@@ -1,0 +1,139 @@
+{
+  "$schema": "../../../.ai/schemas/component.schema.json",
+  "name": "hello-cli",
+  "type": "app",
+  "version": "0.1.0",
+  "description": "简单的 CLI 问候工具，展示最佳实践",
+  "purpose": "这是一个教学示例，展示如何在 beimeng-workspace 中创建符合规范的 CLI 应用。它演示了 Typer 使用、配置管理、类型提示、文档化和 AI-friendly 设计。",
+  "entry_point": "apps/cli/hello/main.py",
+  "interface": {
+    "cli": {
+      "command": "python -m apps.cli.hello",
+      "arguments": [
+        {
+          "name": "command",
+          "type": "string",
+          "required": true,
+          "description": "子命令（如：greet）"
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": true,
+          "description": "要问候的名字"
+        }
+      ],
+      "options": {
+        "--greeting": {
+          "type": "string",
+          "default": "Hello",
+          "description": "问候语"
+        },
+        "--format": {
+          "type": "string",
+          "default": "text",
+          "choices": ["text", "json"],
+          "description": "输出格式"
+        },
+        "--config": {
+          "type": "string",
+          "description": "配置文件路径（YAML）"
+        }
+      }
+    },
+    "api": {
+      "functions": [
+        {
+          "name": "greet_user",
+          "parameters": {
+            "name": "string",
+            "greeting": "string"
+          },
+          "returns": "string"
+        }
+      ]
+    },
+    "input": {
+      "format": "yaml",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "greeting": {"type": "string"},
+          "format": {"type": "string", "enum": ["text", "json"]}
+        }
+      }
+    },
+    "output": {
+      "format": "json|text",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "message": {"type": "string"},
+          "timestamp": {"type": "string"}
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "python": ">=3.12",
+    "packages": [
+      "typer>=0.12.0",
+      "pydantic>=2.0.0",
+      "pydantic-settings>=2.0.0",
+      "rich>=13.0.0",
+      "loguru>=0.7.0",
+      "pyyaml>=6.0"
+    ],
+    "internal": []
+  },
+  "examples": [
+    {
+      "description": "基础问候",
+      "command": "python -m apps.cli.hello greet World",
+      "output": {
+        "message": "Hello, World!",
+        "timestamp": "2025-10-29T12:00:00Z"
+      }
+    },
+    {
+      "description": "JSON 输出",
+      "command": "python -m apps.cli.hello greet World --format json",
+      "output": {
+        "message": "Hello, World!",
+        "timestamp": "2025-10-29T12:00:00Z"
+      }
+    },
+    {
+      "description": "自定义问候语",
+      "command": "python -m apps.cli.hello greet 世界 --greeting 你好",
+      "output": {
+        "message": "你好, 世界!",
+        "timestamp": "2025-10-29T12:00:00Z"
+      }
+    }
+  ],
+  "tags": [
+    "cli",
+    "example",
+    "tutorial",
+    "typer",
+    "best-practices"
+  ],
+  "ai_hints": {
+    "common_use_cases": [
+      "学习如何创建 CLI 应用的模板",
+      "理解 AI-friendly 接口设计的示例",
+      "作为新 CLI 工具的起点"
+    ],
+    "gotchas": [
+      "配置文件是可选的，如果不提供会使用环境变量或默认值",
+      "JSON 输出格式适合管道处理和 AI 解析",
+      "所有输出都包含时间戳以便追踪"
+    ],
+    "related_components": [
+      "scripts/automation/",
+      "packages/common/"
+    ]
+  }
+}
+

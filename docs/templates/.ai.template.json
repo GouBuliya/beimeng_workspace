@@ -1,0 +1,87 @@
+{
+  "$schema": "../../.ai/schemas/component.schema.json",
+  "name": "{component_name}",
+  "type": "{app|script|package|tool}",
+  "version": "0.1.0",
+  "description": "{简短描述组件功能}",
+  "purpose": "{详细说明组件用途和应用场景}",
+  "entry_point": "{主入口文件，如 main.py 或 CLI 命令}",
+  "interface": {
+    "cli": {
+      "command": "{命令名称}",
+      "arguments": [
+        {
+          "name": "arg1",
+          "type": "string",
+          "required": true,
+          "description": "参数描述"
+        }
+      ],
+      "options": {
+        "--option1": {
+          "type": "string",
+          "default": "default_value",
+          "description": "选项描述"
+        }
+      }
+    },
+    "input": {
+      "format": "json",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "field1": {"type": "string"}
+        }
+      }
+    },
+    "output": {
+      "format": "json",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "result": {"type": "string"}
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "python": ">=3.12",
+    "packages": [
+      "package1>=1.0.0",
+      "package2>=2.0.0"
+    ],
+    "internal": [
+      "packages/common"
+    ]
+  },
+  "examples": [
+    {
+      "description": "基础使用示例",
+      "command": "python -m {module_name} --input data.json",
+      "input": {
+        "field1": "value1"
+      },
+      "output": {
+        "result": "success"
+      }
+    }
+  ],
+  "tags": [
+    "tag1",
+    "tag2"
+  ],
+  "ai_hints": {
+    "common_use_cases": [
+      "用例 1: 具体场景描述",
+      "用例 2: 具体场景描述"
+    ],
+    "gotchas": [
+      "注意事项 1",
+      "注意事项 2"
+    ],
+    "related_components": [
+      "相关组件路径"
+    ]
+  }
+}
+

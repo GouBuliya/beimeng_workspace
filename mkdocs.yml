@@ -1,0 +1,85 @@
+site_name: Beimeng Workspace
+site_description: AI-Friendly Python Monorepo 文档
+site_author: Beimeng Team
+
+# Repository
+repo_name: beimeng_workspace
+repo_url: https://github.com/your-org/beimeng_workspace
+
+# Theme
+theme:
+  name: material
+  language: zh
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: 切换到暗色模式
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: 切换到亮色模式
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+
+# Navigation
+nav:
+  - 首页: index.md
+  - 快速开始:
+    - 安装: guides/installation.md
+    - 快速上手: guides/quickstart.md
+  - 架构:
+    - 项目结构: architecture/structure.md
+    - AI Agent 机制: architecture/ai-mechanisms.md
+    - 开发规范: architecture/conventions.md
+  - 指南:
+    - 创建应用: guides/creating-apps.md
+    - 创建脚本: guides/creating-scripts.md
+    - 编写文档: guides/documentation.md
+    - AI Agent 开发: guides/ai-development.md
+  - API 文档: api/
+
+# Plugins
+plugins:
+  - search:
+      lang:
+        - zh
+        - en
+  - git-revision-date-localized:
+      enable_creation_date: true
+
+# Markdown Extensions
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+  - tables
+  - footnotes
+  - attr_list
+  - md_in_html
+
+# Extra
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/your-org/beimeng_workspace
+

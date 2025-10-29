@@ -1,0 +1,98 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Component AI Metadata",
+  "description": "单个组件的 AI 可解析元数据 Schema",
+  "type": "object",
+  "required": ["name", "type", "version", "description", "interface"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "组件名称"
+    },
+    "type": {
+      "type": "string",
+      "enum": ["app", "script", "package", "tool"],
+      "description": "组件类型"
+    },
+    "version": {
+      "type": "string",
+      "description": "组件版本"
+    },
+    "description": {
+      "type": "string",
+      "description": "组件功能描述"
+    },
+    "purpose": {
+      "type": "string",
+      "description": "组件的具体用途和应用场景"
+    },
+    "entry_point": {
+      "type": "string",
+      "description": "主入口文件或命令"
+    },
+    "interface": {
+      "type": "object",
+      "description": "组件接口定义",
+      "properties": {
+        "cli": {
+          "type": "object",
+          "properties": {
+            "command": {"type": "string"},
+            "arguments": {"type": "array"},
+            "options": {"type": "object"}
+          }
+        },
+        "api": {
+          "type": "object",
+          "properties": {
+            "functions": {"type": "array"},
+            "classes": {"type": "array"}
+          }
+        },
+        "input": {
+          "type": "object",
+          "description": "输入数据格式定义"
+        },
+        "output": {
+          "type": "object",
+          "description": "输出数据格式定义"
+        }
+      }
+    },
+    "dependencies": {
+      "type": "object",
+      "properties": {
+        "python": {"type": "string"},
+        "packages": {"type": "array", "items": {"type": "string"}},
+        "internal": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "examples": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "description": {"type": "string"},
+          "command": {"type": "string"},
+          "input": {"type": "object"},
+          "output": {"type": "object"}
+        }
+      }
+    },
+    "tags": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "用于搜索和分类的标签"
+    },
+    "ai_hints": {
+      "type": "object",
+      "description": "给 AI Agent 的额外提示",
+      "properties": {
+        "common_use_cases": {"type": "array", "items": {"type": "string"}},
+        "gotchas": {"type": "array", "items": {"type": "string"}},
+        "related_components": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  }
+}
+
