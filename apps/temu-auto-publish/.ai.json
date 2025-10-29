@@ -1,0 +1,258 @@
+{
+  "$schema": "../../.ai/schemas/component.schema.json",
+  "name": "temu-auto-publish",
+  "version": "0.1.0",
+  "type": "app",
+  "description": "Temu 商品发布自动化系统，使用 Python + 影刀 RPA 混合架构",
+  "category": "automation",
+  "tags": ["rpa", "automation", "temu", "ecommerce", "yingdao"],
+  "status": "in_development",
+  "language": "python",
+  "requires_python": ">=3.12",
+  "dependencies": [
+    "pandas>=2.2.0",
+    "openpyxl>=3.1.0",
+    "pydantic>=2.0.0",
+    "loguru>=0.7.0",
+    "typer>=0.12.0",
+    "rich>=13.0.0"
+  ],
+  "interface": {
+    "type": "cli",
+    "commands": [
+      {
+        "name": "process",
+        "description": "处理选品表，生成任务数据",
+        "usage": "python -m apps.temu-auto-publish process <excel_file>",
+        "args": [
+          {
+            "name": "excel_file",
+            "type": "path",
+            "required": true,
+            "description": "选品表 Excel 文件路径"
+          }
+        ],
+        "options": [
+          {
+            "name": "--output",
+            "type": "path",
+            "description": "输出目录"
+          }
+        ],
+        "output": {
+          "type": "json",
+          "schema": "src/models/task.py:TaskData"
+        }
+      },
+      {
+        "name": "login",
+        "description": "测试 Temu 登录",
+        "usage": "python -m apps.temu-auto-publish login",
+        "options": [
+          {
+            "name": "--username",
+            "type": "string",
+            "description": "用户名"
+          },
+          {
+            "name": "--password",
+            "type": "string",
+            "description": "密码"
+          },
+          {
+            "name": "--force",
+            "type": "boolean",
+            "description": "强制重新登录"
+          }
+        ]
+      },
+      {
+        "name": "status",
+        "description": "查看系统状态和配置",
+        "usage": "python -m apps.temu-auto-publish status"
+      },
+      {
+        "name": "dev excel",
+        "description": "测试 Excel 读取",
+        "usage": "python -m apps.temu-auto-publish dev excel <file_path>"
+      },
+      {
+        "name": "dev price",
+        "description": "测试价格计算",
+        "usage": "python -m apps.temu-auto-publish dev price <cost>"
+      }
+    ]
+  },
+  "data_flow": {
+    "input": {
+      "type": "excel",
+      "path": "data/input/*.xlsx",
+      "schema": "src/models/task.py:ProductInput",
+      "description": "选品表，包含商品名称、成本价、类目、关键词等信息"
+    },
+    "intermediate": {
+      "type": "json",
+      "path": "data/temp/yingdao_task.json",
+      "description": "Python 写入的影刀任务数据"
+    },
+    "output": {
+      "type": "json",
+      "path": "data/output/task_*.json",
+      "schema": "src/models/task.py:TaskData",
+      "description": "处理后的任务数据，包含所有产品信息和价格计算结果"
+    }
+  },
+  "modules": {
+    "data_processor": {
+      "path": "src/data_processor/",
+      "description": "数据处理层，负责 Excel 读取、价格计算、标题生成",
+      "exports": [
+        "ExcelReader",
+        "PriceCalculator",
+        "TitleGenerator",
+        "DataProcessor"
+      ]
+    },
+    "yingdao": {
+      "path": "src/yingdao/",
+      "description": "影刀控制层，负责与影刀 RPA 交互",
+      "exports": [
+        "CookieManager",
+        "LoginController",
+        "SearchController",
+        "EditController"
+      ]
+    },
+    "models": {
+      "path": "src/models/",
+      "description": "数据模型定义，使用 Pydantic 进行数据验证",
+      "exports": [
+        "ProductInput",
+        "TaskProduct",
+        "TaskData",
+        "SearchResult",
+        "EditResult",
+        "PublishResult"
+      ]
+    }
+  },
+  "examples": [
+    {
+      "name": "基础工作流",
+      "description": "从 Excel 到任务数据生成的完整示例",
+      "file": "examples/basic_workflow.py",
+      "usage": "python examples/basic_workflow.py"
+    }
+  ],
+  "configuration": {
+    "env_file": ".env",
+    "config_files": [
+      "config/settings.py",
+      "config/yingdao_config.json"
+    ],
+    "required_env_vars": [
+      "TEMU_USERNAME",
+      "TEMU_PASSWORD"
+    ],
+    "optional_env_vars": [
+      "PRICE_MULTIPLIER",
+      "SUPPLY_PRICE_MULTIPLIER",
+      "COLLECT_COUNT",
+      "LOG_LEVEL"
+    ]
+  },
+  "external_dependencies": {
+    "yingdao": {
+      "name": "影刀 RPA 客户端",
+      "version": "最新版",
+      "url": "https://www.yingdao.com/",
+      "required": true,
+      "description": "负责浏览器自动化操作"
+    }
+  },
+  "development": {
+    "setup": [
+      "cd /Users/candy/beimeng_workspace",
+      "uv sync --extra temu --extra dev",
+      "cp apps/temu-auto-publish/.env.example apps/temu-auto-publish/.env",
+      "# 编辑 .env 文件填写配置"
+    ],
+    "test": [
+      "uv run pytest apps/temu-auto-publish/tests/",
+      "uv run python -m apps.temu-auto-publish status"
+    ],
+    "lint": [
+      "uv run ruff check apps/temu-auto-publish/",
+      "uv run ruff format apps/temu-auto-publish/",
+      "uv run mypy apps/temu-auto-publish/"
+    ]
+  },
+  "roadmap": {
+    "week1": {
+      "status": "in_progress",
+      "tasks": [
+        "✅ 项目结构创建",
+        "✅ 数据处理层（Excel、价格、标题）",
+        "🚧 影刀登录流程",
+        "📅 搜索采集流程",
+        "📅 首次编辑流程"
+      ]
+    },
+    "week2": {
+      "status": "planned",
+      "tasks": [
+        "批量编辑 18 步",
+        "批量发布",
+        "Python 流程编排"
+      ]
+    },
+    "week3": {
+      "status": "planned",
+      "tasks": [
+        "完整测试",
+        "文档整理",
+        "项目交付"
+      ]
+    }
+  },
+  "ai_hints": {
+    "architecture": "Python 处理数据逻辑，影刀处理浏览器交互，通过 JSON 文件解耦",
+    "data_flow": "Excel → Python 处理 → JSON 任务 → 影刀执行 → JSON 结果 → Python 记录",
+    "key_patterns": [
+      "所有数据使用 Pydantic 模型验证",
+      "所有接口输入输出都是 JSON",
+      "影刀通过文件交互（data/temp/yingdao_task.json 和 yingdao_result.json）",
+      "Cookie 管理避免频繁登录",
+      "完整的类型提示和 docstring"
+    ],
+    "when_modifying": [
+      "修改数据结构时更新 Pydantic 模型",
+      "添加新影刀流程时创建对应的控制器",
+      "所有函数都需要完整的类型提示和 Google Style docstring",
+      "遵循单一职责原则，模块不超过 500 行"
+    ],
+    "common_tasks": {
+      "add_new_flow": "在 src/yingdao/ 创建新控制器，参考 login_controller.py",
+      "add_data_model": "在 src/models/ 添加 Pydantic 模型",
+      "add_cli_command": "在 __main__.py 添加新的 @app.command()",
+      "test_module": "创建对应的 tests/test_*.py 文件"
+    }
+  },
+  "documentation": {
+    "readme": "README.md",
+    "guides": [
+      "../../docs/projects/temu-auto-publish/guides/quickstart.md",
+      "../../docs/projects/temu-auto-publish/guides/data-format.md"
+    ],
+    "api": "通过 docstrings 生成，运行 pdoc apps/temu-auto-publish",
+    "architecture": "../../docs/projects/temu-auto-publish/index.md"
+  },
+  "notes": [
+    "这是一个 MVP 版本，重点是核心流程的自动化",
+    "影刀流程需要在影刀客户端中手动创建和维护",
+    "Cookie 有效期默认 24 小时",
+    "价格计算公式：建议售价 = 成本 × 7.5，供货价 = 成本 × 10",
+    "支持多种标题生成模式：temu(影刀AI)、api(外部API)、rule(规则生成)"
+  ]
+}
+

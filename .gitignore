@@ -76,3 +76,19 @@ temp/
 # AI Plan (临时文件)
 ai.plan.md
 
+# Temu 自动发布项目数据
+apps/temu-auto-publish/data/input/*.xlsx
+apps/temu-auto-publish/data/output/*.json
+apps/temu-auto-publish/data/temp/*
+apps/temu-auto-publish/data/logs/*
+apps/temu-auto-publish/.env
+
+# 保留目录结构
+!apps/temu-auto-publish/data/input/.gitkeep
+!apps/temu-auto-publish/data/output/.gitkeep
+!apps/temu-auto-publish/data/temp/.gitkeep
+!apps/temu-auto-publish/data/logs/.gitkeep
+
+# 影刀临时文件
+*.flow.lock
+
