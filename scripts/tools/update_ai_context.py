@@ -44,31 +44,31 @@ class ContextUpdater:
         # 发现 apps
         apps_dir = self.workspace_root / "apps"
         if apps_dir.exists():
-            for app_path in apps_dir.iterdir():
-                if app_path.is_dir() and (app_path / ".ai.json").exists():
-                    components["apps"].append(self._load_component_metadata(app_path))
+            for app_path in apps_dir.rglob("*/.ai.json"):
+                app_dir = app_path.parent
+                components["apps"].append(self._load_component_metadata(app_dir))
 
         # 发现 scripts
         scripts_dir = self.workspace_root / "scripts"
         if scripts_dir.exists():
-            for script_path in scripts_dir.rglob("*.py"):
-                if script_path.parent / ".ai.json" in script_path.parent.iterdir():
-                    parent_dir = script_path.parent
-                    if parent_dir not in [
-                        c["path"] for c in components["scripts"]
-                    ]:
-                        components["scripts"].append(
-                            self._load_component_metadata(parent_dir)
-                        )
+            for script_ai_json in scripts_dir.rglob(".ai.json"):
+                script_dir = script_ai_json.parent
+                # 避免重复添加（如果父目录已经在列表中）
+                if script_dir not in [
+                    self.workspace_root / c.get("path", "") for c in components["scripts"]
+                ]:
+                    components["scripts"].append(
+                        self._load_component_metadata(script_dir)
+                    )
 
         # 发现 packages
         packages_dir = self.workspace_root / "packages"
         if packages_dir.exists():
-            for pkg_path in packages_dir.iterdir():
-                if pkg_path.is_dir() and (pkg_path / ".ai.json").exists():
-                    components["packages"].append(
-                        self._load_component_metadata(pkg_path)
-                    )
+            for pkg_ai_json in packages_dir.rglob(".ai.json"):
+                pkg_dir = pkg_ai_json.parent
+                components["packages"].append(
+                    self._load_component_metadata(pkg_dir)
+                )
 
         return components
 
