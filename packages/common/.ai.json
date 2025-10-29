@@ -1,0 +1,68 @@
+{
+  "$schema": "../../.ai/schemas/component.schema.json",
+  "name": "common",
+  "type": "package",
+  "version": "0.1.0",
+  "description": "通用组件和工具库，提供跨项目共享的功能",
+  "purpose": "为项目中的各种应用和脚本提供可复用的通用功能，包括日志、配置、验证和工具函数。减少代码重复，保持一致性。",
+  "entry_point": "packages/common/__init__.py",
+  "interface": {
+    "api": {
+      "functions": [
+        {
+          "name": "setup_logger",
+          "module": "logger",
+          "description": "配置和返回 loguru logger"
+        }
+      ],
+      "classes": [
+        {
+          "name": "BaseAppConfig",
+          "module": "config",
+          "description": "应用配置基类"
+        }
+      ]
+    }
+  },
+  "dependencies": {
+    "python": ">=3.12",
+    "packages": [
+      "loguru>=0.7.0",
+      "pydantic>=2.0.0",
+      "pydantic-settings>=2.0.0"
+    ],
+    "internal": []
+  },
+  "examples": [
+    {
+      "description": "使用日志功能",
+      "command": "from packages.common.logger import setup_logger; logger = setup_logger('app')"
+    },
+    {
+      "description": "使用配置基类",
+      "command": "from packages.common.config import BaseAppConfig"
+    }
+  ],
+  "tags": [
+    "library",
+    "common",
+    "utils",
+    "shared"
+  ],
+  "ai_hints": {
+    "common_use_cases": [
+      "为新应用设置标准化日志",
+      "创建统一的配置管理",
+      "使用通用的数据验证模型"
+    ],
+    "gotchas": [
+      "所有应用应该使用这个包来保持一致性",
+      "不要在这里放置特定应用的逻辑"
+    ],
+    "related_components": [
+      "apps/cli/hello/",
+      "scripts/data_processing/transform/"
+    ]
+  }
+}
+

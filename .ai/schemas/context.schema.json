@@ -1,0 +1,77 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Context Schema",
+  "description": "项目全局上下文的 JSON Schema",
+  "type": "object",
+  "required": ["version", "project", "components", "conventions"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "description": "Context schema 版本"
+    },
+    "project": {
+      "type": "object",
+      "required": ["name", "description"],
+      "properties": {
+        "name": {"type": "string"},
+        "description": {"type": "string"},
+        "structure": {"type": "string", "enum": ["monorepo", "multirepo"]},
+        "language": {"type": "string"},
+        "package_manager": {"type": "string"}
+      }
+    },
+    "components": {
+      "type": "object",
+      "properties": {
+        "apps": {"type": "array", "items": {"$ref": "#/definitions/component"}},
+        "scripts": {"type": "array", "items": {"$ref": "#/definitions/component"}},
+        "packages": {"type": "array", "items": {"$ref": "#/definitions/component"}}
+      }
+    },
+    "conventions": {
+      "type": "object",
+      "properties": {
+        "documentation": {"type": "object"},
+        "code_style": {"type": "object"},
+        "cli": {"type": "object"}
+      }
+    },
+    "ai_features": {
+      "type": "object",
+      "description": "AI Agent 相关特性"
+    },
+    "discovery": {
+      "type": "object",
+      "description": "组件发现规则"
+    },
+    "last_updated": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "definitions": {
+    "component": {
+      "type": "object",
+      "required": ["name", "path", "type"],
+      "properties": {
+        "name": {"type": "string"},
+        "path": {"type": "string"},
+        "type": {"type": "string"},
+        "description": {"type": "string"},
+        "entry_point": {"type": "string"},
+        "dependencies": {"type": "array", "items": {"type": "string"}},
+        "ai_metadata": {"$ref": "#/definitions/ai_metadata"}
+      }
+    },
+    "ai_metadata": {
+      "type": "object",
+      "properties": {
+        "purpose": {"type": "string"},
+        "inputs": {"type": "object"},
+        "outputs": {"type": "object"},
+        "examples": {"type": "array"}
+      }
+    }
+  }
+}
+

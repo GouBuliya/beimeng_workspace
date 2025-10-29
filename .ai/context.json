@@ -1,0 +1,61 @@
+{
+  "$schema": "./schemas/context.schema.json",
+  "version": "1.0.0",
+  "project": {
+    "name": "beimeng-workspace",
+    "description": "AI-Friendly Python Monorepo - 多用途工作空间",
+    "structure": "monorepo",
+    "language": "python",
+    "package_manager": "uv"
+  },
+  "components": {
+    "apps": [],
+    "scripts": [],
+    "packages": []
+  },
+  "conventions": {
+    "documentation": {
+      "required_files": ["README.md", ".ai.json", "examples/"],
+      "docstring_style": "google",
+      "api_doc_tool": "pdoc"
+    },
+    "code_style": {
+      "linter": "ruff",
+      "formatter": "ruff",
+      "type_checker": "mypy",
+      "max_line_length": 100
+    },
+    "cli": {
+      "framework": "typer",
+      "input_format": ["json", "yaml"],
+      "output_format": ["json", "yaml", "text"]
+    }
+  },
+  "ai_features": {
+    "structured_context": {
+      "enabled": true,
+      "description": "所有组件在 context.json 中自动索引"
+    },
+    "schema_validation": {
+      "enabled": true,
+      "description": "每个组件使用 JSON Schema 定义接口"
+    },
+    "prompt_templates": {
+      "enabled": true,
+      "location": ".ai/prompts/"
+    },
+    "tool_discovery": {
+      "enabled": true,
+      "description": "自动发现和注册工具"
+    }
+  },
+  "discovery": {
+    "patterns": {
+      "apps": "apps/**/pyproject.toml",
+      "scripts": "scripts/**/*.py",
+      "tools": "scripts/tools/**/*.py"
+    }
+  },
+  "last_updated": "2025-10-29T00:00:00Z"
+}
+

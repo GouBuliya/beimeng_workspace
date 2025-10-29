@@ -1,0 +1,116 @@
+{
+  "$schema": "../../../../.ai/schemas/component.schema.json",
+  "name": "data-transform",
+  "type": "script",
+  "version": "0.1.0",
+  "description": "数据转换脚本，支持 JSON 数据的结构化转换",
+  "purpose": "演示如何创建符合规范的数据处理脚本，包括输入验证、数据转换和标准化输出。适合批处理和管道操作。",
+  "entry_point": "scripts/data_processing/transform/main.py",
+  "interface": {
+    "cli": {
+      "command": "python scripts/data_processing/transform/main.py",
+      "options": {
+        "--input": {
+          "type": "string",
+          "description": "输入文件路径（JSON），不提供则从 stdin 读取"
+        },
+        "--output": {
+          "type": "string",
+          "description": "输出文件路径（JSON），不提供则输出到 stdout"
+        },
+        "--operation": {
+          "type": "string",
+          "default": "uppercase",
+          "choices": ["uppercase", "lowercase", "reverse"],
+          "description": "转换操作类型"
+        }
+      }
+    },
+    "input": {
+      "format": "json",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {"type": "string"}
+          }
+        },
+        "required": ["data"]
+      }
+    },
+    "output": {
+      "format": "json",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "result": {
+            "type": "array",
+            "items": {"type": "string"}
+          },
+          "operation": {"type": "string"},
+          "count": {"type": "integer"}
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "python": ">=3.12",
+    "packages": [
+      "pydantic>=2.0.0",
+      "loguru>=0.7.0",
+      "typer>=0.12.0"
+    ],
+    "internal": []
+  },
+  "examples": [
+    {
+      "description": "转换为大写",
+      "command": "echo '{\"data\": [\"hello\", \"world\"]}' | python scripts/data_processing/transform/main.py",
+      "input": {
+        "data": ["hello", "world"]
+      },
+      "output": {
+        "result": ["HELLO", "WORLD"],
+        "operation": "uppercase",
+        "count": 2
+      }
+    },
+    {
+      "description": "从文件读取并转换",
+      "command": "python scripts/data_processing/transform/main.py --input data.json --output result.json --operation lowercase",
+      "input": {
+        "data": ["HELLO", "WORLD"]
+      },
+      "output": {
+        "result": ["hello", "world"],
+        "operation": "lowercase",
+        "count": 2
+      }
+    }
+  ],
+  "tags": [
+    "data-processing",
+    "script",
+    "example",
+    "transformation",
+    "pipeline"
+  ],
+  "ai_hints": {
+    "common_use_cases": [
+      "批量数据转换和处理",
+      "作为数据管道的一部分",
+      "学习脚本规范的模板"
+    ],
+    "gotchas": [
+      "输入必须是有效的 JSON 格式",
+      "支持 stdin/stdout，适合管道操作",
+      "所有输入都会通过 Pydantic 验证"
+    ],
+    "related_components": [
+      "apps/cli/hello/",
+      "scripts/automation/"
+    ]
+  }
+}
+
