@@ -73,36 +73,7 @@ async def quick_test():
     except Exception as e:
         logger.warning(f"关闭弹窗时出错（可忽略）: {e}")
 
-    # 选择创建人员：柯诗俊(keshijun123)
-    logger.info("正在选择创建人员...")
-    try:
-        # 查找"创建人员"下拉框
-        creator_selector = await page.locator("text='创建人员'").count()
-        if creator_selector > 0:
-            logger.info("找到创建人员筛选项")
-            # 点击下拉框
-            await page.locator("input[placeholder*='创建人员'], input[placeholder*='全部']").first.click()
-            await asyncio.sleep(500)
-            # 输入搜索
-            await page.keyboard.type("柯诗俊")
-            await asyncio.sleep(500)
-            # 选择结果
-            keshijun_option = await page.locator("text='柯诗俊'").count()
-            if keshijun_option > 0:
-                await page.locator("text='柯诗俊'").first.click()
-                logger.success("✓ 已选择创建人员：柯诗俊")
-            await asyncio.sleep(1000)
-        
-        # 点击搜索按钮
-        search_btn = await page.locator("button:has-text('搜索')").count()
-        if search_btn > 0:
-            await page.locator("button:has-text('搜索')").first.click()
-            logger.info("✓ 已点击搜索按钮")
-            await asyncio.sleep(2000)
-    except Exception as e:
-        logger.warning(f"选择创建人员失败（可能不需要）: {e}")
-
-    # 切换到"全部"tab
+    # 切换到"全部"tab（SOP要求：先切换到全部tab）
     logger.info("正在切换到「全部」tab...")
     try:
         all_tab = await page.locator("text='全部'").count()
@@ -110,8 +81,49 @@ async def quick_test():
             await page.locator("text='全部'").first.click()
             await asyncio.sleep(2000)
             logger.success("✓ 已切换到「全部」tab")
+        
+        # 等待页面加载完成
+        await page.wait_for_load_state("networkidle", timeout=10000)
+        logger.info("✓ 页面加载完成")
     except Exception as e:
         logger.warning(f"切换tab失败: {e}")
+
+    # 选择创建人员：柯诗俊(keshijun123)
+    logger.info("正在筛选创建人员...")
+    try:
+        # 查找"创建人员"下拉框
+        creator_input = await page.locator("input[placeholder*='创建人员'], input[placeholder*='全部']").count()
+        if creator_input > 0:
+            logger.info("找到创建人员筛选项")
+            # 点击下拉框
+            await page.locator("input[placeholder*='创建人员'], input[placeholder*='全部']").first.click()
+            await asyncio.sleep(800)
+            # 输入搜索
+            await page.keyboard.type("柯诗俊")
+            await asyncio.sleep(800)
+            # 选择结果（查找包含"柯诗俊"的选项）
+            keshijun_option = await page.locator("text='柯诗俊'").count()
+            if keshijun_option > 0:
+                await page.locator("text='柯诗俊'").first.click()
+                await asyncio.sleep(500)
+                logger.success("✓ 已选择创建人员：柯诗俊")
+            else:
+                logger.warning("未找到「柯诗俊」选项，尝试直接搜索")
+        
+        # 点击搜索按钮
+        search_btn = await page.locator("button:has-text('搜索')").count()
+        if search_btn > 0:
+            await page.locator("button:has-text('搜索')").first.click()
+            logger.info("✓ 已点击搜索按钮")
+            await asyncio.sleep(3000)  # 等待搜索结果加载
+            
+            # 等待搜索结果加载完成
+            await page.wait_for_load_state("networkidle", timeout=10000)
+            logger.success("✓ 搜索结果已加载")
+    except Exception as e:
+        logger.warning(f"选择创建人员失败（可能不需要）: {e}")
+
+    # 移除了重复的切换到"全部"tab代码，因为已经在前面完成
 
     # 检查产品
     logger.info("正在检查产品...")
