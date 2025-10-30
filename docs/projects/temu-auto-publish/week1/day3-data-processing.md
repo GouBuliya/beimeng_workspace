@@ -113,7 +113,7 @@ class PriceCalculator:
         
         Args:
             cost_price: 成本价
-            
+        
         Returns:
             建议售价 = 成本价 × 10
             
@@ -152,7 +152,7 @@ class PriceCalculator:
         
         Args:
             cost_price: 成本价
-            
+        
         Returns:
             PriceResult: 包含所有价格的结果对象
             
@@ -178,7 +178,7 @@ class PriceCalculator:
         
         Args:
             cost_price: 成本价
-            
+        
         Returns:
             包含价格明细的字典
         """
@@ -202,7 +202,7 @@ uv run python -c "
 from src.data_processor.price_calculator import PriceCalculator
 
 calc = PriceCalculator()
-
+    
 # 测试案例：成本价 150 元
 result = calc.calculate_all(150.0)
 print('价格计算结果（成本价 150 元）：')
@@ -325,7 +325,7 @@ class TitleGenerator:
             model_prefix: 型号前缀（默认 "A"）
             start_number: 起始编号（默认 1）
             add_modifiers: 是否添加可选修饰词
-            
+        
         Returns:
             带型号后缀的新标题列表
             
@@ -343,7 +343,7 @@ class TitleGenerator:
         result = []
         for i, title in enumerate(base_titles):
             model_number = f"{model_prefix}{start_number + i:04d}"
-            
+        
             # 构建完整标题
             if add_modifiers:
                 modifier = random.choice(self.OPTIONAL_MODIFIERS)
@@ -380,7 +380,7 @@ class TitleGenerator:
         
         Args:
             titles: 原始标题
-            
+        
         Returns:
             AI 生成的新标题
             
@@ -402,7 +402,7 @@ class TitleGenerator:
         
         Args:
             titles: 原始标题
-            
+        
         Returns:
             完整的提示词
         """

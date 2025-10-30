@@ -149,17 +149,17 @@ class LoginController:
             return False
         
         try:
-            # 加载 Cookie
+        # 加载 Cookie
             cookies = json.loads(self.cookie_file.read_text())
-            await context.add_cookies(cookies)
+        await context.add_cookies(cookies)
             logger.debug(f"加载了 {len(cookies)} 个 Cookie")
-            
+        
             # 访问后台首页验证
             await page.goto("https://seller.temu.com", timeout=30000)
             await page.wait_for_load_state("domcontentloaded")
-            
-            # 检查是否登录成功
-            return await self._verify_login_success(page)
+        
+        # 检查是否登录成功
+        return await self._verify_login_success(page)
             
         except Exception as e:
             logger.warning(f"Cookie 登录失败: {e}")
@@ -176,23 +176,23 @@ class LoginController:
             登录是否成功
         """
         try:
-            # 1. 访问登录页
+        # 1. 访问登录页
             logger.info(f"访问登录页: {self.login_url}")
             await page.goto(self.login_url, timeout=30000)
             await page.wait_for_load_state("domcontentloaded")
-            
-            # 2. 输入账号密码
-            await self._input_credentials(page)
-            
-            # 3. 处理验证码（如有）
+        
+        # 2. 输入账号密码
+        await self._input_credentials(page)
+        
+        # 3. 处理验证码（如有）
             await self._handle_captcha(page)
-            
+        
             # 4. 点击登录按钮
             await self._click_login_button(page)
-            
+        
             # 5. 等待登录完成
             await asyncio.sleep(3)
-            
+        
             # 6. 验证登录成功
             if not await self._verify_login_success(page):
                 return False
@@ -202,7 +202,7 @@ class LoginController:
             
             logger.success("登录成功")
             return True
-            
+        
         except Exception as e:
             logger.error(f"登录失败: {e}")
             await page.screenshot(path=f"data/temp/login_error.png")
@@ -298,7 +298,7 @@ class LoginController:
             
         except Exception as e:
             logger.error(f"验证登录失败: {e}")
-            return False
+        return False
     
     async def _save_cookies(self, context: BrowserContext) -> None:
         """保存 Cookie
@@ -398,7 +398,7 @@ class MiaoshouController:
             # 验证是否成功
             if await self._verify_store_front(page):
                 logger.success("成功访问前端店铺")
-                return True
+        return True
             else:
                 logger.error("访问前端店铺失败")
                 return False
@@ -407,7 +407,7 @@ class MiaoshouController:
             logger.error(f"访问店铺失败: {e}")
             await page.screenshot(path="data/temp/store_front_error.png")
             return False
-    
+        
     async def navigate_to_collection_box(self, page: Page) -> bool:
         """导航到妙手采集箱
         
@@ -453,7 +453,7 @@ class MiaoshouController:
         try:
             # 方法1：检查 URL
             if "collection" in page.url or "采集箱" in page.url:
-                return True
+            return True
             
             # 方法2：检查特征元素
             # TODO: 使用 codegen 获取特征选择器
@@ -484,7 +484,7 @@ class MiaoshouController:
                 return True
             return False
         except Exception:
-            return False
+    return False
 ```
 
 #### 测试妙手访问
@@ -520,7 +520,7 @@ async def test_miaoshou_access():
         try:
             # 2. 登录
             login_ctrl = LoginController(
-                username=settings.temu_username,
+            username=settings.temu_username,
                 password=settings.temu_password,
                 cookie_file=Path("data/temp/temu_cookies.json")
             )

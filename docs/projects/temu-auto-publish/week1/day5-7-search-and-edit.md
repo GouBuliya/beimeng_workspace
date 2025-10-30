@@ -108,7 +108,7 @@ class SearchController:
             page: Playwright 页面对象
             keyword: 搜索关键词
             spec_requirements: 规格要求（颜色、尺寸等）
-            
+        
         Returns:
             SearchResult: 搜索结果（包含 5 条链接）
         """
@@ -185,12 +185,12 @@ class SearchController:
         # 定位搜索框
         await page.fill(self.search_input_selector, keyword)
         await asyncio.sleep(0.5)
-        
+    
         # 点击搜索或按回车
         await page.click(self.search_button_selector)
         logger.debug("已触发搜索")
-    
-    async def _wait_for_results(self, page: Page) -> None:
+
+async def _wait_for_results(self, page: Page) -> None:
         """等待搜索结果加载
         
         Args:
@@ -203,11 +203,11 @@ class SearchController:
             self.product_list_selector,
             timeout=30000
         )
-        
+    
         # 额外等待动态内容
         await asyncio.sleep(2)
-        logger.debug("搜索结果已加载")
-    
+    logger.debug("搜索结果已加载")
+
     async def _filter_products(
         self,
         page: Page,
@@ -246,34 +246,34 @@ class SearchController:
         Returns:
             商品列表
         """
-        products = []
-        
+    products = []
+    
         # 获取商品元素列表
         product_elements = await page.query_selector_all(
             self.product_link_selector
         )
-        
+    
         for element in product_elements:
-            try:
-                # 提取商品信息
+        try:
+            # 提取商品信息
                 link = await element.get_attribute('href')
                 title = await element.inner_text()
                 
                 # 提取图片（用于验证）
                 img_element = await element.query_selector('img')
                 image_url = await img_element.get_attribute('src') if img_element else None
-                
-                products.append({
+            
+            products.append({
                     'link': link,
                     'title': title,
                     'image_url': image_url
-                })
-                
-            except Exception as e:
+            })
+            
+        except Exception as e:
                 logger.warning(f"提取商品信息失败: {e}")
-                continue
-        
-        return products
+            continue
+    
+    return products
     
     async def add_links_to_miaoshou(
         self,
@@ -470,7 +470,7 @@ class FirstEditController:
             
             # 2. 修改标题
             await self._update_title(page, new_title)
-            
+        
             # 3. 核对类目
             await self._verify_category(page, link.get('category'))
             
@@ -507,15 +507,15 @@ class FirstEditController:
         logger.debug("标题已更新")
     
     async def _verify_category(
-        self,
-        page: Page,
+    self,
+    page: Page,
         expected_category: str = None
     ) -> None:
         """核对类目
         
         SOP 要求：有些类目上不了（如药品/电子）
-        
-        Args:
+    
+    Args:
             page: 页面对象
             expected_category: 预期类目
         """
@@ -623,7 +623,7 @@ async def claim_links(
         page: 页面对象
         link_count: 链接数量（默认 5）
         claim_times: 每条认领次数（默认 4）
-        
+    
     Returns:
         是否认领成功
     """
@@ -777,10 +777,10 @@ class BatchEditController:
         Args:
             page: 页面对象
             product_data: 产品数据（包含成本价等）
-            
-        Returns:
+    
+    Returns:
             是否全部步骤成功
-        """
+    """
         logger.info("SOP 步骤7：批量编辑 18 步（20条链接）")
         
         # 1. 全选 20 条链接
@@ -827,7 +827,7 @@ class BatchEditController:
                 await page.screenshot(
                     path=f"data/temp/batch_edit_step{step_num}_error.png"
                 )
-                return False
+        return False
         
         logger.success("✓✓✓ 批量编辑 18 步全部完成")
         return True
@@ -934,7 +934,7 @@ class BatchEditController:
         height = random.randint(50, width - 1)
         
         logger.debug(f"设置尺寸：{length} × {width} × {height} cm")
-        
+            
         # TODO: 填充长宽高
         # length_input, width_input, height_input = "待获取"
     

@@ -169,7 +169,7 @@ class LoginController:
 
             # 等待登录结果（跳转到首页或显示错误）
             logger.info("等待登录结果...")
-            
+
             try:
                 # 等待跳转到首页或弹窗消失
                 await page.wait_for_url("**/erp.91miaoshou.com/welcome**", timeout=15000)
