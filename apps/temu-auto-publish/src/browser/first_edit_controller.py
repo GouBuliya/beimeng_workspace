@@ -260,12 +260,14 @@ class FirstEditController:
             stock_selectors = [
                 "input[placeholder='库存']",
                 "input[placeholder*='库存'][type='text']",
+                "input[type='number']",  # 库存通常是number类型
             ]
             
             stock_input = None
             for selector in stock_selectors:
                 try:
                     count = await page.locator(selector).count()
+                    logger.debug(f"库存选择器 {selector} 找到 {count} 个元素")
                     if count > 0:
                         elem = page.locator(selector).nth(sku_index)
                         is_visible = await elem.is_visible(timeout=1000)
@@ -273,7 +275,8 @@ class FirstEditController:
                             stock_input = elem
                             logger.debug(f"使用库存选择器: {selector} (第{sku_index+1}个)")
                             break
-                except:
+                except Exception as e:
+                    logger.debug(f"尝试选择器 {selector} 失败: {e}")
                     continue
             
             if not stock_input:
@@ -321,12 +324,14 @@ class FirstEditController:
             weight_selectors = [
                 "input[placeholder='重量']",
                 "input[placeholder*='重量'][type='text']",
+                "input[placeholder*='重'][type='text']",  # 可能只有"重"
             ]
             
             weight_input = None
             for selector in weight_selectors:
                 try:
                     count = await page.locator(selector).count()
+                    logger.debug(f"重量选择器 {selector} 找到 {count} 个元素")
                     if count > 0:
                         elem = page.locator(selector).nth(sku_index)
                         is_visible = await elem.is_visible(timeout=1000)
@@ -334,7 +339,8 @@ class FirstEditController:
                             weight_input = elem
                             logger.debug(f"使用重量选择器: {selector} (第{sku_index+1}个)")
                             break
-                except:
+                except Exception as e:
+                    logger.debug(f"尝试选择器 {selector} 失败: {e}")
                     continue
             
             if not weight_input:
