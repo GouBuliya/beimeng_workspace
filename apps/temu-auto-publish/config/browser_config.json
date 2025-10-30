@@ -1,0 +1,53 @@
+{
+  "browser": {
+    "type": "chromium",
+    "headless": false,
+    "window_width": 1920,
+    "window_height": 1080,
+    "locale": "zh-CN",
+    "timezone": "Asia/Shanghai",
+    "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+  },
+  "stealth": {
+    "enabled": true,
+    "webdriver": true,
+    "chrome_app": true,
+    "chrome_csi": true,
+    "chrome_load_times": true,
+    "chrome_runtime": true,
+    "iframe_content_window": true,
+    "media_codecs": true,
+    "navigator_languages": true,
+    "navigator_permissions": true,
+    "navigator_plugins": true,
+    "navigator_webdriver": true,
+    "webgl_vendor": true,
+    "window_outerdimensions": true
+  },
+  "timeouts": {
+    "default": 30000,
+    "navigation": 60000,
+    "element_wait": 10000
+  },
+  "retry": {
+    "max_attempts": 3,
+    "delay_ms": 2000
+  },
+  "login": {
+    "url": "https://seller.temu.com/login",
+    "cookie_max_age_hours": 24
+  },
+  "search": {
+    "wait_after_search": 3000,
+    "max_results": 10
+  },
+  "edit": {
+    "wait_after_action": 2000
+  },
+  "screenshots": {
+    "enabled": true,
+    "on_error": true,
+    "directory": "data/temp/screenshots"
+  }
+}
+

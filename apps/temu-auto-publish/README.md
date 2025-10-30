@@ -1,18 +1,20 @@
 # Temu 商品发布自动化系统
 
-> 使用 Python + 影刀 RPA 混合架构的 Temu 商品自动发布系统
+> 使用 Python + Playwright 的纯代码浏览器自动化方案
 
 [![Python](https://img.shields.io/badge/Python-3.12+-blue.svg)](https://www.python.org/downloads/)
+[![Playwright](https://img.shields.io/badge/Playwright-1.48+-green.svg)](https://playwright.dev/python/)
 [![Pydantic](https://img.shields.io/badge/Pydantic-v2-green.svg)](https://docs.pydantic.dev/)
 
 ## 📋 项目概述
 
-本项目采用 **Python + 影刀 RPA** 混合架构，实现 Temu 商品发布流程的自动化：
+本项目采用 **Python + Playwright** 纯代码方案，实现 Temu 商品发布流程的自动化：
 
 - ✅ **Excel 选品表处理** - 自动读取、验证和转换
 - ✅ **价格自动计算** - 建议售价和供货价
 - ✅ **AI 标题生成** - 多种模式可选
-- 🚧 **自动登录** - Cookie 管理，减少重复登录
+- ✅ **自动登录** - Cookie 管理，减少重复登录
+- ✅ **反检测机制** - 使用 playwright-stealth
 - 🚧 **搜索采集** - 站内搜索并采集同款链接
 - 🚧 **批量编辑** - 18步编辑流程
 - 🚧 **批量发布** - 一键发布到多店铺
@@ -22,16 +24,18 @@
 ```
 选品表(Excel) → Python读取处理 → 生成任务数据(JSON)
                                         ↓
-影刀执行浏览器操作 ← Python调度 ← 任务队列
-         ↓
-     结果反馈(JSON) → Python记录日志 → 数据统计
+              Playwright 浏览器自动化 ← Python 异步控制
+                          ↓
+                 结果记录(JSON) → 数据统计
 ```
 
 ### 核心优势
 
-- **数据处理层（Python）**: 灵活、可测试、易扩展
-- **RPA 执行层（影刀）**: 高效的浏览器自动化，支持录制
-- **文件交互**: 通过 JSON 文件解耦，便于调试和维护
+- **纯 Python 实现**: 无需外部 RPA 工具，代码完全可控
+- **异步高效**: 使用 asyncio 和 Playwright 异步 API
+- **反检测能力**: playwright-stealth 降低被识别风险
+- **易于调试**: 完整的日志和截图功能
+- **可维护性强**: 清晰的代码结构和类型提示
 
 ## 🚀 快速开始
 
@@ -40,8 +44,11 @@
 ```bash
 cd /Users/candy/beimeng_workspace
 
-# 安装 temu 相关依赖
+# 安装 temu 相关依赖（包含 Playwright）
 uv sync --extra temu --extra dev
+
+# 安装浏览器（Chromium）
+uv run playwright install chromium
 ```
 
 ### 2. 配置环境
@@ -58,6 +65,7 @@ vim apps/temu-auto-publish/.env
 ```env
 TEMU_USERNAME=your_username
 TEMU_PASSWORD=your_password
+BROWSER_HEADLESS=False
 PRICE_MULTIPLIER=7.5
 COLLECT_COUNT=5
 ```
@@ -96,7 +104,8 @@ apps/temu-auto-publish/
 │   │   ├── price_calculator.py # 价格计算
 │   │   ├── title_generator.py  # 标题生成
 │   │   └── processor.py        # 流程整合
-│   ├── yingdao/             # 影刀控制器
+│   ├── browser/             # 浏览器自动化
+│   │   ├── browser_manager.py  # Playwright 管理器
 │   │   ├── cookie_manager.py   # Cookie 管理
 │   │   ├── login_controller.py # 登录控制
 │   │   └── ...
@@ -105,7 +114,7 @@ apps/temu-auto-publish/
 │       └── result.py          # 结果数据模型
 ├── config/                  # 配置文件
 │   ├── settings.py          # 应用配置
-│   └── yingdao_config.json  # 影刀配置
+│   └── browser_config.json  # 浏览器配置
 ├── data/                    # 数据目录
 │   ├── input/              # Excel 输入
 │   ├── output/             # JSON 输出
@@ -129,6 +138,9 @@ python -m apps.temu-auto-publish process <excel_file>
 
 # 测试登录
 python -m apps.temu-auto-publish login
+
+# 测试登录（无头模式）
+python -m apps.temu-auto-publish login --headless
 
 # 查看系统状态
 python -m apps.temu-auto-publish status
@@ -218,6 +230,10 @@ python -m apps.temu-auto-publish dev price <cost>
 TEMU_USERNAME=your_username
 TEMU_PASSWORD=your_password
 
+# 浏览器配置
+BROWSER_HEADLESS=False        # 无头模式
+BROWSER_CONFIG_FILE=config/browser_config.json
+
 # 业务规则
 PRICE_MULTIPLIER=7.5          # 建议售价 = 成本 × 7.5
 SUPPLY_PRICE_MULTIPLIER=10.0  # 供货价 = 成本 × 10
@@ -227,22 +243,22 @@ COLLECT_COUNT=5               # 采集同款数量
 LOG_LEVEL=INFO
 ```
 
-### 影刀配置 (yingdao_config.json)
+### 浏览器配置 (browser_config.json)
 
 ```json
 {
-  "login": {
-    "timeout": 30,
-    "retry_times": 3,
-    "cookie_max_age_hours": 24
-  },
-  "search": {
-    "timeout": 10,
-    "wait_after_search": 3
-  },
   "browser": {
+    "type": "chromium",
     "headless": false,
-    "window_size": "1920x1080"
+    "window_width": 1920,
+    "window_height": 1080
+  },
+  "stealth": {
+    "enabled": true
+  },
+  "timeouts": {
+    "default": 30000,
+    "navigation": 60000
   }
 }
 ```
@@ -308,10 +324,13 @@ uv run mypy apps/temu-auto-publish
 
 ## ⚠️ 注意事项
 
-1. **不要频繁登录** - 使用 Cookie 管理
-2. **控制请求频率** - 添加延迟避免反爬
-3. **保护账号安全** - 不要泄露 .env 文件
-4. **定期检查流程** - 页面变化需要更新影刀流程
+1. **反检测** - 已集成 playwright-stealth，但仍需注意：
+   - 控制操作频率，避免过快
+   - 添加随机延迟
+   - 使用真实的浏览器指纹
+2. **Cookie 管理** - Cookie 有效期 24 小时
+3. **错误处理** - 自动截图保存错误状态
+4. **无头模式** - 开发时建议 headed，生产可用 headless
 
 ## 📄 License
 
@@ -319,14 +338,15 @@ MIT License - 详见 LICENSE 文件
 
 ## 🙏 致谢
 
-- [影刀 RPA](https://www.yingdao.com/) - 浏览器自动化工具
+- [Playwright](https://playwright.dev/python/) - 强大的浏览器自动化库
+- [playwright-stealth](https://github.com/AtuboDad/playwright_stealth) - 反检测工具
 - [Pydantic](https://docs.pydantic.dev/) - 数据验证
 - [Typer](https://typer.tiangolo.com/) - CLI 框架
 - [Loguru](https://github.com/Delgan/loguru) - 日志库
 
 ---
 
-**项目状态**: 🚧 开发中 (Day 3 完成)
+**项目状态**: 🚧 开发中 (重构完成：影刀 → Playwright)
 
 如有问题，请参考 [详细文档](../../docs/projects/temu-auto-publish/) 或提交 Issue。
 

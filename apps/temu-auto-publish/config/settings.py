@@ -45,8 +45,9 @@ class Settings(BaseSettings):
     data_temp_dir: str = Field(default="data/temp", description="临时目录")
     data_logs_dir: str = Field(default="data/logs", description="日志目录")
 
-    # 影刀配置
-    yingdao_flow_id: str = Field(default="", description="影刀流程ID")
+    # 浏览器配置
+    browser_headless: bool = Field(default=False, description="浏览器无头模式")
+    browser_config_file: str = Field(default="config/browser_config.json", description="浏览器配置文件")
 
     # 业务规则配置
     price_multiplier: float = Field(default=7.5, description="价格倍率（2.5×3）")

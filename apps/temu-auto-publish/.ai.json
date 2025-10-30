@@ -1,17 +1,19 @@
 {
   "$schema": "../../.ai/schemas/component.schema.json",
   "name": "temu-auto-publish",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "app",
-  "description": "Temu 商品发布自动化系统，使用 Python + 影刀 RPA 混合架构",
+  "description": "Temu 商品发布自动化系统，使用 Python + Playwright 纯代码方案",
   "category": "automation",
-  "tags": ["rpa", "automation", "temu", "ecommerce", "yingdao"],
+  "tags": ["playwright", "automation", "temu", "ecommerce", "browser-automation", "anti-detection"],
   "status": "in_development",
   "language": "python",
   "requires_python": ">=3.12",
   "dependencies": [
     "pandas>=2.2.0",
     "openpyxl>=3.1.0",
+    "playwright>=1.48.0",
+    "playwright-stealth>=1.0.0",
     "pydantic>=2.0.0",
     "loguru>=0.7.0",
     "typer>=0.12.0",
@@ -46,7 +48,7 @@
       },
       {
         "name": "login",
-        "description": "测试 Temu 登录",
+        "description": "测试 Temu 登录（Playwright 自动化）",
         "usage": "python -m apps.temu-auto-publish login",
         "options": [
           {
@@ -63,6 +65,11 @@
             "name": "--force",
             "type": "boolean",
             "description": "强制重新登录"
+          },
+          {
+            "name": "--headless",
+            "type": "boolean",
+            "description": "无头模式运行"
           }
         ]
       },
@@ -113,10 +120,11 @@
         "DataProcessor"
       ]
     },
-    "yingdao": {
-      "path": "src/yingdao/",
-      "description": "影刀控制层，负责与影刀 RPA 交互",
+    "browser": {
+      "path": "src/browser/",
+      "description": "浏览器自动化层，使用 Playwright 进行浏览器操作",
       "exports": [
+        "BrowserManager",
         "CookieManager",
         "LoginController",
         "SearchController",
@@ -148,13 +156,15 @@
     "env_file": ".env",
     "config_files": [
       "config/settings.py",
-      "config/yingdao_config.json"
+      "config/browser_config.json"
     ],
     "required_env_vars": [
       "TEMU_USERNAME",
       "TEMU_PASSWORD"
     ],
     "optional_env_vars": [
+      "BROWSER_HEADLESS",
+      "BROWSER_CONFIG_FILE",
       "PRICE_MULTIPLIER",
       "SUPPLY_PRICE_MULTIPLIER",
       "COLLECT_COUNT",
@@ -162,18 +172,19 @@
     ]
   },
   "external_dependencies": {
-    "yingdao": {
-      "name": "影刀 RPA 客户端",
-      "version": "最新版",
-      "url": "https://www.yingdao.com/",
+    "playwright": {
+      "name": "Playwright 浏览器",
+      "version": ">=1.48.0",
+      "url": "https://playwright.dev/python/",
       "required": true,
-      "description": "负责浏览器自动化操作"
+      "description": "需要安装 Chromium 浏览器：playwright install chromium"
     }
   },
   "development": {
     "setup": [
       "cd /Users/candy/beimeng_workspace",
       "uv sync --extra temu --extra dev",
+      "uv run playwright install chromium",
       "cp apps/temu-auto-publish/.env.example apps/temu-auto-publish/.env",
       "# 编辑 .env 文件填写配置"
     ],
@@ -189,13 +200,13 @@
   },
   "roadmap": {
     "week1": {
-      "status": "in_progress",
+      "status": "completed",
       "tasks": [
         "✅ 项目结构创建",
         "✅ 数据处理层（Excel、价格、标题）",
-        "🚧 影刀登录流程",
-        "📅 搜索采集流程",
-        "📅 首次编辑流程"
+        "✅ Playwright 浏览器管理",
+        "✅ 登录控制器（异步）",
+        "✅ 反检测机制集成"
       ]
     },
     "week2": {
@@ -216,26 +227,29 @@
     }
   },
   "ai_hints": {
-    "architecture": "Python 处理数据逻辑，影刀处理浏览器交互，通过 JSON 文件解耦",
-    "data_flow": "Excel → Python 处理 → JSON 任务 → 影刀执行 → JSON 结果 → Python 记录",
+    "architecture": "Python 处理数据逻辑，Playwright 处理浏览器交互，完全异步实现",
+    "data_flow": "Excel → Python 处理 → JSON 任务 → Playwright 异步执行 → JSON 结果 → Python 记录",
     "key_patterns": [
       "所有数据使用 Pydantic 模型验证",
       "所有接口输入输出都是 JSON",
-      "影刀通过文件交互（data/temp/yingdao_task.json 和 yingdao_result.json）",
+      "浏览器操作全部异步（async/await）",
+      "使用 playwright-stealth 反检测",
       "Cookie 管理避免频繁登录",
-      "完整的类型提示和 docstring"
+      "完整的类型提示和 docstring",
+      "自动截图保存错误状态"
     ],
     "when_modifying": [
       "修改数据结构时更新 Pydantic 模型",
-      "添加新影刀流程时创建对应的控制器",
+      "添加新浏览器操作时创建对应的异步方法",
       "所有函数都需要完整的类型提示和 Google Style docstring",
-      "遵循单一职责原则，模块不超过 500 行"
+      "遵循单一职责原则，模块不超过 500 行",
+      "浏览器操作需要适当的等待和错误处理"
     ],
     "common_tasks": {
-      "add_new_flow": "在 src/yingdao/ 创建新控制器，参考 login_controller.py",
+      "add_new_automation": "在 src/browser/ 创建新控制器，继承 BrowserManager",
       "add_data_model": "在 src/models/ 添加 Pydantic 模型",
-      "add_cli_command": "在 __main__.py 添加新的 @app.command()",
-      "test_module": "创建对应的 tests/test_*.py 文件"
+      "add_cli_command": "在 __main__.py 添加新的 @app.command()，使用 asyncio.run() 执行异步函数",
+      "test_browser": "使用 async with BrowserManager() as manager 进行测试"
     }
   },
   "documentation": {
@@ -248,11 +262,14 @@
     "architecture": "../../docs/projects/temu-auto-publish/index.md"
   },
   "notes": [
-    "这是一个 MVP 版本，重点是核心流程的自动化",
-    "影刀流程需要在影刀客户端中手动创建和维护",
+    "重构说明：已从影刀 RPA 方案迁移到 Playwright 纯代码方案",
+    "架构优势：无需外部工具，代码完全可控，易于调试和维护",
+    "反检测：使用 playwright-stealth，但仍需注意操作频率和行为模式",
     "Cookie 有效期默认 24 小时",
     "价格计算公式：建议售价 = 成本 × 7.5，供货价 = 成本 × 10",
-    "支持多种标题生成模式：temu(影刀AI)、api(外部API)、rule(规则生成)"
+    "支持多种标题生成模式：temu(平台AI)、api(外部API)、rule(规则生成)",
+    "支持 headless 和 headed 模式，开发时建议 headed，生产可用 headless",
+    "所有浏览器操作使用异步（async/await），性能更好"
   ]
 }
 

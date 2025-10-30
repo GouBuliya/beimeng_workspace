@@ -1,8 +1,9 @@
 """Temu 自动发布系统 CLI 入口.
 
-使用 Typer 提供命令行接口。
+使用 Typer 提供命令行接口，Playwright 进行浏览器自动化。
 """
 
+import asyncio
 import sys
 from pathlib import Path
 
@@ -16,7 +17,7 @@ from rich.panel import Panel
 
 from config.settings import settings
 from src.data_processor.processor import DataProcessor
-from src.yingdao.login_controller import LoginController
+from src.browser.login_controller import LoginController
 
 app = typer.Typer(
     name="temu-auto-publish",
@@ -71,15 +72,16 @@ def login(
     username: str = typer.Option(None, "--username", "-u", help="用户名"),
     password: str = typer.Option(None, "--password", "-p", help="密码"),
     force: bool = typer.Option(False, "--force", "-f", help="强制重新登录"),
+    headless: bool = typer.Option(False, "--headless", help="无头模式"),
 ):
-    """测试 Temu 登录.
+    """测试 Temu 登录（使用 Playwright）.
     
     Examples:
         temu-auto-publish login
         temu-auto-publish login -u user -p pass
-        temu-auto-publish login --force
+        temu-auto-publish login --force --headless
     """
-    console.print(Panel.fit("🔐 Temu 登录测试", style="bold blue"))
+    console.print(Panel.fit("🔐 Temu 登录测试 (Playwright)", style="bold blue"))
 
     # 使用配置或命令行参数
     username = username or settings.temu_username
@@ -92,8 +94,11 @@ def login(
         raise typer.Exit(1)
 
     # 执行登录
-    controller = LoginController()
-    success = controller.login(username, password, force=force)
+    async def _login():
+        controller = LoginController()
+        return await controller.login(username, password, force=force, headless=headless)
+    
+    success = asyncio.run(_login())
 
     if success:
         console.print("[green]✓ 登录成功！[/green]")
@@ -126,11 +131,16 @@ def status():
     console.print(f"  日志目录: {settings.data_logs_dir}")
 
     # Cookie 状态
-    from src.yingdao.cookie_manager import CookieManager
+    from src.browser.cookie_manager import CookieManager
 
     manager = CookieManager()
     cookie_status = "✓ 有效" if manager.is_valid() else "✗ 无效/不存在"
     console.print(f"\n[bold]Cookie 状态:[/bold] {cookie_status}")
+    
+    # 浏览器配置
+    console.print("\n[bold]浏览器配置:[/bold]")
+    console.print(f"  无头模式: {settings.browser_headless}")
+    console.print(f"  配置文件: {settings.browser_config_file}")
 
 
 # 开发命令组
