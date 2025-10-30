@@ -247,7 +247,7 @@ class TitleGenerator:
     """AI 标题生成器
     
     优先级：
-    1. 使用 Temu 自带 AI 功能（通过影刀触发）
+    1. 使用 Temu 自带 AI 功能（通过 Playwright 浏览器自动化触发）
     2. 调用外部 API（如 OpenAI, 通义千问等）
     3. 基于规则生成（保底方案）
     """
@@ -326,8 +326,8 @@ class TitleGenerator:
         """
         try:
             if self.mode == "temu":
-                # Temu 模式：在影刀中触发，这里只是标记
-                logger.info("将使用 Temu 自带 AI 生成标题（影刀执行）")
+                # Temu 模式：在 Playwright 浏览器中触发，这里只是标记
+                logger.info("将使用 Temu 自带 AI 生成标题（Playwright 浏览器自动化执行）")
                 return f"[TEMU_AI:{keyword}]"  # 占位符
             
             elif self.mode == "api":
@@ -363,7 +363,7 @@ if __name__ == "__main__":
 #### 任务清单
 - [ ] 实现 `title_generator.py`
 - [ ] 测试规则生成模式
-- [ ] 研究 Temu AI 标题功能的触发方式（为影刀做准备）
+- [ ] 研究 Temu AI 标题功能的触发方式（为 Playwright 自动化做准备）
 - [ ] （可选）注册一个 AI API 账号（如通义千问）
 - [ ] **验证标准**：规则模式能生成合理标题，长度合适
 
@@ -549,5 +549,5 @@ data/output/task.json
 ---
 
 ## 下一步
-完成 Day 3 后，继续 [Day 4：影刀登录流程](day4-yingdao-login.md)
+完成 Day 3 后，继续 [Day 4：Playwright 登录流程](day4-playwright-login.md)
 
