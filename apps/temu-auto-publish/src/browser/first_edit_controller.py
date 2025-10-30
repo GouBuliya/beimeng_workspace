@@ -580,21 +580,23 @@ class FirstEditController:
             if not await self.set_sku_stock(page, stock):
                 return False
 
-            # 步骤4.6: 设置重量
-            if not await self.set_sku_weight(page, weight):
-                return False
+            # 步骤4.6: 设置重量 (暂时跳过 - 需要确认在哪个tab)
+            logger.warning("⚠️  跳过步骤4.6（重量）- 需要确认输入框位置")
+            # if not await self.set_sku_weight(page, weight):
+            #     return False
 
-            # 步骤4.7: 设置尺寸
-            length, width, height = dimensions
-            if not await self.set_sku_dimensions(page, length, width, height):
-                return False
+            # 步骤4.7: 设置尺寸 (暂时跳过 - 需要确认在哪个tab)
+            logger.warning("⚠️  跳过步骤4.7（尺寸）- 需要确认输入框位置")
+            # length, width, height = dimensions
+            # if not await self.set_sku_dimensions(page, length, width, height):
+            #     return False
 
             # 保存修改
             if not await self.save_changes(page):
                 return False
 
             logger.info("=" * 60)
-            logger.success("✓ 首次编辑完整流程已完成")
+            logger.success("✓ 首次编辑完整流程已完成（标题、价格、库存）")
             logger.info("=" * 60)
             return True
 
