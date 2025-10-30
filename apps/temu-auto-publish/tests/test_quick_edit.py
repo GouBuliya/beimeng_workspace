@@ -76,11 +76,21 @@ async def quick_test():
     # 切换到"全部"tab（SOP要求：先切换到全部tab）
     logger.info("正在切换到「全部」tab...")
     try:
-        all_tab = await page.locator("text='全部'").count()
-        if all_tab > 0:
-            await page.locator("text='全部'").first.click()
+        # 方法1: 使用正则表达式匹配完整的tab文本（包含数字），例如 "全部 (7661)"
+        all_tab_regex = await page.locator("text=/全部.*\\(\\d+\\)/").count()
+        if all_tab_regex > 0:
+            await page.locator("text=/全部.*\\(\\d+\\)/").click()
             await asyncio.sleep(2000)
-            logger.success("✓ 已切换到「全部」tab")
+            logger.success("✓ 已切换到「全部」tab（方法1）")
+        else:
+            # 方法2: 尝试通过radio button的class定位
+            radio_buttons = await page.locator(".jx-radio-button:has-text('全部')").count()
+            if radio_buttons > 0:
+                await page.locator(".jx-radio-button:has-text('全部')").first.click()
+                await asyncio.sleep(2000)
+                logger.success("✓ 已切换到「全部」tab（方法2）")
+            else:
+                logger.warning("未找到「全部」tab，可能已经在全部tab")
         
         # 等待页面加载完成
         await page.wait_for_load_state("networkidle", timeout=10000)
