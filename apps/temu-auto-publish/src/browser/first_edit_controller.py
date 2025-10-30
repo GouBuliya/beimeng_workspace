@@ -323,8 +323,8 @@ class FirstEditController:
 
             weight_selectors = [
                 "input[placeholder='重量']",
-                "input[placeholder*='重量'][type='text']",
-                "input[placeholder*='重'][type='text']",  # 可能只有"重"
+                "input[placeholder*='重量']",  # 移除type限制
+                "input[placeholder*='重']",  # 可能只有"重"
             ]
             
             weight_input = None
@@ -389,17 +389,72 @@ class FirstEditController:
             first_edit_config = self.selectors.get("first_edit_dialog", {})
             sales_attrs_config = first_edit_config.get("sales_attrs", {})
 
+            # 查找长宽高输入框（移除type限制）
+            length_selectors = ["input[placeholder='长']", "input[placeholder*='长']"]
+            width_selectors = ["input[placeholder='宽']", "input[placeholder*='宽']"]
+            height_selectors = ["input[placeholder='高']", "input[placeholder*='高']"]
+            
+            # 查找长度输入框
+            length_input = None
+            for selector in length_selectors:
+                try:
+                    count = await page.locator(selector).count()
+                    logger.debug(f"长度选择器 {selector} 找到 {count} 个元素")
+                    if count > 0:
+                        elem = page.locator(selector).nth(sku_index)
+                        if await elem.is_visible(timeout=1000):
+                            length_input = elem
+                            break
+                except:
+                    continue
+            
+            # 查找宽度输入框
+            width_input = None
+            for selector in width_selectors:
+                try:
+                    count = await page.locator(selector).count()
+                    logger.debug(f"宽度选择器 {selector} 找到 {count} 个元素")
+                    if count > 0:
+                        elem = page.locator(selector).nth(sku_index)
+                        if await elem.is_visible(timeout=1000):
+                            width_input = elem
+                            break
+                except:
+                    continue
+            
+            # 查找高度输入框
+            height_input = None
+            for selector in height_selectors:
+                try:
+                    count = await page.locator(selector).count()
+                    logger.debug(f"高度选择器 {selector} 找到 {count} 个元素")
+                    if count > 0:
+                        elem = page.locator(selector).nth(sku_index)
+                        if await elem.is_visible(timeout=1000):
+                            height_input = elem
+                            break
+                except:
+                    continue
+            
+            if not length_input or not width_input or not height_input:
+                logger.error(f"未找到尺寸输入框（长:{length_input is not None}, 宽:{width_input is not None}, 高:{height_input is not None}）")
+                return False
+            
             # 填写长宽高
-            length_selector = sales_attrs_config.get("sku_length_template", "input[placeholder*='长']")
-            width_selector = sales_attrs_config.get("sku_width_template", "input[placeholder*='宽']")
-            height_selector = sales_attrs_config.get("sku_height_template", "input[placeholder*='高']")
+            await length_input.fill("")
+            await page.wait_for_timeout(200)
+            await length_input.fill(str(length))
+            await page.wait_for_timeout(200)
 
-            await page.locator(length_selector).fill(str(length))
+            await width_input.fill("")
+            await page.wait_for_timeout(200)
+            await width_input.fill(str(width))
+            await page.wait_for_timeout(200)
+
+            await height_input.fill("")
+            await page.wait_for_timeout(200)
+            await height_input.fill(str(height))
             await page.wait_for_timeout(300)
-            await page.locator(width_selector).fill(str(width))
-            await page.wait_for_timeout(300)
-            await page.locator(height_selector).fill(str(height))
-            await page.wait_for_timeout(500)
 
             logger.success(f"✓ 尺寸已设置: {length}x{width}x{height} CM")
             return True
