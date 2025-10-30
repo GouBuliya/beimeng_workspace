@@ -60,10 +60,11 @@ class Settings(BaseSettings):
         default="config/browser_config.json", description="浏览器配置文件"
     )
 
-    # 业务规则配置
-    price_multiplier: float = Field(default=7.5, description="价格倍率（2.5×3）")
-    supply_price_multiplier: float = Field(default=10.0, description="供货价倍率")
-    collect_count: int = Field(default=5, ge=1, le=10, description="采集数量")
+    # 业务规则配置（基于SOP v2.0）
+    price_multiplier: float = Field(default=10.0, description="建议售价倍率（SOP步骤7.14）")
+    supply_price_multiplier: float = Field(default=7.5, description="供货价倍率（SOP步骤9）")
+    collect_count: int = Field(default=5, ge=1, le=10, description="采集数量（SOP固定5条）")
+    claim_count: int = Field(default=4, ge=1, le=10, description="认领次数（SOP步骤5）")
 
     # 日志配置
     log_level: str = Field(default="INFO", description="日志级别")
