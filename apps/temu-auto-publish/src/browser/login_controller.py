@@ -115,9 +115,10 @@ class LoginController:
 
             cookie_file = "data/temp/miaoshou_cookies.json"
             if await self.browser_manager.load_cookies(cookie_file):
-                # 验证登录状态
-                login_url = self.selectors.get("login", {}).get("url", "https://erp.91miaoshou.com/")
-                await self.browser_manager.goto(login_url)
+                # 验证登录状态 - 直接访问首页而不是登录页
+                welcome_url = self.selectors.get("homepage", {}).get("url", "https://erp.91miaoshou.com/welcome")
+                await self.browser_manager.goto(welcome_url)
+                await self.browser_manager.page.wait_for_timeout(2000)  # 等待页面加载
 
                 # 检查是否已登录
                 if await self._check_login_status():

@@ -277,8 +277,8 @@ class FirstEditController:
         logger.info(f"SOP 4.7: 设置尺寸 -> {length}x{width}x{height} CM")
 
         try:
-            first_edit_config = self.selectors.get("first_edit_dialog", {}")
-            sales_attrs_config = first_edit_config.get("sales_attrs", {}")
+            first_edit_config = self.selectors.get("first_edit_dialog", {})
+            sales_attrs_config = first_edit_config.get("sales_attrs", {})
 
             # 填写长宽高
             length_selector = sales_attrs_config.get("sku_length_template", "aria-ref=e2986")
@@ -316,7 +316,7 @@ class FirstEditController:
         logger.info("保存修改...")
 
         try:
-            first_edit_config = self.selectors.get("first_edit_dialog", {}")
+            first_edit_config = self.selectors.get("first_edit_dialog", {})
             actions_config = first_edit_config.get("actions", {})
 
             save_btn_selector = actions_config.get("save_btn", "aria-ref=e3548")
@@ -353,7 +353,7 @@ class FirstEditController:
         logger.info("关闭编辑弹窗...")
 
         try:
-            first_edit_config = self.selectors.get("first_edit_dialog", {}")
+            first_edit_config = self.selectors.get("first_edit_dialog", {})
             close_btn_selector = first_edit_config.get("close_btn", "aria-ref=e2272")
 
             await page.locator(f"[{close_btn_selector}]").click()

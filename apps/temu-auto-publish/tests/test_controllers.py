@@ -18,14 +18,15 @@ import sys
 from pathlib import Path
 
 # 添加项目根目录到Python路径
-project_root = Path(__file__).parent.parent.parent.parent
-sys.path.insert(0, str(project_root))
+current_file = Path(__file__)
+app_root = current_file.parent.parent
+sys.path.insert(0, str(app_root))
 
 from loguru import logger
 
-from apps.temu_auto_publish.src.browser.login_controller import LoginController
-from apps.temu_auto_publish.src.browser.miaoshou_controller import MiaoshouController
-from apps.temu_auto_publish.src.browser.first_edit_controller import FirstEditController
+from src.browser.login_controller import LoginController
+from src.browser.miaoshou_controller import MiaoshouController
+from src.browser.first_edit_controller import FirstEditController
 
 
 async def test_login():
