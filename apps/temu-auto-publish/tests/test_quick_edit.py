@@ -54,6 +54,25 @@ async def quick_test():
     await miaoshou_controller.navigate_to_collection_box(page, use_sidebar=False)
     await asyncio.sleep(2)
 
+    # 尝试关闭可能出现的弹窗
+    logger.info("检查并关闭可能的弹窗...")
+    try:
+        # 查找"我知道了"按钮
+        know_btn_count = await page.locator("button:has-text('我知道了')").count()
+        if know_btn_count > 0:
+            logger.info("发现弹窗，点击「我知道了」...")
+            await page.locator("button:has-text('我知道了')").first.click()
+            await asyncio.sleep(1000)
+            logger.success("✓ 已关闭弹窗")
+        
+        # 也尝试其他可能的关闭按钮
+        close_btn_count = await page.locator("button:has-text('关闭')").count()
+        if close_btn_count > 0:
+            await page.locator("button:has-text('关闭')").first.click()
+            await asyncio.sleep(500)
+    except Exception as e:
+        logger.warning(f"关闭弹窗时出错（可忽略）: {e}")
+
     # 选择创建人员：柯诗俊(keshijun123)
     logger.info("正在选择创建人员...")
     try:
