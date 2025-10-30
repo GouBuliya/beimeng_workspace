@@ -1,6 +1,12 @@
-"""环境测试脚本.
-
-测试依赖是否正确安装。
+"""
+@PURPOSE: 环境测试脚本，测试依赖是否正确安装
+@OUTLINE:
+  - def test_imports(): 测试所有必需的导入
+  - def test_paths(): 测试路径配置
+  - def main(): 运行所有测试
+@DEPENDENCIES:
+  - 标准库: sys
+  - 外部: pandas, openpyxl, pydantic, playwright, typer, rich
 """
 
 import sys

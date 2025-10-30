@@ -1,18 +1,12 @@
-"""配置管理模块
-
-提供应用配置的基类和工具。
-
-Examples:
-    创建自定义配置::
-
-        from packages.common.config import BaseAppConfig
-        from pydantic import Field
-
-        class MyConfig(BaseAppConfig):
-            api_key: str = Field(..., description="API密钥")
-            timeout: int = Field(default=30, description="超时时间")
-
-        config = MyConfig()
+"""
+@PURPOSE: 提供应用配置的基类和工具，基于Pydantic Settings实现
+@OUTLINE:
+  - class BaseAppConfig: 应用配置基类，支持环境变量和.env文件
+  - get_absolute_path(): 将相对路径转换为绝对路径
+  - ensure_directories(): 确保配置的目录存在
+@DEPENDENCIES:
+  - 外部: pydantic, pydantic_settings
+@RELATED: packages/common/__init__.py
 """
 
 from pathlib import Path

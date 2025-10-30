@@ -1,6 +1,14 @@
-"""测试浏览器管理器.
-
-测试 Playwright 浏览器管理的基础功能。
+"""
+@PURPOSE: 测试浏览器管理器基础功能
+@OUTLINE:
+  - test_browser_manager_init: 测试浏览器管理器初始化
+  - test_browser_manager_start: 测试浏览器启动
+  - test_browser_manager_cookie: 测试Cookie保存和加载
+  - test_browser_manager_screenshot: 测试截图功能
+@TECH_DEBT:
+  - TODO: 实现完整测试（需要pytest-asyncio支持）
+@DEPENDENCIES:
+  - 外部: pytest
 """
 
 import pytest

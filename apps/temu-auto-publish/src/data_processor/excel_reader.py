@@ -1,6 +1,13 @@
-"""Excel 选品表读取器.
-
-负责读取和验证 Excel 选品表数据。
+"""
+@PURPOSE: Excel选品表读取器，负责读取和验证Excel选品表数据
+@OUTLINE:
+  - class ExcelReader: Excel读取器主类
+  - def read(): 读取Excel并返回ProductInput列表
+  - def validate_columns(): 验证必需列是否存在
+@DEPENDENCIES:
+  - 外部: pandas, openpyxl
+  - 内部: ..models.task
+@RELATED: processor.py
 """
 
 from pathlib import Path

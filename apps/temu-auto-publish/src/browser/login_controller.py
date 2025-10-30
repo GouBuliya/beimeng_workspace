@@ -1,6 +1,19 @@
-"""登录控制器.
-
-使用 Playwright 自动化登录 Temu 后台。
+"""
+@PURPOSE: 登录控制器，使用Playwright自动化登录Temu后台
+@OUTLINE:
+  - class LoginController: 登录控制器主类
+  - async def login(): 执行登录流程
+  - async def check_login_status(): 检查登录状态
+  - async def wait_for_manual_login(): 等待手动登录
+  - async def ensure_logged_in(): 确保已登录状态
+@GOTCHAS:
+  - 优先使用Cookie登录，失效后才执行完整登录
+  - 支持手动登录（扫码等）
+  - Cookie有效期24小时
+@DEPENDENCIES:
+  - 内部: .browser_manager, .cookie_manager
+  - 外部: playwright
+@RELATED: browser_manager.py, cookie_manager.py
 """
 
 from datetime import datetime

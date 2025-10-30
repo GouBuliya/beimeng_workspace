@@ -1,6 +1,14 @@
-"""集成测试（占位）.
-
-测试 Python 和影刀的交互。
+"""
+@PURPOSE: 集成测试，测试Python和影刀的交互
+@OUTLINE:
+  - test_placeholder: 占位测试
+  - test_yingdao_file_interaction: 测试文件交互方式（待实现）
+  - test_login_flow: 测试登录流程（待实现）
+  - test_cookie_management: 测试Cookie管理（待实现）
+@TECH_DEBT:
+  - TODO: 实现完整的集成测试
+@DEPENDENCIES:
+  - 外部: pytest
 """
 
 import pytest

@@ -1,6 +1,12 @@
-"""基础使用示例
-
-展示 hello CLI 的基本功能。
+"""
+@PURPOSE: Hello CLI的基础使用示例
+@OUTLINE:
+  - def main(): 运行所有示例
+  - 示例1: 简单问候
+  - 示例2: JSON格式输出
+  - 示例3: YAML格式输出
+@DEPENDENCIES:
+  - 标准库: subprocess, sys
 """
 
 import subprocess

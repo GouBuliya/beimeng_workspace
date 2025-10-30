@@ -1,11 +1,12 @@
-#!/usr/bin/env python3
-"""自动更新 .ai/context.json 的工具
-
-此工具扫描项目目录，发现所有组件并更新全局上下文文件。
-适用于 AI Agent 获取项目的最新状态。
-
-Usage:
-    python scripts/tools/update_ai_context.py
+"""
+@PURPOSE: 自动更新.ai/context.json的工具，扫描项目并更新全局上下文
+@OUTLINE:
+  - class ContextUpdater: 上下文更新器主类
+  - def discover_components(): 发现所有组件
+  - def update_context(): 更新context.json文件
+@DEPENDENCIES:
+  - 标准库: json, datetime, pathlib
+  - 外部: loguru
 """
 
 import json

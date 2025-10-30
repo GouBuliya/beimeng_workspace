@@ -1,18 +1,14 @@
 """
-Hello CLI - 示例命令行工具
-
-这是一个展示最佳实践的 CLI 应用示例。
-
-Examples:
-    基础使用::
-
-        $ python -m apps.cli.hello greet World
-        Hello, World!
-
-    JSON 输出::
-
-        $ python -m apps.cli.hello greet World --format json
-        {"message": "Hello, World!", "timestamp": "2025-10-29T12:00:00Z"}
+@PURPOSE: Hello CLI示例命令行工具，展示CLI应用最佳实践
+@OUTLINE:
+  - app: Typer应用实例
+  - class OutputFormat: 输出格式枚举
+  - class HelloConfig: CLI配置类
+  - def greet(): 问候命令
+  - def config_show(): 显示配置命令
+@DEPENDENCIES:
+  - 外部: typer, rich, pydantic, pydantic_settings
+@RELATED: __main__.py
 """
 
 import json

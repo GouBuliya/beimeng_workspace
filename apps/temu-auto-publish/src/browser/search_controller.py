@@ -1,6 +1,17 @@
-"""搜索控制器.
-
-使用 Playwright 实现站内搜索和商品采集。
+"""
+@PURPOSE: 搜索采集控制器，使用Playwright实现站内搜索和商品采集
+@OUTLINE:
+  - class SearchController: 搜索采集控制器主类
+  - async def search_and_collect(): 搜索并采集商品链接
+  - async def _input_keyword(): 输入关键词
+  - async def _wait_for_results(): 等待搜索结果
+  - async def _extract_product_links(): 提取商品链接
+@TECH_DEBT:
+  - TODO: Day 5实现完整功能
+@DEPENDENCIES:
+  - 内部: .browser_manager
+  - 外部: playwright
+@RELATED: browser_manager.py, edit_controller.py
 """
 
 from loguru import logger

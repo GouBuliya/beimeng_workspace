@@ -1,6 +1,15 @@
-"""应用配置管理.
-
-使用 Pydantic Settings 管理配置，支持从 .env 文件加载。
+"""
+@PURPOSE: 应用配置管理，使用Pydantic Settings管理配置，支持从.env文件加载
+@OUTLINE:
+  - class Settings: Temu自动发布应用配置主类
+  - def ensure_directories(): 确保数据目录存在
+  - def get_absolute_path(): 获取绝对路径
+@GOTCHAS:
+  - 敏感信息（账号密码）应存储在.env文件中
+  - 不要将.env提交到git
+@DEPENDENCIES:
+  - 外部: pydantic, pydantic_settings
+@RELATED: __init__.py
 """
 
 from pathlib import Path

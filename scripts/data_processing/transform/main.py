@@ -1,16 +1,14 @@
-#!/usr/bin/env python3
-"""数据转换脚本
-
-一个展示最佳实践的数据处理脚本。
-
-Examples:
-    从文件读取::
-
-        $ python main.py --input data.json --output result.json
-
-    使用管道::
-
-        $ cat data.json | python main.py | jq .
+"""
+@PURPOSE: 数据转换脚本示例，展示最佳实践的数据处理脚本
+@OUTLINE:
+  - class Operation: 转换操作类型枚举
+  - class InputData: 输入数据模型
+  - class OutputData: 输出数据模型
+  - def transform(): 数据转换主函数
+  - def main(): CLI入口
+@DEPENDENCIES:
+  - 外部: typer, pydantic
+@RELATED: examples/run_examples.py
 """
 
 import json

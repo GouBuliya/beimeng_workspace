@@ -1,6 +1,13 @@
-"""基础工作流示例.
-
-演示如何使用 temu-auto-publish 系统处理选品表。
+"""
+@PURPOSE: 基础工作流示例，演示如何使用temu-auto-publish系统处理选品表
+@OUTLINE:
+  - def main(): 运行基础工作流示例
+  - 步骤1: 配置路径
+  - 步骤2: 处理Excel文件
+  - 步骤3: 输出结果
+@DEPENDENCIES:
+  - 内部: config.settings, src.data_processor
+@RELATED: test_env.py
 """
 
 from pathlib import Path

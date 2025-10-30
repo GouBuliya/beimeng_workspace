@@ -1,6 +1,13 @@
-"""结果数据模型定义.
-
-定义了影刀流程执行结果的数据结构。
+"""
+@PURPOSE: 定义影刀流程执行结果的数据结构
+@OUTLINE:
+  - class YingdaoResult: 影刀流程执行结果基类
+  - class SearchResult: 搜索采集结果
+  - class EditResult: 商品编辑结果
+  - class PublishResult: 商品发布结果
+@DEPENDENCIES:
+  - 外部: pydantic
+@RELATED: src/browser/search_controller.py, src/browser/edit_controller.py
 """
 
 from datetime import datetime

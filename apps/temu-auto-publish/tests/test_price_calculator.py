@@ -1,4 +1,14 @@
-"""测试价格计算器."""
+"""
+@PURPOSE: 测试价格计算器功能
+@OUTLINE:
+  - test_price_result_calculate: 测试价格计算
+  - test_price_result_rounding: 测试价格四舍五入
+  - test_price_calculator_batch: 测试批量计算
+  - test_price_calculator_custom_multipliers: 测试自定义倍率
+@DEPENDENCIES:
+  - 外部: pytest
+  - 内部: src.data_processor.price_calculator
+"""
 
 import pytest
 

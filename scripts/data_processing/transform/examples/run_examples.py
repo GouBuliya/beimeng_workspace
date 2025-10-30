@@ -1,5 +1,13 @@
-#!/usr/bin/env python3
-"""数据转换脚本使用示例"""
+"""
+@PURPOSE: 数据转换脚本使用示例
+@OUTLINE:
+  - def main(): 运行所有示例
+  - 示例1: 转换为大写
+  - 示例2: 转换为小写
+  - 示例3: 反转字符串
+@DEPENDENCIES:
+  - 标准库: json, subprocess, sys, pathlib
+"""
 
 import json
 import subprocess

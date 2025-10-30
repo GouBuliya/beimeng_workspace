@@ -1,6 +1,17 @@
-"""编辑控制器.
-
-使用 Playwright 实现商品编辑和发布。
+"""
+@PURPOSE: 编辑控制器，使用Playwright实现商品编辑和发布
+@OUTLINE:
+  - class EditController: 编辑控制器主类
+  - async def edit_product(): 编辑商品信息
+  - async def _claim_product(): 认领商品
+  - async def _fill_form(): 填写表单
+  - async def _submit(): 提交发布
+@TECH_DEBT:
+  - TODO: Day 6-7实现完整功能
+@DEPENDENCIES:
+  - 内部: .browser_manager
+  - 外部: playwright
+@RELATED: browser_manager.py, search_controller.py
 """
 
 from loguru import logger

@@ -1,6 +1,14 @@
-"""Cookie 管理器.
-
-负责 Temu 登录 Cookie 的保存、加载和验证。
+"""
+@PURPOSE: Cookie管理器，负责Temu登录Cookie的保存、加载和验证
+@OUTLINE:
+  - class CookieManager: Cookie管理器主类
+  - def save(): 保存Cookie到文件
+  - def load(): 从文件加载Cookie
+  - def is_valid(): 检查Cookie是否有效
+  - def clear(): 清除Cookie
+@DEPENDENCIES:
+  - 标准库: json, datetime, pathlib
+@RELATED: browser_manager.py, login_controller.py
 """
 
 import json

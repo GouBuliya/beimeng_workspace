@@ -1,6 +1,12 @@
-"""任务数据模型定义.
-
-定义了从 Excel 读取到任务生成的所有数据结构。
+"""
+@PURPOSE: 定义任务数据模型，从Excel读取到任务生成的所有数据结构
+@OUTLINE:
+  - class ProductInput: 选品表单行数据模型
+  - class TaskProduct: 任务商品数据模型（包含价格计算结果）
+  - class TaskData: 完整任务数据模型
+@DEPENDENCIES:
+  - 外部: pydantic
+@RELATED: src/data_processor/excel_reader.py, src/data_processor/processor.py
 """
 
 from datetime import datetime

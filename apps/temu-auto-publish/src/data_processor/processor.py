@@ -1,6 +1,12 @@
-"""数据处理流程整合.
-
-整合所有数据处理模块，提供统一的处理接口。
+"""
+@PURPOSE: 数据处理流程整合，提供统一的数据处理接口
+@OUTLINE:
+  - class DataProcessor: 数据处理器主类
+  - def process_excel(): 处理Excel文件并生成任务数据
+  - def _process_products(): 处理单个商品数据
+@DEPENDENCIES:
+  - 内部: .excel_reader, .price_calculator, .title_generator, ..models.task
+@RELATED: excel_reader.py, price_calculator.py, title_generator.py
 """
 
 import json

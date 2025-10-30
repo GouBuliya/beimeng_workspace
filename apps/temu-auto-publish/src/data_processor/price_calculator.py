@@ -1,6 +1,13 @@
-"""价格计算器.
-
-根据成本价计算建议售价和供货价。
+"""
+@PURPOSE: 价格计算器，根据成本价计算建议售价和供货价
+@OUTLINE:
+  - class PriceResult: 价格计算结果模型
+  - class PriceCalculator: 价格计算器主类
+  - def calculate(): 计算单个价格
+  - def calculate_batch(): 批量计算价格
+@DEPENDENCIES:
+  - 外部: pydantic
+@RELATED: processor.py
 """
 
 from typing import List

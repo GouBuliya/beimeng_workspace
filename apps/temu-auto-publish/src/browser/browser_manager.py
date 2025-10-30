@@ -1,6 +1,19 @@
-"""浏览器管理器.
-
-使用 Playwright 管理浏览器实例，支持反检测和Cookie管理。
+"""
+@PURPOSE: 浏览器管理器，使用Playwright管理浏览器实例，支持反检测和Cookie管理
+@OUTLINE:
+  - class BrowserManager: 浏览器管理器主类
+  - async def start(): 启动浏览器
+  - async def close(): 关闭浏览器
+  - async def save_cookies(): 保存Cookie
+  - async def load_cookies(): 加载Cookie
+  - async def screenshot(): 截图
+@GOTCHAS:
+  - 必须使用async/await异步操作
+  - 关闭浏览器前应保存Cookie
+  - 反检测配置在browser_config.json中
+@DEPENDENCIES:
+  - 外部: playwright
+@RELATED: login_controller.py, cookie_manager.py
 """
 
 import json

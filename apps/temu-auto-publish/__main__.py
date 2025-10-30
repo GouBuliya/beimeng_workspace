@@ -1,6 +1,13 @@
-"""Temu 自动发布系统 CLI 入口.
-
-使用 Typer 提供命令行接口，Playwright 进行浏览器自动化。
+"""
+@PURPOSE: Temu自动发布系统CLI入口，提供命令行接口
+@OUTLINE:
+  - app: Typer应用实例
+  - def process(): 处理Excel选品表主命令
+  - def login_test(): 测试登录功能
+  - def info(): 显示系统信息
+@DEPENDENCIES:
+  - 内部: config.settings, src.data_processor, src.browser
+  - 外部: typer, rich
 """
 
 import asyncio

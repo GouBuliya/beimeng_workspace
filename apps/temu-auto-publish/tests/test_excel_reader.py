@@ -1,4 +1,15 @@
-"""测试 Excel 读取器."""
+"""
+@PURPOSE: 测试Excel读取器功能
+@OUTLINE:
+  - test_placeholder: 占位测试
+  - test_excel_reader_valid_file: 测试读取有效Excel文件（待实现）
+  - test_excel_reader_invalid_file: 测试处理无效文件（待实现）
+  - test_excel_reader_empty_rows: 测试处理空行（待实现）
+@TECH_DEBT:
+  - TODO: 实现完整测试
+@DEPENDENCIES:
+  - 外部: pytest
+"""
 
 import pytest
 from pathlib import Path

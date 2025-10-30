@@ -1,14 +1,11 @@
-"""日志配置模块
-
-提供统一的日志配置和管理功能。
-
-Examples:
-    基础使用::
-
-        from packages.common.logger import setup_logger
-
-        logger = setup_logger("my_app")
-        logger.info("应用启动")
+"""
+@PURPOSE: 提供统一的日志配置和管理功能，基于loguru实现
+@OUTLINE:
+  - def setup_logger(name, level, format_string): 配置并返回logger实例
+  - def remove_default_handlers(): 移除默认处理器
+@DEPENDENCIES:
+  - 外部: loguru
+@RELATED: packages/common/config.py
 """
 
 import sys

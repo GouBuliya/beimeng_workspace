@@ -1,6 +1,20 @@
-"""AI 标题生成器.
-
-生成商品标题，支持多种模式。
+"""
+@PURPOSE: AI标题生成器，支持多种模式生成商品标题
+@OUTLINE:
+  - class TitleGenerator: 标题生成器主类
+  - def generate(): 生成商品标题
+  - def generate_with_temu_ai(): 使用Temu AI生成
+  - def generate_with_api(): 使用外部API生成
+  - def generate_with_rules(): 基于规则生成（保底方案）
+@GOTCHAS:
+  - 优先级：Temu AI > 外部API > 规则生成
+  - 规则生成仅作为保底方案，质量较低
+@TECH_DEBT:
+  - TODO: 实现外部API调用（OpenAI/通义千问）
+  - TODO: 优化规则生成的标题质量
+@DEPENDENCIES:
+  - 外部: loguru
+@RELATED: processor.py
 """
 
 import re
