@@ -151,18 +151,34 @@ class MiaoshouController:
 
             counts = {}
 
-            # 获取各个tab的数量（从tab文本中提取）
-            for status, selector in tabs_config.items():
+            # 优化：使用正则表达式匹配完整的tab文本（包含数字）
+            import re
+            
+            # 定义tab名称映射
+            tab_patterns = {
+                "all": r"全部.*\((\d+)\)",
+                "unclaimed": r"未认领.*\((\d+)\)",
+                "claimed": r"已认领.*\((\d+)\)",
+                "failed": r"(采集失败|失败).*\((\d+)\)",
+            }
+            
+            for status, pattern in tab_patterns.items():
                 try:
-                    tab_text = await page.locator(selector).text_content()
-                    # 提取数字，例如 "已认领 (7650)" -> 7650
-                    import re
-                    match = re.search(r"\((\d+)\)", tab_text or "")
-                    if match:
-                        counts[status] = int(match.group(1))
+                    # 查找匹配的元素
+                    tab_locator = page.locator(f"text=/{pattern}/")
+                    count = await tab_locator.count()
+                    
+                    if count > 0:
+                        tab_text = await tab_locator.first.text_content(timeout=3000)
+                        match = re.search(r"\((\d+)\)", tab_text or "")
+                        if match:
+                            counts[status] = int(match.group(1))
+                        else:
+                            counts[status] = 0
                     else:
                         counts[status] = 0
-                except Exception:
+                except Exception as e:
+                    logger.debug(f"获取{status}数量失败: {e}")
                     counts[status] = 0
 
             logger.success(f"✓ 产品统计: {counts}")
