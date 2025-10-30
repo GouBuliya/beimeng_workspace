@@ -114,15 +114,45 @@ class FirstEditController:
         logger.info(f"SOP 4.1: 编辑标题 -> {new_title}")
 
         try:
-            first_edit_config = self.selectors.get("first_edit_dialog", {})
-            basic_info_config = first_edit_config.get("basic_info", {})
-
-            title_selector = basic_info_config.get("title_input", "input[placeholder*='标题']")
+            # 等待弹窗完全加载
+            await page.wait_for_timeout(1000)
+            
+            # 尝试多个可能的标题输入框选择器
+            title_selectors = [
+                "textarea[placeholder*='标题']",
+                "input[placeholder*='标题']",
+                "textarea[placeholder*='产品标题']",
+                "input[placeholder*='产品标题']",
+                "textarea.jx-textarea__inner",  # 通用textarea class
+                "input[type='text']:visible",   # 可见的文本输入框
+            ]
+            
+            title_input = None
+            for selector in title_selectors:
+                try:
+                    count = await page.locator(selector).count()
+                    if count > 0:
+                        # 找到第一个可见的
+                        for i in range(count):
+                            elem = page.locator(selector).nth(i)
+                            is_visible = await elem.is_visible(timeout=1000)
+                            if is_visible:
+                                title_input = elem
+                                logger.debug(f"使用选择器: {selector} (第{i+1}个)")
+                                break
+                        if title_input:
+                            break
+                except:
+                    continue
+            
+            if not title_input:
+                logger.error("未找到标题输入框")
+                return False
             
             # 清空并填写新标题
-            await page.locator(title_selector).fill("")
+            await title_input.fill("")
             await page.wait_for_timeout(300)
-            await page.locator(title_selector).fill(new_title)
+            await title_input.fill(new_title)
             await page.wait_for_timeout(500)
 
             logger.success(f"✓ 标题已更新: {new_title}")
