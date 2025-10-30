@@ -29,7 +29,7 @@ from loguru import logger
 from src.browser.first_edit_controller import FirstEditController
 from src.browser.login_controller import LoginController
 from src.browser.miaoshou_controller import MiaoshouController
-from src.data_processor.price_calculator import PriceCalculator
+from src.data_processor.price_calculator import PriceCalculator, PriceResult
 from src.data_processor.title_generator import TitleGenerator
 
 
@@ -192,7 +192,12 @@ async def quick_test():
     # 生成测试数据
     cost = 10.0
     price_calc = PriceCalculator()
-    price_result = price_calc.calculate(cost)
+    # 使用PriceResult的静态方法计算价格
+    price_result = PriceResult.calculate(
+        cost, 
+        price_calc.suggested_multiplier, 
+        price_calc.supply_multiplier
+    )
 
     title_gen = TitleGenerator()
     titles = title_gen.generate_with_model_suffix(
