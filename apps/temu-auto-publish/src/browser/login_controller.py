@@ -44,13 +44,13 @@ class LoginController:
     def __init__(
         self,
         config_path: str = "config/browser_config.json",
-        selector_path: str = "config/miaoshou_selectors.json",
+        selector_path: str = "config/miaoshou_selectors_v2.json",
     ):
         """初始化控制器.
 
         Args:
             config_path: 浏览器配置文件路径
-            selector_path: 选择器配置文件路径
+            selector_path: 选择器配置文件路径（默认使用v2文本定位器版本）
         """
         self.browser_manager = BrowserManager(config_path)
         self.cookie_manager = CookieManager()
@@ -145,27 +145,27 @@ class LoginController:
             await page.goto(login_url, timeout=60000)
             await page.wait_for_load_state("domcontentloaded")
 
-            # 使用aria-ref定位元素
-            username_selector = login_config.get("username_input", "aria-ref=e32")
-            password_selector = login_config.get("password_input", "aria-ref=e35")
-            login_btn_selector = login_config.get("login_button", "aria-ref=e38")
+            # 使用文本定位器（更稳定）
+            username_selector = login_config.get("username_input", "input[type='text']")
+            password_selector = login_config.get("password_input", "input[type='password']")
+            login_btn_selector = login_config.get("login_button", "button:has-text('登录')")
 
             # 等待登录表单加载
-            await page.wait_for_selector(f"[{username_selector}]", timeout=10000)
+            await page.wait_for_selector(username_selector, timeout=10000)
 
             # 输入用户名
             logger.debug("输入用户名...")
-            await page.locator(f"[{username_selector}]").fill(username)
+            await page.locator(username_selector).fill(username)
             await page.wait_for_timeout(500)  # 等待输入生效
 
             # 输入密码
             logger.debug("输入密码...")
-            await page.locator(f"[{password_selector}]").fill(password)
+            await page.locator(password_selector).fill(password)
             await page.wait_for_timeout(500)
 
             # 点击登录按钮
             logger.debug("点击登录按钮...")
-            await page.locator(f"[{login_btn_selector}]").click()
+            await page.locator(login_btn_selector).click()
 
             # 等待登录结果（跳转到首页或显示错误）
             logger.info("等待登录结果...")
@@ -238,9 +238,9 @@ class LoginController:
 
             # 检查是否有产品菜单元素（首页特有）
             homepage_config = self.selectors.get("homepage", {})
-            product_menu_selector = homepage_config.get("product_menu", "aria-ref=e11")
+            product_menu_selector = homepage_config.get("product_menu", "text='产品'")
             
-            menu_count = await page.locator(f"[{product_menu_selector}]").count()
+            menu_count = await page.locator(product_menu_selector).count()
             if menu_count > 0:
                 logger.debug("✓ 检测到产品菜单元素")
                 return True

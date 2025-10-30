@@ -50,15 +50,15 @@ class FirstEditController:
         >>> await ctrl.edit_title(page, "新标题 A0001型号")
     """
 
-    def __init__(self, selector_path: str = "config/miaoshou_selectors.json"):
+    def __init__(self, selector_path: str = "config/miaoshou_selectors_v2.json"):
         """初始化首次编辑控制器.
 
         Args:
-            selector_path: 选择器配置文件路径
+            selector_path: 选择器配置文件路径（默认使用v2文本定位器版本）
         """
         self.selector_path = Path(selector_path)
         self.selectors = self._load_selectors()
-        logger.info("首次编辑控制器初始化（SOP步骤4）")
+        logger.info("首次编辑控制器初始化（SOP步骤4 - 文本定位器）")
 
     def _load_selectors(self) -> dict:
         """加载选择器配置."""
@@ -88,9 +88,9 @@ class FirstEditController:
         """
         try:
             first_edit_config = self.selectors.get("first_edit_dialog", {})
-            close_btn_selector = first_edit_config.get("close_btn", "aria-ref=e2272")
+            close_btn_selector = first_edit_config.get("close_btn", "button:has-text('关闭')")
 
-            await page.wait_for_selector(f"[{close_btn_selector}]", timeout=timeout)
+            await page.wait_for_selector(close_btn_selector, timeout=timeout)
             logger.success("✓ 编辑弹窗已打开")
             return True
         except Exception as e:
@@ -117,12 +117,12 @@ class FirstEditController:
             first_edit_config = self.selectors.get("first_edit_dialog", {})
             basic_info_config = first_edit_config.get("basic_info", {})
 
-            title_selector = basic_info_config.get("title_input", "aria-ref=e2445")
+            title_selector = basic_info_config.get("title_input", "input[placeholder*='标题']")
             
             # 清空并填写新标题
-            await page.locator(f"[{title_selector}]").fill("")
+            await page.locator(title_selector).fill("")
             await page.wait_for_timeout(300)
-            await page.locator(f"[{title_selector}]").fill(new_title)
+            await page.locator(title_selector).fill(new_title)
             await page.wait_for_timeout(500)
 
             logger.success(f"✓ 标题已更新: {new_title}")
@@ -160,13 +160,13 @@ class FirstEditController:
 
             # 切换到销售属性tab
             nav_config = first_edit_config.get("navigation", {})
-            sales_tab_selector = nav_config.get("sales_attrs", "aria-ref=e2422")
-            await page.locator(f"[{sales_tab_selector}]").click()
+            sales_tab_selector = nav_config.get("sales_attrs", "text='销售属性'")
+            await page.locator(sales_tab_selector).click()
             await page.wait_for_timeout(1000)
 
             # 填写SKU价格
-            price_selector = sales_attrs_config.get("sku_price_template", "aria-ref=e2958")
-            await page.locator(f"[{price_selector}]").fill(str(price))
+            price_selector = sales_attrs_config.get("sku_price_template", "input[placeholder*='价格']")
+            await page.locator(price_selector).fill(str(price))
             await page.wait_for_timeout(500)
 
             logger.success(f"✓ 价格已设置: {price} CNY")
@@ -202,8 +202,8 @@ class FirstEditController:
             first_edit_config = self.selectors.get("first_edit_dialog", {})
             sales_attrs_config = first_edit_config.get("sales_attrs", {})
 
-            stock_selector = sales_attrs_config.get("sku_stock_template", "aria-ref=e2962")
-            await page.locator(f"[{stock_selector}]").fill(str(stock))
+            stock_selector = sales_attrs_config.get("sku_stock_template", "input[placeholder*='库存']")
+            await page.locator(stock_selector).fill(str(stock))
             await page.wait_for_timeout(500)
 
             logger.success(f"✓ 库存已设置: {stock}")
@@ -239,8 +239,8 @@ class FirstEditController:
             first_edit_config = self.selectors.get("first_edit_dialog", {})
             sales_attrs_config = first_edit_config.get("sales_attrs", {})
 
-            weight_selector = sales_attrs_config.get("sku_weight_template", "aria-ref=e2972")
-            await page.locator(f"[{weight_selector}]").fill(str(weight))
+            weight_selector = sales_attrs_config.get("sku_weight_template", "input[placeholder*='重量']")
+            await page.locator(weight_selector).fill(str(weight))
             await page.wait_for_timeout(500)
 
             logger.success(f"✓ 重量已设置: {weight} KG")
@@ -281,15 +281,15 @@ class FirstEditController:
             sales_attrs_config = first_edit_config.get("sales_attrs", {})
 
             # 填写长宽高
-            length_selector = sales_attrs_config.get("sku_length_template", "aria-ref=e2986")
-            width_selector = sales_attrs_config.get("sku_width_template", "aria-ref=e2990")
-            height_selector = sales_attrs_config.get("sku_height_template", "aria-ref=e2994")
+            length_selector = sales_attrs_config.get("sku_length_template", "input[placeholder*='长']")
+            width_selector = sales_attrs_config.get("sku_width_template", "input[placeholder*='宽']")
+            height_selector = sales_attrs_config.get("sku_height_template", "input[placeholder*='高']")
 
-            await page.locator(f"[{length_selector}]").fill(str(length))
+            await page.locator(length_selector).fill(str(length))
             await page.wait_for_timeout(300)
-            await page.locator(f"[{width_selector}]").fill(str(width))
+            await page.locator(width_selector).fill(str(width))
             await page.wait_for_timeout(300)
-            await page.locator(f"[{height_selector}]").fill(str(height))
+            await page.locator(height_selector).fill(str(height))
             await page.wait_for_timeout(500)
 
             logger.success(f"✓ 尺寸已设置: {length}x{width}x{height} CM")
@@ -319,13 +319,13 @@ class FirstEditController:
             first_edit_config = self.selectors.get("first_edit_dialog", {})
             actions_config = first_edit_config.get("actions", {})
 
-            save_btn_selector = actions_config.get("save_btn", "aria-ref=e3548")
-            await page.locator(f"[{save_btn_selector}]").click()
+            save_btn_selector = actions_config.get("save_btn", "button:has-text('保存')")
+            await page.locator(save_btn_selector).click()
             
             if wait_for_close:
                 # 等待弹窗关闭
-                close_btn_selector = first_edit_config.get("close_btn", "aria-ref=e2272")
-                await page.wait_for_selector(f"[{close_btn_selector}]", state="hidden", timeout=10000)
+                close_btn_selector = first_edit_config.get("close_btn", "button:has-text('关闭')")
+                await page.wait_for_selector(close_btn_selector, state="hidden", timeout=10000)
                 logger.success("✓ 修改已保存，弹窗已关闭")
             else:
                 await page.wait_for_timeout(2000)
@@ -354,9 +354,9 @@ class FirstEditController:
 
         try:
             first_edit_config = self.selectors.get("first_edit_dialog", {})
-            close_btn_selector = first_edit_config.get("close_btn", "aria-ref=e2272")
+            close_btn_selector = first_edit_config.get("close_btn", "button:has-text('关闭')")
 
-            await page.locator(f"[{close_btn_selector}]").click()
+            await page.locator(close_btn_selector).click()
             await page.wait_for_timeout(1000)
 
             logger.success("✓ 编辑弹窗已关闭")

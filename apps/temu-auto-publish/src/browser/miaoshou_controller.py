@@ -42,15 +42,15 @@ class MiaoshouController:
         >>> await ctrl.navigate_to_collection_box(page)
     """
 
-    def __init__(self, selector_path: str = "config/miaoshou_selectors.json"):
+    def __init__(self, selector_path: str = "config/miaoshou_selectors_v2.json"):
         """初始化妙手控制器.
 
         Args:
-            selector_path: 选择器配置文件路径
+            selector_path: 选择器配置文件路径（默认使用v2文本定位器版本）
         """
         self.selector_path = Path(selector_path)
         self.selectors = self._load_selectors()
-        logger.info("妙手控制器初始化（SOP v2.0）")
+        logger.info("妙手控制器初始化（SOP v2.0 - 文本定位器）")
 
     def _load_selectors(self) -> dict:
         """加载选择器配置.
@@ -95,10 +95,10 @@ class MiaoshouController:
             if use_sidebar:
                 # 方式1：通过侧边栏导航（推荐）
                 sidebar_config = self.selectors.get("sidebar_menu", {})
-                collection_box_selector = sidebar_config.get("common_collection_box", "aria-ref=e405")
+                collection_box_selector = sidebar_config.get("common_collection_box", "menuitem:has-text('公用采集箱')")
 
                 logger.debug("点击侧边栏「公用采集箱」...")
-                await page.locator(f"[{collection_box_selector}]").click()
+                await page.locator(collection_box_selector).click()
                 await page.wait_for_timeout(1000)
 
             else:
@@ -154,7 +154,7 @@ class MiaoshouController:
             # 获取各个tab的数量（从tab文本中提取）
             for status, selector in tabs_config.items():
                 try:
-                    tab_text = await page.locator(f"[{selector}]").text_content()
+                    tab_text = await page.locator(selector).text_content()
                     # 提取数字，例如 "已认领 (7650)" -> 7650
                     import re
                     match = re.search(r"\((\d+)\)", tab_text or "")
@@ -197,7 +197,7 @@ class MiaoshouController:
                 return False
 
             selector = tabs_config[tab_name]
-            await page.locator(f"[{selector}]").click()
+            await page.locator(selector).click()
             await page.wait_for_timeout(1500)  # 等待列表刷新
 
             logger.success(f"✓ 已切换到「{tab_name}」tab")
@@ -240,31 +240,31 @@ class MiaoshouController:
             # 填写搜索条件
             if title:
                 logger.debug(f"填写标题: {title}")
-                title_selector = search_config.get("product_title", "aria-ref=e675")
-                await page.locator(f"[{title_selector}]").fill(title)
+                title_selector = search_config.get("product_title", "input[placeholder*='标题']")
+                await page.locator(title_selector).fill(title)
                 await page.wait_for_timeout(300)
 
             if source_id:
                 logger.debug(f"填写货源ID: {source_id}")
-                id_selector = search_config.get("source_id", "aria-ref=e684")
-                await page.locator(f"[{id_selector}]").fill(source_id)
+                id_selector = search_config.get("source_id", "input[placeholder*='ID']")
+                await page.locator(id_selector).fill(source_id)
                 await page.wait_for_timeout(300)
 
             if price_min is not None:
                 logger.debug(f"填写最低价格: {price_min}")
-                min_selector = search_config.get("source_price_min", "aria-ref=e694")
-                await page.locator(f"[{min_selector}]").fill(str(price_min))
+                min_selector = search_config.get("source_price_min", "input[placeholder*='最低']")
+                await page.locator(min_selector).fill(str(price_min))
                 await page.wait_for_timeout(300)
 
             if price_max is not None:
                 logger.debug(f"填写最高价格: {price_max}")
-                max_selector = search_config.get("source_price_max", "aria-ref=e698")
-                await page.locator(f"[{max_selector}]").fill(str(price_max))
+                max_selector = search_config.get("source_price_max", "input[placeholder*='最高']")
+                await page.locator(max_selector).fill(str(price_max))
                 await page.wait_for_timeout(300)
 
             # 点击搜索按钮
-            search_btn_selector = search_config.get("search_btn", "aria-ref=e816")
-            await page.locator(f"[{search_btn_selector}]").click()
+            search_btn_selector = search_config.get("search_btn", "button:has-text('搜索')")
+            await page.locator(search_btn_selector).click()
             await page.wait_for_timeout(2000)  # 等待搜索结果加载
 
             logger.success("✓ 搜索完成")
@@ -293,8 +293,8 @@ class MiaoshouController:
             collection_box_config = self.selectors.get("collection_box", {})
             pagination_config = collection_box_config.get("pagination", {})
             
-            select_all_selector = pagination_config.get("select_all", "aria-ref=e928")
-            await page.locator(f"[{select_all_selector}]").click()
+            select_all_selector = pagination_config.get("select_all", "text='全选'")
+            await page.locator(select_all_selector).click()
             await page.wait_for_timeout(500)
 
             logger.success("✓ 已全选产品")
@@ -323,16 +323,16 @@ class MiaoshouController:
             collection_box_config = self.selectors.get("collection_box", {})
             product_list_config = collection_box_config.get("product_list", {})
 
-            # 第一个产品的编辑按钮（选择器可能是模板，需要使用实际的ref）
-            edit_btn_selector = product_list_config.get("edit_btn_template", "aria-ref=e1010")
-            await page.locator(f"[{edit_btn_selector}]").click()
+            # 第一个产品的编辑按钮
+            edit_btn_selector = product_list_config.get("edit_btn_template", "button:has-text('编辑')")
+            await page.locator(edit_btn_selector).first.click()
             await page.wait_for_timeout(2000)  # 等待弹窗加载
 
             # 验证弹窗是否打开
             first_edit_config = self.selectors.get("first_edit_dialog", {})
-            close_btn_selector = first_edit_config.get("close_btn", "aria-ref=e2272")
+            close_btn_selector = first_edit_config.get("close_btn", "button:has-text('关闭')")
 
-            if await page.locator(f"[{close_btn_selector}]").is_visible():
+            if await page.locator(close_btn_selector).is_visible():
                 logger.success("✓ 编辑弹窗已打开")
                 return True
             else:
