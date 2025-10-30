@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "file-info": {
-      "command": "python3",
+      "command": "/Users/candy/beimeng_workspace/.venv/bin/python",
       "args": [
         "/Users/candy/beimeng_workspace/packages/mcp_file_info/run_server.py"
       ],
