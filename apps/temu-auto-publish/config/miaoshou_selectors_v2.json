@@ -7,9 +7,9 @@
   
   "login": {
     "url": "https://erp.91miaoshou.com/sub_account/users",
-    "username_input": "input[type='text'], input[placeholder*='账号']",
-    "password_input": "input[type='password'], input[placeholder*='密码']",
-    "login_button": "button:has-text('登录')"
+    "username_input": "input[name='mobile'].account-input.J_loginName",
+    "password_input": "input[name='password'].password-input.J_inputField",
+    "login_button": "button.login-submit-btn"
   },
   
   "homepage": {
