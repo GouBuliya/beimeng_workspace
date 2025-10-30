@@ -132,3 +132,48 @@
    - 添加重要功能时更新 @CHANGELOG
    - 发现新的易错点时补充到 @GOTCHAS
 
+#### 使用 MCP 工具快速查看文件元信息
+
+**推荐使用 `mcp_file-info` 工具**来快速获取文件的元信息，而不是完整读取文件：
+
+**获取文件全部元信息：**
+```
+使用 mcp_file-info_get_file_metadata 工具
+- 参数: file_path（相对或绝对路径）
+- 返回: 文件的所有元信息字段（PURPOSE, OUTLINE, DEPENDENCIES等）
+```
+
+**获取特定字段：**
+```
+使用 mcp_file-info_get_specific_metadata 工具
+- 参数: file_path, fields（字段列表）
+- 可用字段: PURPOSE, OUTLINE, GOTCHAS, TECH_DEBT, DEPENDENCIES, CHANGELOG, AUTHOR, RELATED
+- 返回: 仅包含指定字段的元信息
+```
+
+**使用场景：**
+- ✅ 快速了解文件用途和结构（只需元信息，无需读取整个文件）
+- ✅ 检查文件依赖关系（@DEPENDENCIES字段）
+- ✅ 查看已知问题和注意事项（@GOTCHAS字段）
+- ✅ 了解技术债务（@TECH_DEBT字段）
+- ✅ 批量检查多个文件的元信息
+
+**示例：**
+```python
+# 获取文件的PURPOSE和OUTLINE
+mcp_file-info_get_specific_metadata(
+    file_path="apps/temu-auto-publish/src/browser/browser_manager.py",
+    fields=["PURPOSE", "OUTLINE"]
+)
+
+# 获取文件的全部元信息
+mcp_file-info_get_file_metadata(
+    file_path="packages/common/logger.py"
+)
+```
+
+**注意：**
+- 所有源代码文件都已符合元信息协议规范（合规率100%）
+- 优先使用MCP工具获取元信息，比读取整个文件更高效
+- 如果需要查看具体实现代码，再使用 read_file 工具
+
