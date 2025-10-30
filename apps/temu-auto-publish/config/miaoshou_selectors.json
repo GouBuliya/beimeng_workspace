@@ -1,89 +1,164 @@
 {
-  "comment": "妙手工具选择器配置 - 所有选择器需要使用 playwright codegen 获取实际值",
+  "comment": "妙手ERP系统选择器配置 - 使用aria-ref定位元素",
   "version": "1.0.0",
   "last_updated": "2025-10-30",
-
+  
   "login": {
-    "url": "https://seller.temu.com/login",
-    "username_input": "待使用codegen获取",
-    "password_input": "待使用codegen获取",
-    "login_button": "待使用codegen获取",
-    "captcha_container": "待使用codegen获取"
+    "url": "https://erp.91miaoshou.com/sub_account/users",
+    "username_input": "aria-ref=e32",
+    "password_input": "aria-ref=e35",
+    "login_button": "aria-ref=e38"
   },
-
-  "seller_backend": {
-    "home_url": "https://seller.temu.com",
-    "store_front_button": "待使用codegen获取",
-    "user_info": "待使用codegen获取"
+  
+  "homepage": {
+    "url": "https://erp.91miaoshou.com/welcome",
+    "product_menu": "aria-ref=e11",
+    "product_collection_link": "aria-ref=e298",
+    "pending_publish_count": "aria-ref=e87"
   },
-
-  "miaoshou": {
-    "collection_box_url": "待确认实际URL",
-    "collection_box_title": "待使用codegen获取",
-    "search_input": "待使用codegen获取",
-    "collect_button": "待使用codegen获取",
-    "link_list": "待使用codegen获取",
-    "link_item": "待使用codegen获取",
-    "claim_button": "待使用codegen获取",
-    "page_size_selector": "待使用codegen获取"
+  
+  "product_collection": {
+    "url": "https://erp.91miaoshou.com/common_collect_box/index",
+    "link_input": "aria-ref=e492",
+    "collection_optimize_btn": "aria-ref=e477",
+    "collection_settings_btn": "aria-ref=e482",
+    "auto_claim_checkbox": "aria-ref=e626",
+    "platform_selector": "aria-ref=e633",
+    "collect_and_claim_btn": "aria-ref=e635",
+    "collect_and_publish_btn": "aria-ref=e637"
   },
-
-  "first_edit": {
-    "edit_button": "待使用codegen获取",
-    "title_input": "待使用codegen获取",
-    "category_selector": "待使用codegen获取",
-    "image_upload": "待使用codegen获取",
-    "video_upload": "待使用codegen获取",
-    "save_button": "待使用codegen获取"
+  
+  "sidebar_menu": {
+    "common_functions": "aria-ref=e399",
+    "product_collection_item": "aria-ref=e404",
+    "common_collection_box": "aria-ref=e405"
   },
-
-  "batch_edit": {
-    "select_all": "待使用codegen获取",
-    "batch_edit_button": "待使用codegen获取",
-    "preview_button": "待使用codegen获取",
-    "save_button": "待使用codegen获取",
-
-    "steps": {
-      "step_01_title": "待使用codegen获取",
-      "step_02_english_title": "待使用codegen获取",
-      "step_03_category_attrs": "待使用codegen获取",
-      "step_05_packaging_shape": "待使用codegen获取",
-      "step_05_packaging_type": "待使用codegen获取",
-      "step_06_origin": "待使用codegen获取",
-      "step_09_weight": "待使用codegen获取",
-      "step_10_length": "待使用codegen获取",
-      "step_10_width": "待使用codegen获取",
-      "step_10_height": "待使用codegen获取",
-      "step_11_sku": "待使用codegen获取",
-      "step_12_sku_category": "待使用codegen获取",
-      "step_14_suggested_price": "待使用codegen获取",
-      "step_18_manual_upload": "待使用codegen获取"
+  
+  "collection_box": {
+    "url": "https://erp.91miaoshou.com/common_collect_box/items",
+    "search_box": {
+      "product_title": "aria-ref=e675",
+      "source_id": "aria-ref=e684",
+      "source_price_min": "aria-ref=e694",
+      "source_price_max": "aria-ref=e698",
+      "search_btn": "aria-ref=e816",
+      "reset_btn": "aria-ref=e821"
+    },
+    "action_buttons": {
+      "claim_to": "aria-ref=e827",
+      "platform_claim_config": "aria-ref=e833",
+      "group": "aria-ref=e838",
+      "delete": "aria-ref=e844",
+      "more": "aria-ref=e850",
+      "create_product": "aria-ref=e856",
+      "import_product": "aria-ref=e859"
+    },
+    "tabs": {
+      "all": "aria-ref=e871",
+      "unclaimed": "aria-ref=e874",
+      "claimed": "aria-ref=e877",
+      "failed": "aria-ref=e880"
+    },
+    "product_list": {
+      "checkbox_template": "aria-ref=e965",
+      "edit_btn_template": "aria-ref=e1010",
+      "delete_btn_template": "aria-ref=e1012",
+      "claim_to_btn_template": "aria-ref=e1015",
+      "note_btn_template": "aria-ref=e1020"
+    },
+    "pagination": {
+      "select_all": "aria-ref=e928",
+      "inverse_select": "aria-ref=e930",
+      "prev_page": "aria-ref=e935",
+      "next_page": "aria-ref=e938",
+      "page_input": "aria-ref=e943",
+      "per_page_selector": "aria-ref=e949"
     }
   },
-
-  "publish": {
-    "shop_select": "待使用codegen获取",
-    "supply_price_input": "待使用codegen获取",
-    "publish_button": "待使用codegen获取",
-    "confirm_button": "待使用codegen获取",
-    "publish_result": "待使用codegen获取"
+  
+  "first_edit_dialog": {
+    "comment": "首次编辑弹窗（产品编辑对话框）",
+    "close_btn": "aria-ref=e2272",
+    "navigation": {
+      "basic_info": "aria-ref=e2418",
+      "product_attrs": "aria-ref=e2420",
+      "sales_attrs": "aria-ref=e2422",
+      "product_images": "aria-ref=e2424",
+      "product_video": "aria-ref=e2426",
+      "certification": "aria-ref=e2428",
+      "logistics_info": "aria-ref=e2430",
+      "source_info": "aria-ref=e2432"
+    },
+    "basic_info": {
+      "title_input": "aria-ref=e2445",
+      "product_code": "aria-ref=e2462",
+      "simple_desc": "aria-ref=e2471",
+      "detailed_desc_iframe": "aria-ref=e2604"
+    },
+    "product_attrs": {
+      "add_attr_btn": "aria-ref=e2861",
+      "attr_name_template": "aria-ref=e2774",
+      "attr_value_template": "aria-ref=e2778"
+    },
+    "sales_attrs": {
+      "single_spec_radio": "aria-ref=e2880",
+      "multi_spec_radio": "aria-ref=e2885",
+      "spec_name_input": "aria-ref=e2896",
+      "spec_value_input": "aria-ref=e2902",
+      "add_spec_btn": "aria-ref=e2915",
+      "sku_price_template": "aria-ref=e2958",
+      "sku_stock_template": "aria-ref=e2962",
+      "sku_weight_template": "aria-ref=e2972",
+      "sku_length_template": "aria-ref=e2986",
+      "sku_width_template": "aria-ref=e2990",
+      "sku_height_template": "aria-ref=e2994"
+    },
+    "product_images": {
+      "ai_process_btn": "aria-ref=e3008",
+      "translate_btn": "aria-ref=e3014",
+      "edit_btn": "aria-ref=e3020",
+      "upload_btn": "aria-ref=e3026",
+      "batch_delete_btn": "aria-ref=e3029",
+      "export_btn": "aria-ref=e3035",
+      "select_all_checkbox": "aria-ref=e3046"
+    },
+    "product_video": {
+      "video_translate_btn": "aria-ref=e3414",
+      "ai_generate_btn": "aria-ref=e3417",
+      "edit_video_btn": "aria-ref=e3420",
+      "one_click_generate_btn": "aria-ref=e3423",
+      "make_video_btn": "aria-ref=e3426"
+    },
+    "logistics_info": {
+      "package_weight": "aria-ref=e3483",
+      "package_length": "aria-ref=e3501",
+      "package_width": "aria-ref=e3505",
+      "package_height": "aria-ref=e3509"
+    },
+    "source_info": {
+      "source_link_input": "aria-ref=e3528",
+      "jump_btn": "aria-ref=e3530",
+      "copy_btn": "aria-ref=e3532",
+      "add_btn": "aria-ref=e3534"
+    },
+    "actions": {
+      "cancel_btn": "aria-ref=e3540",
+      "one_click_translate_btn": "aria-ref=e3543",
+      "save_btn": "aria-ref=e3548"
+    }
   },
-
-  "codegen_instructions": {
-    "command": "uv run playwright codegen https://seller.temu.com",
-    "steps": [
-      "1. 启动 codegen 工具",
-      "2. 手动完成登录",
-      "3. 依次操作：访问店铺 → 进入采集箱 → 首次编辑 → 认领 → 批量编辑 → 发布",
-      "4. 复制生成的选择器到此配置文件",
-      "5. 测试验证所有选择器有效性"
-    ],
-    "tips": [
-      "- 优先使用 data-testid 属性",
-      "- 使用 text 和 role 组合定位",
-      "- 添加 fallback 选择器策略",
-      "- 定期验证选择器是否失效"
-    ]
+  
+  "batch_edit": {
+    "comment": "批量编辑功能 - 通过选择多个产品后点击'认领到'按钮进入",
+    "entry_point": {
+      "select_products": "使用 collection_box.product_list.checkbox_template 选择多个产品",
+      "click_claim_to": "使用 collection_box.action_buttons.claim_to 进入批量编辑"
+    },
+    "note": "批量编辑页面的具体选择器需要在实际进入页面后再获取"
+  },
+  
+  "publish_flow": {
+    "comment": "发布流程 - SOP步骤10的预览和发布",
+    "note": "发布页面的具体选择器需要在实际进入页面后再获取"
   }
 }
-
