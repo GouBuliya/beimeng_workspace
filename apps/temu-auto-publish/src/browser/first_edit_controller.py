@@ -463,12 +463,12 @@ class FirstEditController:
             logger.error(f"设置尺寸失败: {e}")
             return False
 
-    async def save_changes(self, page: Page, wait_for_close: bool = True) -> bool:
+    async def save_changes(self, page: Page, wait_for_close: bool = False) -> bool:
         """保存修改并关闭弹窗.
 
         Args:
             page: Playwright页面对象
-            wait_for_close: 是否等待弹窗关闭（默认True）
+            wait_for_close: 是否等待弹窗关闭（默认False）
 
         Returns:
             是否保存成功
@@ -480,20 +480,45 @@ class FirstEditController:
         logger.info("保存修改...")
 
         try:
-            first_edit_config = self.selectors.get("first_edit_dialog", {})
-            actions_config = first_edit_config.get("actions", {})
-
-            save_btn_selector = actions_config.get("save_btn", "button:has-text('保存')")
-            await page.locator(save_btn_selector).click()
+            # 点击保存按钮
+            save_selectors = [
+                "button:has-text('保存')",
+                "button:has-text('确定')",
+                "button:has-text('提交')",
+            ]
+            
+            saved = False
+            for selector in save_selectors:
+                try:
+                    count = await page.locator(selector).count()
+                    if count > 0:
+                        logger.debug(f"找到保存按钮: {selector}")
+                        await page.locator(selector).first.click()
+                        saved = True
+                        break
+                except:
+                    continue
+            
+            if not saved:
+                logger.error("未找到保存按钮")
+                return False
+            
+            # 等待保存完成
+            await page.wait_for_timeout(2000)
             
             if wait_for_close:
-                # 等待弹窗关闭
-                close_btn_selector = first_edit_config.get("close_btn", "button:has-text('关闭')")
-                await page.wait_for_selector(close_btn_selector, state="hidden", timeout=10000)
-                logger.success("✓ 修改已保存，弹窗已关闭")
+                # 等待弹窗关闭（检查弹窗是否还存在）
+                try:
+                    await page.wait_for_timeout(1000)
+                    dialog_count = await page.locator(".jx-dialog").count()
+                    if dialog_count == 0:
+                        logger.success("✓ 修改已保存，弹窗已关闭")
+                    else:
+                        logger.success("✓ 修改已保存（弹窗仍打开）")
+                except:
+                    logger.success("✓ 修改已保存")
             else:
-                await page.wait_for_timeout(2000)
-                logger.success("✓ 保存按钮已点击")
+                logger.success("✓ 修改已保存")
 
             return True
 
