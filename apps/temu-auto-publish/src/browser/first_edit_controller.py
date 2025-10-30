@@ -194,9 +194,34 @@ class FirstEditController:
             await page.locator(sales_tab_selector).click()
             await page.wait_for_timeout(1000)
 
-            # 填写SKU价格
-            price_selector = sales_attrs_config.get("sku_price_template", "input[placeholder*='价格']")
-            await page.locator(price_selector).fill(str(price))
+            # 填写SKU价格（排除分页器）
+            price_selectors = [
+                "input[placeholder='价格']:not([aria-label='页'])",  # 排除分页器
+                "input[placeholder*='价格'][type='text']",
+            ]
+            
+            price_input = None
+            for selector in price_selectors:
+                try:
+                    count = await page.locator(selector).count()
+                    logger.debug(f"价格选择器 {selector} 找到 {count} 个元素")
+                    if count > 0:
+                        elem = page.locator(selector).nth(sku_index)
+                        is_visible = await elem.is_visible(timeout=1000)
+                        if is_visible:
+                            price_input = elem
+                            logger.debug(f"使用价格选择器: {selector} (第{sku_index+1}个)")
+                            break
+                except:
+                    continue
+            
+            if not price_input:
+                logger.error("未找到价格输入框")
+                return False
+            
+            await price_input.fill("")
+            await page.wait_for_timeout(300)
+            await price_input.fill(str(price))
             await page.wait_for_timeout(500)
 
             logger.success(f"✓ 价格已设置: {price} CNY")
@@ -232,8 +257,32 @@ class FirstEditController:
             first_edit_config = self.selectors.get("first_edit_dialog", {})
             sales_attrs_config = first_edit_config.get("sales_attrs", {})
 
-            stock_selector = sales_attrs_config.get("sku_stock_template", "input[placeholder*='库存']")
-            await page.locator(stock_selector).fill(str(stock))
+            stock_selectors = [
+                "input[placeholder='库存']",
+                "input[placeholder*='库存'][type='text']",
+            ]
+            
+            stock_input = None
+            for selector in stock_selectors:
+                try:
+                    count = await page.locator(selector).count()
+                    if count > 0:
+                        elem = page.locator(selector).nth(sku_index)
+                        is_visible = await elem.is_visible(timeout=1000)
+                        if is_visible:
+                            stock_input = elem
+                            logger.debug(f"使用库存选择器: {selector} (第{sku_index+1}个)")
+                            break
+                except:
+                    continue
+            
+            if not stock_input:
+                logger.error("未找到库存输入框")
+                return False
+            
+            await stock_input.fill("")
+            await page.wait_for_timeout(300)
+            await stock_input.fill(str(stock))
             await page.wait_for_timeout(500)
 
             logger.success(f"✓ 库存已设置: {stock}")
@@ -269,8 +318,32 @@ class FirstEditController:
             first_edit_config = self.selectors.get("first_edit_dialog", {})
             sales_attrs_config = first_edit_config.get("sales_attrs", {})
 
-            weight_selector = sales_attrs_config.get("sku_weight_template", "input[placeholder*='重量']")
-            await page.locator(weight_selector).fill(str(weight))
+            weight_selectors = [
+                "input[placeholder='重量']",
+                "input[placeholder*='重量'][type='text']",
+            ]
+            
+            weight_input = None
+            for selector in weight_selectors:
+                try:
+                    count = await page.locator(selector).count()
+                    if count > 0:
+                        elem = page.locator(selector).nth(sku_index)
+                        is_visible = await elem.is_visible(timeout=1000)
+                        if is_visible:
+                            weight_input = elem
+                            logger.debug(f"使用重量选择器: {selector} (第{sku_index+1}个)")
+                            break
+                except:
+                    continue
+            
+            if not weight_input:
+                logger.error("未找到重量输入框")
+                return False
+            
+            await weight_input.fill("")
+            await page.wait_for_timeout(300)
+            await weight_input.fill(str(weight))
             await page.wait_for_timeout(500)
 
             logger.success(f"✓ 重量已设置: {weight} KG")
