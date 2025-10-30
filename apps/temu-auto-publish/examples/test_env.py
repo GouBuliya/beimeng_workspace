@@ -104,11 +104,19 @@ def test_modules():
         return False
 
     try:
-        from src.yingdao.cookie_manager import CookieManager
+        from src.browser.cookie_manager import CookieManager
 
-        print("✓ src.yingdao.cookie_manager")
+        print("✓ src.browser.cookie_manager")
     except ImportError as e:
-        print(f"✗ src.yingdao.cookie_manager: {e}")
+        print(f"✗ src.browser.cookie_manager: {e}")
+        return False
+
+    try:
+        from src.browser.browser_manager import BrowserManager
+
+        print("✓ src.browser.browser_manager")
+    except ImportError as e:
+        print(f"✗ src.browser.browser_manager: {e}")
         return False
 
     return True

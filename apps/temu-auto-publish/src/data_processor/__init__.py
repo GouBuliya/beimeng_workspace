@@ -11,18 +11,16 @@
 
 from .excel_reader import ExcelReader, ProductInput
 from .price_calculator import PriceCalculator, PriceResult
-from .title_generator import TitleGenerator
 from .processor import DataProcessor, TaskData, TaskProduct
+from .title_generator import TitleGenerator
 
 __all__ = [
+    "DataProcessor",
     "ExcelReader",
-    "ProductInput",
     "PriceCalculator",
     "PriceResult",
-    "TitleGenerator",
-    "DataProcessor",
+    "ProductInput",
     "TaskData",
     "TaskProduct",
+    "TitleGenerator",
 ]
-
-

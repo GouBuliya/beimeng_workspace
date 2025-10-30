@@ -12,11 +12,10 @@
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import List
 
 from loguru import logger
 
-from ..models.task import ProductInput, TaskData, TaskProduct
+from ..models.task import TaskData, TaskProduct
 from .excel_reader import ExcelReader
 from .price_calculator import PriceCalculator, PriceResult
 from .title_generator import TitleGenerator
@@ -24,13 +23,13 @@ from .title_generator import TitleGenerator
 
 class DataProcessor:
     """数据处理器.
-    
+
     整合 Excel 读取、价格计算、标题生成等功能。
-    
+
     Attributes:
         price_calculator: 价格计算器
         title_generator: 标题生成器
-        
+
     Examples:
         >>> processor = DataProcessor()
         >>> task_data = processor.process_excel(
@@ -48,7 +47,7 @@ class DataProcessor:
         title_mode: str = "temu",
     ):
         """初始化处理器.
-        
+
         Args:
             price_multiplier: 价格倍率
             supply_multiplier: 供货价倍率
@@ -59,18 +58,18 @@ class DataProcessor:
 
     def process_excel(self, excel_path: str | Path, output_path: str | Path) -> TaskData:
         """处理 Excel 生成任务数据.
-        
+
         Args:
             excel_path: Excel 文件路径
             output_path: 输出 JSON 路径
-            
+
         Returns:
             任务数据
-            
+
         Raises:
             FileNotFoundError: Excel 文件不存在
             ValueError: 数据验证失败
-            
+
         Examples:
             >>> processor = DataProcessor()
             >>> task = processor.process_excel(
@@ -151,5 +150,3 @@ if __name__ == "__main__":
 
     print("\n任务预览:")
     print(task_data.model_dump_json(indent=2, ensure_ascii=False))
-
-

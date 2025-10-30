@@ -1,7 +1,7 @@
 """
-@PURPOSE: 定义影刀流程执行结果的数据结构
+@PURPOSE: 定义Playwright浏览器自动化执行结果的数据结构
 @OUTLINE:
-  - class YingdaoResult: 影刀流程执行结果基类
+  - class BrowserResult: 浏览器操作执行结果基类
   - class SearchResult: 搜索采集结果
   - class EditResult: 商品编辑结果
   - class PublishResult: 商品发布结果
@@ -11,40 +11,44 @@
 """
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
 
-class YingdaoResult(BaseModel):
-    """影刀流程执行结果基类.
-    
-    所有影刀返回结果的通用结构。
-    
+class BrowserResult(BaseModel):
+    """浏览器操作执行结果基类.
+
+    使用 Playwright 执行浏览器自动化的通用结果结构。
+
     Attributes:
         task_id: 任务ID
-        flow: 流程名称
-        status: 执行状态（success|failed）
+        operation: 操作名称（search|edit|publish）
+        status: 执行状态（success|failed|pending）
         result: 结果数据
         execution_time: 执行耗时（秒）
         completed_at: 完成时间
         error_message: 错误信息
         logs: 执行日志
+        screenshot_path: 错误截图路径（如果有）
     """
 
     task_id: str = Field(..., description="任务ID")
-    flow: str = Field(..., description="流程名称")
+    operation: str = Field(..., description="操作名称")
     status: str = Field(..., description="执行状态")
-    result: Dict[str, Any] = Field(default_factory=dict, description="结果数据")
+    result: dict[str, Any] = Field(default_factory=dict, description="结果数据")
     execution_time: float = Field(default=0.0, description="执行耗时")
-    completed_at: str = Field(default_factory=lambda: datetime.now().isoformat(), description="完成时间")
-    error_message: Optional[str] = Field(default=None, description="错误信息")
-    logs: List[str] = Field(default_factory=list, description="执行日志")
+    completed_at: str = Field(
+        default_factory=lambda: datetime.now().isoformat(), description="完成时间"
+    )
+    error_message: str | None = Field(default=None, description="错误信息")
+    logs: list[str] = Field(default_factory=list, description="执行日志")
+    screenshot_path: str | None = Field(default=None, description="错误截图路径")
 
 
 class SearchResult(BaseModel):
     """搜索采集结果.
-    
+
     Attributes:
         product_id: 对应的产品ID
         keyword: 搜索关键词
@@ -56,15 +60,17 @@ class SearchResult(BaseModel):
 
     product_id: str = Field(..., description="产品ID")
     keyword: str = Field(..., description="搜索关键词")
-    collected_at: str = Field(default_factory=lambda: datetime.now().isoformat(), description="采集时间")
-    links: List[Dict[str, str]] = Field(default_factory=list, description="商品链接列表")
+    collected_at: str = Field(
+        default_factory=lambda: datetime.now().isoformat(), description="采集时间"
+    )
+    links: list[dict[str, str]] = Field(default_factory=list, description="商品链接列表")
     count: int = Field(default=0, description="采集数量")
     status: str = Field(default="pending", description="采集状态")
 
 
 class EditResult(BaseModel):
     """编辑结果.
-    
+
     Attributes:
         product_id: 产品ID
         claimed_ids: 认领成功的商品ID列表
@@ -77,18 +83,20 @@ class EditResult(BaseModel):
     """
 
     product_id: str = Field(..., description="产品ID")
-    claimed_ids: List[str] = Field(default_factory=list, description="认领的商品ID")
-    edited_at: str = Field(default_factory=lambda: datetime.now().isoformat(), description="编辑时间")
-    changes: Dict[str, Dict[str, str]] = Field(default_factory=dict, description="修改内容")
+    claimed_ids: list[str] = Field(default_factory=list, description="认领的商品ID")
+    edited_at: str = Field(
+        default_factory=lambda: datetime.now().isoformat(), description="编辑时间"
+    )
+    changes: dict[str, dict[str, str]] = Field(default_factory=dict, description="修改内容")
     images_confirmed: bool = Field(default=False, description="图片已确认")
     saved: bool = Field(default=False, description="已保存")
     status: str = Field(default="pending", description="编辑状态")
-    error_message: Optional[str] = Field(default=None, description="错误信息")
+    error_message: str | None = Field(default=None, description="错误信息")
 
 
 class PublishResult(BaseModel):
     """发布结果.
-    
+
     Attributes:
         product_id: 产品ID
         published_at: 发布时间
@@ -100,11 +108,11 @@ class PublishResult(BaseModel):
     """
 
     product_id: str = Field(..., description="产品ID")
-    published_at: str = Field(default_factory=lambda: datetime.now().isoformat(), description="发布时间")
-    items: List[Dict[str, Any]] = Field(default_factory=list, description="发布商品列表")
+    published_at: str = Field(
+        default_factory=lambda: datetime.now().isoformat(), description="发布时间"
+    )
+    items: list[dict[str, Any]] = Field(default_factory=list, description="发布商品列表")
     total_published: int = Field(default=0, description="总发布数量")
     success_count: int = Field(default=0, description="成功数量")
     failed_count: int = Field(default=0, description="失败数量")
     status: str = Field(default="pending", description="发布状态")
-
-

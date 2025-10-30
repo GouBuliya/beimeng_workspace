@@ -195,17 +195,18 @@ python -m apps.temu-auto-publish dev price <cost>
 
 ## 🛠️ 开发指南
 
-### 影刀流程开发
+### Playwright 自动化开发
 
-1. 在影刀中创建流程
-2. 配置输入输出参数
-3. 录制浏览器操作
-4. 添加错误处理
-5. 测试并优化
+1. 了解页面结构（使用浏览器开发者工具）
+2. 编写选择器定位元素
+3. 实现业务逻辑
+4. 添加错误处理和重试机制
+5. 测试并优化性能
 
 参考文档：
-- [Day 4: 登录流程](../../docs/projects/temu-auto-publish/week1/day4-yingdao-login.md)
-- [Day 5-7: 搜索和编辑](../../docs/projects/temu-auto-publish/week1/day5-7-search-and-edit.md)
+- [Playwright 官方文档](https://playwright.dev/python/)
+- [项目实施方案](../../docs/projects/temu-auto-publish/index.md)
+- [数据格式规范](../../docs/projects/temu-auto-publish/guides/data-format.md)
 
 ### Python 模块开发
 
@@ -285,22 +286,25 @@ uv run pytest --cov=apps/temu-auto-publish
 
 ## 🗺️ 开发路线图
 
-### ✅ Week 1 (Day 1-7)
+### ✅ Phase 1: 基础架构
 - [x] 项目结构创建
 - [x] 数据处理层（Excel、价格、标题）
-- [ ] 影刀登录流程
-- [ ] 搜索采集流程
-- [ ] 首次编辑流程
+- [x] Playwright 浏览器管理器
+- [x] Cookie 管理和登录流程
 
-### 🚧 Week 2 (Day 8-14)
-- [ ] 批量编辑 18 步
-- [ ] 批量发布
-- [ ] Python 流程编排
+### 🚧 Phase 2: 核心功能（当前）
+- [x] 登录自动化（含Cookie复用）
+- [x] 搜索采集控制器（框架完成，需根据实际页面调整选择器）
+- [x] 编辑控制器（框架完成，需根据实际页面调整选择器）
+- [ ] 完善18步批量编辑逻辑
+- [ ] 实现发布流程
 
-### 📅 Week 3 (Day 15-17)
-- [ ] 完整测试
-- [ ] 文档整理
-- [ ] 项目交付
+### 📅 Phase 3: 优化和扩展
+- [ ] 图片自动验证（接入视觉模型）
+- [ ] 多店铺批量发布
+- [ ] 完整的端到端测试
+- [ ] 性能优化和并发处理
+- [ ] Web 管理界面
 
 ## 🤝 贡献指南
 
@@ -326,11 +330,25 @@ uv run mypy apps/temu-auto-publish
 
 1. **反检测** - 已集成 playwright-stealth，但仍需注意：
    - 控制操作频率，避免过快
-   - 添加随机延迟
+   - 添加随机延迟（已实现）
    - 使用真实的浏览器指纹
-2. **Cookie 管理** - Cookie 有效期 24 小时
+2. **Cookie 管理** - Cookie 有效期 24 小时，自动管理
 3. **错误处理** - 自动截图保存错误状态
 4. **无头模式** - 开发时建议 headed，生产可用 headless
+5. **页面选择器** - 代码中的选择器是示例，需根据实际 Temu 后台页面结构调整
+
+## 🔧 TODO 选择器调整
+
+当前代码中的选择器是通用示例，需要根据实际的 Temu 卖家后台页面结构调整：
+
+- **SearchController**: 搜索输入框、搜索按钮、商品列表等选择器
+- **EditController**: 认领按钮、标题输入、类目选择、保存按钮等选择器  
+- **LoginController**: 已基本完善，可能需要微调
+
+建议使用 Playwright 的 `codegen` 工具生成选择器：
+```bash
+uv run playwright codegen https://seller.temu.com
+```
 
 ## 📄 License
 
@@ -346,7 +364,7 @@ MIT License - 详见 LICENSE 文件
 
 ---
 
-**项目状态**: 🚧 开发中 (重构完成：影刀 → Playwright)
+**项目状态**: 🚧 开发中 (已完成从影刀到 Playwright 的架构迁移)
 
 如有问题，请参考 [详细文档](../../docs/projects/temu-auto-publish/) 或提交 Issue。
 

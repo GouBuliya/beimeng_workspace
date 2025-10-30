@@ -9,24 +9,22 @@
 @RELATED: src/data_processor/excel_reader.py, src/data_processor/processor.py
 """
 
-from datetime import datetime
-from typing import List, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
 
 class ProductInput(BaseModel):
     """选品表单行数据模型.
-    
+
     从 Excel 读取的原始数据。
-    
+
     Attributes:
         name: 商品名称
         cost_price: 成本价（元）
         category: 商品类目路径
         keyword: 站内搜索关键词
         notes: 备注信息
-        
+
     Examples:
         >>> product = ProductInput(
         ...     name="智能手表运动防水",
@@ -53,9 +51,9 @@ class ProductInput(BaseModel):
 
 class TaskProduct(BaseModel):
     """任务产品数据.
-    
-    处理后的产品数据，用于影刀流程执行。
-    
+
+    处理后的产品数据，用于 Playwright 浏览器自动化执行。
+
     Attributes:
         id: 产品ID（格式：P001, P002, ...）
         keyword: 搜索关键词
@@ -83,10 +81,10 @@ class TaskProduct(BaseModel):
     category: str = Field(..., description="类目")
     search_count: int = Field(default=5, ge=1, le=10, description="采集数量")
     status: str = Field(default="pending", description="状态")
-    collected_links: List[str] = Field(default_factory=list, description="采集的链接")
-    claimed_ids: List[str] = Field(default_factory=list, description="认领的商品ID")
-    edit_result: Optional[dict] = Field(default=None, description="编辑结果")
-    publish_result: Optional[dict] = Field(default=None, description="发布结果")
+    collected_links: list[str] = Field(default_factory=list, description="采集的链接")
+    claimed_ids: list[str] = Field(default_factory=list, description="认领的商品ID")
+    edit_result: dict | None = Field(default=None, description="编辑结果")
+    publish_result: dict | None = Field(default=None, description="发布结果")
 
     @field_validator("suggested_price", "supply_price")
     @classmethod
@@ -97,16 +95,16 @@ class TaskProduct(BaseModel):
 
 class TaskData(BaseModel):
     """任务数据.
-    
+
     完整的任务信息，包含所有待处理的产品。
-    
+
     Attributes:
         task_id: 任务ID（格式：YYYYMMDD_HHMMSS）
         created_at: 创建时间（ISO 8601）
         status: 任务状态（pending|processing|completed|failed）
         products: 产品列表
         statistics: 统计信息
-        
+
     Examples:
         >>> from datetime import datetime
         >>> task = TaskData(
@@ -119,7 +117,7 @@ class TaskData(BaseModel):
     task_id: str = Field(..., description="任务ID")
     created_at: str = Field(..., description="创建时间")
     status: str = Field(default="pending", description="任务状态")
-    products: List[TaskProduct] = Field(default_factory=list, description="产品列表")
+    products: list[TaskProduct] = Field(default_factory=list, description="产品列表")
     statistics: dict = Field(
         default_factory=lambda: {
             "total": 0,
@@ -138,5 +136,3 @@ class TaskData(BaseModel):
         self.statistics["processing"] = sum(1 for p in self.products if p.status == "processing")
         self.statistics["success"] = sum(1 for p in self.products if p.status == "success")
         self.statistics["failed"] = sum(1 for p in self.products if p.status == "failed")
-
-

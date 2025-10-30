@@ -20,13 +20,13 @@ from loguru import logger
 
 class CookieManager:
     """Cookie 管理器.
-    
+
     管理 Temu 登录 Cookie，避免频繁登录。
-    
+
     Attributes:
         cookie_file: Cookie 文件路径
         max_age: Cookie 最大有效期
-        
+
     Examples:
         >>> manager = CookieManager()
         >>> manager.is_valid()
@@ -35,7 +35,7 @@ class CookieManager:
 
     def __init__(self, cookie_file: str = "data/temp/temu_cookies.json", max_age_hours: int = 24):
         """初始化管理器.
-        
+
         Args:
             cookie_file: Cookie 文件路径
             max_age_hours: Cookie 最大有效期（小时）
@@ -45,10 +45,10 @@ class CookieManager:
 
     def is_valid(self) -> bool:
         """检查 Cookie 是否有效.
-        
+
         Returns:
             True 如果 Cookie 存在且未过期
-            
+
         Examples:
             >>> manager = CookieManager()
             >>> if manager.is_valid():
@@ -79,10 +79,10 @@ class CookieManager:
 
     def save(self, cookies: str) -> None:
         """保存 Cookie.
-        
+
         Args:
             cookies: Cookie 字符串
-            
+
         Examples:
             >>> manager = CookieManager()
             >>> manager.save("session=abc123")
@@ -98,10 +98,10 @@ class CookieManager:
 
     def load(self) -> str | None:
         """加载 Cookie.
-        
+
         Returns:
             Cookie 字符串，如果不存在或无效则返回 None
-            
+
         Examples:
             >>> manager = CookieManager()
             >>> cookies = manager.load()
@@ -116,7 +116,7 @@ class CookieManager:
 
     def clear(self) -> None:
         """清除 Cookie 文件.
-        
+
         Examples:
             >>> manager = CookieManager()
             >>> manager.clear()
@@ -134,5 +134,3 @@ if __name__ == "__main__":
         print("✓ Cookie 有效，可以跳过登录")
     else:
         print("✗ Cookie 无效，需要重新登录")
-
-

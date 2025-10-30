@@ -20,9 +20,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     """Temu 自动发布应用配置.
-    
+
     从 .env 文件或环境变量加载配置。
-    
+
     Attributes:
         temu_username: Temu 商家账号用户名
         temu_password: Temu 商家账号密码
@@ -35,7 +35,7 @@ class Settings(BaseSettings):
         supply_price_multiplier: 供货价倍率（供货价 = 成本 × multiplier）
         collect_count: 默认采集同款数量
         log_level: 日志级别
-        
+
     Examples:
         >>> from config.settings import settings
         >>> settings.temu_username
@@ -54,9 +54,11 @@ class Settings(BaseSettings):
     data_temp_dir: str = Field(default="data/temp", description="临时目录")
     data_logs_dir: str = Field(default="data/logs", description="日志目录")
 
-    # 浏览器配置
+    # Playwright 浏览器配置
     browser_headless: bool = Field(default=False, description="浏览器无头模式")
-    browser_config_file: str = Field(default="config/browser_config.json", description="浏览器配置文件")
+    browser_config_file: str = Field(
+        default="config/browser_config.json", description="浏览器配置文件"
+    )
 
     # 业务规则配置
     price_multiplier: float = Field(default=7.5, description="价格倍率（2.5×3）")
@@ -75,10 +77,10 @@ class Settings(BaseSettings):
 
     def get_absolute_path(self, relative_path: str) -> Path:
         """将相对路径转换为绝对路径.
-        
+
         Args:
             relative_path: 相对路径
-            
+
         Returns:
             绝对路径
         """
@@ -99,5 +101,3 @@ class Settings(BaseSettings):
 
 # 全局配置实例
 settings = Settings()
-
-

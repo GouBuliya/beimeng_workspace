@@ -18,22 +18,21 @@
 """
 
 import re
-from typing import Optional
 
 from loguru import logger
 
 
 class TitleGenerator:
     """AI 标题生成器.
-    
+
     优先级：
-    1. 使用 Temu 自带 AI 功能（通过影刀触发）
+    1. 使用 Temu 自带 AI 功能（通过 Playwright 触发）
     2. 调用外部 API（如 OpenAI, 通义千问等）
     3. 基于规则生成（保底方案）
-    
+
     Attributes:
         mode: 生成模式 (temu|api|rule)
-        
+
     Examples:
         >>> generator = TitleGenerator(mode="rule")
         >>> title = generator.generate("智能手表", "手表")
@@ -43,7 +42,7 @@ class TitleGenerator:
 
     def __init__(self, mode: str = "temu"):
         """初始化生成器.
-        
+
         Args:
             mode: 生成模式 (temu|api|rule)
         """
@@ -52,19 +51,19 @@ class TitleGenerator:
 
     def generate_by_rule(self, product_name: str, keyword: str) -> str:
         """基于规则生成标题（保底方案）.
-        
+
         规则：
         - 提取核心词汇
         - 添加修饰词（新款、热卖、优质等）
         - 控制长度 50-80 字符
-        
+
         Args:
             product_name: 商品名称
             keyword: 关键词
-            
+
         Returns:
             生成的标题
-            
+
         Examples:
             >>> gen = TitleGenerator(mode="rule")
             >>> title = gen.generate_by_rule("智能手表运动防水", "智能手表")
@@ -89,14 +88,14 @@ class TitleGenerator:
 
     def generate_by_api(self, product_name: str, keyword: str) -> str:
         """调用 API 生成标题.
-        
+
         Args:
             product_name: 商品名称
             keyword: 关键词
-            
+
         Returns:
             生成的标题
-            
+
         Note:
             MVP 阶段可以先返回 None，后续再实现
         """
@@ -105,15 +104,15 @@ class TitleGenerator:
 
     def generate(self, product_name: str, keyword: str, fallback: bool = True) -> str:
         """生成标题（主入口）.
-        
+
         Args:
             product_name: 商品名称
             keyword: 关键词
             fallback: 失败时是否降级到规则生成
-            
+
         Returns:
             生成的标题
-            
+
         Examples:
             >>> gen = TitleGenerator(mode="temu")
             >>> title = gen.generate("智能手表", "手表")
@@ -122,8 +121,8 @@ class TitleGenerator:
         """
         try:
             if self.mode == "temu":
-                # Temu 模式：在影刀中触发，这里只是标记
-                logger.info("将使用 Temu 自带 AI 生成标题（影刀执行）")
+                # Temu 模式：在浏览器自动化中触发，这里只是标记
+                logger.info("将使用 Temu 自带 AI 生成标题（Playwright 执行）")
                 return f"[TEMU_AI:{keyword}]"  # 占位符
 
             elif self.mode == "api":
@@ -154,5 +153,3 @@ if __name__ == "__main__":
         title = generator.generate(name, keyword)
         print(f"原名: {name}")
         print(f"标题: {title}\n")
-
-

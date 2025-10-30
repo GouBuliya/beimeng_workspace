@@ -10,7 +10,6 @@
 @RELATED: processor.py
 """
 
-from typing import List
 
 from loguru import logger
 from pydantic import BaseModel, Field
@@ -18,13 +17,13 @@ from pydantic import BaseModel, Field
 
 class PriceResult(BaseModel):
     """价格计算结果.
-    
+
     Attributes:
         cost_price: 成本价
         multiplier: 倍率
         suggested_price: 建议售价
         supply_price: 供货价
-        
+
     Examples:
         >>> result = PriceResult.calculate(100, 7.5)
         >>> result.suggested_price
@@ -43,15 +42,15 @@ class PriceResult(BaseModel):
         cls, cost_price: float, multiplier: float = 7.5, supply_multiplier: float = 10.0
     ) -> "PriceResult":
         """计算价格.
-        
+
         Args:
             cost_price: 成本价
             multiplier: 价格倍率，默认 7.5 (即 2.5×3)
             supply_multiplier: 供货价倍率，默认 10
-            
+
         Returns:
             价格计算结果
-            
+
         Examples:
             >>> result = PriceResult.calculate(100)
             >>> result.suggested_price
@@ -70,13 +69,13 @@ class PriceResult(BaseModel):
 
 class PriceCalculator:
     """价格计算器.
-    
+
     批量计算产品价格。
-    
+
     Attributes:
         multiplier: 默认价格倍率
         supply_multiplier: 默认供货价倍率
-        
+
     Examples:
         >>> calculator = PriceCalculator()
         >>> results = calculator.calculate_batch([100, 200, 300])
@@ -86,7 +85,7 @@ class PriceCalculator:
 
     def __init__(self, multiplier: float = 7.5, supply_multiplier: float = 10.0):
         """初始化计算器.
-        
+
         Args:
             multiplier: 默认价格倍率
             supply_multiplier: 默认供货价倍率
@@ -95,12 +94,12 @@ class PriceCalculator:
         self.supply_multiplier = supply_multiplier
         logger.info(f"价格计算器初始化，倍率: {multiplier}, 供货价倍率: {supply_multiplier}")
 
-    def calculate_batch(self, cost_prices: List[float]) -> List[PriceResult]:
+    def calculate_batch(self, cost_prices: list[float]) -> list[PriceResult]:
         """批量计算价格.
-        
+
         Args:
             cost_prices: 成本价列表
-            
+
         Returns:
             价格结果列表
         """
@@ -125,5 +124,3 @@ if __name__ == "__main__":
     results = calculator.calculate_batch([100, 200, 300])
     for r in results:
         print(f"成本: ¥{r.cost_price} → 建议售价: ¥{r.suggested_price} → 供货价: ¥{r.supply_price}")
-
-
