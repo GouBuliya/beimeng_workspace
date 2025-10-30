@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "file-info": {
+      "command": "python3",
+      "args": [
+        "/Users/candy/beimeng_workspace/packages/mcp_file_info/run_server.py"
+      ],
+      "description": "文件元信息提取工具 - 读取源代码文件头部的元数据注释"
+    }
+  }
+}
+
