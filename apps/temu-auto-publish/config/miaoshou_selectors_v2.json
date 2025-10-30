@@ -32,8 +32,8 @@
   
   "sidebar_menu": {
     "common_functions": "text='通用功能'",
-    "product_collection_item": "menuitem:has-text('产品采集')",
-    "common_collection_box": "menuitem:has-text('公用采集箱')"
+    "product_collection_item": "text='产品采集'",
+    "common_collection_box": "text='公用采集箱'"
   },
   
   "collection_box": {

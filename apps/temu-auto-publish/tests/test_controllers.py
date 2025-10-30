@@ -69,8 +69,8 @@ async def test_navigation(login_controller: LoginController):
     try:
         page = login_controller.browser_manager.page
 
-        # 导航到公用采集箱
-        success = await miaoshou_controller.navigate_to_collection_box(page, use_sidebar=True)
+        # 导航到公用采集箱（使用URL导航更可靠）
+        success = await miaoshou_controller.navigate_to_collection_box(page, use_sidebar=False)
 
         if success:
             logger.success("✅ 测试2通过：导航成功")
