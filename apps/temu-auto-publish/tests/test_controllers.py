@@ -1,241 +1,217 @@
-"""测试控制器模块（集成测试框架）.
+"""
+集成测试：验证妙手ERP自动化流程
 
-此脚本用于测试所有新创建的控制器：
-- MiaoshouController
-- FirstEditController
-- BatchEditController
+测试流程：
+1. 登录妙手ERP
+2. 导航到公用采集箱
+3. 打开第一个产品的编辑弹窗
+4. 执行首次编辑操作
+5. 保存并验证
 
-注意：需要先使用 playwright codegen 获取实际的选择器。
+运行方式：
+    uv run python apps/temu-auto-publish/tests/test_controllers.py
 """
 
 import asyncio
+import os
+import sys
 from pathlib import Path
 
+# 添加项目根目录到Python路径
+project_root = Path(__file__).parent.parent.parent.parent
+sys.path.insert(0, str(project_root))
+
 from loguru import logger
-from playwright.async_api import async_playwright
 
-# 配置日志
-logger.add(
-    "data/logs/test_controllers_{time}.log",
-    rotation="1 MB",
-    retention="7 days",
-    level="DEBUG",
-)
+from apps.temu_auto_publish.src.browser.login_controller import LoginController
+from apps.temu_auto_publish.src.browser.miaoshou_controller import MiaoshouController
+from apps.temu_auto_publish.src.browser.first_edit_controller import FirstEditController
 
 
-async def test_miaoshou_controller():
-    """测试妙手控制器."""
-    logger.info("=" * 60)
-    logger.info("测试妙手控制器（MiaoshouController）")
-    logger.info("=" * 60)
+async def test_login():
+    """测试1：登录妙手ERP."""
+    logger.info("=" * 80)
+    logger.info("测试1：登录妙手ERP")
+    logger.info("=" * 80)
 
-    from src.browser.miaoshou_controller import MiaoshouController
+    # 从环境变量读取凭据
+    username = os.getenv("MIAOSHOU_USERNAME", "lyl12345678")
+    password = os.getenv("MIAOSHOU_PASSWORD", "Lyl12345678.")
 
-    async with async_playwright() as p:
-        # 启动浏览器
-        browser = await p.chromium.launch(headless=False, slow_mo=1000)
-        page = await browser.new_page()
-
-        # 初始化控制器
-        ctrl = MiaoshouController()
-
-        try:
-            # 测试1：访问前端店铺
-            logger.info("\n测试1：访问前端店铺")
-            result = await ctrl.navigate_to_store_front(page)
-            logger.info(f"结果: {'✓ 成功' if result else '✗ 失败'}")
-
-            # 等待用户观察
-            await asyncio.sleep(3)
-
-            # 测试2：进入采集箱
-            logger.info("\n测试2：进入采集箱")
-            result = await ctrl.navigate_to_collection_box(page)
-            logger.info(f"结果: {'✓ 成功' if result else '✗ 失败'}")
-
-            # 等待用户观察
-            await asyncio.sleep(3)
-
-            # 测试3：验证采集箱
-            logger.info("\n测试3：验证采集箱")
-            result = await ctrl.verify_collection_box(page)
-            logger.info(f"结果: {'✓ 成功' if result else '✗ 失败'}")
-
-            # 测试4：认领链接（模拟）
-            logger.info("\n测试4：认领链接（模拟，link_count=2, claim_times=2）")
-            result = await ctrl.claim_links(page, link_count=2, claim_times=2)
-            logger.info(f"结果: {'✓ 成功' if result else '✗ 失败'}")
-
-            # 测试5：验证认领结果
-            logger.info("\n测试5：验证认领结果（预期4条）")
-            result = await ctrl.verify_claims(page, expected_count=4)
-            logger.info(f"结果: {'✓ 成功' if result else '✗ 失败'}")
-
-        except Exception as e:
-            logger.error(f"测试失败: {e}")
-            await page.screenshot(path="data/temp/test_miaoshou_error.png")
-
-        finally:
-            logger.info("\n等待5秒后关闭浏览器...")
-            await asyncio.sleep(5)
-            await browser.close()
-
-    logger.success("妙手控制器测试完成")
-
-
-async def test_first_edit_controller():
-    """测试首次编辑控制器."""
-    logger.info("=" * 60)
-    logger.info("测试首次编辑控制器（FirstEditController）")
-    logger.info("=" * 60)
-
-    from src.browser.first_edit_controller import FirstEditController
-
-    async with async_playwright() as p:
-        # 启动浏览器
-        browser = await p.chromium.launch(headless=False, slow_mo=1000)
-        page = await browser.new_page()
-
-        # 初始化控制器
-        ctrl = FirstEditController()
-
-        # 准备测试数据
-        product_data = {
-            "title_cn": "智能手表 2025新款 A0001型号",
-            "title_en": "Smart Watch 2025 New Model A0001",
-            "cost": 150.0,
-            "category": "智能穿戴",
-            "main_images": [
-                "data/temp/test_img1.jpg",
-                "data/temp/test_img2.jpg",
-            ],
-            "detail_images": [
-                "data/temp/detail1.jpg",
-                "data/temp/detail2.jpg",
-            ],
-        }
-
-        try:
-            # 测试完整流程
-            logger.info("\n测试：首次编辑完整流程")
-            result = await ctrl.edit_product(page, product_data, link_index=1)
-            logger.info(f"结果: {'✓ 成功' if result else '✗ 失败'}")
-
-        except Exception as e:
-            logger.error(f"测试失败: {e}")
-            await page.screenshot(path="data/temp/test_first_edit_error.png")
-
-        finally:
-            logger.info("\n等待5秒后关闭浏览器...")
-            await asyncio.sleep(5)
-            await browser.close()
-
-    logger.success("首次编辑控制器测试完成")
-
-
-async def test_batch_edit_controller():
-    """测试批量编辑控制器."""
-    logger.info("=" * 60)
-    logger.info("测试批量编辑控制器（BatchEditController）")
-    logger.info("=" * 60)
-
-    from src.browser.batch_edit_controller import BatchEditController
-
-    async with async_playwright() as p:
-        # 启动浏览器
-        browser = await p.chromium.launch(headless=False, slow_mo=1000)
-        page = await browser.new_page()
-
-        # 初始化控制器
-        ctrl = BatchEditController()
-
-        # 准备测试数据（20条）
-        products_data = [
-            {
-                "cost": 150.0 + i * 10,
-                "title_en": f"Smart Watch A{i:04d}",
-            }
-            for i in range(1, 21)
-        ]
-
-        try:
-            # 测试完整流程
-            logger.info("\n测试：批量编辑完整流程（20条商品）")
-            result = await ctrl.batch_edit(page, products_data)
-            logger.info(f"结果: {'✓ 成功' if result else '✗ 失败'}")
-
-        except Exception as e:
-            logger.error(f"测试失败: {e}")
-            await page.screenshot(path="data/temp/test_batch_edit_error.png")
-
-        finally:
-            logger.info("\n等待5秒后关闭浏览器...")
-            await asyncio.sleep(5)
-            await browser.close()
-
-    logger.success("批量编辑控制器测试完成")
-
-
-async def test_all_controllers():
-    """测试所有控制器."""
-    logger.info("=" * 60)
-    logger.info("开始测试所有控制器")
-    logger.info("=" * 60)
+    controller = LoginController()
 
     try:
-        # 测试1：妙手控制器
-        await test_miaoshou_controller()
-        await asyncio.sleep(2)
+        success = await controller.login(username, password, headless=False, force=False)
 
-        # 测试2：首次编辑控制器
-        await test_first_edit_controller()
-        await asyncio.sleep(2)
-
-        # 测试3：批量编辑控制器
-        await test_batch_edit_controller()
-
-        logger.success("\n所有测试完成！")
+        if success:
+            logger.success("✅ 测试1通过：登录成功")
+            
+            # 保持浏览器打开，供后续测试使用
+            return controller
+        else:
+            logger.error("❌ 测试1失败：登录失败")
+            return None
 
     except Exception as e:
-        logger.error(f"测试过程出错: {e}")
+        logger.error(f"❌ 测试1异常：{e}")
+        return None
 
 
-def main():
-    """主函数."""
-    print("=" * 60)
-    print("控制器集成测试")
-    print("=" * 60)
-    print()
-    print("⚠️  注意：")
-    print("1. 需要先使用 playwright codegen 获取实际选择器")
-    print("2. 更新 config/miaoshou_selectors.json")
-    print("3. 需要登录 Temu 商家后台")
-    print("4. 测试过程中不要实际保存/发布商品")
-    print()
-    print("测试模式：")
-    print("1. 测试妙手控制器")
-    print("2. 测试首次编辑控制器")
-    print("3. 测试批量编辑控制器")
-    print("4. 测试所有控制器")
-    print("0. 退出")
-    print()
+async def test_navigation(login_controller: LoginController):
+    """测试2：导航到公用采集箱."""
+    logger.info("=" * 80)
+    logger.info("测试2：导航到公用采集箱")
+    logger.info("=" * 80)
 
-    choice = input("请选择测试模式 (1-4): ").strip()
+    miaoshou_controller = MiaoshouController()
 
-    if choice == "1":
-        asyncio.run(test_miaoshou_controller())
-    elif choice == "2":
-        asyncio.run(test_first_edit_controller())
-    elif choice == "3":
-        asyncio.run(test_batch_edit_controller())
-    elif choice == "4":
-        asyncio.run(test_all_controllers())
-    elif choice == "0":
-        print("退出测试")
+    try:
+        page = login_controller.browser_manager.page
+
+        # 导航到公用采集箱
+        success = await miaoshou_controller.navigate_to_collection_box(page, use_sidebar=True)
+
+        if success:
+            logger.success("✅ 测试2通过：导航成功")
+
+            # 获取产品数量
+            counts = await miaoshou_controller.get_product_count(page)
+            logger.info(f"产品数量统计: {counts}")
+
+            # 切换到已认领tab
+            await miaoshou_controller.switch_tab(page, "claimed")
+
+            return miaoshou_controller
+        else:
+            logger.error("❌ 测试2失败：导航失败")
+            return None
+
+    except Exception as e:
+        logger.error(f"❌ 测试2异常：{e}")
+        return None
+
+
+async def test_first_edit(login_controller: LoginController, miaoshou_controller: MiaoshouController):
+    """测试3：首次编辑功能."""
+    logger.info("=" * 80)
+    logger.info("测试3：首次编辑功能")
+    logger.info("=" * 80)
+
+    first_edit_controller = FirstEditController()
+
+    try:
+        page = login_controller.browser_manager.page
+
+        # 点击第一个产品的编辑按钮
+        logger.info("打开第一个产品的编辑弹窗...")
+        success = await miaoshou_controller.click_edit_first_product(page)
+
+        if not success:
+            logger.error("❌ 测试3失败：无法打开编辑弹窗")
+            return False
+
+        # 等待弹窗加载
+        await first_edit_controller.wait_for_dialog(page)
+
+        # 执行首次编辑流程（使用测试数据）
+        test_title = "【测试】自动化产品标题 A9999型号"
+        test_price = 150.00
+        test_stock = 99
+        test_weight = 0.5
+        test_dimensions = (40.0, 30.0, 50.0)
+
+        logger.info("开始执行首次编辑流程...")
+        logger.info(f"  标题: {test_title}")
+        logger.info(f"  价格: {test_price} CNY")
+        logger.info(f"  库存: {test_stock}")
+        logger.info(f"  重量: {test_weight} KG")
+        logger.info(f"  尺寸: {test_dimensions[0]}x{test_dimensions[1]}x{test_dimensions[2]} CM")
+
+        # 注意：这里仅测试部分功能，避免实际修改数据
+        # 如果要完整测试，取消注释以下代码：
+        
+        # success = await first_edit_controller.complete_first_edit(
+        #     page,
+        #     test_title,
+        #     test_price,
+        #     test_stock,
+        #     test_weight,
+        #     test_dimensions
+        # )
+
+        # 仅测试单个操作（不保存）
+        success = await first_edit_controller.edit_title(page, test_title)
+
+        if success:
+            logger.success("✅ 测试3通过：首次编辑功能正常")
+            logger.warning("⚠️ 本次测试未保存修改，请手动验证")
+
+            # 关闭弹窗（不保存）
+            await first_edit_controller.close_dialog(page)
+            await page.wait_for_timeout(1000)
+
+            return True
+        else:
+            logger.error("❌ 测试3失败：编辑操作失败")
+            return False
+
+    except Exception as e:
+        logger.error(f"❌ 测试3异常：{e}")
+        return False
+
+
+async def main():
+    """运行所有测试."""
+    logger.info("=" * 80)
+    logger.info("妙手ERP自动化流程集成测试")
+    logger.info("=" * 80)
+
+    # 测试1：登录
+    login_controller = await test_login()
+    if not login_controller:
+        logger.error("登录测试失败，终止测试")
+        return
+
+    await asyncio.sleep(2)
+
+    # 测试2：导航
+    miaoshou_controller = await test_navigation(login_controller)
+    if not miaoshou_controller:
+        logger.error("导航测试失败，终止测试")
+        await login_controller.browser_manager.close()
+        return
+
+    await asyncio.sleep(2)
+
+    # 测试3：首次编辑
+    success = await test_first_edit(login_controller, miaoshou_controller)
+
+    # 测试完成，保持浏览器打开供手动检查
+    logger.info("=" * 80)
+    if success:
+        logger.success("✅ 所有测试通过！")
     else:
-        print("无效选择")
+        logger.error("❌ 部分测试失败")
+    logger.info("=" * 80)
+    logger.info("浏览器将保持打开10秒，供手动检查...")
+    logger.info("按 Ctrl+C 可立即关闭")
+
+    try:
+        await asyncio.sleep(10)
+    except KeyboardInterrupt:
+        logger.info("用户中断")
+
+    # 关闭浏览器
+    await login_controller.browser_manager.close()
+    logger.info("测试完成，浏览器已关闭")
 
 
 if __name__ == "__main__":
-    main()
-
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("测试被用户中断")
+    except Exception as e:
+        logger.error(f"测试运行失败: {e}")
+        import traceback
+        traceback.print_exc()

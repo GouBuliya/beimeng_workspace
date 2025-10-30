@@ -1,23 +1,24 @@
 """
-@PURPOSE: 登录控制器，使用Playwright自动化登录Temu后台
+@PURPOSE: 登录控制器，使用Playwright自动化登录妙手ERP系统
 @OUTLINE:
   - class LoginController: 登录控制器主类
   - async def login(): 执行登录流程
   - async def check_login_status(): 检查登录状态
-  - async def wait_for_manual_login(): 等待手动登录
   - async def ensure_logged_in(): 确保已登录状态
 @GOTCHAS:
+  - 使用aria-ref定位元素（妙手ERP特有）
   - 优先使用Cookie登录，失效后才执行完整登录
-  - 支持手动登录（扫码等）
   - Cookie有效期24小时
 @DEPENDENCIES:
   - 内部: .browser_manager, .cookie_manager
   - 外部: playwright
-@RELATED: browser_manager.py, cookie_manager.py
+@RELATED: browser_manager.py, cookie_manager.py, miaoshou_controller.py
 """
 
+import json
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
 from loguru import logger
 
@@ -28,26 +29,56 @@ from .cookie_manager import CookieManager
 class LoginController:
     """登录控制器.
 
-    管理 Temu 登录流程，包括 Cookie 管理和自动化登录。
+    管理妙手ERP登录流程，包括 Cookie 管理和自动化登录。
 
     Attributes:
         browser_manager: 浏览器管理器
         cookie_manager: Cookie 管理器
+        selectors: 妙手ERP选择器配置
 
     Examples:
         >>> controller = LoginController()
         >>> success = await controller.login("username", "password")
     """
 
-    def __init__(self, config_path: str = "config/browser_config.json"):
+    def __init__(
+        self,
+        config_path: str = "config/browser_config.json",
+        selector_path: str = "config/miaoshou_selectors.json",
+    ):
         """初始化控制器.
 
         Args:
             config_path: 浏览器配置文件路径
+            selector_path: 选择器配置文件路径
         """
         self.browser_manager = BrowserManager(config_path)
         self.cookie_manager = CookieManager()
         self.config_path = Path(config_path)
+        self.selector_path = Path(selector_path)
+        self.selectors = self._load_selectors()
+
+    def _load_selectors(self) -> dict:
+        """加载选择器配置.
+
+        Returns:
+            选择器配置字典
+        """
+        try:
+            # 尝试相对于当前文件的路径
+            if not self.selector_path.is_absolute():
+                # 获取项目根目录
+                current_file = Path(__file__)
+                project_root = current_file.parent.parent.parent
+                selector_file = project_root / self.selector_path
+            else:
+                selector_file = self.selector_path
+
+            with open(selector_file, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            logger.warning(f"加载选择器配置失败: {e}")
+            return {}
 
     async def login(
         self,
@@ -82,22 +113,22 @@ class LoginController:
             # 启动浏览器并加载 Cookie
             await self.browser_manager.start(headless=headless)
 
-            cookie_file = "data/temp/temu_cookies.json"
+            cookie_file = "data/temp/miaoshou_cookies.json"
             if await self.browser_manager.load_cookies(cookie_file):
                 # 验证登录状态
-                await self.browser_manager.goto("https://seller.temu.com/")
+                login_url = self.selectors.get("login", {}).get("url", "https://erp.91miaoshou.com/")
+                await self.browser_manager.goto(login_url)
 
                 # 检查是否已登录
                 if await self._check_login_status():
                     logger.success("✓ Cookie 登录成功")
-                    await self.browser_manager.close()
                     return True
                 else:
                     logger.warning("Cookie 已失效，需要重新登录")
                     self.cookie_manager.clear()
 
         # 2. 执行自动化登录
-        logger.info("开始自动化登录...")
+        logger.info("开始自动化登录妙手ERP...")
 
         try:
             # 启动浏览器（如果未启动）
@@ -107,51 +138,53 @@ class LoginController:
             page = self.browser_manager.page
 
             # 导航到登录页
-            login_url = "https://seller.temu.com/login"
+            login_config = self.selectors.get("login", {})
+            login_url = login_config.get("url", "https://erp.91miaoshou.com/sub_account/users")
             logger.info(f"导航到登录页: {login_url}")
-            await page.goto(login_url)
+            await page.goto(login_url, timeout=60000)
+            await page.wait_for_load_state("domcontentloaded")
+
+            # 使用aria-ref定位元素
+            username_selector = login_config.get("username_input", "aria-ref=e32")
+            password_selector = login_config.get("password_input", "aria-ref=e35")
+            login_btn_selector = login_config.get("login_button", "aria-ref=e38")
 
             # 等待登录表单加载
-            await page.wait_for_selector('input[type="text"], input[type="email"]', timeout=10000)
+            await page.wait_for_selector(f"[{username_selector}]", timeout=10000)
 
             # 输入用户名
             logger.debug("输入用户名...")
-            username_input = page.locator('input[type="text"], input[type="email"]').first
-            await username_input.fill(username)
+            await page.locator(f"[{username_selector}]").fill(username)
+            await page.wait_for_timeout(500)  # 等待输入生效
 
             # 输入密码
             logger.debug("输入密码...")
-            password_input = page.locator('input[type="password"]').first
-            await password_input.fill(password)
+            await page.locator(f"[{password_selector}]").fill(password)
+            await page.wait_for_timeout(500)
 
             # 点击登录按钮
             logger.debug("点击登录按钮...")
-            login_button = page.locator('button:has-text("登录"), button:has-text("Login")').first
-            await login_button.click()
+            await page.locator(f"[{login_btn_selector}]").click()
 
-            # 等待登录结果
+            # 等待登录结果（跳转到首页或显示错误）
             logger.info("等待登录结果...")
-
-            # 检查是否需要验证码
+            
             try:
-                captcha = page.locator('text="验证", text="captcha"')
-                if await captcha.count() > 0:
-                    logger.warning("⚠️ 检测到验证码，请手动完成")
-                    logger.info("等待手动完成验证码...")
-                    # 等待验证码消失或跳转
-                    await page.wait_for_url("**/seller.temu.com/**", timeout=120000)
-            except Exception:
-                pass
-
-            # 等待跳转到后台
-            await page.wait_for_url("**/seller.temu.com/**", timeout=30000)
+                # 等待跳转到首页或弹窗消失
+                await page.wait_for_url("**/erp.91miaoshou.com/welcome**", timeout=15000)
+                logger.success("✓ 已跳转到首页")
+            except Exception as e:
+                logger.debug(f"未能等待到URL变化: {e}")
+                # 可能登录失败或需要额外操作
+                await page.wait_for_timeout(2000)
 
             # 验证登录状态
             if await self._check_login_status():
                 logger.success("✓ 登录成功")
 
                 # 保存 Cookie
-                await self.browser_manager.save_cookies("data/temp/temu_cookies.json")
+                await self.browser_manager.save_cookies("data/temp/miaoshou_cookies.json")
+                logger.debug("✓ Cookie 已保存")
 
                 return True
             else:
@@ -183,7 +216,7 @@ class LoginController:
                 await self.browser_manager.close()
 
     async def _check_login_status(self) -> bool:
-        """检查是否已登录.
+        """检查是否已登录妙手ERP.
 
         Returns:
             True 如果已登录
@@ -193,23 +226,22 @@ class LoginController:
         try:
             # 检查页面URL
             url = page.url
-            if "login" in url.lower():
+            if "sub_account/users" in url or "login" in url.lower():
+                logger.debug("✗ 仍在登录页面")
                 return False
 
-            # 检查是否有用户信息元素（根据实际页面结构调整）
-            # 这里需要根据实际的 Temu 后台结构来定位
-            user_elements = await page.locator(
-                '[class*="user"], [class*="profile"], [class*="account"]'
-            ).count()
-
-            if user_elements > 0:
-                logger.debug("✓ 检测到用户信息元素")
+            # 检查是否在欢迎页面或其他后台页面
+            if "welcome" in url or "common_collect_box" in url:
+                logger.debug("✓ 已在后台页面")
                 return True
 
-            # 也可以检查特定的后台页面元素
-            dashboard_elements = await page.locator('[class*="dashboard"], [class*="home"]').count()
-            if dashboard_elements > 0:
-                logger.debug("✓ 检测到后台页面元素")
+            # 检查是否有产品菜单元素（首页特有）
+            homepage_config = self.selectors.get("homepage", {})
+            product_menu_selector = homepage_config.get("product_menu", "aria-ref=e11")
+            
+            menu_count = await page.locator(f"[{product_menu_selector}]").count()
+            if menu_count > 0:
+                logger.debug("✓ 检测到产品菜单元素")
                 return True
 
             return False
