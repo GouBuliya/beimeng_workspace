@@ -52,7 +52,7 @@ async def quick_test():
     # 导航到采集箱
     logger.info("正在导航到采集箱...")
     await miaoshou_controller.navigate_to_collection_box(page, use_sidebar=False)
-    await asyncio.sleep(2)
+    await asyncio.sleep(1)  # 1秒
 
     # 尝试关闭可能出现的弹窗
     logger.info("检查并关闭可能的弹窗...")
@@ -62,14 +62,14 @@ async def quick_test():
         if know_btn_count > 0:
             logger.info("发现弹窗，点击「我知道了」...")
             await page.locator("button:has-text('我知道了')").first.click()
-            await asyncio.sleep(1000)
+            await asyncio.sleep(0.5)  # 0.5秒
             logger.success("✓ 已关闭弹窗")
         
         # 也尝试其他可能的关闭按钮
         close_btn_count = await page.locator("button:has-text('关闭')").count()
         if close_btn_count > 0:
             await page.locator("button:has-text('关闭')").first.click()
-            await asyncio.sleep(500)
+            await asyncio.sleep(0.3)  # 0.3秒
     except Exception as e:
         logger.warning(f"关闭弹窗时出错（可忽略）: {e}")
 
@@ -80,14 +80,14 @@ async def quick_test():
         all_tab_regex = await page.locator("text=/全部.*\\(\\d+\\)/").count()
         if all_tab_regex > 0:
             await page.locator("text=/全部.*\\(\\d+\\)/").click()
-            await asyncio.sleep(2000)
+            await asyncio.sleep(1)  # 1秒
             logger.success("✓ 已切换到「全部」tab（方法1）")
         else:
             # 方法2: 尝试通过radio button的class定位
             radio_buttons = await page.locator(".jx-radio-button:has-text('全部')").count()
             if radio_buttons > 0:
                 await page.locator(".jx-radio-button:has-text('全部')").first.click()
-                await asyncio.sleep(2000)
+                await asyncio.sleep(1)  # 1秒
                 logger.success("✓ 已切换到「全部」tab（方法2）")
             else:
                 logger.warning("未找到「全部」tab，可能已经在全部tab")
@@ -107,15 +107,15 @@ async def quick_test():
             logger.info("找到创建人员筛选项")
             # 点击下拉框
             await page.locator("input[placeholder*='创建人员'], input[placeholder*='全部']").first.click()
-            await asyncio.sleep(800)
+            await asyncio.sleep(0.5)  # 0.5秒
             # 输入搜索
             await page.keyboard.type("柯诗俊")
-            await asyncio.sleep(800)
+            await asyncio.sleep(0.5)  # 0.5秒
             # 选择结果（查找包含"柯诗俊"的选项）
             keshijun_option = await page.locator("text='柯诗俊'").count()
             if keshijun_option > 0:
                 await page.locator("text='柯诗俊'").first.click()
-                await asyncio.sleep(500)
+                await asyncio.sleep(0.3)  # 0.3秒
                 logger.success("✓ 已选择创建人员：柯诗俊")
             else:
                 logger.warning("未找到「柯诗俊」选项，尝试直接搜索")
@@ -125,7 +125,7 @@ async def quick_test():
         if search_btn > 0:
             await page.locator("button:has-text('搜索')").first.click()
             logger.info("✓ 已点击搜索按钮")
-            await asyncio.sleep(3000)  # 等待搜索结果加载
+            await asyncio.sleep(2)  # 2秒，等待搜索结果加载
             
             # 等待搜索结果加载完成
             await page.wait_for_load_state("networkidle", timeout=10000)
@@ -157,15 +157,15 @@ async def quick_test():
         # 重新选择创建人员和切换到全部tab
         try:
             await page.locator("input[placeholder*='创建人员']").first.click()
-            await asyncio.sleep(500)
+            await asyncio.sleep(0.5)
             await page.keyboard.type("柯诗俊")
-            await asyncio.sleep(500)
+            await asyncio.sleep(0.5)
             await page.locator("text='柯诗俊'").first.click()
-            await asyncio.sleep(500)
+            await asyncio.sleep(0.3)
             await page.locator("button:has-text('搜索')").first.click()
-            await asyncio.sleep(2000)
-            await page.locator("text='全部'").first.click()
-            await asyncio.sleep(2000)
+            await asyncio.sleep(2)
+            await page.locator("text=/全部.*\\(\\d+\\)/").click()
+            await asyncio.sleep(1)
         except:
             pass
         
@@ -178,6 +178,7 @@ async def quick_test():
 
     # 不需要切换tab了，已经在"全部"tab
     logger.info("准备编辑产品...")
+    await asyncio.sleep(0.5)  # 0.5秒
 
     # 打开编辑弹窗
     logger.info("正在打开编辑弹窗...")
@@ -186,7 +187,7 @@ async def quick_test():
         logger.error("无法打开编辑弹窗")
         return False
 
-    await asyncio.sleep(2)
+    await asyncio.sleep(1)  # 1秒
 
     # 生成测试数据
     cost = 10.0
