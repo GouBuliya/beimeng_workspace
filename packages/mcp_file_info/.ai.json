@@ -1,0 +1,149 @@
+{
+  "name": "mcp-file-info",
+  "version": "0.1.0",
+  "description": "MCP工具，用于提取和解析源代码文件头部的元数据注释",
+  "type": "package",
+  "category": "tools",
+  "interface": {
+    "type": "mcp_server",
+    "tools": [
+      {
+        "name": "get_file_metadata",
+        "description": "获取文件的全部元信息",
+        "parameters": {
+          "file_path": {
+            "type": "string",
+            "required": true,
+            "description": "文件路径"
+          }
+        },
+        "returns": {
+          "type": "object",
+          "properties": {
+            "file_path": "文件路径",
+            "has_metadata": "是否包含元信息",
+            "fields": "元信息字段字典",
+            "is_complete": "必填字段是否完整"
+          }
+        }
+      },
+      {
+        "name": "get_specific_metadata",
+        "description": "获取文件的特定元信息字段",
+        "parameters": {
+          "file_path": {
+            "type": "string",
+            "required": true,
+            "description": "文件路径"
+          },
+          "fields": {
+            "type": "array",
+            "items": "string",
+            "required": true,
+            "description": "要获取的字段名称列表"
+          }
+        },
+        "returns": {
+          "type": "object",
+          "properties": {
+            "file_path": "文件路径",
+            "has_metadata": "是否包含元信息",
+            "requested_fields": "请求的字段列表",
+            "fields": "字段值字典"
+          }
+        }
+      }
+    ],
+    "python_api": {
+      "main_class": "FileInfoParser",
+      "key_functions": [
+        "parse_file(file_path) -> FileMetadata",
+        "parse_multiple_files(file_paths) -> dict"
+      ]
+    }
+  },
+  "metadata_protocol": {
+    "required_fields": ["PURPOSE", "OUTLINE"],
+    "optional_fields": [
+      "GOTCHAS",
+      "TECH_DEBT",
+      "DEPENDENCIES",
+      "CHANGELOG",
+      "AUTHOR",
+      "RELATED"
+    ],
+    "format": "@FIELD: content"
+  },
+  "supported_languages": [
+    "Python (.py)",
+    "JavaScript (.js, .jsx)",
+    "TypeScript (.ts, .tsx)",
+    "Java (.java)",
+    "C/C++ (.c, .cpp, .h, .hpp)",
+    "Go (.go)",
+    "Rust (.rs)",
+    "Ruby (.rb)",
+    "Shell (.sh, .bash)",
+    "YAML (.yaml, .yml)",
+    "HTML/XML (.html, .xml)",
+    "CSS/SCSS (.css, .scss)"
+  ],
+  "examples": [
+    {
+      "title": "解析单个Python文件",
+      "code": "from packages.mcp_file_info import FileInfoParser\n\nparser = FileInfoParser()\nmetadata = parser.parse_file('example.py')\nprint(metadata.get_field('PURPOSE'))"
+    },
+    {
+      "title": "批量解析文件",
+      "code": "parser = FileInfoParser()\nresults = parser.parse_multiple_files(['file1.py', 'file2.ts'])\nfor path, meta in results.items():\n    print(f'{path}: {meta.get_field(\"PURPOSE\")}')"
+    },
+    {
+      "title": "使用MCP工具获取特定字段",
+      "mcp_call": {
+        "tool": "get_specific_metadata",
+        "arguments": {
+          "file_path": "auth_service.py",
+          "fields": ["PURPOSE", "DEPENDENCIES"]
+        }
+      }
+    }
+  ],
+  "ai_hints": {
+    "when_to_use": [
+      "需要快速了解文件的核心功能",
+      "查找文件的依赖关系",
+      "了解文件的结构大纲",
+      "发现潜在的易错点和技术债务",
+      "批量分析代码库的元信息"
+    ],
+    "best_practices": [
+      "始终确保文件包含@PURPOSE和@OUTLINE字段",
+      "元信息注释应放在文件最开始",
+      "使用正确的注释语法（根据语言）",
+      "定期更新元信息以反映代码变化",
+      "使用@GOTCHAS记录重要的注意事项"
+    ],
+    "common_patterns": [
+      "在代码审查前使用工具检查元信息完整性",
+      "生成代码库文档时提取元信息",
+      "在重构前了解文件的依赖关系",
+      "追踪技术债务和待优化项"
+    ]
+  },
+  "configuration": {
+    "environment_variables": {
+      "MCP_FILEINFO_MAX_LINES_TO_READ": "最大读取行数（默认100）",
+      "MCP_FILEINFO_STRIP_COMMENT_MARKERS": "是否移除注释标记（默认true）",
+      "MCP_FILEINFO_NORMALIZE_WHITESPACE": "是否规范化空白字符（默认true）"
+    }
+  },
+  "dependencies": {
+    "runtime": ["pydantic>=2.0.0", "pydantic-settings>=2.0.0", "mcp"],
+    "development": ["pytest>=8.0.0", "pytest-cov>=4.1.0"]
+  },
+  "related_files": [
+    "packages/common/",
+    ".cursorrules"
+  ]
+}
+
