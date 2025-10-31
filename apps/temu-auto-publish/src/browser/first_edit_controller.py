@@ -97,6 +97,68 @@ class FirstEditController:
             logger.error(f"等待编辑弹窗失败: {e}")
             return False
 
+    async def get_original_title(self, page: Page) -> str:
+        """获取产品的原始标题（SOP步骤4.2准备）.
+
+        从编辑弹窗的"产品标题"字段读取原始标题。
+
+        Args:
+            page: Playwright页面对象
+
+        Returns:
+            原始标题文本（如果失败返回空字符串）
+
+        Examples:
+            >>> title = await ctrl.get_original_title(page)
+            >>> print(title)
+            "便携药箱家用急救包医疗收纳盒"
+        """
+        logger.debug("获取产品原始标题...")
+
+        try:
+            # 等待弹窗完全加载
+            await page.wait_for_timeout(1000)
+            
+            # 尝试多个可能的标题输入框选择器
+            title_selectors = [
+                "textarea[placeholder*='标题']",
+                "input[placeholder*='标题']",
+                "textarea[placeholder*='产品标题']",
+                "input[placeholder*='产品标题']",
+                "textarea.jx-textarea__inner",
+                "input[type='text']:visible",
+            ]
+            
+            title_input = None
+            for selector in title_selectors:
+                try:
+                    count = await page.locator(selector).count()
+                    if count > 0:
+                        for i in range(count):
+                            elem = page.locator(selector).nth(i)
+                            is_visible = await elem.is_visible(timeout=1000)
+                            if is_visible:
+                                title_input = elem
+                                logger.debug(f"使用选择器: {selector} (第{i+1}个)")
+                                break
+                        if title_input:
+                            break
+                except:
+                    continue
+            
+            if not title_input:
+                logger.error("未找到标题输入框")
+                return ""
+            
+            # 获取标题值
+            title = await title_input.input_value()
+            logger.success(f"✓ 获取到原始标题: {title[:50]}...")
+            return title
+
+        except Exception as e:
+            logger.error(f"获取原始标题失败: {e}")
+            return ""
+
     async def edit_title(self, page: Page, new_title: str) -> bool:
         """编辑产品标题（SOP步骤4.1）.
 
@@ -160,6 +222,70 @@ class FirstEditController:
 
         except Exception as e:
             logger.error(f"编辑标题失败: {e}")
+            return False
+    
+    async def edit_title_with_ai(
+        self,
+        page: Page,
+        product_index: int,
+        all_original_titles: list,
+        model_number: str,
+        use_ai: bool = True
+    ) -> bool:
+        """使用AI生成的新标题编辑产品标题（SOP步骤4.2）.
+
+        此方法假设已经从5个产品中收集了原始标题，并通过AI生成了5个新标题。
+        根据product_index选择对应的新标题并填入。
+
+        Args:
+            page: Playwright页面对象
+            product_index: 产品索引（0-4）
+            all_original_titles: 5个原始标题列表
+            model_number: 型号后缀（如：A0049型号）
+            use_ai: 是否使用AI生成（False则只添加型号）
+
+        Returns:
+            是否编辑成功
+
+        Examples:
+            >>> original_titles = ["标题1", "标题2", "标题3", "标题4", "标题5"]
+            >>> await ctrl.edit_title_with_ai(page, 0, original_titles, "A0049型号")
+            True
+        """
+        logger.info(f"SOP 4.2: 使用AI生成标题（产品{product_index+1}/5）")
+
+        try:
+            # 动态导入AI标题生成器（避免循环导入）
+            from ..data_processor.ai_title_generator import AITitleGenerator
+
+            # 创建AI生成器实例
+            ai_generator = AITitleGenerator()
+
+            # 生成5个新标题
+            new_titles = await ai_generator.generate_titles(
+                all_original_titles,
+                model_number=model_number,
+                use_ai=use_ai
+            )
+
+            # 获取当前产品对应的新标题
+            if product_index >= len(new_titles):
+                logger.error(f"产品索引超出范围: {product_index}/{len(new_titles)}")
+                return False
+
+            new_title = new_titles[product_index]
+            logger.info(f"为产品{product_index+1}生成的标题: {new_title}")
+
+            # 使用edit_title方法填写标题
+            return await self.edit_title(page, new_title)
+
+        except Exception as e:
+            logger.error(f"使用AI编辑标题失败: {e}")
+            # 降级方案：使用原标题+型号
+            if product_index < len(all_original_titles):
+                fallback_title = f"{all_original_titles[product_index]} {model_number}"
+                logger.warning(f"⚠️ 使用降级方案: {fallback_title}")
+                return await self.edit_title(page, fallback_title)
             return False
 
     async def set_sku_price(

@@ -62,14 +62,19 @@ class CompletePublishWorkflow:
         True
     """
 
-    def __init__(self):
-        """初始化完整工作流控制器."""
-        self.five_to_twenty = FiveToTwentyWorkflow()
+    def __init__(self, use_ai_titles: bool = True):
+        """初始化完整工作流控制器.
+        
+        Args:
+            use_ai_titles: 是否使用AI生成标题（默认True）
+        """
+        self.five_to_twenty = FiveToTwentyWorkflow(use_ai_titles=use_ai_titles)
         self.batch_edit_ctrl = BatchEditController()
         self.publish_ctrl = PublishController()
         self.miaoshou_ctrl = MiaoshouController()
+        self.use_ai_titles = use_ai_titles
         
-        logger.info("完整发布工作流控制器已初始化（SOP步骤4-11）")
+        logger.info(f"完整发布工作流控制器已初始化（SOP步骤4-11，AI标题: {'启用' if use_ai_titles else '禁用'}）")
 
     async def execute(
         self,

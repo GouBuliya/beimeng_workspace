@@ -49,6 +49,15 @@ metrics:
   storage_dir: data/metrics
   export_format: json  # json / csv
 
+# AI配置（用于标题生成）
+ai:
+  provider: openai  # openai / anthropic
+  model: gpt-3.5-turbo  # gpt-3.5-turbo / gpt-4 / claude-3-haiku-20240307
+  title_generation:
+    enabled: true  # 是否启用AI标题生成
+    max_retries: 3  # 最大重试次数
+    timeout: 30  # 超时时间（秒）
+
 # 业务配置
 business:
   price_multiplier: 10.0  # 建议售价倍率

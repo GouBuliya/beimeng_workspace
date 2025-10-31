@@ -3,18 +3,20 @@
 @OUTLINE:
   - async def execute_five_to_twenty_workflow(): 执行完整的5→20流程
   - async def edit_single_product(): 编辑单个产品（首次编辑）
+  - async def collect_original_titles(): 收集5个产品的原始标题
   - class FiveToTwentyWorkflow: 工作流控制类
 @GOTCHAS:
   - 必须先完成首次编辑，再进行认领
   - 认领操作需要等待UI更新
   - 最终需要验证是否达到20条产品
+  - AI标题生成是可选的，失败时自动降级
 @TECH_DEBT:
   - TODO: 添加更详细的错误恢复机制
   - TODO: 支持自定义认领次数
 @DEPENDENCIES:
-  - 内部: browser.miaoshou_controller, browser.first_edit_controller
+  - 内部: browser.miaoshou_controller, browser.first_edit_controller, data_processor.ai_title_generator
   - 外部: playwright, loguru
-@RELATED: miaoshou_controller.py, first_edit_controller.py
+@RELATED: miaoshou_controller.py, first_edit_controller.py, ai_title_generator.py
 """
 
 import asyncio
@@ -28,6 +30,7 @@ from ..browser.miaoshou_controller import MiaoshouController
 from ..data_processor.title_generator import TitleGenerator
 from ..data_processor.price_calculator import PriceCalculator
 from ..data_processor.random_generator import RandomDataGenerator
+from ..data_processor.ai_title_generator import AITitleGenerator
 
 
 class FiveToTwentyWorkflow:
@@ -54,26 +57,90 @@ class FiveToTwentyWorkflow:
         True
     """
 
-    def __init__(self):
-        """初始化工作流控制器."""
+    def __init__(self, use_ai_titles: bool = True):
+        """初始化工作流控制器.
+        
+        Args:
+            use_ai_titles: 是否使用AI生成标题（默认True）
+        """
         self.miaoshou_ctrl = MiaoshouController()
         self.first_edit_ctrl = FirstEditController()
         self.title_generator = TitleGenerator()
         self.price_calculator = PriceCalculator()
         self.random_generator = RandomDataGenerator()
+        self.ai_title_generator = AITitleGenerator()
+        self.use_ai_titles = use_ai_titles
         
-        logger.info("5→20工作流控制器已初始化")
+        logger.info(f"5→20工作流控制器已初始化（AI标题: {'启用' if use_ai_titles else '禁用'}）")
+    
+    async def collect_original_titles(
+        self,
+        page: Page,
+        product_count: int = 5
+    ) -> List[str]:
+        """收集产品的原始标题（SOP步骤4.2准备）.
+
+        逐个打开产品编辑弹窗，收集原始标题，然后关闭弹窗。
+
+        Args:
+            page: Playwright页面对象
+            product_count: 产品数量（默认5）
+
+        Returns:
+            原始标题列表
+
+        Examples:
+            >>> titles = await workflow.collect_original_titles(page, 5)
+            >>> len(titles)
+            5
+        """
+        logger.info("=" * 60)
+        logger.info("收集产品原始标题（准备AI生成）")
+        logger.info("=" * 60)
+
+        original_titles = []
+
+        for i in range(product_count):
+            try:
+                logger.info(f">>> 收集第{i+1}/{product_count}个产品的标题...")
+
+                # 打开编辑弹窗
+                if not await self.miaoshou_ctrl.click_edit_product_by_index(page, i):
+                    logger.error(f"✗ 无法打开第{i+1}个产品的编辑弹窗")
+                    original_titles.append(f"产品{i+1}")  # 占位
+                    continue
+
+                # 获取原始标题
+                title = await self.first_edit_ctrl.get_original_title(page)
+                if title:
+                    original_titles.append(title)
+                    logger.success(f"✓ 第{i+1}个产品标题: {title[:50]}...")
+                else:
+                    logger.warning(f"⚠️ 第{i+1}个产品标题为空，使用占位符")
+                    original_titles.append(f"产品{i+1}")
+
+                # 关闭弹窗
+                await self.first_edit_ctrl.close_dialog(page)
+                await page.wait_for_timeout(500)
+
+            except Exception as e:
+                logger.error(f"收集第{i+1}个产品标题失败: {e}")
+                original_titles.append(f"产品{i+1}")
+
+        logger.info(f"✓ 共收集{len(original_titles)}个原始标题")
+        return original_titles
 
     async def edit_single_product(
         self,
         page: Page,
         product_index: int,
-        product_data: Dict
+        product_data: Dict,
+        new_titles: Optional[List[str]] = None
     ) -> bool:
         """编辑单个产品（首次编辑）.
 
         执行SOP步骤4的首次编辑：
-        - 修改标题（AI生成+型号）
+        - 修改标题（AI生成+型号 或 简单生成）
         - 设置价格
         - 设置库存
 
@@ -85,6 +152,7 @@ class FiveToTwentyWorkflow:
                 - model_number: 型号（如A0001）
                 - cost: 成本价
                 - stock: 库存
+            new_titles: AI生成的新标题列表（可选，如果提供则使用对应的标题）
 
         Returns:
             是否编辑成功
@@ -108,45 +176,58 @@ class FiveToTwentyWorkflow:
                 logger.error(f"✗ 无法打开第{product_index+1}个产品的编辑弹窗")
                 return False
 
-            # 2. 生成标题（含型号）
+            # 2. 生成/使用标题
             keyword = product_data.get("keyword", "商品")
             model_number = product_data.get("model_number", f"A{str(product_index+1).zfill(4)}")
             
-            # 使用简单标题生成（后续可集成AI）
-            title = f"{keyword} {model_number}型号"
-            logger.info(f"生成标题: {title}")
+            if new_titles and product_index < len(new_titles):
+                # 使用AI生成的标题
+                title = new_titles[product_index]
+                logger.info(f"使用AI生成的标题: {title}")
+            else:
+                # 降级方案：使用简单标题
+                title = f"{keyword} {model_number}型号"
+                logger.info(f"使用简单生成的标题: {title}")
 
-            # 3. 计算价格
+            # 3. 编辑标题
+            if not await self.first_edit_ctrl.edit_title(page, title):
+                logger.error(f"✗ 标题编辑失败")
+                return False
+
+            # 4. 计算价格
             cost = product_data.get("cost", 10.0)
             price = self.price_calculator.calculate_supply_price(cost)
             logger.info(f"计算价格: ¥{price} (成本: ¥{cost})")
 
-            # 4. 获取库存
+            # 5. 获取库存
             stock = product_data.get("stock", 100)
             logger.info(f"设置库存: {stock}")
 
-            # 5. 生成随机重量和尺寸（暂时不使用，在批量编辑中处理）
+            # 6. 生成随机重量和尺寸（暂时不使用，在批量编辑中处理）
             weight = self.random_generator.generate_weight()
             dimensions = self.random_generator.generate_dimensions()
 
-            # 6. 执行首次编辑
-            success = await self.first_edit_ctrl.complete_first_edit(
-                page=page,
-                title=title,
-                price=price,
-                stock=stock,
-                weight=weight,
-                dimensions=dimensions
-            )
-
-            if success:
-                logger.success(f"✓ 第{product_index+1}个产品首次编辑完成")
-                # 等待保存完成
-                await page.wait_for_timeout(1000)
-                return True
-            else:
-                logger.error(f"✗ 第{product_index+1}个产品首次编辑失败")
+            # 7. 设置价格
+            if not await self.first_edit_ctrl.set_sku_price(page, price):
+                logger.error(f"✗ 价格设置失败")
                 return False
+            
+            # 8. 设置库存
+            if not await self.first_edit_ctrl.set_sku_stock(page, stock):
+                logger.error(f"✗ 库存设置失败")
+                return False
+            
+            # 9. 保存修改
+            if not await self.first_edit_ctrl.save_changes(page, wait_for_close=False):
+                logger.error(f"✗ 保存失败")
+                return False
+            
+            # 10. 关闭弹窗
+            await self.first_edit_ctrl.close_dialog(page)
+            await page.wait_for_timeout(500)
+
+            logger.success(f"✓ 第{product_index+1}个产品首次编辑完成")
+            return True
 
         except Exception as e:
             logger.error(f"编辑第{product_index+1}个产品失败: {e}")
@@ -207,6 +288,49 @@ class FiveToTwentyWorkflow:
         }
 
         try:
+            # 阶段0：收集原始标题并使用AI生成新标题（如果启用）
+            new_titles = None
+            if self.use_ai_titles:
+                logger.info("\n" + "=" * 60)
+                logger.info("[阶段0/3] AI标题生成（SOP步骤4.2）")
+                logger.info("=" * 60)
+                
+                try:
+                    # 0.1 收集5个产品的原始标题
+                    original_titles = await self.collect_original_titles(page, 5)
+                    
+                    # 0.2 使用AI生成新标题
+                    logger.info("\n>>> 调用AI生成5个新标题...")
+                    # 获取第一个产品的型号作为基准
+                    base_model_number = products_data[0].get("model_number", "A0001")
+                    # 提取型号前缀（如 A0001 -> A）
+                    model_prefix = base_model_number.rstrip('0123456789') or 'A'
+                    
+                    new_titles = await self.ai_title_generator.generate_titles(
+                        original_titles,
+                        model_number="",  # 型号后续会在每个产品编辑时单独添加
+                        use_ai=True
+                    )
+                    
+                    # 为每个标题添加对应的型号
+                    for i in range(len(new_titles)):
+                        model_number = products_data[i].get("model_number", f"{model_prefix}{str(i+1).zfill(4)}")
+                        # 如果标题中还没有型号，添加型号
+                        if "型号" not in new_titles[i] and model_number not in new_titles[i]:
+                            new_titles[i] = f"{new_titles[i]} {model_number}型号"
+                    
+                    logger.info("\n生成的新标题：")
+                    for i, title in enumerate(new_titles):
+                        logger.info(f"  {i+1}. {title}")
+                    
+                    logger.success("✓ AI标题生成完成")
+                    
+                except Exception as e:
+                    logger.warning(f"⚠️ AI标题生成失败，将使用简单标题: {e}")
+                    new_titles = None
+            else:
+                logger.info("\n>>> AI标题生成已禁用，将使用简单标题")
+
             # 阶段1：首次编辑5个产品
             logger.info("\n" + "=" * 60)
             logger.info("[阶段1/3] 首次编辑5个产品")
@@ -218,7 +342,7 @@ class FiveToTwentyWorkflow:
             for i in range(5):
                 logger.info(f"\n>>> 编辑第{i+1}/5个产品...")
                 
-                if await self.edit_single_product(page, i, products_data[i]):
+                if await self.edit_single_product(page, i, products_data[i], new_titles):
                     edited_count += 1
                     logger.success(f"✓ 第{i+1}个产品编辑成功（总计: {edited_count}/5）")
                 else:

@@ -20,6 +20,10 @@ loguru>=0.7.0
 openpyxl>=3.1.2
 pandas>=2.1.0
 
+# AI Integration (Optional - 用于标题生成)
+openai>=1.3.0  # OpenAI GPT models
+anthropic>=0.7.0  # Claude models (可选)
+
 # Async Support
 asyncio-compat>=0.2.0
 

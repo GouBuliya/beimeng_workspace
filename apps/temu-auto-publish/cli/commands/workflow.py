@@ -81,6 +81,11 @@ def run(
         "--staff",
         help="人员名称（用于筛选采集箱中的产品）"
     ),
+    use_ai_titles: bool = typer.Option(
+        True,
+        "--use-ai-titles/--no-ai-titles",
+        help="是否使用AI生成产品标题（默认启用）"
+    ),
     output: Optional[Path] = typer.Option(
         None,
         "--output", "-o",
@@ -101,6 +106,12 @@ def run(
         
         # 自定义工作流ID
         temu-auto-publish workflow run --id my-workflow-001
+        
+        # 禁用AI标题生成
+        temu-auto-publish workflow run --no-ai-titles
+        
+        # 筛选特定人员并使用AI标题
+        temu-auto-publish workflow run --staff "张三" --use-ai-titles
     """
     console.print("\n[bold blue]🚀 Temu 自动发布 - 工作流执行[/bold blue]\n")
     
@@ -163,8 +174,11 @@ def run(
     console.print("\n[bold]工作流配置:[/bold]")
     console.print(f"  批量编辑: {'✓ 启用' if enable_batch_edit else '✗ 禁用'}")
     console.print(f"  发布: {'✓ 启用' if enable_publish else '✗ 禁用'}")
+    console.print(f"  AI标题生成: {'✓ 启用' if use_ai_titles else '✗ 禁用'}")
     if shop_name:
         console.print(f"  店铺: {shop_name}")
+    if staff_name:
+        console.print(f"  人员筛选: {staff_name}")
     console.print(f"  环境: {settings.environment}")
     console.print(f"  重试: {settings.retry.max_attempts} 次")
     
@@ -181,6 +195,7 @@ def run(
             enable_batch_edit=enable_batch_edit,
             enable_publish=enable_publish,
             shop_name=shop_name,
+            use_ai_titles=use_ai_titles,
         )
     )
     
@@ -364,6 +379,7 @@ async def _execute_workflow(
     enable_batch_edit: bool,
     enable_publish: bool,
     shop_name: Optional[str],
+    use_ai_titles: bool = True,
 ) -> dict:
     """执行工作流（内部函数）."""
     login_ctrl = None
@@ -384,7 +400,7 @@ async def _execute_workflow(
         executor = WorkflowExecutor()
         
         # 创建工作流
-        workflow = CompletePublishWorkflow()
+        workflow = CompletePublishWorkflow(use_ai_titles=use_ai_titles)
         
         # 执行
         async def _run_workflow(page, config, workflow_id, **kwargs):
