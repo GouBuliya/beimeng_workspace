@@ -268,30 +268,65 @@ class MiaoshouController:
                 logger.error(f"✗ 无效的tab名称: {tab_name}")
                 return False
 
-            selector = tabs_config[tab_name]
+            # tab名称映射（英文 -> 中文）
+            tab_name_map = {
+                "all": "全部",
+                "unclaimed": "未认领",
+                "claimed": "已认领",
+                "failed": "失败"
+            }
+            
+            # 定义fallback选择器列表（参考test_quick_edit.py的策略）
+            selectors = [
+                tabs_config[tab_name],  # CSS类选择器：.jx-radio-button:has-text('全部')
+                f"text=/{tab_name_map[tab_name]}.*\\(\\d+\\)/",  # 正则：全部 (7657)
+                f"text='{tab_name_map[tab_name]}'"  # 简单文本：全部
+            ]
             
             # 等待页面加载完成（等待任何一个tab出现）
             logger.debug(f"等待tab区域加载...")
             try:
                 await page.wait_for_selector(
-                    f"{tabs_config.get('all', 'text=全部')}, {tabs_config.get('unclaimed', 'text=未认领')}",
+                    tabs_config.get('all', '.jx-radio-button:has-text("全部")'),
                     timeout=10000,
                     state="visible"
                 )
             except Exception as wait_error:
-                logger.warning(f"等待tab出现超时: {wait_error}")
-                # 继续尝试点击
+                logger.warning(f"等待tab出现超时，继续尝试...")
             
-            # 点击目标tab（使用force=True强制点击，避免被其他元素遮挡）
-            logger.debug(f"点击tab选择器: {selector}")
-            try:
-                # 优先使用第一个选择器（通常是最精确的）
-                await page.locator(selector).first.click(timeout=5000)
-            except Exception as e:
-                logger.warning(f"普通点击失败: {str(e)[:100]}...")
-                # 强制点击（跳过可点击性检查）
-                logger.debug("尝试强制点击...")
-                await page.locator(selector).first.click(force=True, timeout=5000)
+            # 尝试多个选择器（fallback策略）
+            clicked = False
+            for i, selector in enumerate(selectors):
+                logger.debug(f"尝试选择器 {i+1}/{len(selectors)}: {selector}")
+                try:
+                    # 先检查是否存在
+                    count = await page.locator(selector).count()
+                    if count == 0:
+                        logger.debug(f"选择器 {i+1} 未找到元素")
+                        continue
+                    
+                    # 尝试点击
+                    await page.locator(selector).first.click(timeout=3000)
+                    clicked = True
+                    logger.success(f"✓ 使用选择器 {i+1} 成功点击")
+                    break
+                except Exception as e:
+                    logger.debug(f"选择器 {i+1} 点击失败: {str(e)[:80]}...")
+                    if i < len(selectors) - 1:
+                        continue
+                    else:
+                        # 最后一次尝试：强制点击第一个选择器
+                        logger.debug("所有选择器失败，尝试强制点击...")
+                        try:
+                            await page.locator(selectors[0]).first.click(force=True, timeout=3000)
+                            clicked = True
+                            logger.success("✓ 强制点击成功")
+                        except Exception as force_error:
+                            logger.error(f"强制点击也失败: {force_error}")
+            
+            if not clicked:
+                logger.error(f"✗ 所有选择器都失败，无法切换到「{tab_name}」tab")
+                return False
             
             # 等待列表刷新（参考test_quick_edit.py的成功策略）
             await page.wait_for_timeout(1000)
