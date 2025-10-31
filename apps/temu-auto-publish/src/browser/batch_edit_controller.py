@@ -46,6 +46,13 @@ from playwright.async_api import Page
 from ..data_processor.price_calculator import PriceCalculator
 from ..data_processor.random_generator import RandomDataGenerator
 from ..utils.smart_locator import SmartLocator
+from ..utils.batch_edit_helpers import (
+    retry_on_failure,
+    performance_monitor,
+    enhanced_error_handler,
+    StepValidator,
+    GenericSelectors,
+)
 
 
 class BatchEditController:
