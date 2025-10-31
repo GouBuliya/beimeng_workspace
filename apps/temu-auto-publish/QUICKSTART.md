@@ -6,6 +6,25 @@
 
 1. **设置登录凭证**（必须）
 
+**方式1：使用.env文件（推荐）**
+
+在项目根目录的 `.env` 文件中添加：
+
+```bash
+# 妙手ERP登录凭证
+TEMU_USERNAME=你的用户名
+TEMU_PASSWORD=你的密码
+```
+
+或者使用：
+
+```bash
+MIAOSHOU_USERNAME=你的用户名
+MIAOSHOU_PASSWORD=你的密码
+```
+
+**方式2：设置环境变量**
+
 ```bash
 export MIAOSHOU_USERNAME="你的妙手ERP用户名"
 export MIAOSHOU_PASSWORD="你的妙手ERP密码"
@@ -19,6 +38,11 @@ echo 'export MIAOSHOU_USERNAME="你的用户名"' >> ~/.zshrc
 echo 'export MIAOSHOU_PASSWORD="你的密码"' >> ~/.zshrc
 source ~/.zshrc
 ```
+
+**注意：** 
+- 如果同时设置了 `.env` 文件和环境变量，优先使用 `MIAOSHOU_*` 环境变量
+- 其次使用 `TEMU_*` 环境变量
+- `.env` 文件已在 `.gitignore` 中，不会被提交到版本库
 
 2. **准备测试数据**
 
