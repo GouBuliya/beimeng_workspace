@@ -31,6 +31,7 @@ except Exception as e:
     logger.warning(f"⚠️  加载.env失败: {e}")
 
 from src.browser.login_controller import LoginController
+from src.browser.miaoshou_controller import MiaoshouController
 from src.workflows.five_to_twenty_workflow import FiveToTwentyWorkflow
 
 
@@ -102,8 +103,24 @@ async def main():
         page = login_controller.browser_manager.page
         await asyncio.sleep(2)
         
-        # 3. 执行5→20工作流
-        logger.info("\n步骤3：执行5→20认领流程...")
+        # 3. 导航到公用采集箱（SOP步骤4.0）
+        logger.info("\n步骤3：导航到公用采集箱...")
+        miaoshou_ctrl = MiaoshouController()
+        if not await miaoshou_ctrl.navigate_to_collection_box(page, use_sidebar=False):
+            logger.error("✗ 导航失败")
+            return 1
+        logger.success("✓ 导航成功")
+        
+        # 4. 切换到"全部"tab（SOP步骤4.0）
+        logger.info("\n步骤4：切换到「全部」tab...")
+        if not await miaoshou_ctrl.switch_tab(page, "all"):
+            logger.warning("⚠️ 切换tab失败，但继续尝试执行")
+        else:
+            logger.success("✓ 已切换到全部tab")
+        await page.wait_for_timeout(1000)
+        
+        # 5. 执行5→20工作流
+        logger.info("\n步骤5：执行5→20认领流程...")
         logger.info("----------------------------------------")
         workflow = FiveToTwentyWorkflow()
         
