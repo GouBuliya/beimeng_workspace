@@ -4,11 +4,12 @@
   - async def main(): 自动执行5→20认领流程测试
 @DEPENDENCIES:
   - 内部: browser_manager, workflows
-  - 外部: playwright, loguru
+  - 外部: playwright, loguru, python-dotenv
 @RELATED: test_stage2_real_environment.py
 """
 
 import asyncio
+import os
 import sys
 from pathlib import Path
 
@@ -17,7 +18,18 @@ from loguru import logger
 # 添加项目根目录到path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from src.browser.browser_manager import BrowserManager
+# 加载.env环境变量
+try:
+    from dotenv import load_dotenv
+    env_path = Path(__file__).parent / ".env"
+    load_dotenv(env_path)
+    logger.info(f"✓ 环境变量已从 {env_path} 加载")
+except ImportError:
+    logger.warning("⚠️  python-dotenv未安装，请运行: pip install python-dotenv")
+    logger.warning("   将使用硬编码的占位符账号")
+except Exception as e:
+    logger.warning(f"⚠️  加载.env失败: {e}")
+
 from src.browser.login_controller import LoginController
 from src.workflows.five_to_twenty_workflow import FiveToTwentyWorkflow
 
@@ -53,14 +65,21 @@ async def main():
         # 2. 登录（会自动启动浏览器）
         logger.info("\n步骤2：登录妙手ERP...")
         
-        # 从环境变量或配置文件读取账号密码（实际项目中应该这样做）
-        # 这里使用占位符，实际运行时需要提供真实账号
-        username = "your_username"  # 需要替换为真实用户名
-        password = "your_password"  # 需要替换为真实密码
+        # 从.env环境变量读取账号密码
+        username = os.getenv("MIAOSHOU_USERNAME")
+        password = os.getenv("MIAOSHOU_PASSWORD")
         
-        logger.warning("⚠️  注意：使用Cookie登录模式")
+        if not username or not password:
+            logger.error("❌ 未找到妙手ERP账号配置")
+            logger.info("\n请确保.env文件中包含以下配置：")
+            logger.info("  MIAOSHOU_USERNAME=你的用户名")
+            logger.info("  MIAOSHOU_PASSWORD=你的密码")
+            return 1
+        
+        logger.info(f"  使用账号: {username}")
+        logger.warning("⚠️  注意：优先使用Cookie登录模式")
         logger.info("   如果Cookie有效，将跳过账号密码登录")
-        logger.info("   如果Cookie失效，需要手动登录一次")
+        logger.info("   如果Cookie失效，将使用.env中的账号自动登录")
         
         login_success = await login_controller.login(
             username=username,
