@@ -539,7 +539,7 @@ class FirstEditController:
             return False
 
     async def close_dialog(self, page: Page) -> bool:
-        """关闭编辑弹窗（不保存）.
+        """关闭编辑弹窗（点击右上角×）.
 
         Args:
             page: Playwright页面对象
@@ -551,16 +551,44 @@ class FirstEditController:
             >>> await ctrl.close_dialog(page)
             True
         """
-        logger.info("关闭编辑弹窗...")
+        logger.info("关闭编辑弹窗（点击×）...")
 
         try:
             first_edit_config = self.selectors.get("first_edit_dialog", {})
-            close_btn_selector = first_edit_config.get("close_btn", "button:has-text('关闭')")
+            close_btn_selector = first_edit_config.get(
+                "close_btn", 
+                "button[aria-label='关闭'], button[aria-label='Close'], .jx-dialog__headerbtn, .el-dialog__headerbtn"
+            )
 
-            await page.locator(close_btn_selector).click()
+            # 尝试多个选择器
+            selectors = close_btn_selector.split(", ")
+            closed = False
+            
+            for selector in selectors:
+                try:
+                    count = await page.locator(selector.strip()).count()
+                    if count > 0:
+                        logger.debug(f"找到关闭按钮: {selector}")
+                        await page.locator(selector.strip()).first.click()
+                        closed = True
+                        break
+                except:
+                    continue
+            
+            if not closed:
+                logger.error("未找到关闭按钮")
+                return False
+            
+            # 等待弹窗关闭
             await page.wait_for_timeout(1000)
-
-            logger.success("✓ 编辑弹窗已关闭")
+            
+            # 验证弹窗是否关闭
+            dialog_count = await page.locator(".jx-dialog, .el-dialog, [role='dialog']").count()
+            if dialog_count == 0:
+                logger.success("✓ 编辑弹窗已关闭")
+            else:
+                logger.warning(f"⚠️ 点击了关闭按钮，但弹窗仍存在（{dialog_count}个）")
+            
             return True
 
         except Exception as e:
@@ -628,9 +656,14 @@ class FirstEditController:
             # if not await self.set_sku_dimensions(page, length, width, height):
             #     return False
 
-            # 保存修改并等待弹窗关闭
-            if not await self.save_changes(page, wait_for_close=True):
+            # 保存修改
+            if not await self.save_changes(page, wait_for_close=False):
                 return False
+            
+            # 保存后需要手动关闭弹窗（点击右上角的×）
+            logger.debug("点击关闭按钮（×）...")
+            if not await self.close_dialog(page):
+                logger.warning("⚠️ 关闭弹窗失败，但继续执行")
 
             logger.info("=" * 60)
             logger.success("✓ 首次编辑完整流程已完成（标题、价格、库存）")

@@ -80,7 +80,7 @@
   
   "first_edit_dialog": {
     "comment": "首次编辑弹窗（产品编辑对话框） - 使用文本定位器",
-    "close_btn": "button:has-text('关闭'), button[aria-label*='关闭'], button[title*='关闭']",
+    "close_btn": "button[aria-label='关闭'], button[aria-label='Close'], button.jx-dialog__headerbtn, .jx-dialog__close, .el-dialog__headerbtn, .el-dialog__close",
     "navigation": {
       "basic_info": "text='基本信息'",
       "product_attrs": "text='产品属性'",
