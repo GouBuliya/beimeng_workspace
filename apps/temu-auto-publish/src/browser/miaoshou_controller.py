@@ -77,12 +77,12 @@ class MiaoshouController:
             logger.warning(f"加载选择器配置失败: {e}")
             return {}
 
-    async def navigate_to_collection_box(self, page: Page, use_sidebar: bool = True) -> bool:
+    async def navigate_to_collection_box(self, page: Page, use_sidebar: bool = False) -> bool:
         """导航到公用采集箱.
 
         Args:
             page: Playwright页面对象
-            use_sidebar: 是否通过侧边栏导航（默认True，更可靠）
+            use_sidebar: 是否通过侧边栏导航（默认False，直接使用URL更可靠）
 
         Returns:
             是否成功导航
@@ -98,7 +98,7 @@ class MiaoshouController:
             target_url = collection_box_config.get("url", "https://erp.91miaoshou.com/common_collect_box/items")
 
             if use_sidebar:
-                # 方式1：通过侧边栏导航（推荐）
+                # 方式1：通过侧边栏导航（可能不稳定）
                 sidebar_config = self.selectors.get("sidebar_menu", {})
                 collection_box_selector = sidebar_config.get("common_collection_box", "menuitem:has-text('公用采集箱')")
 
@@ -107,7 +107,7 @@ class MiaoshouController:
                 await page.wait_for_timeout(1000)
 
             else:
-                # 方式2：直接导航到URL
+                # 方式2：直接导航到URL（推荐，更可靠）
                 logger.debug(f"直接导航到: {target_url}")
                 await page.goto(target_url, timeout=30000)
 
