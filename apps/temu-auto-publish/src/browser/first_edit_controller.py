@@ -509,13 +509,25 @@ class FirstEditController:
             if wait_for_close:
                 # 等待弹窗关闭（检查弹窗是否还存在）
                 try:
-                    await page.wait_for_timeout(1000)
-                    dialog_count = await page.locator(".jx-dialog").count()
+                    logger.debug("等待编辑弹窗关闭...")
+                    # 等待更长时间确保保存完成
+                    await page.wait_for_timeout(2000)
+                    
+                    # 检查弹窗是否关闭
+                    dialog_count = await page.locator(".jx-dialog, .el-dialog, [role='dialog']").count()
                     if dialog_count == 0:
                         logger.success("✓ 修改已保存，弹窗已关闭")
                     else:
-                        logger.success("✓ 修改已保存（弹窗仍打开）")
-                except:
+                        # 弹窗还在，再等一会
+                        logger.debug(f"弹窗仍存在（{dialog_count}个），继续等待...")
+                        await page.wait_for_timeout(2000)
+                        dialog_count = await page.locator(".jx-dialog, .el-dialog, [role='dialog']").count()
+                        if dialog_count == 0:
+                            logger.success("✓ 修改已保存，弹窗已关闭")
+                        else:
+                            logger.warning(f"⚠️ 修改已保存，但弹窗仍打开（{dialog_count}个）")
+                except Exception as e:
+                    logger.warning(f"检查弹窗状态时出错: {e}")
                     logger.success("✓ 修改已保存")
             else:
                 logger.success("✓ 修改已保存")
@@ -616,8 +628,8 @@ class FirstEditController:
             # if not await self.set_sku_dimensions(page, length, width, height):
             #     return False
 
-            # 保存修改
-            if not await self.save_changes(page):
+            # 保存修改并等待弹窗关闭
+            if not await self.save_changes(page, wait_for_close=True):
                 return False
 
             logger.info("=" * 60)
