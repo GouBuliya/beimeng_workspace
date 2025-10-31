@@ -1,0 +1,30 @@
+# Temu 自动发布系统 - 依赖包
+
+# Core Framework
+playwright>=1.40.0
+
+# CLI Framework
+typer[all]>=0.9.0
+rich>=13.7.0
+
+# Configuration Management
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+pyyaml>=6.0.1
+python-dotenv>=1.0.0
+
+# Logging
+loguru>=0.7.0
+
+# Data Processing
+openpyxl>=3.1.2
+pandas>=2.1.0
+
+# Async Support
+asyncio-compat>=0.2.0
+
+# Testing (dev)
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+pytest-playwright>=0.4.3
+

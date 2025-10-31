@@ -585,7 +585,7 @@ class FirstEditController:
             # 验证弹窗是否关闭
             dialog_count = await page.locator(".jx-dialog, .el-dialog, [role='dialog']").count()
             if dialog_count == 0:
-            logger.success("✓ 编辑弹窗已关闭")
+                logger.success("✓ 编辑弹窗已关闭")
             else:
                 logger.warning(f"⚠️ 点击了关闭按钮，但弹窗仍存在（{dialog_count}个）")
             
