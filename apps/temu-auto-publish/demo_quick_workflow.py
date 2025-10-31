@@ -107,8 +107,10 @@ async def demo_five_to_twenty():
             logger.error("✗ 导航失败")
             return
 
-        # 3. 切换到"未认领"tab
-        await miaoshou_ctrl.switch_tab(page, "unclaimed")
+        # 3. 立即切换到"全部"tab
+        logger.info("切换到「全部」tab...")
+        if not await miaoshou_ctrl.switch_tab(page, "all"):
+            logger.warning("⚠️ 切换tab失败，但继续尝试执行")
         await page.wait_for_timeout(1000)
 
         # 4. 执行5→20工作流
