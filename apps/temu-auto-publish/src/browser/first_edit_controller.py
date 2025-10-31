@@ -14,9 +14,12 @@
   - 使用aria-ref定位元素
   - 详细描述使用iframe富文本编辑器
   - 保存后弹窗会关闭
+  - ⚠️ 必须修改"产品标题"字段，不是"简易描述"字段！（SOP 4.2明确说明）
 @DEPENDENCIES:
   - 内部: browser_manager
   - 外部: playwright, loguru
+@CHANGELOG:
+  - 2025-10-31: 修复标题选择器，通过label定位"产品标题"而不是"简易描述"
 @RELATED: miaoshou_controller.py, batch_edit_controller.py
 """
 
@@ -119,40 +122,65 @@ class FirstEditController:
             # 等待弹窗完全加载
             await page.wait_for_timeout(1000)
             
-            # 尝试多个可能的标题输入框选择器
+            # ⚠️ 关键：区分"产品标题"和"简易描述"
+            # 根据SOP 4.2：必须修改"产品标题"字段，不是"简易描述"字段
+            # 策略：通过查找label包含"产品标题"的相邻textarea
+            
             title_selectors = [
-                "textarea[placeholder*='标题']",
-                "input[placeholder*='标题']",
+                # 方法1：通过label文本定位（最准确）
+                "//div[contains(@class, 'jx-form-item') and .//label[contains(text(), '产品标题')]]//textarea",
+                "//label[contains(text(), '产品标题')]/..//textarea",
+                "//label[contains(text(), '产品标题')]/following-sibling::*//textarea",
+                
+                # 方法2：通过placeholder定位
                 "textarea[placeholder*='产品标题']",
-                "input[placeholder*='产品标题']",
-                "textarea.jx-textarea__inner",
-                "input[type='text']:visible",
+                "textarea[placeholder*='请输入产品标题']",
+                
+                # 方法3：通过表单项的data属性或class定位
+                "div[class*='product-title'] textarea",
+                ".product-title-input textarea",
+                
+                # 方法4：通过排除法（排除简易描述）
+                "textarea.jx-textarea__inner:not([placeholder*='简易描述']):not([placeholder*='描述'])",
             ]
             
             title_input = None
+            used_selector = None
+            
             for selector in title_selectors:
                 try:
                     count = await page.locator(selector).count()
                     if count > 0:
-                        for i in range(count):
-                            elem = page.locator(selector).nth(i)
-                            is_visible = await elem.is_visible(timeout=1000)
-                            if is_visible:
-                                title_input = elem
-                                logger.debug(f"使用选择器: {selector} (第{i+1}个)")
-                                break
-                        if title_input:
+                        # 找到第一个可见的
+                        elem = page.locator(selector).first
+                        is_visible = await elem.is_visible(timeout=1000)
+                        if is_visible:
+                            title_input = elem
+                            used_selector = selector
+                            logger.debug(f"✓ 使用选择器定位到产品标题: {selector}")
                             break
-                except:
+                except Exception as e:
+                    logger.debug(f"选择器 {selector} 失败: {e}")
                     continue
             
             if not title_input:
-                logger.error("未找到标题输入框")
-                return ""
+                logger.error("未找到产品标题输入框")
+                logger.warning("尝试使用通用textarea作为降级方案...")
+                # 降级方案：使用第一个textarea（可能不准确）
+                title_input = page.locator("textarea.jx-textarea__inner").first
+                used_selector = "textarea.jx-textarea__inner (降级方案)"
             
             # 获取标题值
             title = await title_input.input_value()
-            logger.success(f"✓ 获取到原始标题: {title[:50]}...")
+            
+            # 验证是否是产品标题（简单校验：标题通常较长，不包含特定关键词）
+            if "简易" in title or "描述" in title or len(title) < 10:
+                logger.warning(f"⚠️ 可能获取到了错误的字段: {title[:30]}...")
+                logger.warning("请使用Codegen获取正确的选择器")
+            else:
+                logger.success(f"✓ 获取到产品标题: {title[:50]}...")
+            
+            logger.debug(f"最终使用的选择器: {used_selector}")
             return title
 
         except Exception as e:
@@ -179,37 +207,55 @@ class FirstEditController:
             # 等待弹窗完全加载
             await page.wait_for_timeout(1000)
             
-            # 尝试多个可能的标题输入框选择器
+            # ⚠️ 关键：区分"产品标题"和"简易描述"
+            # 根据SOP 4.2：必须修改"产品标题"字段，不是"简易描述"字段
+            # 使用与get_original_title相同的定位策略
+            
             title_selectors = [
-                "textarea[placeholder*='标题']",
-                "input[placeholder*='标题']",
+                # 方法1：通过label文本定位（最准确）
+                "//div[contains(@class, 'jx-form-item') and .//label[contains(text(), '产品标题')]]//textarea",
+                "//label[contains(text(), '产品标题')]/..//textarea",
+                "//label[contains(text(), '产品标题')]/following-sibling::*//textarea",
+                
+                # 方法2：通过placeholder定位
                 "textarea[placeholder*='产品标题']",
-                "input[placeholder*='产品标题']",
-                "textarea.jx-textarea__inner",  # 通用textarea class
-                "input[type='text']:visible",   # 可见的文本输入框
+                "textarea[placeholder*='请输入产品标题']",
+                
+                # 方法3：通过表单项的data属性或class定位
+                "div[class*='product-title'] textarea",
+                ".product-title-input textarea",
+                
+                # 方法4：通过排除法（排除简易描述）
+                "textarea.jx-textarea__inner:not([placeholder*='简易描述']):not([placeholder*='描述'])",
             ]
             
             title_input = None
+            used_selector = None
+            
             for selector in title_selectors:
                 try:
                     count = await page.locator(selector).count()
                     if count > 0:
                         # 找到第一个可见的
-                        for i in range(count):
-                            elem = page.locator(selector).nth(i)
-                            is_visible = await elem.is_visible(timeout=1000)
-                            if is_visible:
-                                title_input = elem
-                                logger.debug(f"使用选择器: {selector} (第{i+1}个)")
-                                break
-                        if title_input:
+                        elem = page.locator(selector).first
+                        is_visible = await elem.is_visible(timeout=1000)
+                        if is_visible:
+                            title_input = elem
+                            used_selector = selector
+                            logger.debug(f"✓ 使用选择器定位到产品标题: {selector}")
                             break
-                except:
+                except Exception as e:
+                    logger.debug(f"选择器 {selector} 失败: {e}")
                     continue
             
             if not title_input:
-                logger.error("未找到标题输入框")
-                return False
+                logger.error("未找到产品标题输入框")
+                logger.warning("尝试使用通用textarea作为降级方案...")
+                # 降级方案：使用第一个textarea（可能不准确）
+                title_input = page.locator("textarea.jx-textarea__inner").first
+                used_selector = "textarea.jx-textarea__inner (降级方案)"
+            
+            logger.info(f"使用选择器: {used_selector}")
             
             # 清空并填写新标题
             await title_input.fill("")
