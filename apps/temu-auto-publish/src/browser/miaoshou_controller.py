@@ -138,6 +138,117 @@ class MiaoshouController:
             logger.error(f"导航到公用采集箱失败: {e}")
             return False
 
+    async def filter_and_search(self, page: Page, staff_name: str = None) -> bool:
+        """筛选人员并执行搜索.
+        
+        在采集箱页面中，筛选指定人员的产品。
+        
+        Args:
+            page: Playwright页面对象
+            staff_name: 人员名称，如果为None则不筛选人员
+            
+        Returns:
+            是否成功筛选和搜索
+            
+        Examples:
+            >>> await ctrl.filter_and_search(page, "张三")
+            True
+        """
+        logger.info(f"筛选人员并搜索: {staff_name or '(全部)'}")
+        
+        try:
+            collection_box_config = self.selectors.get("collection_box", {})
+            search_box_config = collection_box_config.get("search_box", {})
+            
+            # 如果指定了人员名称，先筛选人员
+            if staff_name:
+                logger.debug(f"筛选人员: {staff_name}")
+                
+                # 策略：直接通过索引定位"创建人员"选择框
+                # 从截图可以看到：第二行左边是"创建人员：全部"的下拉框
+                # 页面中的选择框顺序：第0个是"关联货源"，第1个是"创建人员"
+                try:
+                    logger.debug("查找'创建人员'选择框（第2个选择框）...")
+                    
+                    # 查找页面中所有的选择框
+                    all_selects = page.locator(".jx-select")
+                    select_count = await all_selects.count()
+                    logger.debug(f"找到 {select_count} 个 jx-select 元素")
+                    
+                    if select_count < 2:
+                        logger.warning(f"⚠️ 选择框数量不足，预期至少2个，实际 {select_count} 个")
+                    else:
+                        # 通常"创建人员"是第2个选择框（索引1）
+                        staff_select = all_selects.nth(1)
+                        
+                        # 点击打开下拉菜单
+                        logger.debug("点击'创建人员'选择框...")
+                        await staff_select.click()
+                        await page.wait_for_timeout(1000)
+                        
+                        # 检查下拉菜单是否出现
+                        dropdown_count = await page.locator(".jx-select-dropdown, .jx-popper, [role='listbox']").count()
+                        
+                        if dropdown_count == 0:
+                            logger.warning("⚠️ 下拉菜单未出现")
+                        else:
+                            logger.success("✓ 下拉菜单已打开")
+                            
+                            # 在下拉菜单中查找并点击指定人员
+                            logger.debug(f"在下拉菜单中查找人员: {staff_name}")
+                            await page.wait_for_timeout(500)
+                            
+                            # 尝试多种选择器来定位人员选项
+                            staff_option_selectors = [
+                                f"li:has-text('{staff_name}')",
+                                f".jx-select-dropdown__item:has-text('{staff_name}')",
+                                f".jx-option:has-text('{staff_name}')",
+                                f"[role='option']:has-text('{staff_name}')",
+                                f"div:has-text('{staff_name}')"
+                            ]
+                            
+                            staff_option_clicked = False
+                            for selector in staff_option_selectors:
+                                try:
+                                    elements = await page.locator(selector).all()
+                                    if len(elements) > 0:
+                                        logger.debug(f"找到 {len(elements)} 个匹配'{staff_name}'的选项: {selector}")
+                                        # 点击第一个匹配的选项
+                                        await elements[0].click()
+                                        await page.wait_for_timeout(500)
+                                        staff_option_clicked = True
+                                        logger.success(f"✓ 已选择人员: {staff_name}")
+                                        break
+                                except Exception as e:
+                                    logger.debug(f"选择器 {selector} 点击失败: {e}")
+                                    continue
+                            
+                            if not staff_option_clicked:
+                                logger.warning(f"⚠️ 未找到人员选项: {staff_name}")
+                
+                except Exception as e:
+                    logger.error(f"人员筛选过程出错: {e}")
+                    logger.warning("⚠️ 人员筛选失败，但继续执行")
+            
+            # 点击搜索按钮
+            logger.debug("点击搜索按钮...")
+            search_btn_selector = search_box_config.get("search_btn", "button:has-text('搜索')")
+            
+            search_btn_count = await page.locator(search_btn_selector).count()
+            if search_btn_count == 0:
+                logger.error("✗ 未找到搜索按钮")
+                return False
+            
+            await page.locator(search_btn_selector).first.click()
+            await page.wait_for_timeout(2000)  # 等待搜索结果加载
+            
+            logger.success(f"✓ 已筛选并搜索{f': {staff_name}' if staff_name else ''}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"筛选和搜索失败: {e}")
+            return False
+
     async def close_popup_if_exists(self, page: Page) -> bool:
         """关闭可能出现的弹窗（如"我知道了"等提示）.
 
@@ -517,7 +628,7 @@ class MiaoshouController:
             first_edit_config = self.selectors.get("first_edit_dialog", {})
             close_btn_selector = first_edit_config.get("close_btn", "button:has-text('关闭')")
 
-            if await page.locator(close_btn_selector).is_visible():
+            if await page.locator(close_btn_selector).first.is_visible():
                 logger.success(f"✓ 第{index+1}个产品编辑弹窗已打开")
                 return True
             else:

@@ -1,0 +1,11 @@
+{
+  "workflow_id": "workflow_bab417b6_1761887780",
+  "status": "completed",
+  "current_stage": null,
+  "completed_stages": [],
+  "failed_stages": [],
+  "start_time": "2025-10-31T13:16:20.397644",
+  "update_time": "2025-10-31T13:17:17.331809",
+  "context": {},
+  "checkpoint_data": {}
+}

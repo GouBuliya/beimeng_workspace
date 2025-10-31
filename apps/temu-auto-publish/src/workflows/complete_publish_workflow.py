@@ -120,6 +120,28 @@ class CompletePublishWorkflow:
             logger.info("【阶段1/3】5→20工作流（SOP步骤4-6）")
             logger.info("▶" * 50)
 
+            # 1. 导航到采集箱
+            logger.info("导航到采集箱页面...")
+            if not await self.miaoshou_ctrl.navigate_to_collection_box(page):
+                raise Exception("导航到采集箱失败")
+            await page.wait_for_timeout(2000)
+            
+            # 2. 切换到"全部"tab
+            logger.info("切换到'全部'tab...")
+            if not await self.miaoshou_ctrl.switch_tab(page, "all"):
+                raise Exception("切换到'全部'tab失败")
+            await page.wait_for_timeout(1000)
+            
+            # 3. 筛选人员并搜索（如果配置了人员名称）
+            staff_name = products_data[0].get("staff_name") if products_data else None
+            if staff_name:
+                logger.info(f"筛选人员: {staff_name}")
+                if not await self.miaoshou_ctrl.filter_and_search(page, staff_name):
+                    logger.warning(f"⚠️ 人员筛选失败，但继续执行（人员: {staff_name}）")
+                    # 不失败，继续执行（可能人员筛选不是必须的）
+                await page.wait_for_timeout(1000)
+
+            # 4. 执行5→20工作流
             stage1_result = await self.five_to_twenty.execute(page, products_data)
             result["stage1_result"] = stage1_result
 

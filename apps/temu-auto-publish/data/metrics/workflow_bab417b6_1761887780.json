@@ -1,0 +1,11 @@
+{
+  "workflow_id": "workflow_bab417b6_1761887780",
+  "start_time": "2025-10-31T13:16:20.397653",
+  "end_time": "2025-10-31T13:17:17.329573",
+  "duration": 56.93192,
+  "status": "success",
+  "stages": {},
+  "operations": {},
+  "errors": [],
+  "custom_metrics": {}
+}

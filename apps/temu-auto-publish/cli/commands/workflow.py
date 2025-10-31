@@ -76,6 +76,11 @@ def run(
         "--shop",
         help="店铺名称"
     ),
+    staff_name: Optional[str] = typer.Option(
+        None,
+        "--staff",
+        help="人员名称（用于筛选采集箱中的产品）"
+    ),
     output: Optional[Path] = typer.Option(
         None,
         "--output", "-o",
@@ -119,6 +124,12 @@ def run(
             for i in range(1, 6)
         ]
         console.print(f"[yellow]⚠[/yellow] 使用默认演示数据: {len(products)} 个产品")
+    
+    # 如果指定了人员名称，添加到产品数据中
+    if staff_name:
+        for product in products:
+            product["staff_name"] = staff_name
+        console.print(f"[green]✓[/green] 人员筛选: {staff_name}")
     
     # 加载配置
     config = {}
