@@ -6,13 +6,27 @@
   - main: 主函数
 @DEPENDENCIES:
   - 内部: workflows, browser
-  - 外部: playwright, loguru
+  - 外部: playwright, loguru, python-dotenv
 """
 
 import asyncio
+import os
 from pathlib import Path
 
 from loguru import logger
+
+# 加载.env文件
+try:
+    from dotenv import load_dotenv
+    # 加载项目根目录的.env文件
+    env_path = Path(__file__).parent / '.env'
+    if env_path.exists():
+        load_dotenv(env_path)
+        logger.debug(f"✓ 已加载环境变量从: {env_path}")
+    else:
+        logger.warning(f"⚠️  .env文件不存在: {env_path}")
+except ImportError:
+    logger.warning("⚠️  python-dotenv未安装，将直接使用系统环境变量")
 
 from src.browser.browser_manager import BrowserManager
 from src.browser.login_controller import LoginController
@@ -68,15 +82,15 @@ async def demo_five_to_twenty():
         logger.info("\n[1/4] 初始化浏览器...")
         login_ctrl = LoginController()
         
-        # 从环境变量获取登录信息
-        import os
-        username = os.getenv("MIAOSHOU_USERNAME", "")
-        password = os.getenv("MIAOSHOU_PASSWORD", "")
+        # 从环境变量获取登录信息（已从.env加载）
+        username = os.getenv("MIAOSHOU_USERNAME") or os.getenv("TEMU_USERNAME", "")
+        password = os.getenv("MIAOSHOU_PASSWORD") or os.getenv("TEMU_PASSWORD", "")
         
         if not username or not password:
-            logger.error("✗ 请设置环境变量 MIAOSHOU_USERNAME 和 MIAOSHOU_PASSWORD")
-            logger.info("或使用: export MIAOSHOU_USERNAME=你的用户名")
-            logger.info("       export MIAOSHOU_PASSWORD=你的密码")
+            logger.error("✗ 请在.env文件中设置 TEMU_USERNAME 和 TEMU_PASSWORD")
+            logger.info("或设置环境变量:")
+            logger.info("  export MIAOSHOU_USERNAME=你的用户名")
+            logger.info("  export MIAOSHOU_PASSWORD=你的密码")
             return
 
         logger.info("[2/4] 登录妙手ERP...")
@@ -146,15 +160,15 @@ async def demo_complete_workflow():
         logger.info("\n[1/4] 初始化浏览器...")
         login_ctrl = LoginController()
         
-        # 从环境变量获取登录信息
-        import os
-        username = os.getenv("MIAOSHOU_USERNAME", "")
-        password = os.getenv("MIAOSHOU_PASSWORD", "")
+        # 从环境变量获取登录信息（已从.env加载）
+        username = os.getenv("MIAOSHOU_USERNAME") or os.getenv("TEMU_USERNAME", "")
+        password = os.getenv("MIAOSHOU_PASSWORD") or os.getenv("TEMU_PASSWORD", "")
         
         if not username or not password:
-            logger.error("✗ 请设置环境变量 MIAOSHOU_USERNAME 和 MIAOSHOU_PASSWORD")
-            logger.info("或使用: export MIAOSHOU_USERNAME=你的用户名")
-            logger.info("       export MIAOSHOU_PASSWORD=你的密码")
+            logger.error("✗ 请在.env文件中设置 TEMU_USERNAME 和 TEMU_PASSWORD")
+            logger.info("或设置环境变量:")
+            logger.info("  export MIAOSHOU_USERNAME=你的用户名")
+            logger.info("  export MIAOSHOU_PASSWORD=你的密码")
             return
 
         logger.info("[2/4] 登录妙手ERP...")
