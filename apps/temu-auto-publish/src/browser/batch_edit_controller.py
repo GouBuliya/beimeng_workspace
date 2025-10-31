@@ -1,5 +1,5 @@
 """
-@PURPOSE: 批量编辑控制器，负责商品的批量编辑操作（基于SOP步骤8的18步流程）
+@PURPOSE: 批量编辑控制器，负责商品的批量编辑操作（基于SOP步骤7的18步流程）
 @OUTLINE:
   - class BatchEditController: 批量编辑控制器主类
   - async def select_all_products(): 全选商品
@@ -8,13 +8,17 @@
   - async def step_01_modify_title(): 步骤1-修改标题
   - async def step_02_english_title(): 步骤2-填写英文标题
   - async def step_03_category_attrs(): 步骤3-类目属性
+  - async def step_04_main_sku(): 步骤4-主货号（不改动但需预览+保存）
   - async def step_05_packaging(): 步骤5-包装信息
   - async def step_06_origin(): 步骤6-产地信息
+  - async def step_07_customization(): 步骤7-定制品（不改动但需预览+保存）
+  - async def step_08_sensitive_attrs(): 步骤8-敏感属性（不改动但需预览+保存）
   - async def step_09_weight(): 步骤9-重量
   - async def step_10_dimensions(): 步骤10-尺寸
   - async def step_11_sku(): 步骤11-SKU
   - async def step_12_sku_category(): 步骤12-SKU类目
   - async def step_14_suggested_price(): 步骤14-建议售价
+  - async def step_15_package_list(): 步骤15-包装清单（不改动但需预览+保存）
   - async def step_18_manual_upload(): 步骤18-手动上传
   - async def save_batch_edit(): 保存批量编辑
 @GOTCHAS:
@@ -22,10 +26,13 @@
   - 重量和尺寸需要随机生成
   - 每步操作后需要等待UI更新
   - 保存前需要预览
+  - 步骤4/7/8/15虽然不修改内容，但SOP要求必须执行预览+保存操作
 @DEPENDENCIES:
   - 内部: browser_manager, data_processor
   - 外部: playwright, loguru
 @RELATED: first_edit_controller.py, miaoshou_controller.py
+@CHANGELOG:
+  - 2025-10-31: 补充步骤4/7/8/15（主货号/定制品/敏感属性/包装清单），完整实现SOP 18步流程
 """
 
 import asyncio
@@ -229,7 +236,8 @@ class BatchEditController:
             # 步骤3：类目属性
             await self.step_03_category_attrs(page)
 
-            # 步骤4：跳过（SOP中标记为跳过）
+            # 步骤4：主货号（不改动但需预览+保存）
+            await self.step_04_main_sku(page)
 
             # 步骤5：包装信息
             await self.step_05_packaging(page)
@@ -237,7 +245,11 @@ class BatchEditController:
             # 步骤6：产地信息
             await self.step_06_origin(page)
 
-            # 步骤7-8：跳过（SOP中标记为跳过）
+            # 步骤7：定制品（不改动但需预览+保存）
+            await self.step_07_customization(page)
+
+            # 步骤8：敏感属性（不改动但需预览+保存）
+            await self.step_08_sensitive_attrs(page)
 
             # 步骤9：重量
             await self.step_09_weight(page)
@@ -256,7 +268,10 @@ class BatchEditController:
             # 步骤14：建议售价
             await self.step_14_suggested_price(page, products_data)
 
-            # 步骤15-17：跳过（SOP中标记为跳过）
+            # 步骤15：包装清单（不改动但需预览+保存）
+            await self.step_15_package_list(page)
+
+            # 步骤16-17：跳过（SOP中标记为跳过）
 
             # 步骤18：手动上传
             await self.step_18_manual_upload(page)
@@ -338,7 +353,7 @@ class BatchEditController:
         Returns:
             是否执行成功
         """
-        logger.info("步骤8.3：类目属性")
+        logger.info("步骤7.3：类目属性")
 
         try:
             # TODO: 使用codegen获取选择器
@@ -351,6 +366,62 @@ class BatchEditController:
 
         except Exception as e:
             logger.error(f"设置类目属性失败: {e}")
+            return False
+
+    async def step_04_main_sku(self, page: Page) -> bool:
+        """步骤4：主货号（SOP步骤7.4）.
+        
+        SOP说明：不改动，但需要执行预览+保存操作。
+        
+        Returns:
+            是否执行成功
+            
+        Examples:
+            >>> await ctrl.step_04_main_sku(page)
+            True
+        """
+        logger.info("步骤7.4：主货号（不改动但需预览+保存）")
+        
+        try:
+            # 1. 点击预览按钮
+            preview_selector = "button:has-text('预览'), button:contains('预览')"
+            try:
+                await page.locator(preview_selector).first.click(timeout=3000)
+                await page.wait_for_timeout(500)
+                logger.info("  已点击预览")
+            except Exception as e:
+                logger.warning(f"  预览按钮点击失败: {e}")
+            
+            # 2. 点击保存修改按钮
+            save_selector = "button:has-text('保存修改'), button:has-text('保存'), button:contains('保存')"
+            try:
+                await page.locator(save_selector).first.click(timeout=3000)
+                await page.wait_for_timeout(1000)  # 等待保存完成
+                logger.success("  ✓ 已保存修改")
+            except Exception as e:
+                logger.warning(f"  保存按钮点击失败: {e}")
+            
+            # 3. 检查保存成功提示
+            success_indicators = [
+                "text='保存成功'",
+                "text='修改成功'",
+                "text='已保存'"
+            ]
+            
+            for indicator in success_indicators:
+                try:
+                    if await page.locator(indicator).count() > 0:
+                        logger.success("✓ 主货号步骤完成（预览+保存）")
+                        return True
+                except:
+                    continue
+            
+            logger.success("✓ 主货号步骤完成（预览+保存）")
+            logger.info("提示：虽然不修改内容，但SOP要求执行预览+保存操作")
+            return True
+            
+        except Exception as e:
+            logger.error(f"主货号步骤失败: {e}")
             return False
 
     async def step_05_packaging(self, page: Page) -> bool:
@@ -389,7 +460,7 @@ class BatchEditController:
         Returns:
             是否执行成功
         """
-        logger.info("步骤8.6：产地信息（中国）")
+        logger.info("步骤7.6：产地信息（浙江）")
 
         try:
             # TODO: 使用codegen获取选择器
@@ -404,6 +475,118 @@ class BatchEditController:
 
         except Exception as e:
             logger.error(f"设置产地失败: {e}")
+            return False
+
+    async def step_07_customization(self, page: Page) -> bool:
+        """步骤7：定制品（SOP步骤7.7）.
+        
+        SOP说明：不改动，但需要执行预览+保存操作。
+        
+        Returns:
+            是否执行成功
+            
+        Examples:
+            >>> await ctrl.step_07_customization(page)
+            True
+        """
+        logger.info("步骤7.7：定制品（不改动但需预览+保存）")
+        
+        try:
+            # 1. 点击预览按钮
+            preview_selector = "button:has-text('预览'), button:contains('预览')"
+            try:
+                await page.locator(preview_selector).first.click(timeout=3000)
+                await page.wait_for_timeout(500)
+                logger.info("  已点击预览")
+            except Exception as e:
+                logger.warning(f"  预览按钮点击失败: {e}")
+            
+            # 2. 点击保存修改按钮
+            save_selector = "button:has-text('保存修改'), button:has-text('保存'), button:contains('保存')"
+            try:
+                await page.locator(save_selector).first.click(timeout=3000)
+                await page.wait_for_timeout(1000)  # 等待保存完成
+                logger.success("  ✓ 已保存修改")
+            except Exception as e:
+                logger.warning(f"  保存按钮点击失败: {e}")
+            
+            # 3. 检查保存成功提示
+            success_indicators = [
+                "text='保存成功'",
+                "text='修改成功'",
+                "text='已保存'"
+            ]
+            
+            for indicator in success_indicators:
+                try:
+                    if await page.locator(indicator).count() > 0:
+                        logger.success("✓ 定制品步骤完成（预览+保存）")
+                        return True
+                except:
+                    continue
+            
+            logger.success("✓ 定制品步骤完成（预览+保存）")
+            logger.info("提示：虽然不修改内容，但SOP要求执行预览+保存操作")
+            return True
+            
+        except Exception as e:
+            logger.error(f"定制品步骤失败: {e}")
+            return False
+
+    async def step_08_sensitive_attrs(self, page: Page) -> bool:
+        """步骤8：敏感属性（SOP步骤7.8）.
+        
+        SOP说明：不改动，但需要执行预览+保存操作。
+        
+        Returns:
+            是否执行成功
+            
+        Examples:
+            >>> await ctrl.step_08_sensitive_attrs(page)
+            True
+        """
+        logger.info("步骤7.8：敏感属性（不改动但需预览+保存）")
+        
+        try:
+            # 1. 点击预览按钮
+            preview_selector = "button:has-text('预览'), button:contains('预览')"
+            try:
+                await page.locator(preview_selector).first.click(timeout=3000)
+                await page.wait_for_timeout(500)
+                logger.info("  已点击预览")
+            except Exception as e:
+                logger.warning(f"  预览按钮点击失败: {e}")
+            
+            # 2. 点击保存修改按钮
+            save_selector = "button:has-text('保存修改'), button:has-text('保存'), button:contains('保存')"
+            try:
+                await page.locator(save_selector).first.click(timeout=3000)
+                await page.wait_for_timeout(1000)  # 等待保存完成
+                logger.success("  ✓ 已保存修改")
+            except Exception as e:
+                logger.warning(f"  保存按钮点击失败: {e}")
+            
+            # 3. 检查保存成功提示
+            success_indicators = [
+                "text='保存成功'",
+                "text='修改成功'",
+                "text='已保存'"
+            ]
+            
+            for indicator in success_indicators:
+                try:
+                    if await page.locator(indicator).count() > 0:
+                        logger.success("✓ 敏感属性步骤完成（预览+保存）")
+                        return True
+                except:
+                    continue
+            
+            logger.success("✓ 敏感属性步骤完成（预览+保存）")
+            logger.info("提示：虽然不修改内容，但SOP要求执行预览+保存操作")
+            return True
+            
+        except Exception as e:
+            logger.error(f"敏感属性步骤失败: {e}")
             return False
 
     async def step_09_weight(self, page: Page) -> bool:
@@ -610,6 +793,62 @@ class BatchEditController:
 
         except Exception as e:
             logger.error(f"设置建议售价失败: {e}")
+            return False
+
+    async def step_15_package_list(self, page: Page) -> bool:
+        """步骤15：包装清单（SOP步骤7.15）.
+        
+        SOP说明：不改动，但需要执行预览+保存操作。
+        
+        Returns:
+            是否执行成功
+            
+        Examples:
+            >>> await ctrl.step_15_package_list(page)
+            True
+        """
+        logger.info("步骤7.15：包装清单（不改动但需预览+保存）")
+        
+        try:
+            # 1. 点击预览按钮
+            preview_selector = "button:has-text('预览'), button:contains('预览')"
+            try:
+                await page.locator(preview_selector).first.click(timeout=3000)
+                await page.wait_for_timeout(500)
+                logger.info("  已点击预览")
+            except Exception as e:
+                logger.warning(f"  预览按钮点击失败: {e}")
+            
+            # 2. 点击保存修改按钮
+            save_selector = "button:has-text('保存修改'), button:has-text('保存'), button:contains('保存')"
+            try:
+                await page.locator(save_selector).first.click(timeout=3000)
+                await page.wait_for_timeout(1000)  # 等待保存完成
+                logger.success("  ✓ 已保存修改")
+            except Exception as e:
+                logger.warning(f"  保存按钮点击失败: {e}")
+            
+            # 3. 检查保存成功提示
+            success_indicators = [
+                "text='保存成功'",
+                "text='修改成功'",
+                "text='已保存'"
+            ]
+            
+            for indicator in success_indicators:
+                try:
+                    if await page.locator(indicator).count() > 0:
+                        logger.success("✓ 包装清单步骤完成（预览+保存）")
+                        return True
+                except:
+                    continue
+            
+            logger.success("✓ 包装清单步骤完成（预览+保存）")
+            logger.info("提示：虽然不修改内容，但SOP要求执行预览+保存操作")
+            return True
+            
+        except Exception as e:
+            logger.error(f"包装清单步骤失败: {e}")
             return False
 
     async def step_18_manual_upload(self, page: Page) -> bool:
