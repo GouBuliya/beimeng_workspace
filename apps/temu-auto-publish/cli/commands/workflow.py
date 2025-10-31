@@ -21,11 +21,17 @@ from pathlib import Path
 from typing import Optional
 
 import typer
+from dotenv import load_dotenv
 from loguru import logger
 from rich.console import Console
 from rich.table import Table
 
 from config.settings import settings
+
+# 加载 .env 文件
+env_file = Path(__file__).parent.parent.parent / ".env"
+if env_file.exists():
+    load_dotenv(env_file)
 from src.browser.login_controller import LoginController
 from src.core.executor import WorkflowExecutor
 from src.workflows.complete_publish_workflow import CompletePublishWorkflow
