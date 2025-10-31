@@ -1,0 +1,26 @@
+{
+  "store": {
+    "visit_button": "button:has-text('一键访问店铺'), a:has-text('访问店铺'), a:has-text('Visit Store')",
+    "search_input": "input[type='search'], input[placeholder*='搜索'], input[placeholder*='Search']",
+    "search_button": "button:has-text('搜索'), button:has-text('Search'), button[type='submit']"
+  },
+  "product": {
+    "item_card": ".product-card, .item-card, [data-product-id], .goods-item",
+    "product_link": "a[href*='/product/'], a[href*='/goods/'], a[href*='/item/']",
+    "product_title": ".title, .product-title, .goods-title, h3, h4",
+    "product_price": ".price, .product-price, .goods-price, [class*='price']",
+    "product_image": "img, [class*='image']",
+    "add_to_collection_btn": "button:has-text('采集'), button:has-text('加入采集箱'), .collect-btn"
+  },
+  "collection_box": {
+    "miaoshou_extension": ".miaoshou-extension, #miaoshou-plugin, [class*='miaoshou']",
+    "add_button": "button:has-text('添加到采集箱'), button:has-text('采集'), .add-to-collection",
+    "success_message": "div:has-text('添加成功'), div:has-text('已添加')"
+  },
+  "validation": {
+    "image_selector": "img[src*='temu'], img[src*='product']",
+    "spec_selector": ".spec, .specification, [class*='spec']",
+    "description_selector": ".description, .product-desc, [class*='desc']"
+  }
+}
+
