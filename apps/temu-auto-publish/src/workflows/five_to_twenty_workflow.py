@@ -212,6 +212,10 @@ class FiveToTwentyWorkflow:
             logger.info("[阶段1/3] 首次编辑5个产品")
             logger.info("=" * 60)
 
+            # 切换到"全部"tab（因为"未认领"可能为空）
+            logger.info("切换到「全部」tab...")
+            await self.miaoshou_ctrl.switch_tab(page, "all")
+
             edited_count = 0
             for i in range(5):
                 logger.info(f"\n>>> 编辑第{i+1}/5个产品...")

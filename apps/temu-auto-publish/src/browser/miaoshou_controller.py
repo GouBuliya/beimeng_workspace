@@ -121,6 +121,9 @@ class MiaoshouController:
                 # 等待产品列表加载
                 await page.wait_for_timeout(2000)
                 
+                # 关闭可能出现的弹窗
+                await self.close_popup_if_exists(page)
+                
                 return True
             else:
                 logger.error(f"✗ 导航失败，当前URL: {page.url}")
@@ -128,6 +131,49 @@ class MiaoshouController:
 
         except Exception as e:
             logger.error(f"导航到公用采集箱失败: {e}")
+            return False
+
+    async def close_popup_if_exists(self, page: Page) -> bool:
+        """关闭可能出现的弹窗（如"我知道了"等提示）.
+
+        Args:
+            page: Playwright页面对象
+
+        Returns:
+            是否找到并关闭了弹窗
+
+        Examples:
+            >>> await ctrl.close_popup_if_exists(page)
+            True
+        """
+        try:
+            # 常见的弹窗关闭按钮文本
+            popup_buttons = [
+                "text='我知道了'",
+                "text='知道了'",
+                "text='确定'",
+                "text='关闭'",
+                "button[aria-label='关闭']",
+                "button[aria-label='Close']",
+            ]
+
+            for selector in popup_buttons:
+                try:
+                    locator = page.locator(selector)
+                    if await locator.count() > 0:
+                        logger.debug(f"发现弹窗按钮: {selector}")
+                        await locator.first.click(timeout=2000)
+                        await page.wait_for_timeout(1000)
+                        logger.success(f"✓ 已关闭弹窗: {selector}")
+                        return True
+                except Exception:
+                    continue
+
+            logger.debug("未发现需要关闭的弹窗")
+            return False
+
+        except Exception as e:
+            logger.warning(f"关闭弹窗时出错（可忽略）: {e}")
             return False
 
     async def get_product_count(self, page: Page) -> Dict[str, int]:
@@ -218,8 +264,22 @@ class MiaoshouController:
                 return False
 
             selector = tabs_config[tab_name]
-            await page.locator(selector).click()
-            await page.wait_for_timeout(1500)  # 等待列表刷新
+            
+            # 等待页面加载完成（等待任何一个tab出现）
+            logger.debug(f"等待tab区域加载...")
+            try:
+                await page.wait_for_selector(
+                    f"{tabs_config.get('all', 'text=全部')}, {tabs_config.get('unclaimed', 'text=未认领')}",
+                    timeout=10000
+                )
+            except Exception as wait_error:
+                logger.warning(f"等待tab出现超时: {wait_error}")
+                # 继续尝试点击
+            
+            # 点击目标tab
+            logger.debug(f"点击tab选择器: {selector}")
+            await page.locator(selector).click(timeout=10000)
+            await page.wait_for_timeout(2000)  # 等待列表刷新
 
             logger.success(f"✓ 已切换到「{tab_name}」tab")
             return True
