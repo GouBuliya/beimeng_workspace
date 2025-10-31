@@ -32,6 +32,7 @@ from src.browser.browser_manager import BrowserManager
 from src.browser.login_controller import LoginController
 from src.browser.miaoshou_controller import MiaoshouController
 from src.workflows.complete_publish_workflow import CompletePublishWorkflow
+from src.utils.debug_helper import DebugHelper, DebugConfig
 
 
 # 演示数据
@@ -76,10 +77,20 @@ async def demo_five_to_twenty():
     logger.info("=" * 100)
 
     login_ctrl = None
+    
+    # 创建调试助手（根据需要配置）
+    debug = DebugHelper(DebugConfig(
+        enabled=True,
+        auto_screenshot=True,
+        auto_save_html=False,  # HTML较大，可选择关闭
+        enable_timing=True,
+        enable_breakpoint=False
+    ))
 
     try:
         # 1. 初始化和登录
         logger.info("\n[1/4] 初始化浏览器...")
+        debug.start_timer("total")
         login_ctrl = LoginController()
         
         # 从环境变量获取登录信息（已从.env加载）
@@ -94,30 +105,42 @@ async def demo_five_to_twenty():
             return
 
         logger.info("[2/4] 登录妙手ERP...")
+        debug.start_timer("login")
         if not await login_ctrl.login(username, password):
             logger.error("✗ 登录失败")
             return
+        debug.end_timer("login")
 
         page = login_ctrl.browser_manager.page
+        await debug.save_state(page, "01_after_login")
 
         # 2. 导航到采集箱
         logger.info("[3/4] 导航到公用采集箱...")
+        debug.start_timer("navigate")
         miaoshou_ctrl = MiaoshouController()
         if not await miaoshou_ctrl.navigate_to_collection_box(page):
             logger.error("✗ 导航失败")
             return
+        debug.end_timer("navigate")
+        await debug.save_state(page, "02_collection_box")
 
         # 3. 立即切换到"全部"tab
         logger.info("切换到「全部」tab...")
+        debug.start_timer("switch_tab")
         if not await miaoshou_ctrl.switch_tab(page, "all"):
             logger.warning("⚠️ 切换tab失败，但继续尝试执行")
+        debug.end_timer("switch_tab")
         await page.wait_for_timeout(1000)
+        await debug.save_state(page, "03_after_tab_switch")
 
         # 4. 执行5→20工作流
         logger.info("[4/4] 执行5→20工作流...")
+        debug.start_timer("workflow_execution")
         from src.workflows.five_to_twenty_workflow import execute_five_to_twenty_workflow
 
         result = await execute_five_to_twenty_workflow(page, DEMO_PRODUCTS_DATA)
+        debug.end_timer("workflow_execution")
+        await debug.save_state(page, "04_workflow_complete", full_page=True)
 
         # 5. 显示结果
         logger.info("\n" + "=" * 100)
@@ -156,10 +179,20 @@ async def demo_complete_workflow():
     logger.info("=" * 100)
 
     login_ctrl = None
+    
+    # 创建调试助手
+    debug = DebugHelper(DebugConfig(
+        enabled=True,
+        auto_screenshot=True,
+        auto_save_html=False,
+        enable_timing=True,
+        enable_breakpoint=False
+    ))
 
     try:
         # 1. 初始化和登录
         logger.info("\n[1/4] 初始化浏览器...")
+        debug.start_timer("total")
         login_ctrl = LoginController()
         
         # 从环境变量获取登录信息（已从.env加载）
@@ -174,21 +207,28 @@ async def demo_complete_workflow():
             return
 
         logger.info("[2/4] 登录妙手ERP...")
+        debug.start_timer("login")
         if not await login_ctrl.login(username, password):
             logger.error("✗ 登录失败")
             return
+        debug.end_timer("login")
         
         page = login_ctrl.browser_manager.page
+        await debug.save_state(page, "01_after_login")
 
         # 2. 导航到采集箱
         logger.info("[3/4] 导航到公用采集箱...")
+        debug.start_timer("navigate")
         miaoshou_ctrl = MiaoshouController()
         if not await miaoshou_ctrl.navigate_to_collection_box(page):
             logger.error("✗ 导航失败")
             return
+        debug.end_timer("navigate")
+        await debug.save_state(page, "02_collection_box")
 
         # 3. 执行完整工作流
         logger.info("[4/4] 执行完整工作流...")
+        debug.start_timer("complete_workflow")
         workflow = CompletePublishWorkflow()
         
         result = await workflow.execute(
@@ -198,6 +238,8 @@ async def demo_complete_workflow():
             enable_batch_edit=True,  # 启用批量编辑
             enable_publish=False     # 禁用发布（演示模式）
         )
+        debug.end_timer("complete_workflow")
+        await debug.save_state(page, "03_workflow_complete", full_page=True)
 
         # 4. 显示结果
         logger.info("\n" + "=" * 100)
@@ -235,6 +277,11 @@ async def demo_complete_workflow():
                 logger.warning(f"  - {error}")
 
         logger.info("=" * 100)
+        
+        debug.end_timer("total")
+        
+        # 显示性能摘要
+        debug.log_performance_summary()
 
         # 等待用户查看
         logger.info("\n等待10秒后关闭浏览器...")
@@ -242,6 +289,11 @@ async def demo_complete_workflow():
 
     except Exception as e:
         logger.error(f"演示失败: {e}")
+        # 保存错误状态
+        try:
+            await debug.save_error_state(page, "demo_failed", e)
+        except:
+            pass
         import traceback
         traceback.print_exc()
 
