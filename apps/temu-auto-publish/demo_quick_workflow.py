@@ -67,10 +67,20 @@ async def demo_five_to_twenty():
         # 1. 初始化和登录
         logger.info("\n[1/4] 初始化浏览器...")
         login_ctrl = LoginController()
-        await login_ctrl.browser_manager.start()
+        
+        # 从环境变量获取登录信息
+        import os
+        username = os.getenv("MIAOSHOU_USERNAME", "")
+        password = os.getenv("MIAOSHOU_PASSWORD", "")
+        
+        if not username or not password:
+            logger.error("✗ 请设置环境变量 MIAOSHOU_USERNAME 和 MIAOSHOU_PASSWORD")
+            logger.info("或使用: export MIAOSHOU_USERNAME=你的用户名")
+            logger.info("       export MIAOSHOU_PASSWORD=你的密码")
+            return
 
         logger.info("[2/4] 登录妙手ERP...")
-        if not await login_ctrl.login_if_needed():
+        if not await login_ctrl.login(username, password):
             logger.error("✗ 登录失败")
             return
 
@@ -129,16 +139,26 @@ async def demo_complete_workflow():
     logger.info("演示：完整工作流（快速打通方案 - 阶段1+2+3）")
     logger.info("=" * 100)
 
-    browser_manager = None
+    login_ctrl = None
 
     try:
         # 1. 初始化和登录
         logger.info("\n[1/4] 初始化浏览器...")
         login_ctrl = LoginController()
-        await login_ctrl.browser_manager.start()
+        
+        # 从环境变量获取登录信息
+        import os
+        username = os.getenv("MIAOSHOU_USERNAME", "")
+        password = os.getenv("MIAOSHOU_PASSWORD", "")
+        
+        if not username or not password:
+            logger.error("✗ 请设置环境变量 MIAOSHOU_USERNAME 和 MIAOSHOU_PASSWORD")
+            logger.info("或使用: export MIAOSHOU_USERNAME=你的用户名")
+            logger.info("       export MIAOSHOU_PASSWORD=你的密码")
+            return
 
         logger.info("[2/4] 登录妙手ERP...")
-        if not await login_ctrl.login_if_needed():
+        if not await login_ctrl.login(username, password):
             logger.error("✗ 登录失败")
             return
         
