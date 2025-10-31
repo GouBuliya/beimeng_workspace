@@ -61,20 +61,20 @@ async def demo_five_to_twenty():
     logger.info("演示：5→20工作流（快速打通方案 - 阶段1）")
     logger.info("=" * 100)
 
-    browser_manager = None
+    login_ctrl = None
 
     try:
         # 1. 初始化和登录
         logger.info("\n[1/4] 初始化浏览器...")
-        browser_manager = BrowserManager()
-        await browser_manager.start()
-        page = browser_manager.page
+        login_ctrl = LoginController()
+        await login_ctrl.browser_manager.start()
 
         logger.info("[2/4] 登录妙手ERP...")
-        login_ctrl = LoginController(browser_manager)
         if not await login_ctrl.login_if_needed():
             logger.error("✗ 登录失败")
             return
+
+        page = login_ctrl.browser_manager.page
 
         # 2. 导航到采集箱
         logger.info("[3/4] 导航到公用采集箱...")
@@ -119,8 +119,8 @@ async def demo_five_to_twenty():
         traceback.print_exc()
 
     finally:
-        if browser_manager:
-            await browser_manager.stop()
+        if login_ctrl and login_ctrl.browser_manager:
+            await login_ctrl.browser_manager.close()
 
 
 async def demo_complete_workflow():
@@ -134,15 +134,15 @@ async def demo_complete_workflow():
     try:
         # 1. 初始化和登录
         logger.info("\n[1/4] 初始化浏览器...")
-        browser_manager = BrowserManager()
-        await browser_manager.start()
-        page = browser_manager.page
+        login_ctrl = LoginController()
+        await login_ctrl.browser_manager.start()
 
         logger.info("[2/4] 登录妙手ERP...")
-        login_ctrl = LoginController(browser_manager)
         if not await login_ctrl.login_if_needed():
             logger.error("✗ 登录失败")
             return
+        
+        page = login_ctrl.browser_manager.page
 
         # 2. 导航到采集箱
         logger.info("[3/4] 导航到公用采集箱...")
@@ -210,8 +210,8 @@ async def demo_complete_workflow():
         traceback.print_exc()
 
     finally:
-        if browser_manager:
-            await browser_manager.stop()
+        if login_ctrl and login_ctrl.browser_manager:
+            await login_ctrl.browser_manager.close()
 
 
 async def main():

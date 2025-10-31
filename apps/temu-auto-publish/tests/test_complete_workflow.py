@@ -80,17 +80,17 @@ async def test_five_to_twenty_workflow_only():
     logger.info("测试：5→20工作流")
     logger.info("=" * 80)
 
-    browser_manager = None
+    login_ctrl = None
 
     try:
         # 1. 初始化浏览器和登录
-        browser_manager = BrowserManager()
-        await browser_manager.start()
-        page = browser_manager.page
+        login_ctrl = LoginController()
+        await login_ctrl.browser_manager.start()
 
-        login_ctrl = LoginController(browser_manager)
         if not await login_ctrl.login_if_needed():
             pytest.fail("登录失败")
+
+        page = login_ctrl.browser_manager.page
 
         # 2. 导航到采集箱
         miaoshou_ctrl = MiaoshouController()
@@ -113,8 +113,8 @@ async def test_five_to_twenty_workflow_only():
         logger.success("✓ 测试通过：5→20工作流")
 
     finally:
-        if browser_manager:
-            await browser_manager.stop()
+        if login_ctrl and login_ctrl.browser_manager:
+            await login_ctrl.browser_manager.close()
 
 
 @pytest.mark.asyncio
@@ -132,17 +132,17 @@ async def test_complete_workflow_without_publish():
     logger.info("测试：完整工作流（不包含发布）")
     logger.info("=" * 80)
 
-    browser_manager = None
+    login_ctrl = None
 
     try:
         # 1. 初始化浏览器和登录
-        browser_manager = BrowserManager()
-        await browser_manager.start()
-        page = browser_manager.page
+        login_ctrl = LoginController()
+        await login_ctrl.browser_manager.start()
 
-        login_ctrl = LoginController(browser_manager)
         if not await login_ctrl.login_if_needed():
             pytest.fail("登录失败")
+
+        page = login_ctrl.browser_manager.page
 
         # 2. 导航到采集箱
         miaoshou_ctrl = MiaoshouController()
@@ -167,8 +167,8 @@ async def test_complete_workflow_without_publish():
         logger.success("✓ 测试通过：完整工作流（不包含发布）")
 
     finally:
-        if browser_manager:
-            await browser_manager.stop()
+        if login_ctrl and login_ctrl.browser_manager:
+            await login_ctrl.browser_manager.close()
 
 
 @pytest.mark.asyncio
@@ -191,17 +191,17 @@ async def test_complete_workflow_full():
     logger.warning("⚠️  这个测试会执行真实的发布操作！")
     logger.info("=" * 80)
 
-    browser_manager = None
+    login_ctrl = None
 
     try:
         # 1. 初始化浏览器和登录
-        browser_manager = BrowserManager()
-        await browser_manager.start()
-        page = browser_manager.page
+        login_ctrl = LoginController()
+        await login_ctrl.browser_manager.start()
 
-        login_ctrl = LoginController(browser_manager)
         if not await login_ctrl.login_if_needed():
             pytest.fail("登录失败")
+
+        page = login_ctrl.browser_manager.page
 
         # 2. 导航到采集箱
         miaoshou_ctrl = MiaoshouController()
@@ -230,8 +230,8 @@ async def test_complete_workflow_full():
         logger.success("✓ 测试通过：完整工作流（包含发布）")
 
     finally:
-        if browser_manager:
-            await browser_manager.stop()
+        if login_ctrl and login_ctrl.browser_manager:
+            await login_ctrl.browser_manager.close()
 
 
 def test_workflow_data_validation():
