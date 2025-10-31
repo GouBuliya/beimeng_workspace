@@ -6,5 +6,14 @@
   - 内部: cli.commands.*
 """
 
-__all__ = []
+from cli.commands.config import config_app
+from cli.commands.debug import debug_app
+from cli.commands.monitor import monitor_app
+from cli.commands.workflow import workflow_app
 
+__all__ = [
+    "workflow_app",
+    "monitor_app",
+    "debug_app",
+    "config_app",
+]

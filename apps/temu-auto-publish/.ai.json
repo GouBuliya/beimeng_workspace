@@ -1,275 +1,194 @@
 {
-  "$schema": "../../.ai/schemas/component.schema.json",
   "name": "temu-auto-publish",
-  "version": "0.2.0",
   "type": "app",
-  "description": "Temu 商品发布自动化系统，使用 Python + Playwright 纯代码方案",
-  "category": "automation",
-  "tags": ["playwright", "automation", "temu", "ecommerce", "browser-automation", "anti-detection"],
-  "status": "in_development",
-  "language": "python",
-  "requires_python": ">=3.12",
-  "dependencies": [
-    "pandas>=2.2.0",
-    "openpyxl>=3.1.0",
-    "playwright>=1.48.0",
-    "playwright-stealth>=1.0.0",
-    "pydantic>=2.0.0",
-    "loguru>=0.7.0",
-    "typer>=0.12.0",
-    "rich>=13.0.0"
-  ],
+  "version": "2.0.0",
+  "description": "Temu 商品自动发布系统 - SOTA 工业级",
+  "purpose": "自动化妙手 ERP 商品发布全流程，从采集到批量编辑到发布",
+  "entry_point": "cli/main.py",
   "interface": {
-    "type": "cli",
-    "commands": [
-      {
-        "name": "process",
-        "description": "处理选品表，生成任务数据",
-        "usage": "python -m apps.temu-auto-publish process <excel_file>",
-        "args": [
-          {
-            "name": "excel_file",
-            "type": "path",
-            "required": true,
-            "description": "选品表 Excel 文件路径"
-          }
-        ],
-        "options": [
-          {
-            "name": "--output",
-            "type": "path",
-            "description": "输出目录"
-          }
-        ],
-        "output": {
-          "type": "json",
-          "schema": "src/models/task.py:TaskData"
+    "cli": {
+      "command": "temu-auto-publish",
+      "subcommands": [
+        {
+          "name": "workflow",
+          "description": "工作流执行和管理",
+          "commands": ["run", "resume", "list", "status"]
+        },
+        {
+          "name": "monitor",
+          "description": "监控和指标分析",
+          "commands": ["stats", "report", "watch"]
+        },
+        {
+          "name": "debug",
+          "description": "调试功能管理",
+          "commands": ["enable", "disable", "list", "clean"]
+        },
+        {
+          "name": "config",
+          "description": "配置管理",
+          "commands": ["show", "validate", "init"]
         }
-      },
-      {
-        "name": "login",
-        "description": "测试 Temu 登录（Playwright 自动化）",
-        "usage": "python -m apps.temu-auto-publish login",
-        "options": [
-          {
-            "name": "--username",
-            "type": "string",
-            "description": "用户名"
-          },
-          {
-            "name": "--password",
-            "type": "string",
-            "description": "密码"
-          },
-          {
-            "name": "--force",
-            "type": "boolean",
-            "description": "强制重新登录"
-          },
-          {
-            "name": "--headless",
-            "type": "boolean",
-            "description": "无头模式运行"
-          }
-        ]
-      },
-      {
-        "name": "status",
-        "description": "查看系统状态和配置",
-        "usage": "python -m apps.temu-auto-publish status"
-      },
-      {
-        "name": "dev excel",
-        "description": "测试 Excel 读取",
-        "usage": "python -m apps.temu-auto-publish dev excel <file_path>"
-      },
-      {
-        "name": "dev price",
-        "description": "测试价格计算",
-        "usage": "python -m apps.temu-auto-publish dev price <cost>"
-      }
-    ]
-  },
-  "data_flow": {
-    "input": {
-      "type": "excel",
-      "path": "data/input/*.xlsx",
-      "schema": "src/models/task.py:ProductInput",
-      "description": "选品表，包含商品名称、成本价、类目、关键词等信息"
-    },
-    "intermediate": {
-      "type": "json",
-      "path": "data/temp/yingdao_task.json",
-      "description": "Python 写入的影刀任务数据"
-    },
-    "output": {
-      "type": "json",
-      "path": "data/output/task_*.json",
-      "schema": "src/models/task.py:TaskData",
-      "description": "处理后的任务数据，包含所有产品信息和价格计算结果"
-    }
-  },
-  "modules": {
-    "data_processor": {
-      "path": "src/data_processor/",
-      "description": "数据处理层，负责 Excel 读取、价格计算、标题生成",
-      "exports": [
-        "ExcelReader",
-        "PriceCalculator",
-        "TitleGenerator",
-        "DataProcessor"
       ]
     },
-    "browser": {
-      "path": "src/browser/",
-      "description": "浏览器自动化层，使用 Playwright 进行浏览器操作",
-      "exports": [
-        "BrowserManager",
-        "CookieManager",
+    "api": {
+      "core_classes": [
+        "WorkflowExecutor",
+        "RetryHandler",
+        "MetricsCollector"
+      ],
+      "workflows": [
+        "CompletePublishWorkflow",
+        "FiveToTwentyWorkflow"
+      ],
+      "controllers": [
         "LoginController",
-        "SearchController",
-        "EditController"
-      ]
-    },
-    "models": {
-      "path": "src/models/",
-      "description": "数据模型定义，使用 Pydantic 进行数据验证",
-      "exports": [
-        "ProductInput",
-        "TaskProduct",
-        "TaskData",
-        "SearchResult",
-        "EditResult",
-        "PublishResult"
+        "MiaoshouController",
+        "FirstEditController",
+        "BatchEditController",
+        "PublishController"
       ]
     }
+  },
+  "architecture": {
+    "layers": [
+      "cli - 命令行入口层",
+      "core - 核心业务逻辑（执行器、重试、指标）",
+      "workflows - 工作流编排",
+      "browser - 浏览器控制器",
+      "utils - 工具函数",
+      "models - 数据模型",
+      "config - 配置管理"
+    ],
+    "patterns": [
+      "Command Pattern - CLI 命令",
+      "Strategy Pattern - 重试策略",
+      "Observer Pattern - 指标收集",
+      "State Pattern - 工作流状态"
+    ],
+    "tech_stack": {
+      "language": "Python 3.12+",
+      "frameworks": ["Playwright", "Typer", "Pydantic"],
+      "libraries": ["loguru", "rich", "pyyaml"]
+    }
+  },
+  "configuration": {
+    "environments": ["development", "staging", "production"],
+    "config_files": [
+      "config/environments/dev.yaml",
+      "config/environments/staging.yaml",
+      "config/environments/prod.yaml"
+    ],
+    "env_file": ".env",
+    "settings_class": "config.settings.Settings"
+  },
+  "dependencies": {
+    "python": ">=3.12",
+    "packages": [
+      "playwright>=1.40.0",
+      "typer[all]>=0.9.0",
+      "pydantic>=2.5.0",
+      "pydantic-settings>=2.1.0",
+      "loguru>=0.7.0",
+      "rich>=13.7.0",
+      "pyyaml>=6.0.1",
+      "python-dotenv>=1.0.0"
+    ]
   },
   "examples": [
     {
-      "name": "基础工作流",
-      "description": "从 Excel 到任务数据生成的完整示例",
-      "file": "examples/basic_workflow.py",
-      "usage": "python examples/basic_workflow.py"
+      "description": "执行完整工作流",
+      "command": "temu-auto-publish workflow run --products products.json",
+      "use_case": "从产品数据文件执行5→20→批量编辑流程"
+    },
+    {
+      "description": "查看性能指标",
+      "command": "temu-auto-publish monitor stats --last 24h",
+      "use_case": "查看最近24小时的执行统计"
+    },
+    {
+      "description": "生成报告",
+      "command": "temu-auto-publish monitor report -o report.csv",
+      "use_case": "导出指标数据为CSV报告"
+    },
+    {
+      "description": "查看系统状态",
+      "command": "temu-auto-publish status",
+      "use_case": "检查配置和环境状态"
+    },
+    {
+      "description": "初始化设置",
+      "command": "temu-auto-publish setup",
+      "use_case": "首次使用时的初始化向导"
     }
   ],
-  "configuration": {
-    "env_file": ".env",
-    "config_files": [
-      "config/settings.py",
-      "config/browser_config.json"
+  "features": {
+    "core": [
+      "多环境配置支持（dev/staging/prod）",
+      "智能重试机制（指数退避）",
+      "结构化日志（JSON/详细格式）",
+      "全面指标收集（工作流/阶段/操作级别）",
+      "断点续传（状态保存和恢复）"
     ],
-    "required_env_vars": [
-      "TEMU_USERNAME",
-      "TEMU_PASSWORD"
+    "workflow": [
+      "5→20 产品扩展流程",
+      "18步批量编辑",
+      "智能价格计算",
+      "自动发布到店铺"
     ],
-    "optional_env_vars": [
-      "BROWSER_HEADLESS",
-      "BROWSER_CONFIG_FILE",
-      "PRICE_MULTIPLIER",
-      "SUPPLY_PRICE_MULTIPLIER",
-      "COLLECT_COUNT",
-      "LOG_LEVEL"
+    "observability": [
+      "实时日志输出",
+      "性能指标统计",
+      "错误追踪和分类",
+      "执行历史查询"
     ]
   },
-  "external_dependencies": {
-    "playwright": {
-      "name": "Playwright 浏览器",
-      "version": ">=1.48.0",
-      "url": "https://playwright.dev/python/",
-      "required": true,
-      "description": "需要安装 Chromium 浏览器：playwright install chromium"
-    }
-  },
-  "development": {
-    "setup": [
-      "cd /Users/candy/beimeng_workspace",
-      "uv sync --extra temu --extra dev",
-      "uv run playwright install chromium",
-      "cp apps/temu-auto-publish/.env.example apps/temu-auto-publish/.env",
-      "# 编辑 .env 文件填写配置"
-    ],
-    "test": [
-      "uv run pytest apps/temu-auto-publish/tests/",
-      "uv run python -m apps.temu-auto-publish status"
-    ],
-    "lint": [
-      "uv run ruff check apps/temu-auto-publish/",
-      "uv run ruff format apps/temu-auto-publish/",
-      "uv run mypy apps/temu-auto-publish/"
-    ]
-  },
-  "roadmap": {
-    "week1": {
-      "status": "completed",
-      "tasks": [
-        "✅ 项目结构创建",
-        "✅ 数据处理层（Excel、价格、标题）",
-        "✅ Playwright 浏览器管理",
-        "✅ 登录控制器（异步）",
-        "✅ 反检测机制集成"
-      ]
-    },
-    "week2": {
-      "status": "planned",
-      "tasks": [
-        "批量编辑 18 步",
-        "批量发布",
-        "Python 流程编排"
-      ]
-    },
-    "week3": {
-      "status": "planned",
-      "tasks": [
-        "完整测试",
-        "文档整理",
-        "项目交付"
-      ]
-    }
-  },
+  "tags": [
+    "automation",
+    "e-commerce",
+    "temu",
+    "miaoshou",
+    "workflow",
+    "cli",
+    "industrial-grade",
+    "sota"
+  ],
   "ai_hints": {
-    "architecture": "Python 处理数据逻辑，Playwright 处理浏览器交互，完全异步实现",
-    "data_flow": "Excel → Python 处理 → JSON 任务 → Playwright 异步执行 → JSON 结果 → Python 记录",
-    "key_patterns": [
-      "所有数据使用 Pydantic 模型验证",
-      "所有接口输入输出都是 JSON",
-      "浏览器操作全部异步（async/await）",
-      "使用 playwright-stealth 反检测",
-      "Cookie 管理避免频繁登录",
-      "完整的类型提示和 docstring",
-      "自动截图保存错误状态"
+    "common_use_cases": [
+      "执行完整工作流: temu-auto-publish workflow run",
+      "恢复中断的工作流: temu-auto-publish workflow resume state.json",
+      "查看执行历史: temu-auto-publish workflow list",
+      "监控性能指标: temu-auto-publish monitor stats",
+      "调试问题: temu-auto-publish debug list",
+      "验证配置: temu-auto-publish config validate config.yaml"
     ],
-    "when_modifying": [
-      "修改数据结构时更新 Pydantic 模型",
-      "添加新浏览器操作时创建对应的异步方法",
-      "所有函数都需要完整的类型提示和 Google Style docstring",
-      "遵循单一职责原则，模块不超过 500 行",
-      "浏览器操作需要适当的等待和错误处理"
+    "gotchas": [
+      "首次使用必须运行 setup 命令进行初始化",
+      "登录凭证必须存储在 .env 文件中",
+      "生产环境必须设置 ENVIRONMENT=production",
+      "调试模式会显著降低性能，生产环境应禁用",
+      "Playwright 需要先安装浏览器: playwright install chromium",
+      "状态文件较大，定期清理 data/workflow_states/",
+      "指标数据会占用磁盘空间，定期导出和清理"
     ],
-    "common_tasks": {
-      "add_new_automation": "在 src/browser/ 创建新控制器，继承 BrowserManager",
-      "add_data_model": "在 src/models/ 添加 Pydantic 模型",
-      "add_cli_command": "在 __main__.py 添加新的 @app.command()，使用 asyncio.run() 执行异步函数",
-      "test_browser": "使用 async with BrowserManager() as manager 进行测试"
-    }
-  },
-  "documentation": {
-    "readme": "README.md",
-    "guides": [
-      "../../docs/projects/temu-auto-publish/guides/quickstart.md",
-      "../../docs/projects/temu-auto-publish/guides/data-format.md"
+    "troubleshooting": {
+      "login_failed": "检查 .env 中的用户名密码是否正确",
+      "timeout": "增加 browser.timeout 配置或启用重试",
+      "out_of_memory": "减少并发操作或降低截图频率",
+      "selector_not_found": "页面结构可能变化，更新 selectors 配置"
+    },
+    "best_practices": [
+      "开发时使用 dev 环境配置",
+      "生产环境启用 headless 模式",
+      "定期导出指标数据进行分析",
+      "使用 workflow resume 恢复失败的流程",
+      "配置合适的重试次数避免过度重试",
+      "定期备份工作流状态文件"
     ],
-    "api": "通过 docstrings 生成，运行 pdoc apps/temu-auto-publish",
-    "architecture": "../../docs/projects/temu-auto-publish/index.md"
-  },
-  "notes": [
-    "重构说明：已从影刀 RPA 方案迁移到 Playwright 纯代码方案",
-    "架构优势：无需外部工具，代码完全可控，易于调试和维护",
-    "反检测：使用 playwright-stealth，但仍需注意操作频率和行为模式",
-    "Cookie 有效期默认 24 小时",
-    "价格计算公式：建议售价 = 成本 × 7.5，供货价 = 成本 × 10",
-    "支持多种标题生成模式：temu(平台AI)、api(外部API)、rule(规则生成)",
-    "支持 headless 和 headed 模式，开发时建议 headed，生产可用 headless",
-    "所有浏览器操作使用异步（async/await），性能更好"
-  ]
+    "related_components": [
+      "packages/common/logger",
+      "packages/common/config",
+      "packages/mcp_file_info"
+    ]
+  }
 }
-
