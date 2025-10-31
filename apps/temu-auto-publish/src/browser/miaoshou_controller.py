@@ -118,11 +118,16 @@ class MiaoshouController:
             if "common_collect_box/items" in page.url:
                 logger.success("✓ 成功导航到公用采集箱")
                 
-                # 等待产品列表加载
-                await page.wait_for_timeout(2000)
+                # 等待页面完全加载（弹窗、tab、产品列表）
+                logger.debug("等待页面完全加载...")
+                await page.wait_for_timeout(3000)
                 
-                # 关闭可能出现的弹窗
-                await self.close_popup_if_exists(page)
+                # 关闭可能出现的弹窗（多次尝试，因为弹窗可能延迟出现）
+                for attempt in range(3):
+                    if await self.close_popup_if_exists(page):
+                        break
+                    if attempt < 2:
+                        await page.wait_for_timeout(1000)
                 
                 return True
             else:
@@ -270,15 +275,23 @@ class MiaoshouController:
             try:
                 await page.wait_for_selector(
                     f"{tabs_config.get('all', 'text=全部')}, {tabs_config.get('unclaimed', 'text=未认领')}",
-                    timeout=10000
+                    timeout=10000,
+                    state="visible"
                 )
             except Exception as wait_error:
                 logger.warning(f"等待tab出现超时: {wait_error}")
                 # 继续尝试点击
             
-            # 点击目标tab
+            # 点击目标tab（使用force=True强制点击，避免被其他元素遮挡）
             logger.debug(f"点击tab选择器: {selector}")
-            await page.locator(selector).click(timeout=10000)
+            try:
+                # 方法1：普通点击
+                await page.locator(selector).click(timeout=5000)
+            except Exception as e:
+                logger.warning(f"普通点击失败，尝试强制点击: {e}")
+                # 方法2：强制点击（跳过可点击性检查）
+                await page.locator(selector).click(force=True, timeout=5000)
+            
             await page.wait_for_timeout(2000)  # 等待列表刷新
 
             logger.success(f"✓ 已切换到「{tab_name}」tab")
