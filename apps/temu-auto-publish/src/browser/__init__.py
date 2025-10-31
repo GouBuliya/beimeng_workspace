@@ -25,6 +25,7 @@ from .collection_controller import CollectionController
 from .cookie_manager import CookieManager
 from .edit_controller import EditController
 from .first_edit_controller import FirstEditController
+from .image_manager import ImageManager
 from .login_controller import LoginController
 from .miaoshou_controller import MiaoshouController
 from .publish_controller import PublishController
@@ -37,6 +38,7 @@ __all__ = [
     "CollectionController",
     "MiaoshouController",
     "FirstEditController",
+    "ImageManager",
     "BatchEditController",
     "PublishController",
     "SearchController",  # 旧版，保留

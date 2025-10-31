@@ -421,6 +421,260 @@ class FirstEditController:
             logger.error(f"设置库存失败: {e}")
             return False
 
+    async def navigate_to_logistics_tab(self, page: Page) -> bool:
+        """导航到物流信息Tab（SOP步骤4.6-4.7的前置操作）.
+        
+        重量和尺寸输入框在"物流信息"tab中，需要先切换。
+        
+        Args:
+            page: Playwright页面对象
+            
+        Returns:
+            是否成功导航
+            
+        Examples:
+            >>> await ctrl.navigate_to_logistics_tab(page)
+            True
+        """
+        try:
+            first_edit_config = self.selectors.get("first_edit_dialog", {})
+            nav_config = first_edit_config.get("navigation", {})
+            logistics_tab_selector = nav_config.get(
+                "logistics_info", "text='物流信息'"
+            )
+            
+            logger.info("导航到「物流信息」Tab...")
+            await page.locator(logistics_tab_selector).click()
+            await page.wait_for_timeout(1000)  # 等待Tab内容加载
+            
+            logger.success("✓ 已切换到物流信息Tab")
+            return True
+            
+        except Exception as e:
+            logger.error(f"导航到物流信息Tab失败: {e}")
+            return False
+
+    async def set_package_weight_in_logistics(
+        self,
+        page: Page,
+        weight: float
+    ) -> bool:
+        """在物流信息Tab中设置包裹重量（SOP步骤4.6增强版）.
+        
+        Args:
+            page: Playwright页面对象
+            weight: 重量（克），范围：5000-9999G
+            
+        Returns:
+            是否设置成功
+            
+        Examples:
+            >>> await ctrl.set_package_weight_in_logistics(page, 7500)
+            True
+        """
+        logger.info(f"SOP 4.6: 设置包裹重量 -> {weight}G")
+        
+        # 验证重量范围
+        if not (5000 <= weight <= 9999):
+            logger.warning(f"重量{weight}G 超出推荐范围（5000-9999G）")
+        
+        try:
+            # 先切换到物流信息Tab
+            if not await self.navigate_to_logistics_tab(page):
+                return False
+            
+            # 使用物流信息中的重量选择器
+            first_edit_config = self.selectors.get("first_edit_dialog", {})
+            logistics_config = first_edit_config.get("logistics_info", {})
+            weight_selector = logistics_config.get(
+                "package_weight",
+                "input[placeholder*='包裹重量'], input[placeholder*='重量']"
+            )
+            
+            # 尝试多个选择器
+            weight_selectors = [
+                weight_selector,
+                "input[placeholder='包裹重量']",
+                "input[placeholder*='重量']",
+                "input[placeholder*='重']",
+            ]
+            
+            weight_input = None
+            for selector in weight_selectors:
+                try:
+                    count = await page.locator(selector).count()
+                    logger.debug(f"重量选择器 {selector} 找到 {count} 个元素")
+                    if count > 0:
+                        elem = page.locator(selector).first
+                        is_visible = await elem.is_visible(timeout=1000)
+                        if is_visible:
+                            weight_input = elem
+                            logger.debug(f"使用重量选择器: {selector}")
+                            break
+                except Exception as e:
+                    logger.debug(f"尝试选择器 {selector} 失败: {e}")
+                    continue
+            
+            if not weight_input:
+                logger.error("未找到包裹重量输入框（物流信息Tab）")
+                logger.info("提示：需要使用 Playwright Codegen 录制实际操作获取准确选择器")
+                return False
+            
+            # 填写重量
+            await weight_input.fill("")
+            await page.wait_for_timeout(300)
+            await weight_input.fill(str(weight))
+            await page.wait_for_timeout(500)
+            
+            logger.success(f"✓ 包裹重量已设置: {weight}G")
+            return True
+            
+        except Exception as e:
+            logger.error(f"设置包裹重量失败: {e}")
+            return False
+
+    async def set_package_dimensions_in_logistics(
+        self,
+        page: Page,
+        length: float,
+        width: float,
+        height: float
+    ) -> bool:
+        """在物流信息Tab中设置包裹尺寸（SOP步骤4.7增强版）.
+        
+        SOP要求：
+        - 范围：50-99cm
+        - 规则：长 > 宽 > 高
+        
+        Args:
+            page: Playwright页面对象
+            length: 长度（CM）
+            width: 宽度（CM）
+            height: 高度（CM）
+            
+        Returns:
+            是否设置成功
+            
+        Raises:
+            ValueError: 尺寸不符合SOP规则
+            
+        Examples:
+            >>> await ctrl.set_package_dimensions_in_logistics(page, 89, 64, 32)
+            True
+        """
+        logger.info(f"SOP 4.7: 设置包裹尺寸 -> {length}x{width}x{height} CM")
+        
+        # 验证尺寸范围
+        if not all(50 <= dim <= 99 for dim in [length, width, height]):
+            logger.warning(f"尺寸超出推荐范围（50-99cm）")
+        
+        # 验证长>宽>高规则
+        if not (length > width > height):
+            raise ValueError(
+                f"尺寸不符合SOP规则（长>宽>高）: "
+                f"{length}cm > {width}cm > {height}cm"
+            )
+        
+        try:
+            # 先切换到物流信息Tab
+            if not await self.navigate_to_logistics_tab(page):
+                return False
+            
+            # 使用物流信息中的尺寸选择器
+            first_edit_config = self.selectors.get("first_edit_dialog", {})
+            logistics_config = first_edit_config.get("logistics_info", {})
+            
+            length_selector = logistics_config.get(
+                "package_length",
+                "input[placeholder*='包裹长度'], input[placeholder*='长度'], input[placeholder*='长']"
+            )
+            width_selector = logistics_config.get(
+                "package_width",
+                "input[placeholder*='包裹宽度'], input[placeholder*='宽度'], input[placeholder*='宽']"
+            )
+            height_selector = logistics_config.get(
+                "package_height",
+                "input[placeholder*='包裹高度'], input[placeholder*='高度'], input[placeholder*='高']"
+            )
+            
+            # 查找长度输入框
+            length_input = None
+            for selector in length_selector.split(", "):
+                try:
+                    count = await page.locator(selector.strip()).count()
+                    if count > 0:
+                        elem = page.locator(selector.strip()).first
+                        if await elem.is_visible(timeout=1000):
+                            length_input = elem
+                            logger.debug(f"使用长度选择器: {selector}")
+                            break
+                except:
+                    continue
+            
+            # 查找宽度输入框
+            width_input = None
+            for selector in width_selector.split(", "):
+                try:
+                    count = await page.locator(selector.strip()).count()
+                    if count > 0:
+                        elem = page.locator(selector.strip()).first
+                        if await elem.is_visible(timeout=1000):
+                            width_input = elem
+                            logger.debug(f"使用宽度选择器: {selector}")
+                            break
+                except:
+                    continue
+            
+            # 查找高度输入框
+            height_input = None
+            for selector in height_selector.split(", "):
+                try:
+                    count = await page.locator(selector.strip()).count()
+                    if count > 0:
+                        elem = page.locator(selector.strip()).first
+                        if await elem.is_visible(timeout=1000):
+                            height_input = elem
+                            logger.debug(f"使用高度选择器: {selector}")
+                            break
+                except:
+                    continue
+            
+            if not length_input or not width_input or not height_input:
+                logger.error(
+                    f"未找到包裹尺寸输入框（物流信息Tab） - "
+                    f"长:{length_input is not None}, "
+                    f"宽:{width_input is not None}, "
+                    f"高:{height_input is not None}"
+                )
+                logger.info("提示：需要使用 Playwright Codegen 录制实际操作获取准确选择器")
+                return False
+            
+            # 填写长宽高
+            await length_input.fill("")
+            await page.wait_for_timeout(200)
+            await length_input.fill(str(length))
+            await page.wait_for_timeout(200)
+            
+            await width_input.fill("")
+            await page.wait_for_timeout(200)
+            await width_input.fill(str(width))
+            await page.wait_for_timeout(200)
+            
+            await height_input.fill("")
+            await page.wait_for_timeout(200)
+            await height_input.fill(str(height))
+            await page.wait_for_timeout(300)
+            
+            logger.success(f"✓ 包裹尺寸已设置: {length}x{width}x{height} CM")
+            return True
+            
+        except ValueError as e:
+            logger.error(f"尺寸验证失败: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"设置包裹尺寸失败: {e}")
+            return False
+
     async def set_sku_weight(
         self,
         page: Page,
@@ -771,16 +1025,34 @@ class FirstEditController:
             if not await self.set_sku_stock(page, stock):
                 return False
 
-            # 步骤4.6: 设置重量 (暂时跳过 - 需要确认在哪个tab)
-            logger.warning("⚠️  跳过步骤4.6（重量）- 需要确认输入框位置")
-            # if not await self.set_sku_weight(page, weight):
-            #     return False
+            # 步骤4.6: 设置包裹重量（物流信息Tab）
+            logger.info("尝试设置包裹重量（物流信息Tab）...")
+            weight_success = await self.set_package_weight_in_logistics(page, weight)
+            if not weight_success:
+                logger.warning("⚠️ 包裹重量设置失败 - 可能需要Codegen验证选择器")
 
-            # 步骤4.7: 设置尺寸 (暂时跳过 - 需要确认在哪个tab)
-            logger.warning("⚠️  跳过步骤4.7（尺寸）- 需要确认输入框位置")
-            # length, width, height = dimensions
-            # if not await self.set_sku_dimensions(page, length, width, height):
-            #     return False
+            # 步骤4.7: 设置包裹尺寸（物流信息Tab）
+            logger.info("尝试设置包裹尺寸（物流信息Tab）...")
+            length, width, height = dimensions
+            try:
+                dimensions_success = await self.set_package_dimensions_in_logistics(
+                    page, length, width, height
+                )
+                if not dimensions_success:
+                    logger.warning("⚠️ 包裹尺寸设置失败 - 可能需要Codegen验证选择器")
+            except ValueError as e:
+                logger.error(f"尺寸验证失败: {e}")
+                logger.warning("⚠️ 跳过尺寸设置")
+            
+            # 切换回基本信息Tab（为了保存操作）
+            logger.info("切换回基本信息Tab...")
+            nav_config = self.selectors.get("first_edit_dialog", {}).get("navigation", {})
+            basic_info_selector = nav_config.get("basic_info", "text='基本信息'")
+            try:
+                await page.locator(basic_info_selector).click()
+                await page.wait_for_timeout(500)
+            except:
+                logger.warning("切换回基本信息Tab失败，但继续执行")
 
             # 保存修改
             if not await self.save_changes(page, wait_for_close=False):
@@ -792,7 +1064,7 @@ class FirstEditController:
                 logger.warning("⚠️ 关闭弹窗失败，但继续执行")
 
             logger.info("=" * 60)
-            logger.success("✓ 首次编辑完整流程已完成（标题、价格、库存）")
+            logger.success("✓ 首次编辑完整流程已完成（标题、价格、库存、重量、尺寸）")
             logger.info("=" * 60)
             return True
 
