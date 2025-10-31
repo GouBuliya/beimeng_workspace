@@ -1,0 +1,208 @@
+{
+  "_comment": "妙手批量编辑选择器配置 - 使用稳定的文本定位器和多重后备策略",
+  "_version": "3.0",
+  "_last_updated": "2025-10-31",
+  "_strategy": "智能文本定位器 + 多重后备 + 自适应查找",
+  "_note": "避免使用动态的aria-ref，使用文本、角色、占位符等稳定属性",
+  
+  "collection_box": {
+    "_description": "采集箱页面选择器",
+    "url": "https://erp.91miaoshou.com/common_collect_box/items",
+    "select_all_checkbox": [
+      "input[type='checkbox'][title*='全选']",
+      "input[type='checkbox']:near(:text('全选'))",
+      "thead input[type='checkbox']",
+      ".jx-table-header input[type='checkbox']"
+    ],
+    "batch_edit_button": [
+      "button:has-text('批量编辑')",
+      "button:has-text('编辑')",
+      ":text('批量编辑')"
+    ],
+    "page_size_selector": [
+      "select:has(option[value='20'])",
+      ".jx-select",
+      "select[class*='pagination']"
+    ],
+    "product_checkbox": [
+      "tbody tr input[type='checkbox']",
+      "tr[class*='table-row'] input[type='checkbox']",
+      ".product-item input[type='checkbox']"
+    ]
+  },
+  
+  "batch_edit": {
+    "_description": "批量编辑页面选择器 - 弹窗形式或独立页面",
+    "navigation": {
+      "_description": "通用按钮 - 使用文本定位",
+      "preview_button": [
+        "button:has-text('预览')",
+        ":text('预览') >> visible=true"
+      ],
+      "save_button": [
+        "button:has-text('保存修改')",
+        "button:has-text('保存')",
+        "button:has-text('确定')"
+      ],
+      "confirm_button": [
+        "button:has-text('确认')",
+        "button:has-text('确定')"
+      ]
+    },
+    
+    "step_02_english_title": {
+      "_description": "步骤2：英语标题（按空格键）",
+      "enabled": true,
+      "input": [
+        "input[placeholder*='英文']",
+        "input[placeholder*='English']",
+        "textarea[placeholder*='英文标题']",
+        "label:has-text('英文标题') + input",
+        ":text('英文标题') >> .. >> input"
+      ]
+    },
+    
+    "step_03_category_attrs": {
+      "_description": "步骤3：类目属性（参考采集链接）",
+      "enabled": true,
+      "expand_button": [
+        "button:has-text('展开')",
+        ":text('展开')",
+        "[class*='expand']"
+      ],
+      "attribute_container": [
+        "div:has-text('类目属性')",
+        ".category-attrs",
+        "[class*='category']"
+      ]
+    },
+    
+    "step_05_packaging": {
+      "_description": "步骤5：外包装（长方体+硬包装）",
+      "enabled": true,
+      "shape_container": [
+        ":text('外包装形状') >> .. >> select",
+        "select:near(:text('外包装形状'))",
+        "label:has-text('形状') + select"
+      ],
+      "type_container": [
+        ":text('外包装类型') >> .. >> select",
+        "select:near(:text('外包装类型'))",
+        "label:has-text('类型') + select"
+      ],
+      "shape_value": "长方体",
+      "type_value": "硬包装",
+      "image_upload": [
+        "input[type='file'][accept*='image']",
+        ":text('上传图片') >> .. >> input[type='file']"
+      ]
+    },
+    
+    "step_06_origin": {
+      "_description": "步骤6：产地（浙江）",
+      "enabled": true,
+      "input": [
+        "input[placeholder*='产地']",
+        ":text('产地') >> .. >> input",
+        "label:has-text('产地') + input"
+      ],
+      "dropdown_option": [
+        "li:has-text('浙江')",
+        "[role='option']:has-text('浙江')",
+        ".dropdown-item:has-text('浙江')"
+      ],
+      "value": "浙江"
+    },
+    
+    "step_09_weight": {
+      "_description": "步骤9：重量（5000-9999G）",
+      "enabled": true,
+      "input": [
+        "input[placeholder*='重量']",
+        ":text('重量') >> .. >> input",
+        "label:has-text('重量') + input",
+        "input[type='number']:near(:text('重量'))"
+      ],
+      "unit": "G",
+      "range": [5000, 9999]
+    },
+    
+    "step_10_dimensions": {
+      "_description": "步骤10：尺寸（50-99cm，长>宽>高）",
+      "enabled": true,
+      "length_input": [
+        "input[placeholder*='长']",
+        ":text('长') >> .. >> input",
+        "label:has-text('长度') + input"
+      ],
+      "width_input": [
+        "input[placeholder*='宽']",
+        ":text('宽') >> .. >> input",
+        "label:has-text('宽度') + input"
+      ],
+      "height_input": [
+        "input[placeholder*='高']",
+        ":text('高') >> .. >> input",
+        "label:has-text('高度') + input"
+      ],
+      "unit": "cm",
+      "range": [50, 99]
+    },
+    
+    "step_11_platform_sku": {
+      "_description": "步骤11：平台SKU（自定义SKU编码）",
+      "enabled": true,
+      "custom_sku_button": [
+        "button:has-text('自定义SKU编码')",
+        ":text('自定义') >> visible=true",
+        "button:has-text('自定义')"
+      ]
+    },
+    
+    "step_12_sku_category": {
+      "_description": "步骤12：SKU分类（组合装500件）",
+      "enabled": true,
+      "select": [
+        "select:near(:text('SKU分类'))",
+        ":text('SKU分类') >> .. >> select",
+        "label:has-text('SKU分类') + select"
+      ],
+      "value": "组合装500件"
+    },
+    
+    "step_14_suggested_price": {
+      "_description": "步骤14：建议售价（成本×10）",
+      "enabled": true,
+      "input": [
+        "input[placeholder*='建议售价']",
+        ":text('建议售价') >> .. >> input",
+        "label:has-text('建议售价') + input",
+        "input[type='number']:near(:text('建议售价'))"
+      ]
+    },
+    
+    "step_18_manual_upload": {
+      "_description": "步骤18：产品说明书",
+      "enabled": true,
+      "file_upload": [
+        "input[type='file'][accept*='pdf']",
+        ":text('产品说明书') >> .. >> input[type='file']",
+        ":text('上传') >> .. >> input[type='file']"
+      ]
+    }
+  },
+  
+  "smart_locator_config": {
+    "_description": "智能定位器配置",
+    "use_fallback": true,
+    "timeout_per_selector": 3000,
+    "retry_count": 3,
+    "wait_after_action": 500,
+    "common_patterns": {
+      "input_by_label": ":text('{label}') >> .. >> input",
+      "button_by_text": "button:has-text('{text}')",
+      "select_by_label": "label:has-text('{label}') + select",
+      "checkbox_by_text": "input[type='checkbox']:near(:text('{text}'))"
+    }
+  }
+}

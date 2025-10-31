@@ -21,6 +21,7 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
+import pytest
 from loguru import logger
 
 from src.browser.browser_manager import BrowserManager
@@ -67,6 +68,8 @@ def generate_test_data():
     }
 
 
+@pytest.mark.asyncio
+@pytest.mark.integration
 async def test_complete_edit_flow():
     """测试完整的产品编辑流程.
     

@@ -13,9 +13,12 @@
 import asyncio
 from pathlib import Path
 
+import pytest
 from playwright.async_api import async_playwright
 
 
+@pytest.mark.asyncio
+@pytest.mark.integration
 async def test_playwright():
     """测试 Playwright 基本功能."""
     print("=" * 60)

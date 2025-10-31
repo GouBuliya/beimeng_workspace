@@ -6,10 +6,15 @@
   - async def search_products(): 搜索产品
   - async def select_products(): 选择产品
   - async def get_product_count(): 获取产品数量
+  - async def click_edit_product_by_index(): 点击指定索引的产品编辑
+  - async def claim_product(): 认领单个产品
+  - async def claim_product_multiple_times(): 认领产品多次（SOP步骤5）
+  - async def verify_claim_success(): 验证认领是否成功（SOP步骤6）
 @GOTCHAS:
-  - 使用aria-ref定位元素（妙手ERP特有）
+  - 使用文本定位器（text_locator）策略，提高稳定性
   - 产品列表是动态加载的
   - 需要确保已登录后再使用
+  - 认领操作需要等待UI更新，避免操作过快
 @DEPENDENCIES:
   - 内部: browser_manager, login_controller
   - 外部: playwright, loguru
@@ -357,6 +362,187 @@ class MiaoshouController:
 
         except Exception as e:
             logger.error(f"打开编辑弹窗失败: {e}")
+            return False
+
+    async def click_edit_product_by_index(self, page: Page, index: int) -> bool:
+        """点击指定索引的产品编辑按钮.
+
+        Args:
+            page: Playwright页面对象
+            index: 产品索引（从0开始）
+
+        Returns:
+            是否成功打开编辑弹窗
+
+        Examples:
+            >>> await ctrl.click_edit_product_by_index(page, 2)  # 编辑第3个产品
+            True
+        """
+        logger.info(f"点击第{index+1}个产品的编辑按钮...")
+
+        try:
+            collection_box_config = self.selectors.get("collection_box", {})
+            product_list_config = collection_box_config.get("product_list", {})
+
+            # 指定索引的产品编辑按钮
+            edit_btn_selector = product_list_config.get("edit_btn_template", "button:has-text('编辑')")
+            edit_buttons = page.locator(edit_btn_selector)
+            
+            # 检查是否有足够的产品
+            count = await edit_buttons.count()
+            if count <= index:
+                logger.error(f"✗ 产品数量不足，当前只有{count}个产品")
+                return False
+            
+            # 点击指定索引的编辑按钮
+            await edit_buttons.nth(index).click()
+            await page.wait_for_timeout(2000)  # 等待弹窗加载
+
+            # 验证弹窗是否打开
+            first_edit_config = self.selectors.get("first_edit_dialog", {})
+            close_btn_selector = first_edit_config.get("close_btn", "button:has-text('关闭')")
+
+            if await page.locator(close_btn_selector).is_visible():
+                logger.success(f"✓ 第{index+1}个产品编辑弹窗已打开")
+                return True
+            else:
+                logger.error("✗ 编辑弹窗未打开")
+                return False
+
+        except Exception as e:
+            logger.error(f"打开编辑弹窗失败: {e}")
+            return False
+
+    async def claim_product(self, page: Page, product_index: int = 0) -> bool:
+        """认领单个产品（SOP步骤5）.
+
+        通过点击产品的"认领到"按钮来认领产品。
+        
+        Args:
+            page: Playwright页面对象
+            product_index: 产品索引（从0开始，默认第一个）
+
+        Returns:
+            是否认领成功
+
+        Examples:
+            >>> await ctrl.claim_product(page, 0)  # 认领第1个产品
+            True
+        """
+        logger.info(f"认领第{product_index+1}个产品...")
+
+        try:
+            collection_box_config = self.selectors.get("collection_box", {})
+            product_list_config = collection_box_config.get("product_list", {})
+
+            # 定位"认领到"按钮
+            claim_btn_selector = product_list_config.get("claim_to_btn_template", "button:has-text('认领到')")
+            claim_buttons = page.locator(claim_btn_selector)
+            
+            # 检查是否有足够的产品
+            count = await claim_buttons.count()
+            if count <= product_index:
+                logger.error(f"✗ 产品数量不足，当前只有{count}个产品")
+                return False
+            
+            # 点击指定产品的认领按钮
+            await claim_buttons.nth(product_index).click()
+            await page.wait_for_timeout(1000)  # 等待认领操作完成
+
+            logger.success(f"✓ 第{product_index+1}个产品认领成功")
+            return True
+
+        except Exception as e:
+            logger.error(f"认领产品失败: {e}")
+            return False
+
+    async def claim_product_multiple_times(
+        self,
+        page: Page,
+        product_index: int,
+        times: int = 4
+    ) -> bool:
+        """认领产品多次（SOP步骤5 - 每条链接认领4次）.
+
+        Args:
+            page: Playwright页面对象
+            product_index: 产品索引（从0开始）
+            times: 认领次数（默认4次，符合SOP）
+
+        Returns:
+            是否全部认领成功
+
+        Examples:
+            >>> await ctrl.claim_product_multiple_times(page, 0, 4)  # 第1个产品认领4次
+            True
+        """
+        logger.info(f"开始认领第{product_index+1}个产品{times}次...")
+
+        try:
+            success_count = 0
+            
+            for i in range(times):
+                logger.debug(f"  [{i+1}/{times}] 认领中...")
+                
+                if await self.claim_product(page, product_index):
+                    success_count += 1
+                    # 每次认领后等待一下，避免操作过快
+                    await page.wait_for_timeout(500)
+                else:
+                    logger.warning(f"  ⚠️  第{i+1}次认领失败")
+            
+            if success_count == times:
+                logger.success(f"✓ 第{product_index+1}个产品已成功认领{success_count}次")
+                return True
+            else:
+                logger.warning(f"⚠️  第{product_index+1}个产品认领了{success_count}/{times}次")
+                return False
+
+        except Exception as e:
+            logger.error(f"多次认领失败: {e}")
+            return False
+
+    async def verify_claim_success(
+        self,
+        page: Page,
+        expected_count: int = 20
+    ) -> bool:
+        """验证认领是否成功（SOP步骤6）.
+
+        通过检查"已认领"tab的数量来验证。
+        SOP要求：5条链接×4次认领=20条产品
+        
+        Args:
+            page: Playwright页面对象
+            expected_count: 期望的产品数量（默认20）
+
+        Returns:
+            是否达到预期数量
+
+        Examples:
+            >>> await ctrl.verify_claim_success(page, 20)
+            True
+        """
+        logger.info(f"验证认领结果（期望数量: {expected_count}）...")
+
+        try:
+            # 切换到"已认领"tab
+            await self.switch_tab(page, "claimed")
+            await page.wait_for_timeout(1000)
+            
+            # 获取产品数量
+            counts = await self.get_product_count(page)
+            claimed_count = counts.get("claimed", 0)
+            
+            if claimed_count >= expected_count:
+                logger.success(f"✓ 认领验证成功！已认领数量: {claimed_count}（期望≥{expected_count}）")
+                return True
+            else:
+                logger.error(f"✗ 认领验证失败！已认领数量: {claimed_count}（期望≥{expected_count}）")
+                return False
+
+        except Exception as e:
+            logger.error(f"验证认领失败: {e}")
             return False
 
 

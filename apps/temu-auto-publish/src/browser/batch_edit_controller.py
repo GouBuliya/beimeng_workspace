@@ -29,13 +29,16 @@
 """
 
 import asyncio
-import random
-from typing import List, Optional
+import json
+from pathlib import Path
+from typing import List
 
 from loguru import logger
 from playwright.async_api import Page
 
 from ..data_processor.price_calculator import PriceCalculator
+from ..data_processor.random_generator import RandomDataGenerator
+from ..utils.smart_locator import SmartLocator
 
 
 class BatchEditController:
@@ -61,37 +64,42 @@ class BatchEditController:
     # SOP规定的批量编辑数量
     BATCH_SIZE = 20
 
-    # 随机数据范围（根据实际商品调整）
-    WEIGHT_RANGE = (50, 500)  # 克
-    DIMENSION_RANGE = (5, 30)  # 厘米
+    def __init__(self, selector_path: str = "config/miaoshou_selectors_batch_edit.json"):
+        """初始化批量编辑控制器.
 
-    def __init__(self):
-        """初始化批量编辑控制器."""
-        # 选择器（需要codegen获取）
-        self.select_all_checkbox = "待使用codegen获取"
-        self.batch_edit_button = "待使用codegen获取"
-        self.save_button = "待使用codegen获取"
-        self.preview_button = "待使用codegen获取"
+        Args:
+            selector_path: 选择器配置文件路径
+        """
+        self.selector_path = Path(selector_path)
+        self.selectors = self._load_selectors()
+        
+        # 初始化工具类
+        self.price_calculator = PriceCalculator()
+        self.random_generator = RandomDataGenerator()
 
-        # 18步流程的选择器
-        self.selectors = {
-            "step_01_title": "待使用codegen获取",
-            "step_02_english_title": "待使用codegen获取",
-            "step_03_category_attrs": "待使用codegen获取",
-            "step_05_packaging_shape": "待使用codegen获取",
-            "step_05_packaging_type": "待使用codegen获取",
-            "step_06_origin": "待使用codegen获取",
-            "step_09_weight": "待使用codegen获取",
-            "step_10_length": "待使用codegen获取",
-            "step_10_width": "待使用codegen获取",
-            "step_10_height": "待使用codegen获取",
-            "step_11_sku": "待使用codegen获取",
-            "step_12_sku_category": "待使用codegen获取",
-            "step_14_suggested_price": "待使用codegen获取",
-            "step_18_manual_upload": "待使用codegen获取",
-        }
+        logger.info("批量编辑控制器初始化（SOP v2.0，18步流程）")
 
-        logger.info("批量编辑控制器初始化（SOP v2.0）")
+    def _load_selectors(self) -> dict:
+        """加载选择器配置.
+
+        Returns:
+            选择器配置字典
+        """
+        try:
+            if not self.selector_path.is_absolute():
+                current_file = Path(__file__)
+                project_root = current_file.parent.parent.parent
+                selector_file = project_root / self.selector_path
+            else:
+                selector_file = self.selector_path
+
+            with open(selector_file, "r", encoding="utf-8") as f:
+                config = json.load(f)
+                logger.debug(f"选择器配置已加载: {selector_file}")
+                return config
+        except Exception as e:
+            logger.warning(f"加载选择器配置失败: {e}，使用默认值")
+            return {}
 
     async def batch_edit(
         self, page: Page, products_data: List[dict]
@@ -275,7 +283,9 @@ class BatchEditController:
     async def step_02_english_title(
         self, page: Page, products_data: List[dict]
     ) -> bool:
-        """步骤2：填写英文标题.
+        """步骤2：填写英文标题（按空格键，SOP特殊要求）.
+
+        SOP说明：在输入框中按一下空格键即可
 
         Args:
             page: 页面对象
@@ -284,19 +294,36 @@ class BatchEditController:
         Returns:
             是否填写成功
         """
-        logger.info("步骤8.2：填写英文标题")
+        logger.info("步骤7.2：填写英文标题（按空格键）")
 
         try:
-            # TODO: 使用codegen获取选择器
-            # 填写英文标题（批量）
-            # english_title = products_data[0].get("title_en", "")
-            # await page.fill(
-            #     self.selectors["step_02_english_title"], english_title
-            # )
-            await asyncio.sleep(1)
+            step_config = self.selectors.get("batch_edit", {}).get("step_02_english_title", {})
+            
+            if not step_config.get("enabled", True):
+                logger.info("  跳过步骤2（未启用）")
+                return True
+            
+            # 查找英文标题输入框
+            input_selector = step_config.get("input")
+            if not input_selector:
+                logger.warning("未找到英文标题输入框选择器")
+                return False
+            
+            input_element = page.locator(input_selector).first
+            if not await input_element.is_visible(timeout=5000):
+                logger.warning("英文标题输入框不可见")
+                return False
+            
+            # 按空格键（SOP要求）
+            await input_element.click()
+            await page.wait_for_timeout(300)
+            await input_element.press("Space")
+            await page.wait_for_timeout(500)
 
-            logger.success("✓ 英文标题已填写")
-            logger.warning("⚠️ 英文标题输入框选择器待获取")
+            logger.success("✓ 英文标题已填写（空格键）")
+            
+            # 预览和保存
+            await self._preview_and_save(page)
             return True
 
         except Exception as e:
@@ -380,58 +407,102 @@ class BatchEditController:
             return False
 
     async def step_09_weight(self, page: Page) -> bool:
-        """步骤9：重量.
+        """步骤9：重量（随机生成5000-9999G，SOP步骤7.9）.
 
-        SOP说明：随机生成重量（50-500克）
+        SOP说明：随机生成重量（5000-9999克）
 
         Returns:
             是否执行成功
         """
-        logger.info("步骤8.9：重量（随机生成）")
+        logger.info("步骤7.9：重量（随机生成5000-9999G）")
 
         try:
-            # 随机生成重量
-            weight = random.randint(*self.WEIGHT_RANGE)
-            logger.info(f"  生成重量: {weight}g")
+            step_config = self.selectors.get("batch_edit", {}).get("step_09_weight", {})
+            
+            if not step_config.get("enabled", True):
+                logger.info("  跳过步骤9（未启用）")
+                return True
+            
+            # 生成随机重量
+            weight = self.random_generator.generate_weight()
+            logger.info(f"  生成重量: {weight}G")
 
-            # TODO: 使用codegen获取选择器
-            # await page.fill(self.selectors["step_09_weight"], str(weight))
-            await asyncio.sleep(0.5)
-
-            logger.success(f"✓ 重量已设置: {weight}g")
-            logger.warning("⚠️ 重量输入框选择器待获取")
-            return True
+            # 使用SmartLocator查找输入框
+            locator = SmartLocator(page)
+            input_selectors = step_config.get("input", [])
+            
+            if not input_selectors:
+                logger.warning("未配置重量输入框选择器")
+                return False
+            
+            # 使用智能定位器填写
+            success = await locator.fill_with_retry(input_selectors, str(weight))
+            
+            if success:
+                logger.success(f"✓ 重量已设置: {weight}G")
+                # 预览和保存
+                await self._preview_and_save(page)
+                return True
+            else:
+                logger.error("填写重量失败")
+                return False
 
         except Exception as e:
             logger.error(f"设置重量失败: {e}")
             return False
 
     async def step_10_dimensions(self, page: Page) -> bool:
-        """步骤10：尺寸（长宽高）.
+        """步骤10：尺寸（长宽高，随机生成50-99cm，长>宽>高）.
 
-        SOP说明：随机生成尺寸（5-30厘米）
+        SOP说明：随机生成尺寸，且长>宽>高
 
         Returns:
             是否执行成功
         """
-        logger.info("步骤8.10：尺寸（随机生成）")
+        logger.info("步骤7.10：尺寸（随机生成，长>宽>高）")
 
         try:
-            # 随机生成尺寸
-            length = random.randint(*self.DIMENSION_RANGE)
-            width = random.randint(*self.DIMENSION_RANGE)
-            height = random.randint(*self.DIMENSION_RANGE)
-
+            step_config = self.selectors.get("batch_edit", {}).get("step_10_dimensions", {})
+            
+            if not step_config.get("enabled", True):
+                logger.info("  跳过步骤10（未启用）")
+                return True
+            
+            # 生成随机尺寸
+            length, width, height = self.random_generator.generate_dimensions()
             logger.info(f"  生成尺寸: {length}×{width}×{height}cm")
 
-            # TODO: 使用codegen获取选择器
-            # await page.fill(self.selectors["step_10_length"], str(length))
-            # await page.fill(self.selectors["step_10_width"], str(width))
-            # await page.fill(self.selectors["step_10_height"], str(height))
-            await asyncio.sleep(1)
+            # 查找输入框
+            length_selector = step_config.get("length_input")
+            width_selector = step_config.get("width_input")
+            height_selector = step_config.get("height_input")
+            
+            if not all([length_selector, width_selector, height_selector]):
+                logger.warning("未找到尺寸输入框选择器")
+                return False
+            
+            # 填写长度
+            length_input = page.locator(length_selector).first
+            if await length_input.is_visible(timeout=5000):
+                await length_input.fill(str(length))
+                await page.wait_for_timeout(300)
+            
+            # 填写宽度
+            width_input = page.locator(width_selector).first
+            if await width_input.is_visible(timeout=5000):
+                await width_input.fill(str(width))
+                await page.wait_for_timeout(300)
+            
+            # 填写高度
+            height_input = page.locator(height_selector).first
+            if await height_input.is_visible(timeout=5000):
+                await height_input.fill(str(height))
+                await page.wait_for_timeout(300)
 
             logger.success(f"✓ 尺寸已设置: {length}×{width}×{height}cm")
-            logger.warning("⚠️ 尺寸输入框选择器待获取")
+            
+            # 预览和保存
+            await self._preview_and_save(page)
             return True
 
         except Exception as e:
@@ -487,7 +558,7 @@ class BatchEditController:
     async def step_14_suggested_price(
         self, page: Page, products_data: List[dict]
     ) -> bool:
-        """步骤14：建议售价.
+        """步骤14：建议售价（成本×10，SOP步骤7.14）.
 
         SOP规则：建议售价 = 成本 × 10
 
@@ -498,26 +569,43 @@ class BatchEditController:
         Returns:
             是否设置成功
         """
-        logger.info("步骤8.14：建议售价（成本×10）")
+        logger.info("步骤7.14：建议售价（成本×10）")
 
         try:
+            step_config = self.selectors.get("batch_edit", {}).get("step_14_suggested_price", {})
+            
+            if not step_config.get("enabled", True):
+                logger.info("  跳过步骤14（未启用）")
+                return True
+            
             # 计算第一个商品的价格（批量编辑使用统一价格）
-            cost = products_data[0].get("cost", 0)
-            price_calc = PriceCalculator()
-            price_result = price_calc.calculate(cost)
+            cost = products_data[0].get("cost", 0) if products_data else 150.0
+            price_result = self.price_calculator.calculate(cost)
             suggested_price = price_result.suggested_price
 
-            logger.info(f"  建议售价: ¥{suggested_price}")
+            logger.info(f"  建议售价: ¥{suggested_price} (成本¥{cost}×10)")
 
-            # TODO: 使用codegen获取选择器
-            # await page.fill(
-            #     self.selectors["step_14_suggested_price"],
-            #     str(suggested_price),
-            # )
-            await asyncio.sleep(0.5)
+            # 查找建议售价输入框
+            input_selector = step_config.get("input")
+            if not input_selector:
+                logger.warning("未找到建议售价输入框选择器")
+                return False
+            
+            input_element = page.locator(input_selector).first
+            if not await input_element.is_visible(timeout=5000):
+                logger.warning("建议售价输入框不可见")
+                return False
+            
+            # 填写建议售价
+            await input_element.fill("")
+            await page.wait_for_timeout(300)
+            await input_element.fill(str(suggested_price))
+            await page.wait_for_timeout(500)
 
             logger.success(f"✓ 建议售价已设置: ¥{suggested_price}")
-            logger.warning("⚠️ 建议售价输入框选择器待获取")
+            
+            # 预览和保存
+            await self._preview_and_save(page)
             return True
 
         except Exception as e:
@@ -560,28 +648,53 @@ class BatchEditController:
         logger.info("步骤8.19：保存批量编辑")
 
         try:
-            # 1. 预览
-            logger.info("  预览批量编辑...")
-            # TODO: 使用codegen获取选择器
-            # await page.click(self.preview_button)
-            await asyncio.sleep(2)
-
-            # 2. 保存
-            logger.info("  保存批量编辑...")
-            # TODO: 使用codegen获取选择器
-            # await page.click(self.save_button)
-            await asyncio.sleep(3)
-
-            # 3. 等待保存完成
+            await self._preview_and_save(page)
+            
+            # 等待保存完成
             logger.info("  等待保存完成...")
-            await asyncio.sleep(5)
+            await page.wait_for_timeout(5000)
 
             logger.success("✓ 批量编辑已保存")
-            logger.warning("⚠️ 预览和保存按钮选择器待获取")
             return True
 
         except Exception as e:
             logger.error(f"保存批量编辑失败: {e}")
+            return False
+    
+    async def _preview_and_save(self, page: Page) -> bool:
+        """预览并保存（内部辅助方法）.
+        
+        每个步骤完成后都需要预览和保存
+        
+        Returns:
+            是否成功
+        """
+        try:
+            nav_config = self.selectors.get("batch_edit", {}).get("navigation", {})
+            
+            # 1. 预览
+            preview_btn = nav_config.get("preview_button", "button:has-text('预览')")
+            try:
+                await page.locator(preview_btn).first.click(timeout=3000)
+                await page.wait_for_timeout(1000)
+                logger.debug("  已预览")
+            except Exception:
+                logger.debug("  未找到预览按钮，跳过")
+            
+            # 2. 保存
+            save_btn = nav_config.get("save_button", "button:has-text('保存')")
+            try:
+                await page.locator(save_btn).first.click(timeout=3000)
+                await page.wait_for_timeout(2000)
+                logger.debug("  已保存")
+            except Exception:
+                logger.warning("  未找到保存按钮")
+                return False
+            
+            return True
+            
+        except Exception as e:
+            logger.warning(f"预览保存失败: {e}")
             return False
 
 

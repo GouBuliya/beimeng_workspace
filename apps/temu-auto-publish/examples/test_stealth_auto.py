@@ -11,10 +11,13 @@
 
 import asyncio
 
+import pytest
 from playwright.async_api import async_playwright
 from playwright_stealth.stealth import Stealth
 
 
+@pytest.mark.asyncio
+@pytest.mark.integration
 async def test_stealth_auto():
     """测试反检测功能（自动化版本）."""
     print("=" * 60)

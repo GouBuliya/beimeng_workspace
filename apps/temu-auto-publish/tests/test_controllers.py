@@ -22,6 +22,7 @@ current_file = Path(__file__)
 app_root = current_file.parent.parent
 sys.path.insert(0, str(app_root))
 
+import pytest
 from loguru import logger
 
 from src.browser.login_controller import LoginController
@@ -29,6 +30,8 @@ from src.browser.miaoshou_controller import MiaoshouController
 from src.browser.first_edit_controller import FirstEditController
 
 
+@pytest.mark.asyncio
+@pytest.mark.integration
 async def test_login():
     """测试1：登录妙手ERP."""
     logger.info("=" * 80)
@@ -58,6 +61,8 @@ async def test_login():
         return None
 
 
+@pytest.mark.asyncio
+@pytest.mark.integration
 async def test_navigation(login_controller: LoginController):
     """测试2：导航到公用采集箱."""
     logger.info("=" * 80)
@@ -92,6 +97,8 @@ async def test_navigation(login_controller: LoginController):
         return None
 
 
+@pytest.mark.asyncio
+@pytest.mark.integration
 async def test_first_edit(login_controller: LoginController, miaoshou_controller: MiaoshouController):
     """测试3：首次编辑功能."""
     logger.info("=" * 80)

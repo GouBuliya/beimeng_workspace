@@ -186,6 +186,79 @@ class PriceCalculator:
             "供货价倍率": result.supply_multiplier,
         }
 
+    def calculate_suggested_price(self, cost: float) -> float:
+        """计算建议售价（SOP步骤7.14）.
+
+        Args:
+            cost: 成本价
+
+        Returns:
+            建议售价（成本 × 10）
+
+        Examples:
+            >>> calc = PriceCalculator()
+            >>> calc.calculate_suggested_price(150)
+            1500.0
+        """
+        return round(cost * self.suggested_multiplier, 2)
+
+    def calculate_supply_price(self, cost: float) -> float:
+        """计算妙手供货价（SOP步骤9）.
+
+        公式：
+        - 真实供货价 = 成本 × 2.5（最低倍率）
+        - 妙手供货价 = 真实供货价 × 3 = 成本 × 7.5
+
+        Args:
+            cost: 成本价
+
+        Returns:
+            妙手供货价（成本 × 7.5）
+
+        Examples:
+            >>> calc = PriceCalculator()
+            >>> calc.calculate_supply_price(150)
+            1125.0
+        """
+        return round(cost * self.supply_multiplier, 2)
+
+    def calculate_supply_price_for_publish(self, cost: float) -> float:
+        """计算发布时的供货价（SOP步骤9）.
+
+        这是步骤9"设置供货价"使用的价格。
+        公式：真实供货价 × 3 = 成本 × 7.5
+
+        Args:
+            cost: 成本价
+
+        Returns:
+            供货价（成本 × 7.5）
+
+        Examples:
+            >>> calc = PriceCalculator()
+            >>> calc.calculate_supply_price_for_publish(150)
+            1125.0
+        """
+        return self.calculate_supply_price(cost)
+
+    def calculate_real_supply_price(self, cost: float) -> float:
+        """计算真实供货价（中间价格）.
+
+        公式：成本 × 2.5（最低倍率）
+
+        Args:
+            cost: 成本价
+
+        Returns:
+            真实供货价（成本 × 2.5）
+
+        Examples:
+            >>> calc = PriceCalculator()
+            >>> calc.calculate_real_supply_price(150)
+            375.0
+        """
+        return round(cost * 2.5, 2)
+
 
 # 测试代码
 if __name__ == "__main__":

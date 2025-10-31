@@ -12,10 +12,13 @@
 
 import asyncio
 
+import pytest
 from playwright.async_api import async_playwright
 from playwright_stealth.stealth import Stealth
 
 
+@pytest.mark.asyncio
+@pytest.mark.integration
 async def test_stealth():
     """测试反检测功能."""
     print("=" * 60)
@@ -47,8 +50,9 @@ async def test_stealth():
         print("  - Permissions: 应该显示正常")
         print("=" * 60)
 
-        # 等待用户确认
-        input("\n按回车键继续...")
+        # 自动等待5秒（pytest环境无法交互）
+        print("\n等待5秒以便查看...")
+        await page.wait_for_timeout(5000)
 
         await browser.close()
         print("\n✓ 测试完成")

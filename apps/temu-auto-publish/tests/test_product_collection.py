@@ -18,12 +18,15 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
+import pytest
 from loguru import logger
 
 from src.browser.browser_manager import BrowserManager
 from src.browser.login_controller import LoginController
 
 
+@pytest.mark.asyncio
+@pytest.mark.integration
 async def test_collect_products():
     """测试产品采集功能.
     

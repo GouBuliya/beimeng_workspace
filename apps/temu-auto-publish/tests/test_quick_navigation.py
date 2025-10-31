@@ -16,10 +16,13 @@ current_file = Path(__file__)
 app_root = current_file.parent.parent
 sys.path.insert(0, str(app_root))
 
+import pytest
 from loguru import logger
 from playwright.async_api import async_playwright
 
 
+@pytest.mark.asyncio
+@pytest.mark.integration
 async def test_navigation():
     """快速测试：直接在浏览器中导航到公用采集箱."""
     logger.info("=" * 80)
