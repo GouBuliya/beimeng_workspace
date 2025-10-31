@@ -56,10 +56,10 @@
       "import_product": "button:has-text('导入产品')"
     },
     "tabs": {
-      "all": "text='全部'",
-      "unclaimed": "text='未认领'",
-      "claimed": "text='已认领'",
-      "failed": "text='失败'"
+      "all": ".jx-radio-button:has-text('全部'), text=/全部.*\\(\\d+\\)/, text='全部'",
+      "unclaimed": ".jx-radio-button:has-text('未认领'), text=/未认领.*\\(\\d+\\)/, text='未认领'",
+      "claimed": ".jx-radio-button:has-text('已认领'), text=/已认领.*\\(\\d+\\)/, text='已认领'",
+      "failed": ".jx-radio-button:has-text('失败'), text=/失败.*\\(\\d+\\)/, text='失败'"
     },
     "product_list": {
       "checkbox_template": "input[type='checkbox']",

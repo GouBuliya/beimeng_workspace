@@ -285,12 +285,13 @@ class MiaoshouController:
             # 点击目标tab（使用force=True强制点击，避免被其他元素遮挡）
             logger.debug(f"点击tab选择器: {selector}")
             try:
-                # 方法1：普通点击
-                await page.locator(selector).click(timeout=5000)
+                # 优先使用第一个选择器（通常是最精确的）
+                await page.locator(selector).first.click(timeout=5000)
             except Exception as e:
-                logger.warning(f"普通点击失败，尝试强制点击: {e}")
-                # 方法2：强制点击（跳过可点击性检查）
-                await page.locator(selector).click(force=True, timeout=5000)
+                logger.warning(f"普通点击失败: {str(e)[:100]}...")
+                # 强制点击（跳过可点击性检查）
+                logger.debug("尝试强制点击...")
+                await page.locator(selector).first.click(force=True, timeout=5000)
             
             await page.wait_for_timeout(2000)  # 等待列表刷新
 
