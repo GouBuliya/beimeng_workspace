@@ -293,7 +293,13 @@ class MiaoshouController:
                 logger.debug("尝试强制点击...")
                 await page.locator(selector).first.click(force=True, timeout=5000)
             
-            await page.wait_for_timeout(2000)  # 等待列表刷新
+            # 等待列表刷新（参考test_quick_edit.py的成功策略）
+            await page.wait_for_timeout(1000)
+            try:
+                await page.wait_for_load_state("networkidle", timeout=5000)
+            except Exception:
+                # networkidle超时不影响继续执行
+                pass
 
             logger.success(f"✓ 已切换到「{tab_name}」tab")
             return True
