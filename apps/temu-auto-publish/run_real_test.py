@@ -42,19 +42,32 @@ async def main():
     logger.info("")
     
     browser_manager = None
+    login_controller = None
+    
     try:
-        # 1. 初始化浏览器
-        logger.info("步骤1：初始化浏览器...")
-        browser_manager = BrowserManager()
-        await browser_manager.start(headless=False)
-        page = browser_manager.page
-        logger.success("✓ 浏览器初始化成功")
-        await asyncio.sleep(1)
-        
-        # 2. 登录
-        logger.info("\n步骤2：登录妙手ERP...")
+        # 1. 初始化登录控制器
+        logger.info("步骤1：初始化登录控制器...")
         login_controller = LoginController()
-        login_success = await login_controller.login(page)
+        logger.success("✓ 登录控制器初始化成功")
+        
+        # 2. 登录（会自动启动浏览器）
+        logger.info("\n步骤2：登录妙手ERP...")
+        
+        # 从环境变量或配置文件读取账号密码（实际项目中应该这样做）
+        # 这里使用占位符，实际运行时需要提供真实账号
+        username = "your_username"  # 需要替换为真实用户名
+        password = "your_password"  # 需要替换为真实密码
+        
+        logger.warning("⚠️  注意：使用Cookie登录模式")
+        logger.info("   如果Cookie有效，将跳过账号密码登录")
+        logger.info("   如果Cookie失效，需要手动登录一次")
+        
+        login_success = await login_controller.login(
+            username=username,
+            password=password,
+            force=False,  # 优先使用Cookie
+            headless=False
+        )
         
         if not login_success:
             logger.error("❌ 登录失败，测试终止")
@@ -65,6 +78,9 @@ async def main():
             return 1
         
         logger.success("✓ 登录成功")
+        
+        # 获取page对象
+        page = login_controller.browser_manager.page
         await asyncio.sleep(2)
         
         # 3. 执行5→20工作流
@@ -149,11 +165,11 @@ async def main():
         return 1
     
     finally:
-        if browser_manager:
+        if login_controller:
             logger.info("\n清理：准备关闭浏览器...")
             logger.info("  （等待5秒让您查看最终状态）")
             await asyncio.sleep(5)
-            await browser_manager.close()
+            await login_controller.browser_manager.close()
             logger.info("  ✓ 浏览器已关闭")
 
 
