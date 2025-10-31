@@ -1,0 +1,55 @@
+{
+  "name": "config",
+  "type": "package",
+  "version": "2.0.0",
+  "description": "配置管理模块 - 支持多环境和YAML配置",
+  "purpose": "统一管理应用配置，支持开发/测试/生产环境切换",
+  "interface": {
+    "api": {
+      "main_class": "Settings",
+      "functions": [
+        "load_environment_config(env: str) -> Dict",
+        "create_settings(env: str) -> Settings",
+        "settings.get_absolute_path(path: str) -> Path",
+        "settings.ensure_directories() -> None"
+      ]
+    }
+  },
+  "dependencies": {
+    "python": ">=3.12",
+    "packages": ["pydantic", "pydantic-settings", "pyyaml"]
+  },
+  "configuration": {
+    "environments": ["development", "staging", "production"],
+    "config_files": [
+      "environments/dev.yaml",
+      "environments/staging.yaml",
+      "environments/prod.yaml"
+    ],
+    "env_file": ".env"
+  },
+  "ai_hints": {
+    "common_use_cases": [
+      "导入全局配置: from config.settings import settings",
+      "切换环境: export ENVIRONMENT=production",
+      "访问子配置: settings.debug.enabled",
+      "获取绝对路径: settings.get_absolute_path('data/input')"
+    ],
+    "gotchas": [
+      "敏感信息必须存储在.env文件中",
+      "环境变量优先级高于YAML配置",
+      "生产环境必须设置 headless=true",
+      "配置修改后需要重启应用"
+    ],
+    "config_structure": {
+      "debug": "调试相关配置",
+      "logging": "日志系统配置",
+      "browser": "Playwright浏览器配置",
+      "retry": "重试机制配置",
+      "metrics": "指标收集配置",
+      "business": "业务规则配置",
+      "workflow": "工作流配置"
+    }
+  }
+}
+

@@ -1,0 +1,65 @@
+# Production Environment Configuration
+
+environment: production
+
+# 调试配置
+debug:
+  enabled: false  # 生产环境关闭调试
+  auto_screenshot: false
+  auto_save_html: false
+  enable_timing: false
+  enable_breakpoint: false
+  screenshot_format: jpeg
+  screenshot_on_error: true  # 只在错误时截图
+  save_html_on_error: true
+  debug_dir: data/debug
+
+# 日志配置
+logging:
+  level: INFO
+  format: json  # 生产环境使用 JSON 格式
+  output:
+    - file  # 只输出到文件
+  file_path: data/logs/prod.log
+  rotation: 100 MB
+  retention: 30 days
+
+# 浏览器配置
+browser:
+  headless: true  # 生产环境必须无头
+  slow_mo: 0
+  timeout: 60000
+  viewport:
+    width: 1920
+    height: 1080
+  user_agent: null
+
+# 重试配置
+retry:
+  enabled: true
+  max_attempts: 5  # 生产环境更多重试
+  backoff_factor: 2.5
+  initial_delay: 2.0
+  max_delay: 120.0
+
+# 指标配置
+metrics:
+  enabled: true
+  storage_dir: data/metrics
+  export_format: json
+
+# 业务配置
+business:
+  price_multiplier: 10.0
+  supply_price_multiplier: 7.5
+  real_supply_multiplier: 2.5
+  collect_count: 5
+  claim_count: 4
+
+# 工作流配置
+workflow:
+  enable_state_save: true
+  state_dir: data/workflow_states
+  auto_resume: true  # 生产环境自动恢复
+  checkpoint_interval: 5
+

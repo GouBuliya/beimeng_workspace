@@ -1,0 +1,66 @@
+# Development Environment Configuration
+
+environment: development
+
+# 调试配置
+debug:
+  enabled: true
+  auto_screenshot: true
+  auto_save_html: false  # HTML 较大，开发时可选择关闭
+  enable_timing: true
+  enable_breakpoint: false  # 断点模式需要用户交互
+  screenshot_format: png
+  screenshot_on_error: true
+  save_html_on_error: true
+  debug_dir: data/debug
+
+# 日志配置
+logging:
+  level: DEBUG
+  format: detailed  # detailed / json / simple
+  output:
+    - console
+    - file
+  file_path: data/logs/dev.log
+  rotation: 10 MB  # 日志轮转大小
+  retention: 7 days  # 保留时间
+
+# 浏览器配置
+browser:
+  headless: false
+  slow_mo: 100  # 慢速模式（ms）
+  timeout: 30000  # 默认超时（ms）
+  viewport:
+    width: 1280
+    height: 720
+  user_agent: null  # 使用默认
+
+# 重试配置
+retry:
+  enabled: true
+  max_attempts: 3
+  backoff_factor: 2.0
+  initial_delay: 1.0
+  max_delay: 30.0
+
+# 指标配置
+metrics:
+  enabled: true
+  storage_dir: data/metrics
+  export_format: json  # json / csv
+
+# 业务配置
+business:
+  price_multiplier: 10.0  # 建议售价倍率
+  supply_price_multiplier: 7.5  # 供货价倍率
+  real_supply_multiplier: 2.5  # 真实供货价倍率
+  collect_count: 5  # 采集数量
+  claim_count: 4  # 认领次数
+
+# 工作流配置
+workflow:
+  enable_state_save: true
+  state_dir: data/workflow_states
+  auto_resume: false  # 自动恢复
+  checkpoint_interval: 5  # 检查点间隔（操作数）
+

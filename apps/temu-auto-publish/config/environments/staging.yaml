@@ -1,0 +1,66 @@
+# Staging Environment Configuration
+
+environment: staging
+
+# 调试配置
+debug:
+  enabled: true
+  auto_screenshot: false
+  auto_save_html: false
+  enable_timing: true
+  enable_breakpoint: false
+  screenshot_format: jpeg  # JPEG 更小
+  screenshot_on_error: true
+  save_html_on_error: true
+  debug_dir: data/debug
+
+# 日志配置
+logging:
+  level: INFO
+  format: json
+  output:
+    - console
+    - file
+  file_path: data/logs/staging.log
+  rotation: 50 MB
+  retention: 14 days
+
+# 浏览器配置
+browser:
+  headless: false  # Staging 可以有头
+  slow_mo: 50
+  timeout: 45000
+  viewport:
+    width: 1920
+    height: 1080
+  user_agent: null
+
+# 重试配置
+retry:
+  enabled: true
+  max_attempts: 4
+  backoff_factor: 2.0
+  initial_delay: 1.5
+  max_delay: 60.0
+
+# 指标配置
+metrics:
+  enabled: true
+  storage_dir: data/metrics
+  export_format: json
+
+# 业务配置
+business:
+  price_multiplier: 10.0
+  supply_price_multiplier: 7.5
+  real_supply_multiplier: 2.5
+  collect_count: 5
+  claim_count: 4
+
+# 工作流配置
+workflow:
+  enable_state_save: true
+  state_dir: data/workflow_states
+  auto_resume: false
+  checkpoint_interval: 10
+
