@@ -124,14 +124,15 @@ class FirstEditController:
             # 简易描述才是 textarea.jx-textarea__inner
             title_selectors = [
                 # 方法1：通过相邻的label文本定位input（最准确）
+                "xpath=//label[contains(text(), '产品标题')]/following-sibling::*/descendant::input[@type='text'][1]",
                 "xpath=//label[contains(text(), '产品标题')]/following::input[@type='text'][1]",
-                "xpath=//div[contains(@class, 'jx-form-item')]//label[contains(text(), '产品标题:')]/..//input[@type='text']",
+                "xpath=//div[contains(@class, 'jx-form-item')]//label[contains(text(), '产品标题:')]//following-sibling::*/descendant::input[@type='text']",
                 
-                # 方法2：通过className定位（产品标题和简易描述用不同的元素）
-                "xpath=//label[contains(text(), '产品标题')]/ancestor::div[contains(@class, 'jx-form-item')]//input[contains(@class, 'jx-input__inner')]",
+                # 方法2：通过className定位，排除type=number
+                "xpath=//label[contains(text(), '产品标题')]/ancestor::div[contains(@class, 'jx-form-item')]//input[contains(@class, 'jx-input__inner') and @type='text']",
                 
-                # 方法3：在编辑弹窗中查找第一个可见的input.jx-input__inner（降级方案）
-                ".jx-overlay-dialog input.jx-input__inner:visible",
+                # 方法3：在编辑弹窗中查找input，但排除type=number（分页控件）
+                ".jx-overlay-dialog input.jx-input__inner[type='text']:visible",
             ]
             
             title_input = None
@@ -191,14 +192,15 @@ class FirstEditController:
             # 简易描述才是 textarea.jx-textarea__inner
             title_selectors = [
                 # 方法1：通过相邻的label文本定位input（最准确）
+                "xpath=//label[contains(text(), '产品标题')]/following-sibling::*/descendant::input[@type='text'][1]",
                 "xpath=//label[contains(text(), '产品标题')]/following::input[@type='text'][1]",
-                "xpath=//div[contains(@class, 'jx-form-item')]//label[contains(text(), '产品标题:')]/..//input[@type='text']",
+                "xpath=//div[contains(@class, 'jx-form-item')]//label[contains(text(), '产品标题:')]//following-sibling::*/descendant::input[@type='text']",
                 
-                # 方法2：通过className定位（产品标题和简易描述用不同的元素）
-                "xpath=//label[contains(text(), '产品标题')]/ancestor::div[contains(@class, 'jx-form-item')]//input[contains(@class, 'jx-input__inner')]",
+                # 方法2：通过className定位，排除type=number
+                "xpath=//label[contains(text(), '产品标题')]/ancestor::div[contains(@class, 'jx-form-item')]//input[contains(@class, 'jx-input__inner') and @type='text']",
                 
-                # 方法3：在编辑弹窗中查找第一个可见的input.jx-input__inner（降级方案）
-                ".jx-overlay-dialog input.jx-input__inner:visible",
+                # 方法3：在编辑弹窗中查找input，但排除type=number（分页控件）
+                ".jx-overlay-dialog input.jx-input__inner[type='text']:visible",
             ]
             
             logger.debug(f"    尝试{len(title_selectors)}种选择器定位产品标题字段...")
