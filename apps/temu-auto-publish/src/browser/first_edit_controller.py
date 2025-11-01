@@ -120,18 +120,18 @@ class FirstEditController:
             await page.wait_for_timeout(1000)
             
             # 尝试多个可能的标题输入框选择器
-            # 优先通过表单结构定位"产品标题"字段
+            # 重要: 产品标题是 input[type=text] 而不是 textarea！
+            # 简易描述才是 textarea.jx-textarea__inner
             title_selectors = [
-                # 方法1：通过相邻的label文本定位（最准确）
-                "xpath=//label[contains(text(), '产品标题')]/following::textarea[1]",
-                "xpath=//div[contains(@class, 'jx-form-item')]//label[contains(text(), '产品标题')]/..//textarea",
+                # 方法1：通过相邻的label文本定位input（最准确）
+                "xpath=//label[contains(text(), '产品标题')]/following::input[@type='text'][1]",
+                "xpath=//div[contains(@class, 'jx-form-item')]//label[contains(text(), '产品标题:')]/..//input[@type='text']",
                 
-                # 方法2：通过placeholder定位
-                "textarea[placeholder*='产品标题']",
-                "textarea[placeholder*='请输入产品标题']",
+                # 方法2：通过className定位（产品标题和简易描述用不同的元素）
+                "xpath=//label[contains(text(), '产品标题')]/ancestor::div[contains(@class, 'jx-form-item')]//input[contains(@class, 'jx-input__inner')]",
                 
-                # 方法3：通过排除简易描述（降级方案）
-                "textarea.jx-textarea__inner",  # 会找到第一个，可能是简易描述
+                # 方法3：在编辑弹窗中查找第一个可见的input.jx-input__inner（降级方案）
+                ".jx-overlay-dialog input.jx-input__inner:visible",
             ]
             
             title_input = None
@@ -187,18 +187,18 @@ class FirstEditController:
             await page.wait_for_timeout(1000)
             
             # 尝试多个可能的标题输入框选择器
-            # 优先通过表单结构定位"产品标题"字段（与get_original_title一致）
+            # 重要: 产品标题是 input[type=text] 而不是 textarea！
+            # 简易描述才是 textarea.jx-textarea__inner
             title_selectors = [
-                # 方法1：通过相邻的label文本定位（最准确）
-                "xpath=//label[contains(text(), '产品标题')]/following::textarea[1]",
-                "xpath=//div[contains(@class, 'jx-form-item')]//label[contains(text(), '产品标题')]/..//textarea",
+                # 方法1：通过相邻的label文本定位input（最准确）
+                "xpath=//label[contains(text(), '产品标题')]/following::input[@type='text'][1]",
+                "xpath=//div[contains(@class, 'jx-form-item')]//label[contains(text(), '产品标题:')]/..//input[@type='text']",
                 
-                # 方法2：通过placeholder定位
-                "textarea[placeholder*='产品标题']",
-                "textarea[placeholder*='请输入产品标题']",
+                # 方法2：通过className定位（产品标题和简易描述用不同的元素）
+                "xpath=//label[contains(text(), '产品标题')]/ancestor::div[contains(@class, 'jx-form-item')]//input[contains(@class, 'jx-input__inner')]",
                 
-                # 方法3：通过排除简易描述（降级方案）
-                "textarea.jx-textarea__inner",  # 会找到第一个，可能是简易描述
+                # 方法3：在编辑弹窗中查找第一个可见的input.jx-input__inner（降级方案）
+                ".jx-overlay-dialog input.jx-input__inner:visible",
             ]
             
             logger.debug(f"    尝试{len(title_selectors)}种选择器定位产品标题字段...")
