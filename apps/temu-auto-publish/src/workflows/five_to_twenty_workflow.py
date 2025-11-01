@@ -71,7 +71,7 @@ class FiveToTwentyWorkflow:
         self.use_ai_titles = use_ai_titles
         
         logger.info(f"5→20工作流控制器已初始化（AI标题: {'启用' if use_ai_titles else '禁用'}）")
-    
+
     async def edit_single_product(
         self,
         page: Page,
@@ -215,6 +215,34 @@ class FiveToTwentyWorkflow:
             if not await self.first_edit_ctrl.set_sku_stock(page, stock):
                 logger.error(f"✗ 库存设置失败")
                 return False
+            
+            # 8.5. 上传尺寸图（如果提供了URL）- SOP 4.5
+            size_chart_url = product_data.get("size_chart_url")
+            if size_chart_url:
+                logger.info(f"\n>>> 步骤6.5: 上传尺寸图（SOP 4.5）...")
+                try:
+                    if await self.first_edit_ctrl.upload_size_chart(page, size_chart_url):
+                        logger.success("✓ 尺寸图上传成功")
+                    else:
+                        logger.warning("⚠️  尺寸图上传失败（可能需要在实际环境调试选择器）")
+                except Exception as e:
+                    logger.warning(f"⚠️  尺寸图上传异常: {e}")
+            else:
+                logger.debug("跳过尺寸图上传（未提供URL）")
+
+            # 8.6. 上传产品视频（如果提供了URL）- SOP 4.5
+            video_url = product_data.get("video_url")
+            if video_url:
+                logger.info(f"\n>>> 步骤6.6: 上传产品视频（SOP 4.5）...")
+                try:
+                    if await self.first_edit_ctrl.upload_product_video(page, video_url):
+                        logger.success("✓ 产品视频上传成功")
+                    else:
+                        logger.warning("⚠️  产品视频上传失败（可能需要在实际环境调试选择器）")
+                except Exception as e:
+                    logger.warning(f"⚠️  产品视频上传异常: {e}")
+            else:
+                logger.debug("跳过产品视频上传（未提供URL）")
             
             # 9. 保存修改
             logger.info(f"\n>>> 步骤6: 保存修改...")

@@ -48,7 +48,7 @@ async def main():
     logger.info("测试内容：")
     logger.info("  1. 登录妙手ERP")
     logger.info("  2. 导航到待审核页面")
-    logger.info("  3. 首次编辑5条商品（含AI标题、图片、重量、尺寸）")
+    logger.info("  3. 首次编辑5条商品（含AI标题、类目核对、图片、尺寸图、视频、重量、尺寸）")
     logger.info("  4. 每条商品认领4次")
     logger.info("  5. 验证总计20条商品")
     logger.info("")
@@ -138,6 +138,9 @@ async def main():
                 "length": 55 + i * 5,       # 55-75cm
                 "width": 54 + i * 5,        # 54-74cm
                 "height": 53 + i * 5,       # 53-73cm
+                # 新增：测试尺寸图和视频URL（使用示例URL）
+                "size_chart_url": "https://img.kwcdn.com/product/fancy/e7e3c9a5-size.jpg",  # 示例尺寸图
+                "video_url": "https://video.kwcdn.com/example.mp4",  # 示例视频
             }
             for i in range(5)
         ]
