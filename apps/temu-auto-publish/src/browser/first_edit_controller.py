@@ -250,7 +250,7 @@ class FirstEditController:
             logger.info(f"    填写新标题: {new_title}")
             await title_input.fill(new_title)
             await page.wait_for_timeout(500)
-            
+
             # 验证标题是否成功更新
             logger.debug("    验证标题是否成功更新...")
             updated_title = await title_input.input_value()

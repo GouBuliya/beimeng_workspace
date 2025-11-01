@@ -56,7 +56,7 @@ class AITitleGenerator:
         ['新标题1 A0049型号', '新标题2 A0049型号', ...]
     """
     
-    # 固定的AI提示词模板
+    # 固定的AI提示词模板（批量模式 - 5个标题）
     PROMPT_TEMPLATE = """提取上面5个商品标题中的高频热搜词，写5个新的中文标题，
 不要出现药品，急救等医疗相关的词汇
 符合欧美人的阅读习惯，符合TEMU/亚马逊平台规则，提高搜索流量
@@ -66,6 +66,21 @@ class AITitleGenerator:
 
 请生成5个不同的新标题，每个标题独立且有差异。
 每行一个标题，不要编号，不要其他说明文字。"""
+
+    # 单个标题的AI提示词模板（逐个模式 - 1个标题）
+    SINGLE_PROMPT_TEMPLATE = """请基于下面的商品标题，生成一个优化的新标题：
+
+原标题：{title}
+
+要求：
+1. 提取标题中的高频热搜词
+2. 写一个新的中文标题
+3. 不要出现药品、急救等医疗相关的词汇
+4. 符合欧美人的阅读习惯
+5. 符合TEMU/亚马逊平台规则
+6. 优化搜索流量
+
+请只返回一个新标题，不要编号，不要其他说明文字。"""
 
     def __init__(
         self,
@@ -109,7 +124,7 @@ class AITitleGenerator:
             self.model = os.getenv("ANTHROPIC_MODEL", "claude-3-haiku-20240307")
         else:
             self.model = ""
-        
+            
         # 设置base_url（支持OpenAI兼容接口）
         if base_url:
             self.base_url = base_url
@@ -119,7 +134,7 @@ class AITitleGenerator:
         if self.base_url:
             logger.info(f"AI标题生成器初始化: provider={self.provider}, model={self.model}, base_url={self.base_url}")
         else:
-            logger.info(f"AI标题生成器初始化: provider={self.provider}, model={self.model}")
+        logger.info(f"AI标题生成器初始化: provider={self.provider}, model={self.model}")
         
     def _build_prompt(self, original_titles: List[str]) -> str:
         """构建AI提示词.
@@ -362,6 +377,97 @@ class AITitleGenerator:
         logger.info(f"标题生成完成: {len(result)} 个")
         for i, title in enumerate(result):
             logger.debug(f"  {i+1}. {title}")
+        
+        return result
+    
+    async def generate_single_title(
+        self,
+        original_title: str,
+        model_number: str = "",
+        use_ai: bool = True
+    ) -> str:
+        """生成单个新标题（逐个模式）.
+        
+        为单个产品生成优化的标题。每次调用都是独立的AI对话。
+        
+        Args:
+            original_title: 单个原始标题
+            model_number: 型号后缀（如：A0001型号）
+            use_ai: 是否使用AI生成（False则返回原标题+型号）
+            
+        Returns:
+            新生成的标题（已包含型号后缀）
+            
+        Examples:
+            >>> generator = AITitleGenerator()
+            >>> new_title = await generator.generate_single_title(
+            ...     "便携药箱家用急救包",
+            ...     "A0001型号"
+            ... )
+            >>> print(new_title)
+            '便携收纳盒家用医疗包 A0001型号'
+        """
+        logger.info(f"开始生成单个标题: use_ai={use_ai}, model_number={model_number}")
+        logger.debug(f"原始标题: {original_title}")
+        
+        # 如果不使用AI，直接返回原标题+型号
+        if not use_ai:
+            logger.info("未启用AI，直接使用原标题")
+            if model_number:
+                return f"{original_title} {model_number}"
+            else:
+                return original_title
+        
+        # 使用AI生成标题（带重试）
+        new_title = None
+        for attempt in range(self.max_retries):
+            try:
+                logger.debug(f"AI生成尝试 {attempt+1}/{self.max_retries}")
+                
+                # 构建单个标题的提示词
+                prompt = self.SINGLE_PROMPT_TEMPLATE.format(title=original_title)
+                logger.debug(f"Prompt: {prompt[:100]}...")
+                
+                # 调用对应的API
+                if self.provider == "openai":
+                    # 调用OpenAI API，返回单个标题
+                    result_list = await self._call_openai_api(prompt)
+                    # 取第一个结果
+                    new_title = result_list[0] if result_list else original_title
+                elif self.provider == "anthropic":
+                    # 调用Anthropic API，返回单个标题
+                    result_list = await self._call_anthropic_api(prompt)
+                    # 取第一个结果
+                    new_title = result_list[0] if result_list else original_title
+                else:
+                    raise Exception(f"不支持的AI提供商: {self.provider}")
+                
+                logger.success(f"✓ AI生成标题成功: {new_title}")
+                break
+                
+            except Exception as e:
+                logger.warning(f"AI生成失败（尝试 {attempt+1}/{self.max_retries}）: {e}")
+                if attempt < self.max_retries - 1:
+                    await asyncio.sleep(2 ** attempt)  # 指数退避
+                else:
+                    logger.error("AI生成失败，使用降级方案（原标题）")
+        
+        # 如果AI生成失败，使用降级方案
+        if not new_title:
+            logger.warning("⚠️ AI生成失败，使用原标题作为降级方案")
+            new_title = original_title
+        
+        # 添加型号后缀
+        if model_number:
+            # 确保型号后缀不重复
+            if model_number not in new_title:
+                result = f"{new_title} {model_number}"
+            else:
+                result = new_title
+        else:
+            result = new_title
+        
+        logger.info(f"单个标题生成完成: {result}")
         
         return result
 
