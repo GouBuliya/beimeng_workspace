@@ -12,6 +12,41 @@
     "apps": [
       {
         "$schema": "../../../.ai/schemas/component.schema.json",
+        "name": "temu-auto-publish",
+        "type": "app",
+        "version": "1.0.0",
+        "description": "妙手ERP商品发布自动化系统 - 基于Playwright的浏览器自动化方案",
+        "purpose": "自动化妙手ERP商品发布流程，实现从首次编辑到批量发布的完整工作流。支持AI标题生成、类目核对、图片管理等SOTA功能。",
+        "entry_point": "apps/temu-auto-publish/run_real_test.py",
+        "interface": {
+          "cli": {
+            "command": "python apps/temu-auto-publish/run_real_test.py",
+            "description": "执行5→20认领流程完整测试"
+          }
+        },
+        "dependencies": {
+          "python": ">=3.12",
+          "packages": [
+            "playwright>=1.48.0",
+            "loguru>=0.7.0",
+            "pydantic>=2.0.0",
+            "openai>=1.0.0",
+            "python-dotenv>=1.0.0"
+          ]
+        },
+        "tags": [
+          "automation",
+          "browser",
+          "playwright",
+          "erp",
+          "ai",
+          "web-scraping"
+        ],
+        "status": "phase1-complete",
+        "path": "apps/temu-auto-publish"
+      },
+      {
+        "$schema": "../../../.ai/schemas/component.schema.json",
         "name": "hello-cli",
         "type": "app",
         "version": "0.1.0",

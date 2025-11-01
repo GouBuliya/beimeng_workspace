@@ -8,16 +8,33 @@
 
 ## 📋 项目概述
 
-本项目采用 **Python + Playwright** 纯代码方案，实现 Temu 商品发布流程的自动化：
+本项目采用 **Python + Playwright** 纯代码方案，实现妙手ERP商品发布流程的自动化：
 
-- ✅ **Excel 选品表处理** - 自动读取、验证和转换
-- ✅ **价格自动计算** - 建议售价和供货价
-- ✅ **AI 标题生成** - 多种模式可选
-- ✅ **自动登录** - Cookie 管理，减少重复登录
-- ✅ **反检测机制** - 使用 playwright-stealth
-- 🚧 **搜索采集** - 站内搜索并采集同款链接
-- 🚧 **批量编辑** - 18步编辑流程
-- 🚧 **批量发布** - 一键发布到多店铺
+### ✅ 已完成功能 (SOP 步骤1-6)
+
+- ✅ **自动登录** - Cookie管理，智能登录检测
+- ✅ **导航系统** - 自动导航到公用采集箱和各个功能模块
+- ✅ **AI标题生成** - 支持qwen3-vl-plus多模态模型，逐个生成优化标题
+- ✅ **首次编辑** - 自动编辑5个产品（标题、价格、库存、重量、尺寸）
+- ✅ **类目核对** - 自动检查商品类目合规性
+- ✅ **图片管理** - 生产级图片删除/上传/验证功能
+- ✅ **认领流程** - 自动认领产品（5个产品×4次=20个产品）
+- ✅ **价格计算** - 智能价格计算器（建议售价、供货价）
+- ✅ **数据处理** - Excel选品表读取和处理
+
+### 🚧 开发中功能 (SOP 步骤7-11)
+
+- 🚧 **批量编辑18步** - 二次编辑流程（18个步骤，工具已完成）
+- 🚧 **选择店铺** - 多店铺选择功能
+- 🚧 **设置供货价** - 批量设置供货价
+- 🚧 **批量发布** - 一键发布到店铺
+- 🚧 **发布统计** - 发布记录查询和统计
+
+### 📋 待开发功能 (SOP 步骤1-3)
+
+- 📋 **站内搜索** - 结合选品表搜索同款
+- 📋 **采集链接** - 一次性采集5个同款链接
+- 📋 **插件集成** - 集成妙手浏览器插件
 
 ## 🏗️ 架构设计
 
@@ -53,21 +70,31 @@ uv run playwright install chromium
 
 ### 2. 配置环境
 
-```bash
-# 复制配置模板
-cp apps/temu-auto-publish/.env.example apps/temu-auto-publish/.env
+创建 `.env` 文件：
 
-# 编辑配置
-vim apps/temu-auto-publish/.env
+```bash
+cd apps/temu-auto-publish
+cp .env.example .env
+vim .env
 ```
 
-填写以下信息：
+填写以下配置：
+
 ```env
-TEMU_USERNAME=your_username
-TEMU_PASSWORD=your_password
-BROWSER_HEADLESS=False
-PRICE_MULTIPLIER=7.5
-COLLECT_COUNT=5
+# 妙手ERP账号配置
+MIAOSHOU_URL=https://erp.91miaoshou.com/sub_account/users
+MIAOSHOU_USERNAME=your_username
+MIAOSHOU_PASSWORD=your_password
+
+# AI标题生成配置（使用阿里云DashScope）
+DASHSCOPE_API_KEY=your_api_key
+OPENAI_MODEL=qwen3-vl-plus
+OPENAI_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+
+# Temu店铺账号配置（可选）
+TEMU_SHOP_URL=https://agentseller.temu.com/
+TEMU_USERNAME=your_temu_username
+TEMU_PASSWORD=your_temu_password
 ```
 
 ### 3. 准备测试数据
@@ -81,17 +108,16 @@ COLLECT_COUNT=5
 ### 4. 运行测试
 
 ```bash
-# 查看系统状态
-uv run python -m apps.temu-auto-publish status
+# 运行5→20认领流程完整测试
+cd apps/temu-auto-publish
+python3 run_real_test.py
 
-# 测试 Excel 读取
-uv run python -m apps.temu-auto-publish dev excel data/input/products_sample.xlsx
-
-# 测试价格计算
-uv run python -m apps.temu-auto-publish dev price 150
-
-# 处理选品表生成任务
-uv run python -m apps.temu-auto-publish process data/input/products_sample.xlsx
+# 测试将自动执行：
+# 1. 登录妙手ERP
+# 2. 导航到公用采集箱
+# 3. 首次编辑5个产品（AI标题生成、类目核对、价格库存设置）
+# 4. 每个产品认领4次（共20个产品）
+# 5. 验证认领成功
 ```
 
 ## 📁 项目结构
@@ -99,61 +125,88 @@ uv run python -m apps.temu-auto-publish process data/input/products_sample.xlsx
 ```
 apps/temu-auto-publish/
 ├── src/
-│   ├── data_processor/      # 数据处理模块
-│   │   ├── excel_reader.py    # Excel 读取
-│   │   ├── price_calculator.py # 价格计算
-│   │   ├── title_generator.py  # 标题生成
-│   │   └── processor.py        # 流程整合
-│   ├── browser/             # 浏览器自动化
-│   │   ├── browser_manager.py  # Playwright 管理器
-│   │   ├── cookie_manager.py   # Cookie 管理
-│   │   ├── login_controller.py # 登录控制
-│   │   └── ...
-│   └── models/              # 数据模型
-│       ├── task.py            # 任务数据模型
-│       └── result.py          # 结果数据模型
-├── config/                  # 配置文件
-│   ├── settings.py          # 应用配置
-│   └── browser_config.json  # 浏览器配置
-├── data/                    # 数据目录
-│   ├── input/              # Excel 输入
-│   ├── output/             # JSON 输出
-│   ├── temp/               # 临时文件
-│   └── logs/               # 日志文件
-├── examples/               # 示例脚本
-├── tests/                  # 测试
-├── __main__.py            # CLI 入口
-├── .env.example           # 环境变量模板
-├── .ai.json               # AI 元数据
-└── README.md              # 本文件
+│   ├── browser/                # 浏览器自动化核心
+│   │   ├── browser_manager.py    # Playwright浏览器管理
+│   │   ├── login_controller.py   # 登录控制器
+│   │   ├── miaoshou_controller.py# 妙手ERP控制器
+│   │   ├── first_edit_controller.py # 首次编辑控制器
+│   │   ├── batch_edit_controller.py # 批量编辑控制器
+│   │   ├── publish_controller.py    # 发布控制器
+│   │   ├── collection_controller.py # 采集控制器
+│   │   └── image_manager.py         # 图片管理器
+│   ├── workflows/              # 业务流程
+│   │   ├── five_to_twenty_workflow.py    # 5→20认领流程
+│   │   ├── complete_publish_workflow.py  # 完整发布流程
+│   │   └── full_publish_workflow.py      # 全流程工作流
+│   ├── data_processor/         # 数据处理模块
+│   │   ├── excel_reader.py      # Excel读取器
+│   │   ├── price_calculator.py  # 价格计算器
+│   │   ├── ai_title_generator.py# AI标题生成器
+│   │   └── data_generator.py    # 随机数据生成器
+│   ├── automation_tools/       # 自动化增强工具
+│   │   ├── retry_decorator.py   # 重试装饰器
+│   │   ├── performance_monitor.py # 性能监控
+│   │   ├── error_handler.py     # 错误处理器
+│   │   └── step_validator.py    # 步骤验证器
+│   └── models/                 # 数据模型
+│       ├── task.py              # 任务模型
+│       └── result.py            # 结果模型
+├── config/                     # 配置文件
+│   ├── settings.py             # 应用配置
+│   ├── miaoshou_selectors_v2.json # 妙手选择器配置
+│   └── browser_config.json     # 浏览器配置
+├── docs/                       # 文档
+│   ├── AI_TITLE_GENERATION.md  # AI标题生成文档
+│   ├── COLLECTION.md           # 采集功能文档
+│   ├── DEBUG_GUIDE.md          # 调试指南
+│   └── STATE_DETECTOR_GUIDE.md # 状态检测器指南
+├── tests/                      # 测试
+│   ├── unit/                   # 单元测试
+│   └── integration/            # 集成测试
+├── run_real_test.py           # 真实环境测试脚本
+├── .env.example               # 环境变量模板
+├── .env                       # 环境变量配置（需创建）
+├── QUICKSTART.md              # 快速开始指南
+└── README.md                  # 本文件
 ```
 
-## 🎯 CLI 命令
+## 🎯 核心功能说明
 
-### 主命令
+### 5→20认领流程 (SOP 步骤4-6)
 
-```bash
-# 处理选品表（完整流程）
-python -m apps.temu-auto-publish process <excel_file>
+自动化执行商品首次编辑和认领流程：
 
-# 测试登录
-python -m apps.temu-auto-publish login
+1. **导航到公用采集箱** - 自动进入「全部」tab
+2. **首次编辑5个产品**：
+   - AI生成优化标题（qwen3-vl-plus模型）
+   - 核对商品类目合规性
+   - 设置价格和库存
+   - 上传尺寸图和视频（可选）
+3. **认领流程** - 每个产品认领4次
+4. **验证结果** - 确认20个产品已认领成功
 
-# 测试登录（无头模式）
-python -m apps.temu-auto-publish login --headless
+### AI标题生成
 
-# 查看系统状态
-python -m apps.temu-auto-publish status
+支持多种AI模型：
+- **qwen3-vl-plus** - 阿里云通义千问多模态模型（推荐）
+- **qwen-plus** - 阿里云通义千问标准模型
+- **gpt-3.5-turbo** - OpenAI模型
+- **claude** - Anthropic模型
+
+AI自动提取热搜词，生成符合TEMU/亚马逊平台规则的中文标题。
+
+### 类目核对
+
+自动检查商品类目是否合规：
+- ✅ 支持的类目：家居用品、收纳整理等
+- ❌ 不支持的类目：药品、医疗器械、电子产品等
+
+### 价格计算
+
+智能价格计算器：
 ```
-
-### 开发命令
-
-```bash
-# 测试 Excel 读取
-python -m apps.temu-auto-publish dev excel <file>
-
-# 测试价格计算
-python -m apps.temu-auto-publish dev price <cost>
+建议售价 = 成本价 × 10
+供货价 = 成本价 × 7.5
 ```
 
 ## 📊 数据格式
@@ -286,25 +339,41 @@ uv run pytest --cov=apps/temu-auto-publish
 
 ## 🗺️ 开发路线图
 
-### ✅ Phase 1: 基础架构
-- [x] 项目结构创建
+### ✅ Phase 1: 基础架构与核心功能 (已完成)
+- [x] Playwright浏览器管理器
+- [x] Cookie管理和智能登录
+- [x] 导航系统（妙手ERP各模块）
+- [x] 首次编辑控制器（FirstEditController）
+- [x] AI标题生成器（支持多模态模型）
+- [x] 类目核对功能
+- [x] 图片管理器（生产级）
+- [x] 价格计算器
+- [x] 5→20认领流程完整实现
 - [x] 数据处理层（Excel、价格、标题）
-- [x] Playwright 浏览器管理器
-- [x] Cookie 管理和登录流程
+- [x] 自动化增强工具（重试、监控、验证）
 
-### 🚧 Phase 2: 核心功能（当前）
-- [x] 登录自动化（含Cookie复用）
-- [x] 搜索采集控制器（框架完成，需根据实际页面调整选择器）
-- [x] 编辑控制器（框架完成，需根据实际页面调整选择器）
-- [ ] 完善18步批量编辑逻辑
-- [ ] 实现发布流程
+### 🚧 Phase 2: 批量编辑与发布 (开发中)
+- [x] 批量编辑控制器基础框架
+- [x] 批量编辑18步工具集（retry、monitor、error_handler）
+- [ ] 批量编辑18步端到端测试
+- [ ] 选择店铺功能（步骤8）
+- [ ] 设置供货价功能（步骤9）
+- [ ] 批量发布功能（步骤10）
+- [ ] 发布记录查询和统计（步骤11）
 
-### 📅 Phase 3: 优化和扩展
-- [ ] 图片自动验证（接入视觉模型）
-- [ ] 多店铺批量发布
-- [ ] 完整的端到端测试
+### 📅 Phase 3: 采集与完整流程 (计划中)
+- [ ] 站内搜索功能（步骤2）
+- [ ] 一次性采集5个链接（步骤3）
+- [ ] 妙手插件集成（步骤1）
+- [ ] 完整的端到端测试（步骤1-11）
 - [ ] 性能优化和并发处理
-- [ ] Web 管理界面
+- [ ] 监控报警系统
+
+### 📚 Phase 4: 文档与优化 (持续进行)
+- [x] 代码文件元信息协议100%合规
+- [ ] 完善文档体系（用户手册、API文档）
+- [ ] 故障排查指南
+- [ ] 最佳实践文档
 
 ## 🤝 贡献指南
 
@@ -328,26 +397,65 @@ uv run mypy apps/temu-auto-publish
 
 ## ⚠️ 注意事项
 
-1. **反检测** - 已集成 playwright-stealth，但仍需注意：
-   - 控制操作频率，避免过快
-   - 添加随机延迟（已实现）
+1. **反检测机制**：
+   - 已集成 playwright-stealth
+   - 自动添加随机延迟（200-500ms）
    - 使用真实的浏览器指纹
-2. **Cookie 管理** - Cookie 有效期 24 小时，自动管理
-3. **错误处理** - 自动截图保存错误状态
-4. **无头模式** - 开发时建议 headed，生产可用 headless
-5. **页面选择器** - 代码中的选择器是示例，需根据实际 Temu 后台页面结构调整
+   
+2. **Cookie管理**：
+   - 自动保存和加载Cookie
+   - Cookie有效期约24小时
+   - 智能检测登录状态
+   
+3. **错误处理**：
+   - 完整的错误日志记录
+   - 失败时自动截图
+   - 重试机制（最多3次）
+   
+4. **AI模型配置**：
+   - 推荐使用qwen3-vl-plus（支持多模态）
+   - 需要配置DASHSCOPE_API_KEY
+   - API调用自动限流避免频率限制
+   
+5. **选择器维护**：
+   - 选择器配置在 `config/miaoshou_selectors_v2.json`
+   - 使用文本定位器提高稳定性
+   - 如果妙手ERP界面更新，可能需要更新选择器
 
-## 🔧 TODO 选择器调整
+## 🔧 故障排查
 
-当前代码中的选择器是通用示例，需要根据实际的 Temu 卖家后台页面结构调整：
+### 常见问题
 
-- **SearchController**: 搜索输入框、搜索按钮、商品列表等选择器
-- **EditController**: 认领按钮、标题输入、类目选择、保存按钮等选择器  
-- **LoginController**: 已基本完善，可能需要微调
+**Q: 登录失败？**
+- 检查`.env`中的账号密码是否正确
+- 尝试删除`data/cookies/miaoshou_cookies.json`重新登录
+- 检查网络连接
 
-建议使用 Playwright 的 `codegen` 工具生成选择器：
+**Q: AI标题生成失败？**
+- 检查`DASHSCOPE_API_KEY`是否正确
+- 检查API Key是否有余额
+- 查看日志中的具体错误信息
+
+**Q: 元素定位失败？**
+- 妙手ERP界面可能更新
+- 使用Playwright Codegen重新录制选择器
+- 更新`config/miaoshou_selectors_v2.json`
+
+**Q: 类目核对读取不到信息？**
+- 类目字段选择器需要在实际环境调试
+- 不影响主流程，会默认认为合规
+
+### 调试工具
+
 ```bash
-uv run playwright codegen https://seller.temu.com
+# 使用Playwright Codegen录制操作
+uv run playwright codegen https://erp.91miaoshou.com
+
+# 查看详细日志
+tail -f data/logs/temu_automation.log
+
+# 使用浏览器开发者工具检查元素
+# 推荐Chrome DevTools的Elements面板
 ```
 
 ## 📄 License
@@ -364,7 +472,15 @@ MIT License - 详见 LICENSE 文件
 
 ---
 
-**项目状态**: 🚧 开发中 (已完成从影刀到 Playwright 的架构迁移)
+**项目状态**: ✅ Phase 1完成 | 🚧 Phase 2开发中
 
-如有问题，请参考 [详细文档](../../docs/projects/temu-auto-publish/) 或提交 Issue。
+**完成度**: SOP步骤4-6 (5→20认领流程) 已完成并测试通过
+
+**下一步**: 实现SOP步骤7-11 (批量编辑18步 + 发布流程)
+
+如有问题，请参考文档：
+- [快速开始](QUICKSTART.md)
+- [AI标题生成](docs/AI_TITLE_GENERATION.md)
+- [调试指南](docs/DEBUG_GUIDE.md)
+- [商品发布SOP](../../docs/projects/temu-auto-publish/guides/商品发布SOP-IT专用.md)
 
