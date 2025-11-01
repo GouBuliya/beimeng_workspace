@@ -89,19 +89,22 @@ class CollectionToEditWorkflow:
     def __init__(
         self,
         use_ai_titles: bool = True,
-        output_dir: Optional[str] = None
+        output_dir: Optional[str] = None,
+        debug_mode: bool = False
     ):
         """初始化集成工作流.
         
         Args:
             use_ai_titles: 是否使用AI生成标题
             output_dir: 输出目录（保存中间结果和报告）
+            debug_mode: 是否启用调试模式（逐步执行）
         """
         self.collection_ctrl = CollectionController()
         self.miaoshou_ctrl = MiaoshouController()
-        self.five_to_twenty = FiveToTwentyWorkflow(use_ai_titles=use_ai_titles)
+        self.five_to_twenty = FiveToTwentyWorkflow(use_ai_titles=use_ai_titles, debug_mode=debug_mode)
         self.table_reader = SelectionTableReader()
         self.use_ai_titles = use_ai_titles
+        self.debug_mode = debug_mode
         
         # 设置输出目录
         if output_dir:

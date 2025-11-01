@@ -31,6 +31,7 @@ from ..data_processor.title_generator import TitleGenerator
 from ..data_processor.price_calculator import PriceCalculator
 from ..data_processor.random_generator import RandomDataGenerator
 from ..data_processor.ai_title_generator import AITitleGenerator
+from ..utils.debug_helper import DebugHelper
 
 
 class FiveToTwentyWorkflow:
@@ -57,11 +58,12 @@ class FiveToTwentyWorkflow:
         True
     """
 
-    def __init__(self, use_ai_titles: bool = True):
+    def __init__(self, use_ai_titles: bool = True, debug_mode: bool = False):
         """初始化工作流控制器.
         
         Args:
             use_ai_titles: 是否使用AI生成标题（默认True）
+            debug_mode: 是否启用调试模式（默认False）
         """
         self.miaoshou_ctrl = MiaoshouController()
         self.first_edit_ctrl = FirstEditController()
@@ -70,8 +72,9 @@ class FiveToTwentyWorkflow:
         self.random_generator = RandomDataGenerator()
         self.ai_title_generator = AITitleGenerator()
         self.use_ai_titles = use_ai_titles
+        self.debug = DebugHelper(enabled=debug_mode)
         
-        logger.info(f"5→20工作流控制器已初始化（AI标题: {'启用' if use_ai_titles else '禁用'}）")
+        logger.info(f"5→20工作流控制器已初始化（AI标题: {'启用' if use_ai_titles else '禁用'}，调试模式: {'启用' if debug_mode else '禁用'}）")
 
     async def edit_single_product(
         self,
@@ -116,11 +119,25 @@ class FiveToTwentyWorkflow:
         logger.info(f"开始首次编辑第{product_index+1}个产品（逐个AI生成模式）")
         logger.info(f"=" * 60)
 
+        # 🔴 调试断点: 开始编辑产品
+        await self.debug.breakpoint(
+            f"准备编辑第{product_index+1}个产品",
+            data={
+                "产品索引": product_index,
+                "关键词": product_data.get("keyword"),
+                "型号": product_data.get("model_number"),
+                "成本": product_data.get("cost"),
+            }
+        )
+
         try:
             # 1. 点击编辑按钮，打开编辑弹窗
             if not await self.miaoshou_ctrl.click_edit_product_by_index(page, product_index):
                 logger.error(f"✗ 无法打开第{product_index+1}个产品的编辑弹窗")
                 return False
+
+            # 🔴 调试断点: 编辑弹窗已打开
+            await self.debug.breakpoint(f"编辑弹窗已打开（第{product_index+1}个产品）")
 
             # 2. 读取原始标题
             logger.info(f">>> 步骤1: 读取原始标题...")
@@ -148,6 +165,16 @@ class FiveToTwentyWorkflow:
             # 3. 使用AI生成新标题（独立对话）
             model_number = product_data.get("model_number", f"A{str(product_index+1).zfill(4)}")
             
+            # 🔴 调试断点: 准备AI生成
+            await self.debug.breakpoint(
+                f"准备调用AI生成标题",
+                data={
+                    "原始标题": original_title[:80],
+                    "型号": model_number,
+                    "AI启用": self.use_ai_titles,
+                }
+            )
+            
             if self.use_ai_titles:
                 logger.info(f"\n>>> 步骤2: 调用AI生成新标题（独立对话）...")
                 logger.debug(f"    AI提供商: {self.ai_title_generator.provider}")
@@ -169,6 +196,16 @@ class FiveToTwentyWorkflow:
                     elapsed_time = time.time() - start_time
                     logger.success(f"✓ AI生成完成，耗时: {elapsed_time:.2f}秒")
                     logger.info(f"✓ 新标题: {title}")
+                    
+                    # 🔴 调试断点: AI生成完成
+                    await self.debug.breakpoint(
+                        f"AI标题生成完成",
+                        data={
+                            "原始标题": original_title[:60],
+                            "新标题": title,
+                            "耗时": f"{elapsed_time:.2f}秒",
+                        }
+                    )
                     
                 except Exception as e:
                     logger.error(f"❌ AI生成失败: {e}")
@@ -271,6 +308,16 @@ class FiveToTwentyWorkflow:
                     logger.warning(f"⚠️  产品视频上传异常: {e}")
             else:
                 logger.debug("跳过产品视频上传（未提供URL）")
+            
+            # 🔴 调试断点: 准备保存
+            await self.debug.breakpoint(
+                f"所有编辑完成，准备保存（第{product_index+1}个产品）",
+                data={
+                    "标题": title[:60],
+                    "价格": price,
+                    "库存": stock,
+                }
+            )
             
             # 13. 保存修改
             logger.info(f"\n>>> 步骤10: 保存修改...")

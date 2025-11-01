@@ -112,7 +112,10 @@ async def main(args):
         logger.info("步骤2: 执行采集到编辑完整流程")
         logger.info("─" * 80 + "\n")
         
-        workflow = CollectionToEditWorkflow(use_ai_titles=True)
+        workflow = CollectionToEditWorkflow(
+            use_ai_titles=True,
+            debug_mode=args.debug_breakpoint
+        )
         
         result = await workflow.execute(
             page=page,
@@ -178,6 +181,12 @@ if __name__ == "__main__":
         "--debug",
         action="store_true",
         help="启用调试模式，显示详细日志"
+    )
+    
+    parser.add_argument(
+        "--debug-breakpoint",
+        action="store_true",
+        help="启用断点调试模式（逐步执行，按'n'继续下一步）"
     )
     
     parser.add_argument(
