@@ -13,12 +13,55 @@
 """
 
 import argparse
+import re
 import sys
 from pathlib import Path
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 import pandas as pd
 from loguru import logger
+
+
+def extract_image_url(cell_value) -> Optional[str]:
+    """从Excel公式中提取图片ID或URL.
+    
+    Excel中的格式：=DISPIMG("ID_xxx", 1)
+    需要转换为可用的URL或保存ID供后续处理
+    
+    Args:
+        cell_value: Excel单元格值
+        
+    Returns:
+        提取的图片ID或URL，无效则返回None
+        
+    Examples:
+        >>> extract_image_url('=DISPIMG("ID_7DE0F0E72ED7495BAFB3F5DC909FF548",1)')
+        'ID_7DE0F0E72ED7495BAFB3F5DC909FF548'
+        >>> extract_image_url('https://example.com/image.jpg')
+        'https://example.com/image.jpg'
+        >>> extract_image_url(None)
+        None
+    """
+    if pd.isna(cell_value):
+        return None
+    
+    cell_str = str(cell_value)
+    
+    # 提取 DISPIMG 中的 ID
+    if "DISPIMG" in cell_str:
+        match = re.search(r'ID_([A-F0-9]+)', cell_str)
+        if match:
+            image_id = match.group(0)
+            # 返回ID，后续可以手动处理或上传到图床
+            # TODO: 如果有图床，可以在这里构造完整的URL
+            # return f"https://your-image-host.com/{image_id}"
+            return image_id
+    
+    # 如果已经是URL
+    if cell_str.startswith("http"):
+        return cell_str
+    
+    return None
 
 
 def parse_complex_excel(input_file: str) -> pd.DataFrame:
@@ -55,6 +98,10 @@ def convert_to_standard_format(df: pd.DataFrame) -> pd.DataFrame:
     - 标题后缀
     - 产品颜色/规格
     - 采集数量
+    - 进货价
+    - 产品图
+    - 尺寸图
+    - 实拍图
     
     Args:
         df: 原始DataFrame
@@ -64,32 +111,48 @@ def convert_to_standard_format(df: pd.DataFrame) -> pd.DataFrame:
     """
     logger.info("开始转换为标准格式...")
     
-    # 提取关键列
+    # 提取关键列（扩展版本，保留价格和图片）
     key_columns = {
-        '到货情况': '到货情况',
         '产品名称': '产品名称',
         '标题后缀': '标题后缀',
         '产品颜色/规格': '产品颜色/规格',
-        '    进货价': '进货价',
+        '    进货价': '进货价',  # 保留进货价
+        '产品图': '产品图',      # 保留产品图
+        '尺寸图仅供参考尺寸 颜色以第二列为准': '尺寸图',  # 保留尺寸图
+        '实拍图': '实拍图',      # 保留实拍图
     }
     
     # 检查列是否存在
     missing_cols = [col for col in key_columns.keys() if col not in df.columns]
     if missing_cols:
         logger.warning(f"缺失列: {missing_cols}")
+        # 移除缺失的列
+        for col in missing_cols:
+            key_columns.pop(col)
     
     # 创建工作副本
     work_df = df[list(key_columns.keys())].copy()
     work_df.columns = list(key_columns.values())
     
-    # 向下填充产品名称和标题后缀
-    logger.info("向下填充产品名称和标题后缀...")
+    # 向下填充产品名称、标题后缀和进货价
+    logger.info("向下填充产品名称、标题后缀和进货价...")
     work_df['产品名称'] = work_df['产品名称'].ffill()
     work_df['标题后缀'] = work_df['标题后缀'].ffill()
+    if '进货价' in work_df.columns:
+        work_df['进货价'] = work_df['进货价'].ffill()
     
     # 过滤掉无效行（没有规格信息的）
     logger.info("过滤无效行...")
     work_df = work_df[work_df['产品颜色/规格'].notna()].copy()
+    
+    # 处理图片列：提取图片ID/URL
+    logger.info("处理图片URL...")
+    if '产品图' in work_df.columns:
+        work_df['产品图'] = work_df['产品图'].apply(extract_image_url)
+    if '尺寸图' in work_df.columns:
+        work_df['尺寸图'] = work_df['尺寸图'].apply(extract_image_url)
+    if '实拍图' in work_df.columns:
+        work_df['实拍图'] = work_df['实拍图'].apply(extract_image_url)
     
     # 添加采集数量（默认5个）
     work_df['采集数量'] = 5
@@ -97,14 +160,20 @@ def convert_to_standard_format(df: pd.DataFrame) -> pd.DataFrame:
     # 添加负责人（默认为空，需要手动填写）
     work_df['主品负责人'] = ''
     
-    # 重新排列列顺序
-    standard_df = work_df[[
-        '主品负责人',
-        '产品名称',
-        '标题后缀',
-        '产品颜色/规格',
-        '采集数量'
-    ]].copy()
+    # 重新排列列顺序（扩展版本）
+    columns_order = ['主品负责人', '产品名称', '标题后缀', '产品颜色/规格', '采集数量']
+    
+    # 添加可选列（如果存在）
+    if '进货价' in work_df.columns:
+        columns_order.append('进货价')
+    if '产品图' in work_df.columns:
+        columns_order.append('产品图')
+    if '尺寸图' in work_df.columns:
+        columns_order.append('尺寸图')
+    if '实拍图' in work_df.columns:
+        columns_order.append('实拍图')
+    
+    standard_df = work_df[columns_order].copy()
     
     # 清理数据
     logger.info("清理数据...")
@@ -134,17 +203,25 @@ def validate_output(df: pd.DataFrame) -> bool:
         if col not in df.columns:
             issues.append(f"缺少必填列: {col}")
     
-    # 检查空值
+    # 检查空值（必填列）
     for col in ['产品名称', '标题后缀', '产品颜色/规格']:
-        null_count = df[col].isna().sum()
-        if null_count > 0:
-            issues.append(f"列 '{col}' 有 {null_count} 个空值")
+        if col in df.columns:
+            null_count = df[col].isna().sum()
+            if null_count > 0:
+                issues.append(f"列 '{col}' 有 {null_count} 个空值")
     
     # 检查采集数量
     if '采集数量' in df.columns:
         invalid_counts = df[~df['采集数量'].between(1, 100)]
         if len(invalid_counts) > 0:
             issues.append(f"有 {len(invalid_counts)} 行的采集数量不在1-100范围内")
+    
+    # 可选列统计
+    optional_cols = ['进货价', '产品图', '尺寸图', '实拍图']
+    for col in optional_cols:
+        if col in df.columns:
+            valid_count = df[col].notna().sum()
+            logger.info(f"  可选列 '{col}': {valid_count}/{len(df)} 行有数据")
     
     if issues:
         logger.warning("⚠️  发现以下问题:")

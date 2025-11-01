@@ -368,30 +368,24 @@ class FiveToTwentyWorkflow:
             ValueError: 如果产品数量不正确（完整模式下）
 
         Examples:
-            >>> # 完整模式
+            >>> # 使用Excel真实数据
             >>> result = await workflow.execute(page, [
-            ...     {"keyword": "药箱", "model_number": "A0001", "cost": 10, "stock": 100},
-            ...     {"keyword": "药箱", "model_number": "A0002", "cost": 12, "stock": 100},
+            ...     {"keyword": "药箱", "model_number": "A0001", "cost": 10, "stock": 100, "size_chart_url": "..."},
+            ...     {"keyword": "药箱", "model_number": "A0002", "cost": 12, "stock": 100, "size_chart_url": "..."},
             ...     # ... 共5个
             ... ])
             >>> result["final_count"]
             20
-            >>> 
-            >>> # 简化模式
-            >>> result = await workflow.execute(page, None)
         """
         logger.info("=" * 80)
         logger.info("开始执行5→20工作流（SOP步骤4-6）")
         logger.info("=" * 80)
 
-        # 简化模式：生成默认数据
+        # 验证输入数据
         if products_data is None:
-            logger.info("🔹 简化模式：使用默认产品数据（将从采集箱实时读取）")
-            products_data = [
-                {"keyword": f"产品{i+1}", "model_number": f"AUTO{i+1:03d}", "cost": 150.0 + i * 10, "stock": 100}
-                for i in range(5)
-            ]
-        elif len(products_data) != 5:
+            raise ValueError("必须提供产品数据（products_data），不再支持空数据模式")
+        
+        if len(products_data) != 5:
             raise ValueError(f"必须提供5个产品数据，当前提供了{len(products_data)}个")
 
         result = {

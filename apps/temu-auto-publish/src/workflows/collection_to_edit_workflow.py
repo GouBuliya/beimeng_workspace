@@ -530,7 +530,7 @@ class CollectionToEditWorkflow:
         
         Args:
             page: 页面对象
-            products: 选品表产品列表（完整模式使用）
+            products: 选品表产品列表（使用真实Excel数据）
             skip_temu_collection: 是否为简化模式
         """
         logger.info("\n" + "▶" * 50)
@@ -538,44 +538,43 @@ class CollectionToEditWorkflow:
         logger.info("▶" * 50 + "\n")
         
         try:
-            # 简化模式：从采集箱中读取前5个产品进行编辑
-            if skip_temu_collection:
-                logger.info("🔹 简化模式：将直接编辑采集箱中的前5个商品")
-                logger.info("🔹 产品数据将从采集箱页面实时读取\n")
-                
-                # 不传递products_data，让FiveToTwentyWorkflow自己从采集箱读取
-                result = await self.five_to_twenty.execute(
-                    page,
-                    products_data=None,  # 简化模式不需要预先准备数据
-                    claim_times=0  # 暂时不执行认领，只做首次编辑
-                )
-            else:
-                # 完整模式：使用选品表数据
-                logger.info("🔹 完整模式：使用选品表数据进行编辑\n")
-                
-                # 转换数据格式
-                edit_input = DataConverter.selection_to_collection(products)
-                
-                # 构建编辑数据（取前5个产品）
-                products_data = []
-                for i in range(min(5, len(edit_input))):
-                    data = edit_input[i]
-                    products_data.append({
-                        "keyword": data["keyword"],
-                        "model_number": data["model_number"],
-                        "cost": 150.0 + i * 10,
-                        "stock": 100
-                    })
-                
-                # 执行首次编辑（不包括认领）
-                result = await self.five_to_twenty.execute(
-                    page,
-                    products_data,
-                    claim_times=0  # 暂时不执行认领，只做首次编辑
-                )
+            # 构建产品数据（使用Excel真实数据）
+            products_data = []
+            for i, product in enumerate(products[:5]):  # 取前5个
+                product_data = {
+                    "keyword": product.product_name,
+                    "model_number": product.model_number,
+                    "cost": product.cost_price if product.cost_price else 150.0,
+                    "stock": 100,  # 可从Excel扩展
+                    "color_spec": product.color_spec,
+                    "size_chart_url": product.size_chart_url,
+                    "product_image_url": product.product_image_url,
+                    "actual_photo_url": product.actual_photo_url,
+                }
+                products_data.append(product_data)
+            
+            if products_data:
+                logger.info(f"使用Excel数据编辑 {len(products_data)} 个产品:")
+                for i, pd in enumerate(products_data, 1):
+                    cost_str = f"¥{pd['cost']:.2f}" if pd['cost'] else "未设置"
+                    logger.info(f"  产品{i}: {pd['keyword']} ({pd['model_number']}) - 成本{cost_str}")
+                    if pd.get('size_chart_url'):
+                        logger.debug(f"    - 尺寸图: {pd['size_chart_url'][:50]}...")
+                    if pd.get('product_image_url'):
+                        logger.debug(f"    - 产品图: {pd['product_image_url'][:50]}...")
+                    if pd.get('actual_photo_url'):
+                        logger.debug(f"    - 实拍图: {pd['actual_photo_url'][:50]}...")
+                logger.info("")
+            
+            # 执行首次编辑（不包括认领）
+            result = await self.five_to_twenty.execute(
+                page,
+                products_data if products_data else None,
+                claim_times=0  # 暂时不执行认领，只做首次编辑
+            )
             
             if result.get("edited_count", 0) > 0:
-                logger.success(f"✓ 阶段5完成：成功编辑 {result['edited_count']}/5 个产品\n")
+                logger.success(f"✓ 阶段5完成：成功编辑 {result['edited_count']}/{len(products_data) if products_data else 5} 个产品\n")
             else:
                 logger.error("✗ 阶段5失败：首次编辑失败\n")
             

@@ -39,11 +39,13 @@ class ProductSelectionRow(BaseModel):
     Attributes:
         owner: 主品负责人
         product_name: 产品名称/关键词
-        model_number: 型号编号 (如A0001)
+        model_number: 型号编号 (如A0001, A026, A045/A046等)
         color_spec: 产品颜色/规格
-        product_image: 产品图URL
-        size_chart: 尺寸图URL
         collect_count: 需要采集的数量（默认5）
+        cost_price: 进货价/成本价
+        product_image_url: 产品图URL
+        size_chart_url: 尺寸图URL
+        actual_photo_url: 实拍图URL
     
     Examples:
         >>> row = ProductSelectionRow(
@@ -57,18 +59,22 @@ class ProductSelectionRow(BaseModel):
     
     owner: str = Field(..., description="主品负责人")
     product_name: str = Field(..., description="产品名称（用作搜索关键词）")
-    model_number: str = Field(..., description="型号编号", pattern=r"^A\d{4}$")
+    model_number: str = Field(..., description="型号编号")
     color_spec: Optional[str] = Field(None, description="产品颜色/规格")
-    product_image: Optional[str] = Field(None, description="产品图URL")
-    size_chart: Optional[str] = Field(None, description="尺寸图URL")
-    collect_count: int = Field(default=5, ge=1, le=10, description="采集数量")
+    collect_count: int = Field(default=5, ge=1, le=100, description="采集数量")
+    
+    # 新增字段：价格和图片
+    cost_price: Optional[float] = Field(None, description="进货价/成本价", ge=0)
+    product_image_url: Optional[str] = Field(None, description="产品图URL")
+    size_chart_url: Optional[str] = Field(None, description="尺寸图URL")
+    actual_photo_url: Optional[str] = Field(None, description="实拍图URL")
     
     @field_validator("model_number")
     @classmethod
     def validate_model_number(cls, v: str) -> str:
-        """验证型号编号格式."""
-        if not v.startswith("A") or len(v) != 5:
-            raise ValueError("型号编号格式错误，应为A0001-A9999")
+        """验证型号编号格式（放宽验证，支持 A026, A045/A046 等格式）."""
+        if not v or not v.startswith("A"):
+            raise ValueError("型号编号必须以A开头")
         return v
 
 
@@ -111,16 +117,36 @@ class SelectionTableReader:
             "颜色规格": "color_spec",
             "规格": "color_spec",
             
-            "产品图": "product_image",
-            "product_image": "product_image",
-            "图片": "product_image",
-            
-            "尺寸图": "size_chart",
-            "size_chart": "size_chart",
-            "尺寸图片": "size_chart",
-            
             "采集数量": "collect_count",
             "collect_count": "collect_count",
+            
+            # 新增映射：进货价
+            "进货价": "cost_price",
+            "    进货价": "cost_price",  # 处理带空格的列名
+            "成本价": "cost_price",
+            "cost_price": "cost_price",
+            "价格": "cost_price",
+            
+            # 新增映射：产品图
+            "产品图": "product_image_url",
+            "product_image": "product_image_url",
+            "product_image_url": "product_image_url",
+            "图片": "product_image_url",
+            "产品图URL": "product_image_url",
+            
+            # 新增映射：尺寸图
+            "尺寸图": "size_chart_url",
+            "size_chart": "size_chart_url",
+            "size_chart_url": "size_chart_url",
+            "尺寸图片": "size_chart_url",
+            "尺寸图URL": "size_chart_url",
+            "尺寸图仅供参考尺寸 颜色以第二列为准": "size_chart_url",
+            
+            # 新增映射：实拍图
+            "实拍图": "actual_photo_url",
+            "actual_photo": "actual_photo_url",
+            "actual_photo_url": "actual_photo_url",
+            "实拍图URL": "actual_photo_url",
         }
     
     def read_excel(
