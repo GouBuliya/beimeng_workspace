@@ -105,11 +105,12 @@ class AITitleGenerator:
         self.max_retries = max_retries
         self.timeout = timeout
         
-        # 获取API密钥
+        # 获取API密钥（优先使用DASHSCOPE_API_KEY，兼容OPENAI_API_KEY）
         if api_key:
             self.api_key = api_key
         elif self.provider == "openai":
-            self.api_key = os.getenv("OPENAI_API_KEY", "")
+            # 优先使用阿里云DashScope的API Key
+            self.api_key = os.getenv("DASHSCOPE_API_KEY") or os.getenv("OPENAI_API_KEY", "")
         elif self.provider == "anthropic":
             self.api_key = os.getenv("ANTHROPIC_API_KEY", "")
         else:
