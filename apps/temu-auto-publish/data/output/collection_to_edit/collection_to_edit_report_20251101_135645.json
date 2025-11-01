@@ -1,0 +1,44 @@
+{
+  "success": true,
+  "stages": {
+    "stage0": {
+      "products_count": 2
+    },
+    "stage1": {
+      "skipped": true,
+      "reason": "简化模式"
+    },
+    "stage2": {
+      "skipped": true,
+      "reason": "简化模式"
+    },
+    "stage3": {
+      "success": true,
+      "filter_by_user": null
+    },
+    "stage4": {
+      "success": true,
+      "actual_count": 7657,
+      "expected_count": 2,
+      "keywords_matched": 0,
+      "details": []
+    },
+    "stage5": {
+      "success": true,
+      "edited_count": 5,
+      "claimed_count": 5,
+      "final_count": 7653,
+      "errors": []
+    }
+  },
+  "summary": {
+    "total_products": 2,
+    "collected_products": 0,
+    "added_to_miaoshou": 0,
+    "edited_products": 5,
+    "start_time": "2025-11-01T13:55:12.937302",
+    "end_time": "2025-11-01T13:56:45.281813"
+  },
+  "errors": [],
+  "report_file": null
+}

@@ -97,7 +97,52 @@ TEMU_USERNAME=your_temu_username
 TEMU_PASSWORD=your_temu_password
 ```
 
-### 3. 准备测试数据
+### 3. 运行测试
+
+#### 简化模式（推荐）⭐
+
+**适用场景**: 商品已手动添加到妙手采集箱
+
+```bash
+cd apps/temu-auto-publish
+
+# 基础运行
+python run_collection_to_edit_test.py
+
+# 调试模式（显示详细日志）
+python run_collection_to_edit_test.py --debug
+
+# 自动关闭（不等待）
+python run_collection_to_edit_test.py --no-wait
+```
+
+**简化模式特点**:
+- ✅ 无需处理Temu反爬虫机制
+- ✅ 直接编辑采集箱中的商品
+- ✅ 符合实际工作流程（用户手动筛选商品）
+- ✅ 稳定可靠，只操作妙手ERP
+- ✅ 自动AI标题生成和产品信息填写
+
+**工作流程**:
+1. 登录妙手ERP
+2. 导航到公用采集箱
+3. 切换到"全部"tab
+4. 读取前5个商品
+5. 逐个首次编辑（AI生成标题、设置价格/库存等）
+6. 保存并生成报告
+
+#### 完整模式（实验性）
+
+**适用场景**: 从Temu采集到妙手首次编辑的全流程
+
+```bash
+# 需要先配置Temu账号和妙手插件
+python run_collection_to_edit_test.py --no-skip-collection
+```
+
+**注意**: 完整模式需要处理Temu登录和验证码，目前仍在开发中。
+
+---
 
 创建选品表 `data/input/products_sample.xlsx`，包含以下列：
 
@@ -472,11 +517,20 @@ MIT License - 详见 LICENSE 文件
 
 ---
 
-**项目状态**: ✅ Phase 1完成 | 🚧 Phase 2开发中
+**项目状态**: ✅ 简化模式完成 | 🚧 完整模式开发中
 
-**完成度**: SOP步骤4-6 (5→20认领流程) 已完成并测试通过
+**当前功能**:
+- ✅ 简化模式：妙手采集箱 → AI标题生成 → 首次编辑（完全自动化）
+- 🚧 完整模式：Temu采集 → 妙手首次编辑（实验性功能）
 
-**下一步**: 实现SOP步骤7-11 (批量编辑18步 + 发布流程)
+**测试状态**: 
+- ✅ 简化模式已通过完整测试（包含AI标题生成、类目核对、价格设置等）
+- ✅ 支持调试模式，日志详细完整
+- ✅ 生成JSON报告和统计信息
+
+**下一步计划**: 
+1. 完善Temu采集功能（处理登录和验证码）
+2. 实现SOP步骤7-11（批量编辑18步 + 发布流程）
 
 如有问题，请参考文档：
 - [快速开始](QUICKSTART.md)
