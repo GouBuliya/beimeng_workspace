@@ -18,12 +18,16 @@ from loguru import logger
 # 添加项目根目录到path
 sys.path.insert(0, str(Path(__file__).parent))
 
-# 加载.env环境变量
+# 加载.env环境变量（强制覆盖系统环境变量）
 try:
     from dotenv import load_dotenv
     env_path = Path(__file__).parent / ".env"
-    load_dotenv(env_path)
-    logger.info(f"✓ 环境变量已从 {env_path} 加载")
+    load_dotenv(env_path, override=True)  # 强制覆盖已存在的环境变量
+    logger.info(f"✓ 环境变量已从 {env_path} 加载（已覆盖系统环境变量）")
+    # 验证关键配置
+    logger.debug(f"  DASHSCOPE_API_KEY: {os.getenv('DASHSCOPE_API_KEY', 'N/A')[:20]}...")
+    logger.debug(f"  OPENAI_MODEL: {os.getenv('OPENAI_MODEL', 'N/A')}")
+    logger.debug(f"  OPENAI_BASE_URL: {os.getenv('OPENAI_BASE_URL', 'N/A')}")
 except ImportError:
     logger.warning("⚠️  python-dotenv未安装，请运行: pip install python-dotenv")
     logger.warning("   将使用硬编码的占位符账号")
