@@ -72,6 +72,7 @@ class AITitleGenerator:
         provider: str = "openai",
         api_key: Optional[str] = None,
         model: Optional[str] = None,
+        base_url: Optional[str] = None,
         max_retries: int = 3,
         timeout: int = 30
     ):
@@ -81,6 +82,7 @@ class AITitleGenerator:
             provider: AI提供商 ('openai' 或 'anthropic')
             api_key: API密钥（如果为None，从环境变量读取）
             model: 模型名称（如果为None，使用默认模型）
+            base_url: API基础URL（支持OpenAI兼容接口，如通义千问）
             max_retries: 最大重试次数
             timeout: 超时时间（秒）
         """
@@ -107,8 +109,17 @@ class AITitleGenerator:
             self.model = os.getenv("ANTHROPIC_MODEL", "claude-3-haiku-20240307")
         else:
             self.model = ""
+        
+        # 设置base_url（支持OpenAI兼容接口）
+        if base_url:
+            self.base_url = base_url
+        else:
+            self.base_url = os.getenv("OPENAI_BASE_URL", None)
             
-        logger.info(f"AI标题生成器初始化: provider={self.provider}, model={self.model}")
+        if self.base_url:
+            logger.info(f"AI标题生成器初始化: provider={self.provider}, model={self.model}, base_url={self.base_url}")
+        else:
+            logger.info(f"AI标题生成器初始化: provider={self.provider}, model={self.model}")
         
     def _build_prompt(self, original_titles: List[str]) -> str:
         """构建AI提示词.
@@ -148,10 +159,16 @@ class AITitleGenerator:
         logger.debug(f"调用OpenAI API: model={self.model}")
         
         try:
-            client = openai.AsyncOpenAI(
-                api_key=self.api_key,
-                timeout=self.timeout
-            )
+            # 创建客户端，支持自定义base_url（OpenAI兼容接口）
+            client_params = {
+                "api_key": self.api_key,
+                "timeout": self.timeout
+            }
+            if self.base_url:
+                client_params["base_url"] = self.base_url
+                logger.debug(f"使用自定义base_url: {self.base_url}")
+            
+            client = openai.AsyncOpenAI(**client_params)
             
             response = await client.chat.completions.create(
                 model=self.model,

@@ -153,12 +153,12 @@ class FirstEditController:
                     if count > 0:
                         # 找到第一个可见的
                         elem = page.locator(selector).first
-                        is_visible = await elem.is_visible(timeout=1000)
-                        if is_visible:
-                            title_input = elem
+                            is_visible = await elem.is_visible(timeout=1000)
+                            if is_visible:
+                                title_input = elem
                             used_selector = selector
                             logger.debug(f"✓ 使用选择器定位到产品标题: {selector}")
-                            break
+                                break
                 except Exception as e:
                     logger.debug(f"选择器 {selector} 失败: {e}")
                     continue
@@ -238,12 +238,12 @@ class FirstEditController:
                     if count > 0:
                         # 找到第一个可见的
                         elem = page.locator(selector).first
-                        is_visible = await elem.is_visible(timeout=1000)
-                        if is_visible:
-                            title_input = elem
+                            is_visible = await elem.is_visible(timeout=1000)
+                            if is_visible:
+                                title_input = elem
                             used_selector = selector
                             logger.debug(f"✓ 使用选择器定位到产品标题: {selector}")
-                            break
+                                break
                 except Exception as e:
                     logger.debug(f"选择器 {selector} 失败: {e}")
                     continue
