@@ -1,15 +1,14 @@
 """
-@PURPOSE: 实现5→20工作流（SOP步骤4-6）：首次编辑5条链接，每条认领4次，生成20条产品
+@PURPOSE: 实现5→20工作流（SOP步骤4-6）：逐个编辑5条链接，每条认领4次，生成20条产品
 @OUTLINE:
-  - async def execute_five_to_twenty_workflow(): 执行完整的5→20流程
-  - async def edit_single_product(): 编辑单个产品（首次编辑）
-  - async def collect_original_titles(): 收集5个产品的原始标题
+  - async def execute_five_to_twenty_workflow(): 执行完整的5→20流程（逐个AI生成模式）
+  - async def edit_single_product(): 编辑单个产品（首次编辑+逐个AI生成）
   - class FiveToTwentyWorkflow: 工作流控制类
 @GOTCHAS:
   - 必须先完成首次编辑，再进行认领
   - 认领操作需要等待UI更新
   - 最终需要验证是否达到20条产品
-  - AI标题生成是可选的，失败时自动降级
+  - 每个产品独立调用AI生成标题，失败时自动降级
 @TECH_DEBT:
   - TODO: 添加更详细的错误恢复机制
   - TODO: 支持自定义认领次数
@@ -73,63 +72,6 @@ class FiveToTwentyWorkflow:
         
         logger.info(f"5→20工作流控制器已初始化（AI标题: {'启用' if use_ai_titles else '禁用'}）")
     
-    async def collect_original_titles(
-        self,
-        page: Page,
-        product_count: int = 5
-    ) -> List[str]:
-        """收集产品的原始标题（SOP步骤4.2准备）.
-
-        逐个打开产品编辑弹窗，收集原始标题，然后关闭弹窗。
-
-        Args:
-            page: Playwright页面对象
-            product_count: 产品数量（默认5）
-
-        Returns:
-            原始标题列表
-
-        Examples:
-            >>> titles = await workflow.collect_original_titles(page, 5)
-            >>> len(titles)
-            5
-        """
-        logger.info("=" * 60)
-        logger.info("收集产品原始标题（准备AI生成）")
-        logger.info("=" * 60)
-
-        original_titles = []
-
-        for i in range(product_count):
-            try:
-                logger.info(f">>> 收集第{i+1}/{product_count}个产品的标题...")
-
-                # 打开编辑弹窗
-                if not await self.miaoshou_ctrl.click_edit_product_by_index(page, i):
-                    logger.error(f"✗ 无法打开第{i+1}个产品的编辑弹窗")
-                    original_titles.append(f"产品{i+1}")  # 占位
-                    continue
-
-                # 获取原始标题
-                title = await self.first_edit_ctrl.get_original_title(page)
-                if title:
-                    original_titles.append(title)
-                    logger.success(f"✓ 第{i+1}个产品标题: {title[:50]}...")
-                else:
-                    logger.warning(f"⚠️ 第{i+1}个产品标题为空，使用占位符")
-                    original_titles.append(f"产品{i+1}")
-
-                # 关闭弹窗
-                await self.first_edit_ctrl.close_dialog(page)
-                await page.wait_for_timeout(500)
-
-            except Exception as e:
-                logger.error(f"收集第{i+1}个产品标题失败: {e}")
-                original_titles.append(f"产品{i+1}")
-
-        logger.info(f"✓ 共收集{len(original_titles)}个原始标题")
-        return original_titles
-
     async def edit_single_product(
         self,
         page: Page,
@@ -302,74 +244,9 @@ class FiveToTwentyWorkflow:
         }
 
         try:
-            # 阶段0：收集原始标题并使用AI生成新标题（如果启用）
-            new_titles = None
-            if self.use_ai_titles:
-                logger.info("\n" + "=" * 60)
-                logger.info("[阶段0/3] AI标题生成（SOP步骤4.2）")
-                logger.info("=" * 60)
-                
-                try:
-                    # 0.1 收集5个产品的原始标题
-                    logger.info(">>> 步骤1/3: 收集5个产品的原始标题...")
-                    original_titles = await self.collect_original_titles(page, 5)
-                    logger.info(f"✓ 已收集{len(original_titles)}个原始标题")
-                    for i, title in enumerate(original_titles):
-                        logger.debug(f"    原标题{i+1}: {title[:50]}...")
-                    
-                    # 0.2 使用AI生成新标题
-                    logger.info("\n>>> 步骤2/3: 调用AI生成5个新标题...")
-                    logger.info(f"    AI提供商: {self.ai_title_generator.provider}")
-                    logger.info(f"    模型: {self.ai_title_generator.model}")
-                    if self.ai_title_generator.base_url:
-                        logger.info(f"    API地址: {self.ai_title_generator.base_url}")
-                    
-                    # 获取第一个产品的型号作为基准
-                    base_model_number = products_data[0].get("model_number", "A0001")
-                    # 提取型号前缀（如 A0001 -> A）
-                    model_prefix = base_model_number.rstrip('0123456789') or 'A'
-                    
-                    logger.info(f"    正在调用AI API...")
-                    import time
-                    start_time = time.time()
-                    
-                    new_titles = await self.ai_title_generator.generate_titles(
-                        original_titles,
-                        model_number="",  # 型号后续会在每个产品编辑时单独添加
-                        use_ai=True
-                    )
-                    
-                    elapsed_time = time.time() - start_time
-                    logger.info(f"✓ AI调用完成，耗时: {elapsed_time:.2f}秒")
-                    logger.info(f"✓ 生成了{len(new_titles)}个新标题")
-                    
-                    # 0.3 为每个标题添加对应的型号
-                    logger.info("\n>>> 步骤3/3: 为标题添加型号后缀...")
-                    for i in range(len(new_titles)):
-                        model_number = products_data[i].get("model_number", f"{model_prefix}{str(i+1).zfill(4)}")
-                        original_title = new_titles[i]
-                        # 如果标题中还没有型号，添加型号
-                        if "型号" not in new_titles[i] and model_number not in new_titles[i]:
-                            new_titles[i] = f"{new_titles[i]} {model_number}型号"
-                        logger.debug(f"    {i+1}. {original_title} -> {new_titles[i]}")
-                    
-                    logger.info("\n生成的新标题：")
-                    for i, title in enumerate(new_titles):
-                        logger.info(f"  {i+1}. {title}")
-                    
-                    logger.success("✓ AI标题生成完成")
-                    
-                except Exception as e:
-                    logger.error(f"❌ AI标题生成失败: {e}")
-                    logger.exception("详细错误信息:")
-                    logger.warning(f"⚠️ 将使用简单标题作为降级方案")
-                    new_titles = None
-            else:
-                logger.info("\n>>> AI标题生成已禁用，将使用简单标题")
-
-            # 阶段1：首次编辑5个产品
+            # 阶段0：首次编辑5个产品（逐个AI生成模式）
             logger.info("\n" + "=" * 60)
-            logger.info("[阶段1/3] 首次编辑5个产品")
+            logger.info("[阶段0/2] 首次编辑5个产品（逐个AI生成）")
             logger.info("=" * 60)
 
             # 注意：假设已经在"全部"tab（在调用此函数前应该已经切换过）
@@ -378,7 +255,8 @@ class FiveToTwentyWorkflow:
             for i in range(5):
                 logger.info(f"\n>>> 编辑第{i+1}/5个产品...")
                 
-                if await self.edit_single_product(page, i, products_data[i], new_titles):
+                # 逐个模式：不再传入new_titles，每个产品内部独立生成
+                if await self.edit_single_product(page, i, products_data[i], None):
                     edited_count += 1
                     logger.success(f"✓ 第{i+1}个产品编辑成功（总计: {edited_count}/5）")
                 else:
@@ -390,15 +268,15 @@ class FiveToTwentyWorkflow:
                 await page.wait_for_timeout(500)
 
             result["edited_count"] = edited_count
-            logger.info(f"\n✓ 阶段1完成：成功编辑{edited_count}/5个产品")
+            logger.info(f"\n✓ 阶段0完成：成功编辑{edited_count}/5个产品")
 
             if edited_count == 0:
                 logger.error("✗ 没有成功编辑任何产品，终止工作流")
                 return result
 
-            # 阶段2：每个产品认领4次
+            # 阶段1：每个产品认领4次
             logger.info("\n" + "=" * 60)
-            logger.info(f"[阶段2/3] 认领产品（每个认领{claim_times}次）")
+            logger.info(f"[阶段1/2] 认领产品（每个认领{claim_times}次）")
             logger.info("=" * 60)
 
             # 切换到"未认领"tab
