@@ -134,7 +134,7 @@ class AITitleGenerator:
         if self.base_url:
             logger.info(f"AI标题生成器初始化: provider={self.provider}, model={self.model}, base_url={self.base_url}")
         else:
-        logger.info(f"AI标题生成器初始化: provider={self.provider}, model={self.model}")
+            logger.info(f"AI标题生成器初始化: provider={self.provider}, model={self.model}")
         
     def _build_prompt(self, original_titles: List[str]) -> str:
         """构建AI提示词.
