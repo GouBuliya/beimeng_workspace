@@ -297,6 +297,7 @@ class CollectionToEditWorkflow:
         """阶段1: Temu采集（SOP步骤1-3）.
         
         执行完整的Temu商品采集流程。
+        注意：此方法需要在新tab中打开Temu前端。
         """
         logger.info("\n" + "▶" * 50)
         logger.info("【阶段1/5】Temu商品采集（SOP步骤1-3）")
@@ -311,42 +312,56 @@ class CollectionToEditWorkflow:
         }
         
         try:
-            # SOP步骤1: 访问Temu店铺
-            logger.info(">>> SOP步骤1: 访问Temu前端店铺...")
-            if not await self.collection_ctrl.visit_store(page):
-                raise RuntimeError("访问Temu店铺失败")
+            # 获取browser context以便打开新tab
+            context = page.context
             
-            logger.success("✓ 成功访问Temu店铺\n")
+            # 打开新tab用于Temu采集
+            logger.info(">>> 打开新tab用于Temu采集...")
+            temu_page = await context.new_page()
             
-            # SOP步骤2-3: 逐个产品搜索和采集
-            for i, product in enumerate(products):
-                logger.info(f">>> 处理产品 {i+1}/{len(products)}: {product.product_name}")
+            try:
+                # SOP步骤1: 访问Temu前端店铺
+                logger.info(">>> SOP步骤1: 访问Temu前端...")
+                temu_url = "https://www.temu.com"
+                await temu_page.goto(temu_url, wait_until="networkidle", timeout=30000)
+                await temu_page.wait_for_timeout(2000)
                 
-                try:
-                    # 步骤2: 搜索商品
-                    if not await self.collection_ctrl.search_products(page, product.product_name):
-                        logger.error(f"✗ 搜索失败: {product.product_name}")
+                logger.success(f"✓ 成功打开Temu前端: {temu_url}\n")
+                
+                # SOP步骤2-3: 逐个产品搜索和采集
+                for i, product in enumerate(products):
+                    logger.info(f">>> 处理产品 {i+1}/{len(products)}: {product.product_name}")
+                    
+                    try:
+                        # 步骤2: 搜索商品
+                        if not await self.collection_ctrl.search_products(temu_page, product.product_name):
+                            logger.error(f"✗ 搜索失败: {product.product_name}")
+                            result["failed_count"] += 1
+                            continue
+                        
+                        # 步骤3: 采集链接
+                        links = await self.collection_ctrl.collect_links(
+                            temu_page,
+                            count=product.collect_count
+                        )
+                        
+                        if len(links) > 0:
+                            result["success_count"] += 1
+                            result["collected_links"].extend([link["url"] for link in links])
+                            logger.success(f"✓ 产品 {i+1} 采集成功：{len(links)} 个链接\n")
+                        else:
+                            result["failed_count"] += 1
+                            logger.error(f"✗ 产品 {i+1} 采集失败：未获取到链接\n")
+                        
+                    except Exception as e:
+                        logger.error(f"✗ 产品 {i+1} 采集异常: {e}\n")
                         result["failed_count"] += 1
-                        continue
-                    
-                    # 步骤3: 采集链接
-                    links = await self.collection_ctrl.collect_links(
-                        page,
-                        count=product.collect_count
-                    )
-                    
-                    if len(links) > 0:
-                        result["success_count"] += 1
-                        result["collected_links"].extend([link["url"] for link in links])
-                        logger.success(f"✓ 产品 {i+1} 采集成功：{len(links)} 个链接\n")
-                    else:
-                        result["failed_count"] += 1
-                        logger.error(f"✗ 产品 {i+1} 采集失败：未获取到链接\n")
-                    
-                except Exception as e:
-                    logger.error(f"✗ 产品 {i+1} 采集异常: {e}\n")
-                    result["failed_count"] += 1
-                    result["errors"].append(f"产品{i+1}({product.product_name}): {e}")
+                        result["errors"].append(f"产品{i+1}({product.product_name}): {e}")
+            
+            finally:
+                # 关闭Temu tab
+                logger.info(">>> 关闭Temu tab...")
+                await temu_page.close()
             
             result["success"] = result["success_count"] > 0
             
@@ -359,6 +374,7 @@ class CollectionToEditWorkflow:
             
         except Exception as e:
             logger.error(f"阶段1失败: {e}")
+            logger.exception("详细错误:")
             result["errors"].append(str(e))
             return result
     
