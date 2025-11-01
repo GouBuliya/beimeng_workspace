@@ -19,6 +19,7 @@
 """
 
 import asyncio
+import random
 from typing import Dict, List, Optional, Tuple
 
 from loguru import logger
@@ -216,10 +217,37 @@ class FiveToTwentyWorkflow:
                 logger.error(f"✗ 库存设置失败")
                 return False
             
-            # 8.5. 上传尺寸图（如果提供了URL）- SOP 4.5
+            # 9. 设置重量（SOP 7.9要求：5000-9999G）
+            logger.info(f"\n>>> 步骤6: 设置重量...")
+            weight = random.randint(5000, 9999)
+            logger.debug(f"    重量: {weight}G")
+            try:
+                if await self.first_edit_ctrl.set_sku_weight(page, weight):
+                    logger.success(f"✓ 重量已设置: {weight}G")
+                else:
+                    logger.warning(f"⚠️  重量设置失败（可能需要在实际环境调试选择器）")
+            except Exception as e:
+                logger.warning(f"⚠️  重量设置异常: {e}")
+            
+            # 10. 设置尺寸（SOP 7.10要求：长>宽>高，50-99cm）
+            logger.info(f"\n>>> 步骤7: 设置尺寸...")
+            # 生成符合要求的尺寸（长>宽>高）
+            length = random.randint(80, 99)
+            width = random.randint(60, length - 10)
+            height = random.randint(50, width - 10)
+            logger.debug(f"    尺寸: 长{length}cm × 宽{width}cm × 高{height}cm")
+            try:
+                if await self.first_edit_ctrl.set_sku_dimensions(page, length, width, height):
+                    logger.success(f"✓ 尺寸已设置: {length}×{width}×{height}cm")
+                else:
+                    logger.warning(f"⚠️  尺寸设置失败（可能需要在实际环境调试选择器）")
+            except Exception as e:
+                logger.warning(f"⚠️  尺寸设置异常: {e}")
+            
+            # 11. 上传尺寸图（如果提供了URL）- SOP 4.5
             size_chart_url = product_data.get("size_chart_url")
             if size_chart_url:
-                logger.info(f"\n>>> 步骤6.5: 上传尺寸图（SOP 4.5）...")
+                logger.info(f"\n>>> 步骤8: 上传尺寸图（SOP 4.5）...")
                 try:
                     if await self.first_edit_ctrl.upload_size_chart(page, size_chart_url):
                         logger.success("✓ 尺寸图上传成功")
@@ -230,10 +258,10 @@ class FiveToTwentyWorkflow:
             else:
                 logger.debug("跳过尺寸图上传（未提供URL）")
 
-            # 8.6. 上传产品视频（如果提供了URL）- SOP 4.5
+            # 12. 上传产品视频（如果提供了URL）- SOP 4.5
             video_url = product_data.get("video_url")
             if video_url:
-                logger.info(f"\n>>> 步骤6.6: 上传产品视频（SOP 4.5）...")
+                logger.info(f"\n>>> 步骤9: 上传产品视频（SOP 4.5）...")
                 try:
                     if await self.first_edit_ctrl.upload_product_video(page, video_url):
                         logger.success("✓ 产品视频上传成功")
@@ -244,13 +272,13 @@ class FiveToTwentyWorkflow:
             else:
                 logger.debug("跳过产品视频上传（未提供URL）")
             
-            # 9. 保存修改
-            logger.info(f"\n>>> 步骤6: 保存修改...")
+            # 13. 保存修改
+            logger.info(f"\n>>> 步骤10: 保存修改...")
             if not await self.first_edit_ctrl.save_changes(page, wait_for_close=False):
                 logger.error(f"✗ 保存失败")
                 return False
             
-            # 10. 关闭弹窗
+            # 14. 关闭弹窗
             await self.first_edit_ctrl.close_dialog(page)
             await page.wait_for_timeout(500)
 
