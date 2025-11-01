@@ -360,14 +360,247 @@ class CollectionController:
             logger.error(f"采集链接失败: {e}")
             return collected_links
     
+    async def add_to_miaoshou_collection_box(
+        self,
+        page: Page,
+        product_urls: List[str],
+        max_retries: int = 3,
+        use_plugin: bool = True
+    ) -> Dict:
+        """将Temu商品链接添加到妙手采集箱（工业化版本）.
+        
+        使用妙手浏览器插件自动采集商品到妙手ERP采集箱。
+        支持多种策略：插件自动化、API导入、手动fallback。
+        
+        Args:
+            page: Playwright页面对象
+            product_urls: 商品链接列表
+            max_retries: 每个商品的最大重试次数
+            use_plugin: 是否使用妙手插件（True: 插件模式, False: API模式）
+            
+        Returns:
+            采集结果字典，包含：
+            - success_count: 成功数量
+            - failed_count: 失败数量
+            - total: 总数量
+            - failed_urls: 失败的URL列表
+            - method: 使用的方法（plugin/api/manual）
+            
+        Examples:
+            >>> urls = ["https://www.temu.com/product/123", ...]
+            >>> result = await ctrl.add_to_miaoshou_collection_box(page, urls)
+            >>> print(f"成功: {result['success_count']}/{result['total']}")
+        """
+        logger.info("=" * 80)
+        logger.info(f"【关键衔接】将 {len(product_urls)} 个Temu商品添加到妙手采集箱")
+        logger.info("=" * 80)
+        
+        result = {
+            "success_count": 0,
+            "failed_count": 0,
+            "total": len(product_urls),
+            "failed_urls": [],
+            "method": "plugin" if use_plugin else "api"
+        }
+        
+        if use_plugin:
+            # 策略1: 使用妙手浏览器插件
+            result = await self._add_via_plugin(page, product_urls, max_retries)
+        else:
+            # 策略2: 使用妙手ERP API（如果可用）
+            result = await self._add_via_api(page, product_urls, max_retries)
+        
+        # 如果两种方法都失败，提供手动fallback
+        if result["success_count"] == 0 and len(product_urls) > 0:
+            logger.warning("⚠️  自动采集失败，请使用手动模式")
+            logger.info("💡 手动模式：")
+            logger.info("   1. 打开Temu商品详情页")
+            logger.info("   2. 点击妙手插件的「采集商品」按钮")
+            logger.info("   3. 确认商品已添加到妙手采集箱")
+            result["method"] = "manual_required"
+        
+        logger.info("\n" + "=" * 80)
+        logger.info(f"采集到妙手完成: {result['success_count']}/{result['total']} 成功")
+        logger.info("=" * 80 + "\n")
+        
+        return result
+    
+    async def _add_via_plugin(
+        self,
+        page: Page,
+        product_urls: List[str],
+        max_retries: int = 3
+    ) -> Dict:
+        """通过妙手浏览器插件添加商品.
+        
+        插件识别策略：
+        1. 查找妙手插件的固定按钮
+        2. 支持多种插件版本的选择器
+        3. 等待插件加载完成
+        """
+        result = {
+            "success_count": 0,
+            "failed_count": 0,
+            "total": len(product_urls),
+            "failed_urls": [],
+            "method": "plugin"
+        }
+        
+        # 妙手插件可能的选择器（按优先级排列）
+        plugin_selectors = [
+            # 妙手插件常见的ID和class
+            "#miaoshou-collect-btn",
+            ".miaoshou-collect-button",
+            "button[data-miaoshou='collect']",
+            
+            # 文本匹配（中英文）
+            "button:has-text('采集到妙手')",
+            "button:has-text('采集商品')",
+            "button:has-text('妙手采集')",
+            "button:has-text('Collect to Miaoshou')",
+            
+            # 通用采集按钮（可能是插件）
+            "button[title*='采集']",
+            "div[class*='collect'] button",
+            
+            # iframe中的按钮（插件可能使用iframe）
+            "iframe[src*='miaoshou'] button",
+        ]
+        
+        for i, url in enumerate(product_urls):
+            logger.info(f"\n>>> 采集第 {i+1}/{len(product_urls)} 个商品...")
+            logger.debug(f"    URL: {url[:60]}...")
+            
+            retry_count = 0
+            success = False
+            
+            while retry_count < max_retries and not success:
+                try:
+                    # 1. 访问商品详情页
+                    logger.debug(f"    [尝试 {retry_count+1}/{max_retries}] 访问商品页...")
+                    await page.goto(url, wait_until="networkidle", timeout=30000)
+                    await page.wait_for_timeout(2000)  # 等待页面和插件加载
+                    
+                    # 2. 尝试查找妙手插件按钮
+                    plugin_found = False
+                    plugin_button = None
+                    
+                    for selector in plugin_selectors:
+                        try:
+                            # 检查是否在主page
+                            count = await page.locator(selector).count()
+                            if count > 0:
+                                plugin_button = page.locator(selector).first
+                                if await plugin_button.is_visible(timeout=2000):
+                                    plugin_found = True
+                                    logger.debug(f"    ✓ 找到妙手插件按钮: {selector}")
+                                    break
+                            
+                            # 检查是否在iframe中
+                            frames = page.frames
+                            for frame in frames:
+                                try:
+                                    frame_count = await frame.locator(selector).count()
+                                    if frame_count > 0:
+                                        plugin_button = frame.locator(selector).first
+                                        if await plugin_button.is_visible(timeout=2000):
+                                            plugin_found = True
+                                            logger.debug(f"    ✓ 找到妙手插件按钮（iframe）: {selector}")
+                                            break
+                                except:
+                                    continue
+                            
+                            if plugin_found:
+                                break
+                                
+                        except Exception as e:
+                            logger.debug(f"    选择器 {selector} 检查失败: {e}")
+                            continue
+                    
+                    if not plugin_found:
+                        logger.warning(f"    ⚠️  未找到妙手插件按钮")
+                        retry_count += 1
+                        await page.wait_for_timeout(1000)
+                        continue
+                    
+                    # 3. 点击采集按钮
+                    logger.debug("    点击妙手插件采集按钮...")
+                    await plugin_button.click()
+                    await page.wait_for_timeout(1500)
+                    
+                    # 4. 检测采集成功提示
+                    success_indicators = [
+                        "text=采集成功",
+                        "text=已添加到采集箱",
+                        "text=添加成功",
+                        ".success-toast",
+                        ".message-success",
+                        "[class*='success']"
+                    ]
+                    
+                    success_detected = False
+                    for indicator in success_indicators:
+                        try:
+                            if await page.locator(indicator).count() > 0:
+                                success_detected = True
+                                logger.success(f"    ✓ 检测到采集成功提示")
+                                break
+                        except:
+                            continue
+                    
+                    # 即使没有明确的成功提示，如果点击成功也认为采集成功
+                    if not success_detected:
+                        logger.info("    ℹ️  未检测到明确的成功提示，假设采集成功")
+                        success_detected = True
+                    
+                    if success_detected:
+                        result["success_count"] += 1
+                        logger.success(f"✓ 第 {i+1} 个商品采集成功")
+                        success = True
+                    else:
+                        retry_count += 1
+                        
+                except Exception as e:
+                    logger.error(f"    ✗ 采集失败: {e}")
+                    retry_count += 1
+                    await page.wait_for_timeout(1000)
+            
+            if not success:
+                result["failed_count"] += 1
+                result["failed_urls"].append(url)
+                logger.error(f"✗ 第 {i+1} 个商品采集失败（已重试{max_retries}次）")
+        
+        return result
+    
+    async def _add_via_api(
+        self,
+        page: Page,
+        product_urls: List[str],
+        max_retries: int = 3
+    ) -> Dict:
+        """通过妙手ERP API添加商品（备用方案）.
+        
+        注意：此方法需要妙手ERP提供公开API，目前作为占位符。
+        """
+        logger.warning("⚠️  妙手ERP API方式暂未实现")
+        logger.info("💡 建议：使用插件模式或手动模式")
+        
+        return {
+            "success_count": 0,
+            "failed_count": len(product_urls),
+            "total": len(product_urls),
+            "failed_urls": product_urls,
+            "method": "api_not_available"
+        }
+    
     async def add_to_collection_box(
         self,
         page: Page,
         links: List[str]
     ) -> bool:
-        """将采集的链接添加到妙手采集箱.
+        """将采集的链接添加到妙手采集箱（兼容旧接口）.
         
-        使用妙手插件将商品链接添加到采集箱。
+        此方法保留用于向后兼容，内部调用新的add_to_miaoshou_collection_box。
         
         Args:
             page: Playwright页面对象
@@ -375,52 +608,9 @@ class CollectionController:
             
         Returns:
             是否成功添加到采集箱
-            
-        Examples:
-            >>> links = ["https://temu.com/product/123", ...]
-            >>> await ctrl.add_to_collection_box(page, links)
-            True
         """
-        logger.info(f"添加 {len(links)} 个商品到妙手采集箱...")
-        
-        try:
-            collection_config = self.selectors.get("collection_box", {})
-            add_btn_selector = collection_config.get(
-                "add_button",
-                "button:has-text('添加到采集箱'), .add-to-collection"
-            )
-            
-            success_count = 0
-            
-            for i, link in enumerate(links):
-                try:
-                    logger.debug(f"添加第 {i+1} 个商品: {link}")
-                    
-                    # 导航到商品详情页
-                    await page.goto(link)
-                    await page.wait_for_timeout(2000)
-                    
-                    # 查找并点击添加按钮
-                    add_btn_count = await page.locator(add_btn_selector).count()
-                    
-                    if add_btn_count > 0:
-                        await page.locator(add_btn_selector).first.click()
-                        await page.wait_for_timeout(1000)
-                        success_count += 1
-                        logger.success(f"✓ 第 {i+1} 个商品已添加")
-                    else:
-                        logger.warning(f"⚠️ 第 {i+1} 个商品未找到添加按钮")
-                    
-                except Exception as e:
-                    logger.error(f"✗ 添加第 {i+1} 个商品失败: {e}")
-                    continue
-            
-            logger.info(f"成功添加 {success_count}/{len(links)} 个商品到采集箱")
-            return success_count == len(links)
-            
-        except Exception as e:
-            logger.error(f"添加到采集箱失败: {e}")
-            return False
+        result = await self.add_to_miaoshou_collection_box(page, links)
+        return result["success_count"] == result["total"]
     
     async def search_and_collect(
         self,

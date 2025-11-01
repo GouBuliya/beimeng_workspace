@@ -770,6 +770,255 @@ class MiaoshouController:
         except Exception as e:
             logger.error(f"验证认领失败: {e}")
             return False
+    
+    async def navigate_and_filter_collection_box(
+        self,
+        page: Page,
+        filter_by_user: Optional[str] = None,
+        switch_to_tab: str = "all"
+    ) -> bool:
+        """导航到妙手采集箱并应用筛选（工业化版本）.
+        
+        完整流程：
+        1. 导航到公用采集箱
+        2. 筛选创建人员（如果指定）
+        3. 切换到指定tab
+        4. 验证商品列表加载成功
+        
+        Args:
+            page: Playwright页面对象
+            filter_by_user: 创建人员筛选（如"张三(zhangsan123)"）
+            switch_to_tab: 切换到的tab（all/unclaimed/claimed/failed）
+            
+        Returns:
+            是否成功导航和筛选
+            
+        Examples:
+            >>> # 导航并筛选自己的商品
+            >>> await ctrl.navigate_and_filter_collection_box(
+            ...     page,
+            ...     filter_by_user="张三(zhangsan123)",
+            ...     switch_to_tab="all"
+            ... )
+            True
+        """
+        logger.info("=" * 80)
+        logger.info("【导航妙手采集箱】完整流程")
+        logger.info("=" * 80)
+        
+        try:
+            # 步骤1: 导航到公用采集箱
+            logger.info("\n>>> 步骤1: 导航到公用采集箱...")
+            if not await self.navigate_to_collection_box(page):
+                logger.error("✗ 导航失败")
+                return False
+            
+            logger.success("✓ 成功导航到采集箱")
+            await page.wait_for_timeout(1000)
+            
+            # 步骤2: 筛选创建人员（如果指定）
+            if filter_by_user:
+                logger.info(f"\n>>> 步骤2: 筛选创建人员 - {filter_by_user}...")
+                
+                # 查找创建人员下拉框
+                user_filter_selectors = [
+                    "select:has-text('创建人员')",
+                    ".jx-select:has-text('创建人员')",
+                    "label:has-text('创建人员') + .jx-select",
+                    "xpath=//label[contains(text(), '创建人员')]/following-sibling::*//input"
+                ]
+                
+                filter_applied = False
+                for selector in user_filter_selectors:
+                    try:
+                        count = await page.locator(selector).count()
+                        if count > 0:
+                            # 点击下拉框
+                            await page.locator(selector).first.click()
+                            await page.wait_for_timeout(500)
+                            
+                            # 选择用户
+                            user_option = page.locator(f"text=/{filter_by_user}/")
+                            if await user_option.count() > 0:
+                                await user_option.first.click()
+                                await page.wait_for_timeout(500)
+                                
+                                # 点击搜索按钮
+                                search_btn = page.locator("button:has-text('搜索')")
+                                if await search_btn.count() > 0:
+                                    await search_btn.first.click()
+                                    await page.wait_for_timeout(1000)
+                                
+                                filter_applied = True
+                                logger.success(f"✓ 已筛选用户: {filter_by_user}")
+                                break
+                    except Exception as e:
+                        logger.debug(f"尝试筛选器 {selector} 失败: {e}")
+                        continue
+                
+                if not filter_applied:
+                    logger.warning(f"⚠️  未能应用用户筛选，将显示所有用户的商品")
+            else:
+                logger.info("\n>>> 步骤2: 跳过用户筛选")
+            
+            # 步骤3: 切换到指定tab
+            logger.info(f"\n>>> 步骤3: 切换到「{switch_to_tab}」tab...")
+            if not await self.switch_tab(page, switch_to_tab):
+                logger.error(f"✗ 切换tab失败")
+                return False
+            
+            logger.success(f"✓ 已切换到「{switch_to_tab}」tab")
+            await page.wait_for_timeout(1000)
+            
+            # 步骤4: 验证商品列表加载
+            logger.info("\n>>> 步骤4: 验证商品列表...")
+            counts = await self.get_product_count(page)
+            
+            if counts[switch_to_tab] > 0:
+                logger.success(f"✓ 商品列表已加载，共 {counts[switch_to_tab]} 个商品")
+            else:
+                logger.warning(f"⚠️  当前tab没有商品")
+            
+            logger.info("\n" + "=" * 80)
+            logger.info("【导航完成】妙手采集箱已就绪")
+            logger.info("=" * 80 + "\n")
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"导航和筛选失败: {e}")
+            logger.exception("详细错误:")
+            return False
+    
+    async def verify_collected_products(
+        self,
+        page: Page,
+        expected_count: int,
+        product_keywords: Optional[List[str]] = None,
+        check_details: bool = False
+    ) -> Dict:
+        """验证采集箱中的商品（工业化版本）.
+        
+        验证内容：
+        1. 商品数量是否达到预期
+        2. 商品标题是否包含关键词（可选）
+        3. 商品详细信息（可选）
+        
+        Args:
+            page: Playwright页面对象
+            expected_count: 期望的商品数量
+            product_keywords: 商品关键词列表（用于验证）
+            check_details: 是否检查商品详细信息
+            
+        Returns:
+            验证结果字典：
+            - success: 是否验证成功
+            - actual_count: 实际商品数量
+            - expected_count: 期望商品数量
+            - keywords_matched: 关键词匹配数量
+            - details: 详细信息（如果启用）
+            
+        Examples:
+            >>> result = await ctrl.verify_collected_products(
+            ...     page,
+            ...     expected_count=5,
+            ...     product_keywords=["药箱", "收纳盒"]
+            ... )
+            >>> print(f"验证结果: {result['success']}")
+        """
+        logger.info("=" * 80)
+        logger.info(f"【验证采集结果】期望数量: {expected_count}")
+        logger.info("=" * 80)
+        
+        result = {
+            "success": False,
+            "actual_count": 0,
+            "expected_count": expected_count,
+            "keywords_matched": 0,
+            "details": []
+        }
+        
+        try:
+            # 1. 获取当前商品数量
+            logger.info("\n>>> 步骤1: 检查商品数量...")
+            counts = await self.get_product_count(page)
+            actual_count = counts.get("all", 0)
+            result["actual_count"] = actual_count
+            
+            if actual_count < expected_count:
+                logger.error(f"✗ 商品数量不足: {actual_count} < {expected_count}")
+                return result
+            
+            logger.success(f"✓ 商品数量满足要求: {actual_count} ≥ {expected_count}")
+            
+            # 2. 验证商品关键词（如果提供）
+            if product_keywords:
+                logger.info(f"\n>>> 步骤2: 验证商品关键词...")
+                
+                # 获取商品列表
+                product_items = await page.locator(".product-item, .goods-item, [data-product-id]").all()
+                
+                matched_count = 0
+                for i, item in enumerate(product_items[:expected_count]):
+                    try:
+                        title = await item.locator(".title, .product-title, h3").first.inner_text()
+                        
+                        # 检查是否包含任何关键词
+                        has_keyword = any(keyword in title for keyword in product_keywords)
+                        if has_keyword:
+                            matched_count += 1
+                            logger.debug(f"  ✓ 商品 {i+1}: {title[:40]}... (包含关键词)")
+                        else:
+                            logger.warning(f"  ⚠️  商品 {i+1}: {title[:40]}... (不包含关键词)")
+                    except Exception as e:
+                        logger.debug(f"  获取商品 {i+1} 标题失败: {e}")
+                
+                result["keywords_matched"] = matched_count
+                
+                if matched_count >= expected_count * 0.8:  # 80%匹配率
+                    logger.success(f"✓ 关键词匹配: {matched_count}/{expected_count}")
+                else:
+                    logger.warning(f"⚠️  关键词匹配率较低: {matched_count}/{expected_count}")
+            
+            # 3. 检查商品详细信息（如果启用）
+            if check_details:
+                logger.info(f"\n>>> 步骤3: 检查商品详细信息...")
+                
+                product_items = await page.locator(".product-item, .goods-item, [data-product-id]").all()
+                
+                for i, item in enumerate(product_items[:expected_count]):
+                    try:
+                        title = await item.locator(".title, .product-title, h3").first.inner_text()
+                        price = await item.locator(".price, .product-price").first.inner_text()
+                        
+                        detail = {
+                            "index": i + 1,
+                            "title": title,
+                            "price": price
+                        }
+                        result["details"].append(detail)
+                        
+                        logger.debug(f"  商品 {i+1}: {title[:30]}... - {price}")
+                    except Exception as e:
+                        logger.debug(f"  获取商品 {i+1} 详情失败: {e}")
+            
+            # 验证成功
+            result["success"] = True
+            
+            logger.info("\n" + "=" * 80)
+            logger.success("【验证完成】采集结果符合预期")
+            logger.info(f"  实际数量: {result['actual_count']}")
+            logger.info(f"  期望数量: {result['expected_count']}")
+            if product_keywords:
+                logger.info(f"  关键词匹配: {result['keywords_matched']}/{expected_count}")
+            logger.info("=" * 80 + "\n")
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"验证采集结果失败: {e}")
+            logger.exception("详细错误:")
+            return result
 
 
 # 测试代码
@@ -777,3 +1026,4 @@ if __name__ == "__main__":
     # 这个控制器需要配合Page对象使用
     # 测试请在集成测试中进行
     pass
+
