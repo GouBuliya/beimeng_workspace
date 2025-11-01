@@ -130,6 +130,20 @@ class FiveToTwentyWorkflow:
                 logger.warning(f"⚠️ 未能读取原始标题，使用关键词作为原标题")
                 original_title = product_data.get("keyword", "商品")
 
+            # 2.5. 核对商品类目（SOP 4.3）
+            logger.info(f"\n>>> 步骤1.5: 核对商品类目（SOP 4.3）...")
+            is_valid_category, category_name = await self.first_edit_ctrl.check_category(page)
+            
+            if not is_valid_category:
+                logger.error(f"❌ 类目不合规: {category_name}")
+                logger.warning(f"⚠️  建议：跳过此产品或人工确认后继续")
+                # 注意：这里不强制返回False，而是记录警告，由用户决定是否继续
+                # 如果需要强制跳过，取消下面的注释
+                # await self.first_edit_ctrl.close_dialog(page)
+                # return False
+            else:
+                logger.success(f"✓ 类目合规: {category_name}")
+
             # 3. 使用AI生成新标题（独立对话）
             model_number = product_data.get("model_number", f"A{str(product_index+1).zfill(4)}")
             

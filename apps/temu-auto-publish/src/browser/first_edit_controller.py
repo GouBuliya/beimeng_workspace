@@ -2,22 +2,31 @@
 @PURPOSE: 首次编辑控制器，负责产品的首次编辑操作（SOP步骤4）
 @OUTLINE:
   - class FirstEditController: 首次编辑控制器主类
-  - async def edit_title(): 编辑产品标题（步骤4.1）
-  - async def modify_category(): 修改产品类目（步骤4.2）
-  - async def edit_images(): 处理产品图片（步骤4.3）
-  - async def set_price(): 设置价格（步骤4.4）
-  - async def set_stock(): 设置库存（步骤4.5）
-  - async def set_dimensions(): 设置重量和尺寸（步骤4.6-4.7）
+  - async def check_category(): 核对商品类目合规性（步骤4.3）
+  - async def edit_title(): 编辑产品标题（步骤4.2）
+  - async def modify_category(): 修改产品类目
+  - async def edit_images(): 处理产品图片（步骤4.4）
+  - async def upload_size_chart(): 上传尺寸图（步骤4.5）
+  - async def upload_product_video(): 上传产品视频（步骤4.5）
+  - async def set_price(): 设置价格
+  - async def set_stock(): 设置库存
+  - async def set_dimensions(): 设置重量和尺寸
   - async def save_changes(): 保存修改
 @GOTCHAS:
   - 首次编辑是一个弹窗对话框，需要等待加载
   - 使用aria-ref定位元素
   - 详细描述使用iframe富文本编辑器
   - 保存后弹窗会关闭
+  - 类目核对：药品、医疗、电子等类目不支持
+  - 视频/尺寸图上传需要实际环境调试选择器
 @DEPENDENCIES:
   - 内部: browser_manager
   - 外部: playwright, loguru
 @RELATED: miaoshou_controller.py, batch_edit_controller.py
+@CHANGELOG:
+  - 2025-11-01: 新增check_category()核对类目合规性（SOP 4.3）
+  - 2025-11-01: 新增upload_size_chart()上传尺寸图（SOP 4.5）
+  - 2025-11-01: 新增upload_product_video()上传产品视频（SOP 4.5）
 """
 
 import asyncio
@@ -96,6 +105,81 @@ class FirstEditController:
         except Exception as e:
             logger.error(f"等待编辑弹窗失败: {e}")
             return False
+
+    async def check_category(self, page: Page) -> Tuple[bool, str]:
+        """核对商品类目是否合规（SOP步骤4.3）.
+
+        检查商品类目是否属于不支持的类目（药品、电子等）。
+        
+        Args:
+            page: Playwright页面对象
+
+        Returns:
+            (是否合规, 类目名称)
+            - True: 类目合规，可以继续
+            - False: 类目不合规，需要跳过或人工确认
+
+        Examples:
+            >>> is_valid, category = await ctrl.check_category(page)
+            >>> if not is_valid:
+            >>>     logger.warning(f"类目不合规: {category}")
+        """
+        logger.info("SOP 4.3: 核对商品类目...")
+        
+        # 不支持的类目列表（根据SOP文档）
+        UNSUPPORTED_CATEGORIES = [
+            "药品", "医疗器械", "保健品",
+            "电子产品", "数码产品",
+            "食品", "化妆品",
+            # 可以根据实际情况继续添加
+        ]
+        
+        try:
+            # 等待类目信息加载
+            await page.wait_for_timeout(500)
+            
+            # 尝试多种方式读取类目信息
+            category_selectors = [
+                # 方法1: 通过"类目"标签定位
+                "xpath=//label[contains(text(), '类目')]/following-sibling::*/descendant::input[1]",
+                "xpath=//label[contains(text(), '类目')]/following-sibling::*//div[contains(@class, 'jx-input')]",
+                
+                # 方法2: 通过类目选择器
+                ".jx-overlay-dialog .jx-select input[placeholder*='类目']",
+                ".jx-overlay-dialog input[placeholder*='选择类目']",
+            ]
+            
+            category_text = ""
+            for selector in category_selectors:
+                try:
+                    elem = page.locator(selector).first
+                    if await elem.is_visible(timeout=1000):
+                        # 尝试获取value或innerText
+                        category_text = await elem.input_value() or await elem.inner_text()
+                        if category_text:
+                            logger.debug(f"找到类目信息: {category_text} (选择器: {selector})")
+                            break
+                except Exception as e:
+                    logger.debug(f"尝试选择器 {selector} 失败: {e}")
+                    continue
+            
+            if not category_text:
+                logger.warning("⚠️  未能读取类目信息，默认认为合规（建议人工确认）")
+                return (True, "未知类目")
+            
+            # 检查是否属于不支持的类目
+            for unsupported in UNSUPPORTED_CATEGORIES:
+                if unsupported in category_text:
+                    logger.warning(f"❌ 类目不合规: {category_text} (包含: {unsupported})")
+                    return (False, category_text)
+            
+            logger.success(f"✓ 类目合规: {category_text}")
+            return (True, category_text)
+            
+        except Exception as e:
+            logger.error(f"核对类目失败: {e}")
+            logger.warning("⚠️  默认认为类目合规（建议人工确认）")
+            return (True, "检查失败")
 
     async def get_original_title(self, page: Page) -> str:
         """获取产品的原始标题（SOP步骤4.2准备）.
@@ -963,6 +1047,242 @@ class FirstEditController:
 
         except Exception as e:
             logger.error(f"保存修改失败: {e}")
+            return False
+
+    async def upload_size_chart(
+        self,
+        page: Page,
+        image_url: str
+    ) -> bool:
+        """上传尺寸图（SOP步骤4.5 - 补充尺寸图）.
+
+        使用网络图片URL上传尺寸图到产品详情。
+        
+        Args:
+            page: Playwright页面对象
+            image_url: 网络图片URL
+
+        Returns:
+            是否上传成功
+
+        Examples:
+            >>> await ctrl.upload_size_chart(page, "https://example.com/size.jpg")
+            True
+        """
+        logger.info(f"SOP 4.5: 上传尺寸图 -> {image_url[:50]}...")
+        
+        try:
+            # 等待页面稳定
+            await page.wait_for_timeout(500)
+            
+            # 尝试找到"使用网络图片"按钮（需要在详情图片区域）
+            network_image_selectors = [
+                "button:has-text('使用网络图片')",
+                "button:has-text('网络图片')",
+                ".jx-button:has-text('使用网络图片')",
+                "xpath=//button[contains(text(), '使用网络图片')]",
+            ]
+            
+            upload_btn = None
+            for selector in network_image_selectors:
+                try:
+                    count = await page.locator(selector).count()
+                    if count > 0:
+                        upload_btn = page.locator(selector).first
+                        if await upload_btn.is_visible(timeout=1000):
+                            logger.debug(f"找到「使用网络图片」按钮: {selector}")
+                            break
+                except Exception as e:
+                    logger.debug(f"尝试选择器 {selector} 失败: {e}")
+                    continue
+            
+            if not upload_btn:
+                logger.warning("⚠️  未找到「使用网络图片」按钮，尺寸图上传跳过")
+                return False
+            
+            # 点击"使用网络图片"
+            await upload_btn.click()
+            await page.wait_for_timeout(500)
+            
+            # 查找URL输入框
+            url_input_selectors = [
+                "input[placeholder*='图片']",
+                "input[placeholder*='URL']",
+                "input[placeholder*='网址']",
+                ".jx-input__inner",
+            ]
+            
+            url_input = None
+            for selector in url_input_selectors:
+                try:
+                    elem = page.locator(selector).last  # 通常是最后一个弹出的输入框
+                    if await elem.is_visible(timeout=1000):
+                        url_input = elem
+                        logger.debug(f"找到URL输入框: {selector}")
+                        break
+                except Exception:
+                    continue
+            
+            if not url_input:
+                logger.error("未找到URL输入框")
+                return False
+            
+            # 输入图片URL
+            await url_input.fill(image_url)
+            await page.wait_for_timeout(300)
+            
+            # 点击确定/确认按钮
+            confirm_btn_selectors = [
+                "button:has-text('确定')",
+                "button:has-text('确认')",
+                ".jx-button--primary:has-text('确')",
+            ]
+            
+            for selector in confirm_btn_selectors:
+                try:
+                    btn = page.locator(selector).last
+                    if await btn.is_visible(timeout=1000):
+                        await btn.click()
+                        logger.success(f"✓ 尺寸图已上传: {image_url[:50]}...")
+                        await page.wait_for_timeout(500)
+                        return True
+                except Exception:
+                    continue
+            
+            logger.warning("⚠️  未找到确认按钮，尺寸图可能未保存")
+            return False
+            
+        except Exception as e:
+            logger.error(f"上传尺寸图失败: {e}")
+            return False
+
+    async def upload_product_video(
+        self,
+        page: Page,
+        video_url: str
+    ) -> bool:
+        """上传产品视频（SOP步骤4.5 - 补充产品视频）.
+
+        使用网络视频URL上传产品演示视频。
+        
+        Args:
+            page: Playwright页面对象
+            video_url: 网络视频URL（支持MP4等格式）
+
+        Returns:
+            是否上传成功
+
+        Examples:
+            >>> await ctrl.upload_product_video(page, "https://example.com/video.mp4")
+            True
+        """
+        logger.info(f"SOP 4.5: 上传产品视频 -> {video_url[:50]}...")
+        
+        try:
+            # 等待页面稳定
+            await page.wait_for_timeout(500)
+            
+            # 查找视频上传区域（通常在详情描述tab）
+            # 可能需要先切换到"产品视频"或"详情"tab
+            video_tab_selectors = [
+                "text=产品视频",
+                "text=视频",
+                ".jx-tabs__item:has-text('视频')",
+            ]
+            
+            for selector in video_tab_selectors:
+                try:
+                    tab = page.locator(selector).first
+                    if await tab.is_visible(timeout=1000):
+                        await tab.click()
+                        await page.wait_for_timeout(500)
+                        logger.debug(f"已切换到视频tab: {selector}")
+                        break
+                except Exception:
+                    continue
+            
+            # 查找"使用网络视频"或类似按钮
+            network_video_selectors = [
+                "button:has-text('使用网络视频')",
+                "button:has-text('网络视频')",
+                "button:has-text('添加视频')",
+                ".jx-button:has-text('视频')",
+                "xpath=//button[contains(text(), '网络') and contains(text(), '视频')]",
+            ]
+            
+            upload_btn = None
+            for selector in network_video_selectors:
+                try:
+                    count = await page.locator(selector).count()
+                    if count > 0:
+                        upload_btn = page.locator(selector).first
+                        if await upload_btn.is_visible(timeout=1000):
+                            logger.debug(f"找到视频上传按钮: {selector}")
+                            break
+                except Exception as e:
+                    logger.debug(f"尝试选择器 {selector} 失败: {e}")
+                    continue
+            
+            if not upload_btn:
+                logger.warning("⚠️  未找到视频上传按钮，视频上传跳过")
+                logger.info("💡 提示：视频上传功能可能需要在实际环境中调试选择器")
+                return False
+            
+            # 点击上传按钮
+            await upload_btn.click()
+            await page.wait_for_timeout(500)
+            
+            # 查找URL输入框
+            url_input_selectors = [
+                "input[placeholder*='视频']",
+                "input[placeholder*='URL']",
+                "input[placeholder*='网址']",
+                ".jx-input__inner",
+            ]
+            
+            url_input = None
+            for selector in url_input_selectors:
+                try:
+                    elem = page.locator(selector).last
+                    if await elem.is_visible(timeout=1000):
+                        url_input = elem
+                        logger.debug(f"找到视频URL输入框: {selector}")
+                        break
+                except Exception:
+                    continue
+            
+            if not url_input:
+                logger.error("未找到视频URL输入框")
+                return False
+            
+            # 输入视频URL
+            await url_input.fill(video_url)
+            await page.wait_for_timeout(500)
+            
+            # 点击确定/确认按钮
+            confirm_btn_selectors = [
+                "button:has-text('确定')",
+                "button:has-text('确认')",
+                ".jx-button--primary:has-text('确')",
+            ]
+            
+            for selector in confirm_btn_selectors:
+                try:
+                    btn = page.locator(selector).last
+                    if await btn.is_visible(timeout=1000):
+                        await btn.click()
+                        logger.success(f"✓ 产品视频已上传: {video_url[:50]}...")
+                        await page.wait_for_timeout(1000)
+                        return True
+                except Exception:
+                    continue
+            
+            logger.warning("⚠️  未找到确认按钮，视频可能未保存")
+            return False
+            
+        except Exception as e:
+            logger.error(f"上传产品视频失败: {e}")
+            logger.info("💡 提示：视频上传功能可能需要在实际环境中调试")
             return False
 
     async def close_dialog(self, page: Page) -> bool:
