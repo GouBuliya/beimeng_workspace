@@ -79,12 +79,15 @@ class FiveToTwentyWorkflow:
         product_data: Dict,
         new_titles: Optional[List[str]] = None
     ) -> bool:
-        """编辑单个产品（首次编辑）.
+        """编辑单个产品（首次编辑+逐个AI生成）.
 
-        执行SOP步骤4的首次编辑：
-        - 修改标题（AI生成+型号 或 简单生成）
-        - 设置价格
-        - 设置库存
+        执行SOP步骤4的首次编辑（逐个AI生成模式）：
+        1. 点击编辑按钮
+        2. 读取原始标题
+        3. 调用AI生成新标题（独立对话）
+        4. 填写新标题
+        5. 设置价格、库存
+        6. 保存并关闭
 
         Args:
             page: Playwright页面对象
@@ -94,7 +97,7 @@ class FiveToTwentyWorkflow:
                 - model_number: 型号（如A0001）
                 - cost: 成本价
                 - stock: 库存
-            new_titles: AI生成的新标题列表（可选，如果提供则使用对应的标题）
+            new_titles: 已弃用参数（为保持兼容性保留，逐个模式下不使用）
 
         Returns:
             是否编辑成功
@@ -109,7 +112,7 @@ class FiveToTwentyWorkflow:
             True
         """
         logger.info(f"=" * 60)
-        logger.info(f"开始首次编辑第{product_index+1}个产品")
+        logger.info(f"开始首次编辑第{product_index+1}个产品（逐个AI生成模式）")
         logger.info(f"=" * 60)
 
         try:
@@ -118,21 +121,51 @@ class FiveToTwentyWorkflow:
                 logger.error(f"✗ 无法打开第{product_index+1}个产品的编辑弹窗")
                 return False
 
-            # 2. 生成/使用标题
-            keyword = product_data.get("keyword", "商品")
+            # 2. 读取原始标题
+            logger.info(f">>> 步骤1: 读取原始标题...")
+            original_title = await self.first_edit_ctrl.get_original_title(page)
+            if original_title:
+                logger.success(f"✓ 原始标题: {original_title[:60]}...")
+            else:
+                logger.warning(f"⚠️ 未能读取原始标题，使用关键词作为原标题")
+                original_title = product_data.get("keyword", "商品")
+
+            # 3. 使用AI生成新标题（独立对话）
             model_number = product_data.get("model_number", f"A{str(product_index+1).zfill(4)}")
             
-            if new_titles and product_index < len(new_titles):
-                # 使用AI生成的标题
-                title = new_titles[product_index]
-                logger.info(f"使用AI生成的标题: {title}")
+            if self.use_ai_titles:
+                logger.info(f"\n>>> 步骤2: 调用AI生成新标题（独立对话）...")
+                logger.debug(f"    AI提供商: {self.ai_title_generator.provider}")
+                logger.debug(f"    模型: {self.ai_title_generator.model}")
+                if self.ai_title_generator.base_url:
+                    logger.debug(f"    API地址: {self.ai_title_generator.base_url}")
+                
+                try:
+                    import time
+                    start_time = time.time()
+                    
+                    # 调用AI生成单个标题
+                    title = await self.ai_title_generator.generate_single_title(
+                        original_title,
+                        model_number=f"{model_number}型号",
+                        use_ai=True
+                    )
+                    
+                    elapsed_time = time.time() - start_time
+                    logger.success(f"✓ AI生成完成，耗时: {elapsed_time:.2f}秒")
+                    logger.info(f"✓ 新标题: {title}")
+                    
+                except Exception as e:
+                    logger.error(f"❌ AI生成失败: {e}")
+                    logger.warning(f"⚠️ 使用降级方案：原标题+型号")
+                    title = f"{original_title} {model_number}型号"
             else:
-                # 降级方案：使用简单标题
-                title = f"{keyword} {model_number}型号"
-                logger.info(f"使用简单生成的标题: {title}")
+                # AI未启用，使用原标题+型号
+                title = f"{original_title} {model_number}型号"
+                logger.info(f">>> AI未启用，使用原标题+型号: {title}")
 
-            # 3. 编辑标题
-            logger.info(f">>> 开始编辑标题...")
+            # 4. 编辑标题
+            logger.info(f"\n>>> 步骤3: 填写新标题...")
             logger.debug(f"    标题内容: {title}")
             logger.debug(f"    标题长度: {len(title)} 字符")
             
@@ -141,27 +174,23 @@ class FiveToTwentyWorkflow:
             if not edit_result:
                 logger.error(f"✗ 标题编辑失败")
                 logger.error(f"    失败的标题: {title}")
-                # 不要立即返回False，继续尝试其他操作看是否有帮助
-                # return False
             else:
-                logger.success(f"✓ 标题编辑成功: {title}")
+                logger.success(f"✓ 标题编辑成功")
             
             # 等待标题更新生效
             await page.wait_for_timeout(1000)
             logger.debug(f"    已等待1秒确保标题更新")
 
-            # 4. 计算价格
+            # 5. 计算价格
             cost = product_data.get("cost", 10.0)
             price = self.price_calculator.calculate_supply_price(cost)
-            logger.info(f"计算价格: ¥{price} (成本: ¥{cost})")
+            logger.info(f"\n>>> 步骤4: 设置价格...")
+            logger.debug(f"    价格: ¥{price} (成本: ¥{cost})")
 
-            # 5. 获取库存
+            # 6. 获取库存
             stock = product_data.get("stock", 100)
-            logger.info(f"设置库存: {stock}")
-
-            # 6. 生成随机重量和尺寸（暂时不使用，在批量编辑中处理）
-            weight = self.random_generator.generate_weight()
-            dimensions = self.random_generator.generate_dimensions()
+            logger.info(f">>> 步骤5: 设置库存...")
+            logger.debug(f"    库存: {stock}")
 
             # 7. 设置价格
             if not await self.first_edit_ctrl.set_sku_price(page, price):
@@ -174,6 +203,7 @@ class FiveToTwentyWorkflow:
                 return False
             
             # 9. 保存修改
+            logger.info(f"\n>>> 步骤6: 保存修改...")
             if not await self.first_edit_ctrl.save_changes(page, wait_for_close=False):
                 logger.error(f"✗ 保存失败")
                 return False
@@ -187,6 +217,7 @@ class FiveToTwentyWorkflow:
 
         except Exception as e:
             logger.error(f"编辑第{product_index+1}个产品失败: {e}")
+            logger.exception("详细错误信息:")
             return False
 
     async def execute(
