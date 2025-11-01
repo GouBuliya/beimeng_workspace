@@ -547,9 +547,6 @@ class CollectionToEditWorkflow:
                     "cost": product.cost_price if product.cost_price else 150.0,
                     "stock": 100,  # 可从Excel扩展
                     "color_spec": product.color_spec,
-                    "size_chart_url": product.size_chart_url,
-                    "product_image_url": product.product_image_url,
-                    "actual_photo_url": product.actual_photo_url,
                 }
                 products_data.append(product_data)
             
@@ -558,12 +555,6 @@ class CollectionToEditWorkflow:
                 for i, pd in enumerate(products_data, 1):
                     cost_str = f"¥{pd['cost']:.2f}" if pd['cost'] else "未设置"
                     logger.info(f"  产品{i}: {pd['keyword']} ({pd['model_number']}) - 成本{cost_str}")
-                    if pd.get('size_chart_url'):
-                        logger.debug(f"    - 尺寸图: {pd['size_chart_url'][:50]}...")
-                    if pd.get('product_image_url'):
-                        logger.debug(f"    - 产品图: {pd['product_image_url'][:50]}...")
-                    if pd.get('actual_photo_url'):
-                        logger.debug(f"    - 实拍图: {pd['actual_photo_url'][:50]}...")
                 logger.info("")
             
             # 执行首次编辑（不包括认领）

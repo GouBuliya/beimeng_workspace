@@ -43,9 +43,6 @@ class ProductSelectionRow(BaseModel):
         color_spec: 产品颜色/规格
         collect_count: 需要采集的数量（默认5）
         cost_price: 进货价/成本价
-        product_image_url: 产品图URL
-        size_chart_url: 尺寸图URL
-        actual_photo_url: 实拍图URL
     
     Examples:
         >>> row = ProductSelectionRow(
@@ -63,11 +60,8 @@ class ProductSelectionRow(BaseModel):
     color_spec: Optional[str] = Field(None, description="产品颜色/规格")
     collect_count: int = Field(default=5, ge=1, le=100, description="采集数量")
     
-    # 新增字段：价格和图片
+    # 新增字段：价格
     cost_price: Optional[float] = Field(None, description="进货价/成本价", ge=0)
-    product_image_url: Optional[str] = Field(None, description="产品图URL")
-    size_chart_url: Optional[str] = Field(None, description="尺寸图URL")
-    actual_photo_url: Optional[str] = Field(None, description="实拍图URL")
     
     @field_validator("model_number")
     @classmethod
@@ -126,27 +120,6 @@ class SelectionTableReader:
             "成本价": "cost_price",
             "cost_price": "cost_price",
             "价格": "cost_price",
-            
-            # 新增映射：产品图
-            "产品图": "product_image_url",
-            "product_image": "product_image_url",
-            "product_image_url": "product_image_url",
-            "图片": "product_image_url",
-            "产品图URL": "product_image_url",
-            
-            # 新增映射：尺寸图
-            "尺寸图": "size_chart_url",
-            "size_chart": "size_chart_url",
-            "size_chart_url": "size_chart_url",
-            "尺寸图片": "size_chart_url",
-            "尺寸图URL": "size_chart_url",
-            "尺寸图仅供参考尺寸 颜色以第二列为准": "size_chart_url",
-            
-            # 新增映射：实拍图
-            "实拍图": "actual_photo_url",
-            "actual_photo": "actual_photo_url",
-            "actual_photo_url": "actual_photo_url",
-            "实拍图URL": "actual_photo_url",
         }
     
     def read_excel(
