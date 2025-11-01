@@ -32,6 +32,12 @@ from src.workflows.collection_to_edit_workflow import CollectionToEditWorkflow
 
 async def main(args):
     """主测试流程."""
+    # 设置日志级别
+    if args.debug:
+        logger.remove()
+        logger.add(sys.stderr, level="DEBUG")
+        logger.debug("🔧 调试模式已启用")
+    
     logger.info("\n" + "=" * 100)
     logger.info(" " * 20 + "【采集到编辑完整流程测试】")
     logger.info("=" * 100 + "\n")
@@ -114,7 +120,8 @@ async def main(args):
             filter_by_user=miaoshou_username if args.filter_user else None,
             enable_validation=args.enable_validation,
             enable_plugin_collection=args.enable_plugin,
-            save_intermediate_results=True
+            save_intermediate_results=True,
+            skip_temu_collection=args.skip_collection
         )
         
         # 显示结果
@@ -158,6 +165,19 @@ if __name__ == "__main__":
         "--selection",
         type=str,
         help="Excel选品表路径（默认: data/input/selection.xlsx）"
+    )
+    
+    parser.add_argument(
+        "--skip-collection",
+        action="store_true",
+        default=True,
+        help="跳过Temu采集，使用简化模式（默认: True）"
+    )
+    
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="启用调试模式，显示详细日志"
     )
     
     parser.add_argument(

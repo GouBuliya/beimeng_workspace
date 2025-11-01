@@ -1,0 +1,27 @@
+{
+  "success": false,
+  "stages": {
+    "stage0": {
+      "products_count": 2
+    },
+    "stage1": {
+      "success": false,
+      "success_count": 0,
+      "failed_count": 2,
+      "collected_links": [],
+      "errors": []
+    }
+  },
+  "summary": {
+    "total_products": 2,
+    "collected_products": 0,
+    "added_to_miaoshou": 0,
+    "edited_products": 0,
+    "start_time": "2025-11-01T13:23:55.112554",
+    "end_time": "2025-11-01T13:24:05.354288"
+  },
+  "errors": [
+    "阶段1失败：Temu采集失败"
+  ],
+  "report_file": null
+}

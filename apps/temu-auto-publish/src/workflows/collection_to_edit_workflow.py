@@ -122,7 +122,8 @@ class CollectionToEditWorkflow:
         filter_by_user: Optional[str] = None,
         enable_validation: bool = True,
         enable_plugin_collection: bool = True,
-        save_intermediate_results: bool = True
+        save_intermediate_results: bool = True,
+        skip_temu_collection: bool = True
     ) -> Dict:
         """执行从采集到首次编辑的完整流程（工业化版本）.
         
@@ -133,6 +134,7 @@ class CollectionToEditWorkflow:
             enable_validation: 是否启用采集结果验证
             enable_plugin_collection: 是否使用妙手插件采集
             save_intermediate_results: 是否保存中间结果
+            skip_temu_collection: 是否跳过Temu采集（简化模式，默认True）
             
         Returns:
             执行结果字典，包含：
@@ -153,6 +155,7 @@ class CollectionToEditWorkflow:
         logger.info(f"AI标题生成: {'启用' if self.use_ai_titles else '禁用'}")
         logger.info(f"采集验证: {'启用' if enable_validation else '禁用'}")
         logger.info(f"妙手插件: {'启用' if enable_plugin_collection else '禁用'}")
+        logger.info(f"运行模式: {'简化模式（跳过Temu采集）' if skip_temu_collection else '完整模式'}")
         logger.info("=" * 100 + "\n")
         
         # 初始化结果
@@ -186,49 +189,63 @@ class CollectionToEditWorkflow:
             logger.success(f"✓ 阶段0完成：读取 {len(products)} 个产品\n")
             result["stages"]["stage0"] = {"products_count": len(products)}
             
-            # ========== 阶段1: Temu采集（SOP步骤1-3） ==========
-            stage1_result = await self._stage_collect_from_temu(page, products)
-            result["stages"]["stage1"] = stage1_result
-            
-            if not stage1_result["success"]:
-                raise RuntimeError("阶段1失败：Temu采集失败")
-            
-            result["summary"]["collected_products"] = stage1_result["success_count"]
-            
-            # 保存中间结果
-            if save_intermediate_results:
-                self._save_intermediate_result("stage1_collection", stage1_result)
-            
-            # ========== 阶段2: 添加到妙手（关键衔接点） ==========
-            if enable_plugin_collection:
-                stage2_result = await self._stage_add_to_miaoshou(
-                    page,
-                    stage1_result["collected_links"]
-                )
-                result["stages"]["stage2"] = stage2_result
+            # ========== 简化模式：跳过Temu采集 ==========
+            if skip_temu_collection:
+                logger.info("=" * 100)
+                logger.info("⏭️  【简化模式】跳过阶段1-2: Temu采集")
+                logger.info("=" * 100)
+                logger.info("ℹ️  假设商品已通过妙手插件手动采集到采集箱")
+                logger.info("ℹ️  将直接从妙手采集箱读取并编辑商品")
+                logger.info("=" * 100 + "\n")
                 
-                if not stage2_result["success"]:
-                    logger.warning("⚠️  阶段2警告：部分商品未能添加到妙手")
-                    logger.warning(f"   成功: {stage2_result['success_count']}/{stage2_result['total']}")
-                    
-                    # 如果完全失败，提示用户手动操作
-                    if stage2_result["success_count"] == 0:
-                        logger.error("✗ 阶段2失败：无法自动添加到妙手采集箱")
-                        logger.info("💡 请手动完成以下操作：")
-                        logger.info("   1. 打开Temu商品详情页")
-                        logger.info("   2. 点击妙手插件的「采集商品」按钮")
-                        logger.info("   3. 确认商品已添加到妙手采集箱")
-                        logger.info("   4. 完成后按Enter继续...")
-                        # input()  # 等待用户手动操作
-                        # 注意：在自动化测试中应该跳过此步骤
+                result["stages"]["stage1"] = {"skipped": True, "reason": "简化模式"}
+                result["stages"]["stage2"] = {"skipped": True, "reason": "简化模式"}
                 
-                result["summary"]["added_to_miaoshou"] = stage2_result["success_count"]
-                
-                if save_intermediate_results:
-                    self._save_intermediate_result("stage2_add_to_miaoshou", stage2_result)
+                # 直接跳到阶段3
             else:
-                logger.info("⏭️  跳过阶段2：妙手插件采集已禁用")
-                result["stages"]["stage2"] = {"skipped": True}
+                # ========== 阶段1: Temu采集（SOP步骤1-3） ==========
+                stage1_result = await self._stage_collect_from_temu(page, products)
+                result["stages"]["stage1"] = stage1_result
+                
+                if not stage1_result["success"]:
+                    raise RuntimeError("阶段1失败：Temu采集失败")
+                
+                result["summary"]["collected_products"] = stage1_result["success_count"]
+                
+                # 保存中间结果
+                if save_intermediate_results:
+                    self._save_intermediate_result("stage1_collection", stage1_result)
+                
+                # ========== 阶段2: 添加到妙手（关键衔接点） ==========
+                if enable_plugin_collection:
+                    stage2_result = await self._stage_add_to_miaoshou(
+                        page,
+                        stage1_result["collected_links"]
+                    )
+                    result["stages"]["stage2"] = stage2_result
+                    
+                    if not stage2_result["success"]:
+                        logger.warning("⚠️  阶段2警告：部分商品未能添加到妙手")
+                        logger.warning(f"   成功: {stage2_result['success_count']}/{stage2_result['total']}")
+                        
+                        # 如果完全失败，提示用户手动操作
+                        if stage2_result["success_count"] == 0:
+                            logger.error("✗ 阶段2失败：无法自动添加到妙手采集箱")
+                            logger.info("💡 请手动完成以下操作：")
+                            logger.info("   1. 打开Temu商品详情页")
+                            logger.info("   2. 点击妙手插件的「采集商品」按钮")
+                            logger.info("   3. 确认商品已添加到妙手采集箱")
+                            logger.info("   4. 完成后按Enter继续...")
+                            # input()  # 等待用户手动操作
+                            # 注意：在自动化测试中应该跳过此步骤
+                    
+                    result["summary"]["added_to_miaoshou"] = stage2_result["success_count"]
+                    
+                    if save_intermediate_results:
+                        self._save_intermediate_result("stage2_add_to_miaoshou", stage2_result)
+                else:
+                    logger.info("⏭️  跳过阶段2：妙手插件采集已禁用")
+                    result["stages"]["stage2"] = {"skipped": True}
             
             # ========== 阶段3: 导航到妙手采集箱 ==========
             stage3_result = await self._stage_navigate_to_collection_box(

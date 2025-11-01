@@ -770,7 +770,7 @@ class MiaoshouController:
         except Exception as e:
             logger.error(f"验证认领失败: {e}")
             return False
-    
+
     async def navigate_and_filter_collection_box(
         self,
         page: Page,

@@ -559,7 +559,7 @@ class CollectionController:
                         success = True
                     else:
                         retry_count += 1
-                        
+                    
                 except Exception as e:
                     logger.error(f"    ✗ 采集失败: {e}")
                     retry_count += 1

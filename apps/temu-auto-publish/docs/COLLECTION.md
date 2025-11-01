@@ -76,12 +76,12 @@ Excel选品表 → SelectionTableReader → CollectionWorkflow
         "collect_count": 5
       },
       "collected_links": [
-        {
-          "url": "https://www.temu.com/product/12345",
-          "title": "【新款】药箱收纳盒家用大容量...",
-          "price": "¥39.90",
-          "image": "https://img.temu.com/xxx.jpg",
-          "index": 1
+    {
+        "url": "https://www.temu.com/product/12345",
+        "title": "【新款】药箱收纳盒家用大容量...",
+        "price": "¥39.90",
+        "image": "https://img.temu.com/xxx.jpg",
+        "index": 1
         }
       ],
       "success": true,
@@ -557,6 +557,6 @@ reader.create_sample_excel("data/sample.xlsx", num_samples=3)
 
 ---
 
-**作者**: AI Assistant  
+**作者**: AI Assistant
 **最后更新**: 2025-11-01  
 **许可证**: MIT

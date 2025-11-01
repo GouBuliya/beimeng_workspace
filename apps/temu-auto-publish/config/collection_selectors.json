@@ -4,7 +4,7 @@
   "description": "Temu商品采集功能的选择器配置（SOP步骤1-3）",
   "type": "object",
   "properties": {
-    "store": {
+  "store": {
       "description": "店铺相关选择器",
       "type": "object",
       "properties": {
@@ -24,8 +24,8 @@
           "default": "button:has-text('搜索'), button:has-text('Search'), button[type='submit']"
         }
       }
-    },
-    "product": {
+  },
+  "product": {
       "description": "商品相关选择器",
       "type": "object",
       "properties": {
@@ -55,8 +55,8 @@
           "default": "img"
         }
       }
-    },
-    "collection_box": {
+  },
+  "collection_box": {
       "description": "妙手采集箱相关选择器",
       "type": "object",
       "properties": {
