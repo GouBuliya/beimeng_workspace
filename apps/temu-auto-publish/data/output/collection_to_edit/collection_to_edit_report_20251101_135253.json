@@ -1,0 +1,44 @@
+{
+  "success": false,
+  "stages": {
+    "stage0": {
+      "products_count": 2
+    },
+    "stage1": {
+      "skipped": true,
+      "reason": "简化模式"
+    },
+    "stage2": {
+      "skipped": true,
+      "reason": "简化模式"
+    },
+    "stage3": {
+      "success": true,
+      "filter_by_user": null
+    },
+    "stage4": {
+      "success": true,
+      "actual_count": 7657,
+      "expected_count": 2,
+      "keywords_matched": 0,
+      "details": []
+    },
+    "stage5": {
+      "success": false,
+      "edited_count": 0,
+      "error": "必须提供5个产品数据，当前提供了2个"
+    }
+  },
+  "summary": {
+    "total_products": 2,
+    "collected_products": 0,
+    "added_to_miaoshou": 0,
+    "edited_products": 0,
+    "start_time": "2025-11-01T13:52:44.083002",
+    "end_time": "2025-11-01T13:52:53.604308"
+  },
+  "errors": [
+    "阶段5失败：首次编辑失败"
+  ],
+  "report_file": null
+}

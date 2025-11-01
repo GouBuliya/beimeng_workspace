@@ -265,7 +265,7 @@ class FiveToTwentyWorkflow:
     async def execute(
         self,
         page: Page,
-        products_data: List[Dict],
+        products_data: Optional[List[Dict]] = None,
         claim_times: int = 4
     ) -> Dict:
         """执行完整的5→20工作流.
@@ -277,7 +277,7 @@ class FiveToTwentyWorkflow:
 
         Args:
             page: Playwright页面对象
-            products_data: 5个产品的数据列表
+            products_data: 5个产品的数据列表（可选，简化模式下为None）
             claim_times: 每个产品认领次数（默认4，符合SOP）
 
         Returns:
@@ -290,9 +290,10 @@ class FiveToTwentyWorkflow:
             }
 
         Raises:
-            ValueError: 如果产品数量不是5个
+            ValueError: 如果产品数量不正确（完整模式下）
 
         Examples:
+            >>> # 完整模式
             >>> result = await workflow.execute(page, [
             ...     {"keyword": "药箱", "model_number": "A0001", "cost": 10, "stock": 100},
             ...     {"keyword": "药箱", "model_number": "A0002", "cost": 12, "stock": 100},
@@ -300,12 +301,22 @@ class FiveToTwentyWorkflow:
             ... ])
             >>> result["final_count"]
             20
+            >>> 
+            >>> # 简化模式
+            >>> result = await workflow.execute(page, None)
         """
         logger.info("=" * 80)
         logger.info("开始执行5→20工作流（SOP步骤4-6）")
         logger.info("=" * 80)
 
-        if len(products_data) != 5:
+        # 简化模式：生成默认数据
+        if products_data is None:
+            logger.info("🔹 简化模式：使用默认产品数据（将从采集箱实时读取）")
+            products_data = [
+                {"keyword": f"产品{i+1}", "model_number": f"AUTO{i+1:03d}", "cost": 150.0 + i * 10, "stock": 100}
+                for i in range(5)
+            ]
+        elif len(products_data) != 5:
             raise ValueError(f"必须提供5个产品数据，当前提供了{len(products_data)}个")
 
         result = {

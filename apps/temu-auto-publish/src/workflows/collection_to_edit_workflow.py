@@ -273,7 +273,11 @@ class CollectionToEditWorkflow:
                 result["stages"]["stage4"] = {"skipped": True}
             
             # ========== 阶段5: 首次编辑（SOP步骤4） ==========
-            stage5_result = await self._stage_first_edit(page, products)
+            stage5_result = await self._stage_first_edit(
+                page,
+                products,
+                skip_temu_collection=skip_temu_collection
+            )
             result["stages"]["stage5"] = stage5_result
             
             if not stage5_result["success"]:
@@ -514,37 +518,58 @@ class CollectionToEditWorkflow:
     async def _stage_first_edit(
         self,
         page: Page,
-        products: List[ProductSelectionRow]
+        products: List[ProductSelectionRow],
+        skip_temu_collection: bool = True
     ) -> Dict:
         """阶段5: 首次编辑（SOP步骤4）.
         
         执行妙手采集箱中5个产品的首次编辑。
+        
+        Args:
+            page: 页面对象
+            products: 选品表产品列表（完整模式使用）
+            skip_temu_collection: 是否为简化模式
         """
         logger.info("\n" + "▶" * 50)
         logger.info("【阶段5/5】首次编辑（SOP步骤4）")
         logger.info("▶" * 50 + "\n")
         
         try:
-            # 转换数据格式
-            edit_input = DataConverter.selection_to_collection(products)
-            
-            # 构建编辑数据（取前5个产品）
-            products_data = []
-            for i in range(min(5, len(edit_input))):
-                data = edit_input[i]
-                products_data.append({
-                    "keyword": data["keyword"],
-                    "model_number": data["model_number"],
-                    "cost": 150.0 + i * 10,
-                    "stock": 100
-                })
-            
-            # 执行首次编辑（不包括认领）
-            result = await self.five_to_twenty.execute(
-                page,
-                products_data,
-                claim_times=0  # 暂时不执行认领，只做首次编辑
-            )
+            # 简化模式：从采集箱中读取前5个产品进行编辑
+            if skip_temu_collection:
+                logger.info("🔹 简化模式：将直接编辑采集箱中的前5个商品")
+                logger.info("🔹 产品数据将从采集箱页面实时读取\n")
+                
+                # 不传递products_data，让FiveToTwentyWorkflow自己从采集箱读取
+                result = await self.five_to_twenty.execute(
+                    page,
+                    products_data=None,  # 简化模式不需要预先准备数据
+                    claim_times=0  # 暂时不执行认领，只做首次编辑
+                )
+            else:
+                # 完整模式：使用选品表数据
+                logger.info("🔹 完整模式：使用选品表数据进行编辑\n")
+                
+                # 转换数据格式
+                edit_input = DataConverter.selection_to_collection(products)
+                
+                # 构建编辑数据（取前5个产品）
+                products_data = []
+                for i in range(min(5, len(edit_input))):
+                    data = edit_input[i]
+                    products_data.append({
+                        "keyword": data["keyword"],
+                        "model_number": data["model_number"],
+                        "cost": 150.0 + i * 10,
+                        "stock": 100
+                    })
+                
+                # 执行首次编辑（不包括认领）
+                result = await self.five_to_twenty.execute(
+                    page,
+                    products_data,
+                    claim_times=0  # 暂时不执行认领，只做首次编辑
+                )
             
             if result.get("edited_count", 0) > 0:
                 logger.success(f"✓ 阶段5完成：成功编辑 {result['edited_count']}/5 个产品\n")
