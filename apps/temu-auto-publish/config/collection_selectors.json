@@ -1,26 +1,88 @@
 {
-  "store": {
-    "visit_button": "button:has-text('一键访问店铺'), a:has-text('访问店铺'), a:has-text('Visit Store')",
-    "search_input": "input[type='search'], input[placeholder*='搜索'], input[placeholder*='Search']",
-    "search_button": "button:has-text('搜索'), button:has-text('Search'), button[type='submit']"
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Collection Selectors Configuration",
+  "description": "Temu商品采集功能的选择器配置（SOP步骤1-3）",
+  "type": "object",
+  "properties": {
+    "store": {
+      "description": "店铺相关选择器",
+      "type": "object",
+      "properties": {
+        "visit_button": {
+          "description": "一键访问店铺按钮选择器",
+          "type": "string",
+          "default": "button:has-text('一键访问店铺'), a:has-text('访问店铺')"
+        },
+        "search_input": {
+          "description": "搜索框选择器",
+          "type": "string",
+          "default": "input[type='search'], input[placeholder*='搜索'], input[placeholder*='search']"
+        },
+        "search_button": {
+          "description": "搜索按钮选择器",
+          "type": "string",
+          "default": "button:has-text('搜索'), button:has-text('Search'), button[type='submit']"
+        }
+      }
+    },
+    "product": {
+      "description": "商品相关选择器",
+      "type": "object",
+      "properties": {
+        "item_card": {
+          "description": "商品卡片容器选择器",
+          "type": "string",
+          "default": ".product-card, .item-card, [data-product-id], article"
+        },
+        "product_link": {
+          "description": "商品详情链接选择器",
+          "type": "string",
+          "default": "a[href*='/product/'], a[href*='/goods/'], a[href*='/item/']"
+        },
+        "product_title": {
+          "description": "商品标题选择器",
+          "type": "string",
+          "default": ".title, .product-title, h3, .goods-name"
+        },
+        "product_price": {
+          "description": "商品价格选择器",
+          "type": "string",
+          "default": ".price, .product-price, .goods-price, [class*='price']"
+        },
+        "product_image": {
+          "description": "商品图片选择器",
+          "type": "string",
+          "default": "img"
+        }
+      }
+    },
+    "collection_box": {
+      "description": "妙手采集箱相关选择器",
+      "type": "object",
+      "properties": {
+        "miaoshou_extension": {
+          "description": "妙手插件容器选择器",
+          "type": "string",
+          "default": ".miaoshou-extension, #miaoshou-plugin, [data-miaoshou]"
+        },
+        "add_button": {
+          "description": "添加到采集箱按钮选择器",
+          "type": "string",
+          "default": "button:has-text('添加到采集箱'), button:has-text('采集'), .add-to-collection"
+        },
+        "success_indicator": {
+          "description": "采集成功提示选择器",
+          "type": "string",
+          "default": ".success-toast, .message-success, [class*='success']"
+        }
+      }
+    }
   },
-  "product": {
-    "item_card": ".product-card, .item-card, [data-product-id], .goods-item",
-    "product_link": "a[href*='/product/'], a[href*='/goods/'], a[href*='/item/']",
-    "product_title": ".title, .product-title, .goods-title, h3, h4",
-    "product_price": ".price, .product-price, .goods-price, [class*='price']",
-    "product_image": "img, [class*='image']",
-    "add_to_collection_btn": "button:has-text('采集'), button:has-text('加入采集箱'), .collect-btn"
-  },
-  "collection_box": {
-    "miaoshou_extension": ".miaoshou-extension, #miaoshou-plugin, [class*='miaoshou']",
-    "add_button": "button:has-text('添加到采集箱'), button:has-text('采集'), .add-to-collection",
-    "success_message": "div:has-text('添加成功'), div:has-text('已添加')"
-  },
-  "validation": {
-    "image_selector": "img[src*='temu'], img[src*='product']",
-    "spec_selector": ".spec, .specification, [class*='spec']",
-    "description_selector": ".description, .product-desc, [class*='desc']"
-  }
+  "notes": [
+    "选择器配置用于定位Temu页面元素",
+    "支持多个选择器（用逗号分隔），按顺序尝试",
+    "可以使用Playwright支持的所有选择器语法",
+    "包括CSS选择器、文本选择器、XPath等",
+    "建议使用稳定的选择器，避免依赖动态class名"
+  ]
 }
-
