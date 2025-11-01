@@ -56,10 +56,9 @@ async def main(args):
     miaoshou_username = os.getenv("MIAOSHOU_USERNAME")
     miaoshou_password = os.getenv("MIAOSHOU_PASSWORD")
     
-    if not all([temu_username, temu_password, miaoshou_username, miaoshou_password]):
-        logger.error("✗ 未配置完整的账号信息")
+    if not all([miaoshou_username, miaoshou_password]):
+        logger.error("✗ 未配置完整的妙手ERP账号信息")
         logger.info("请在.env文件中配置:")
-        logger.info("  - TEMU_USERNAME, TEMU_PASSWORD")
         logger.info("  - MIAOSHOU_USERNAME, MIAOSHOU_PASSWORD")
         return False
     
@@ -73,35 +72,34 @@ async def main(args):
         reader.create_sample_excel(str(selection_table), num_samples=2)
         logger.info(f"✓ 示例选品表已创建: {selection_table}")
     
-    # 初始化浏览器
-    browser_manager = BrowserManager(headless=args.headless)
+    # 初始化登录控制器
+    login_controller = None
+    browser_manager = None
     
     try:
-        # 启动浏览器
-        await browser_manager.start()
-        page = browser_manager.page
-        
         logger.info("\n" + "─" * 80)
-        logger.info("步骤1: 登录Temu和妙手ERP")
+        logger.info("步骤1: 初始化并登录妙手ERP")
         logger.info("─" * 80 + "\n")
         
-        # 登录Temu
-        logger.info(">>> 登录Temu...")
-        login_ctrl = LoginController(browser_manager)
-        
-        if not await login_ctrl.login_temu(temu_url, temu_username, temu_password):
-            logger.error("✗ Temu登录失败")
-            return False
-        
-        logger.success("✓ Temu登录成功\n")
+        # 创建登录控制器（会自动创建browser_manager）
+        login_controller = LoginController()
         
         # 登录妙手ERP
         logger.info(">>> 登录妙手ERP...")
-        if not await login_ctrl.login_miaoshou(miaoshou_url, miaoshou_username, miaoshou_password):
+        if not await login_controller.login(
+            username=miaoshou_username,
+            password=miaoshou_password,
+            force=False,
+            headless=False
+        ):
             logger.error("✗ 妙手ERP登录失败")
             return False
         
         logger.success("✓ 妙手ERP登录成功\n")
+        
+        # 获取browser_manager和page
+        browser_manager = login_controller.browser_manager
+        page = browser_manager.page
         
         # 执行完整工作流
         logger.info("\n" + "─" * 80)
@@ -149,7 +147,8 @@ async def main(args):
         logger.exception("详细错误:")
         return False
     finally:
-        await browser_manager.close()
+        if login_controller and login_controller.browser_manager:
+            await login_controller.browser_manager.close()
 
 
 if __name__ == "__main__":
@@ -159,12 +158,6 @@ if __name__ == "__main__":
         "--selection",
         type=str,
         help="Excel选品表路径（默认: data/input/selection.xlsx）"
-    )
-    
-    parser.add_argument(
-        "--headless",
-        action="store_true",
-        help="使用无头模式运行浏览器"
     )
     
     parser.add_argument(
