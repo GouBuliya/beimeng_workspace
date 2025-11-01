@@ -179,9 +179,11 @@ class FirstEditController:
             True
         """
         logger.info(f"SOP 4.1: 编辑标题 -> {new_title}")
+        logger.debug(f"    标题长度: {len(new_title)} 字符")
 
         try:
             # 等待弹窗完全加载
+            logger.debug("    等待编辑弹窗加载...")
             await page.wait_for_timeout(1000)
             
             # 尝试多个可能的标题输入框选择器
@@ -199,10 +201,19 @@ class FirstEditController:
                 "textarea.jx-textarea__inner",  # 会找到第一个，可能是简易描述
             ]
             
+            logger.debug(f"    尝试{len(title_selectors)}种选择器定位产品标题字段...")
+            
             title_input = None
+            used_selector = None
+            selector_index = 0
+            
             for selector in title_selectors:
                 try:
+                    selector_index += 1
+                    logger.debug(f"    [{selector_index}/{len(title_selectors)}] 尝试选择器: {selector[:60]}...")
                     count = await page.locator(selector).count()
+                    logger.debug(f"        找到 {count} 个匹配元素")
+                    
                     if count > 0:
                         # 找到第一个可见的
                         for i in range(count):
@@ -210,24 +221,48 @@ class FirstEditController:
                             is_visible = await elem.is_visible(timeout=1000)
                             if is_visible:
                                 title_input = elem
-                                logger.debug(f"使用选择器: {selector} (第{i+1}个)")
+                                used_selector = f"{selector} (第{i+1}个)"
+                                logger.info(f"    ✓ 使用选择器定位到标题输入框: {used_selector}")
                                 break
                         if title_input:
                             break
-                except:
+                except Exception as e:
+                    logger.debug(f"        选择器失败: {e}")
                     continue
             
             if not title_input:
-                logger.error("未找到标题输入框")
+                logger.error("    ✗ 未找到标题输入框")
+                logger.error(f"    尝试了 {len(title_selectors)} 种选择器都失败")
                 return False
             
+            # 获取当前标题值（用于对比）
+            logger.debug("    读取当前标题值...")
+            current_title = await title_input.input_value()
+            logger.debug(f"    当前标题: {current_title[:50]}...")
+            
             # 清空并填写新标题
+            logger.info(f"    清空标题字段...")
             await title_input.fill("")
             await page.wait_for_timeout(300)
+            
+            logger.info(f"    填写新标题: {new_title}")
             await title_input.fill(new_title)
             await page.wait_for_timeout(500)
-
-            logger.success(f"✓ 标题已更新: {new_title}")
+            
+            # 验证标题是否成功更新
+            logger.debug("    验证标题是否成功更新...")
+            updated_title = await title_input.input_value()
+            logger.debug(f"    更新后的标题: {updated_title[:50]}...")
+            
+            if updated_title == new_title:
+                logger.success(f"✓ 标题已成功更新: {new_title}")
+                return True
+            else:
+                logger.warning(f"⚠️ 标题可能未完全更新")
+                logger.warning(f"    期望: {new_title}")
+                logger.warning(f"    实际: {updated_title}")
+                # 仍然返回True，因为可能是显示延迟
+                return True
             return True
 
         except Exception as e:

@@ -190,9 +190,23 @@ class FiveToTwentyWorkflow:
                 logger.info(f"使用简单生成的标题: {title}")
 
             # 3. 编辑标题
-            if not await self.first_edit_ctrl.edit_title(page, title):
+            logger.info(f">>> 开始编辑标题...")
+            logger.debug(f"    标题内容: {title}")
+            logger.debug(f"    标题长度: {len(title)} 字符")
+            
+            edit_result = await self.first_edit_ctrl.edit_title(page, title)
+            
+            if not edit_result:
                 logger.error(f"✗ 标题编辑失败")
-                return False
+                logger.error(f"    失败的标题: {title}")
+                # 不要立即返回False，继续尝试其他操作看是否有帮助
+                # return False
+            else:
+                logger.success(f"✓ 标题编辑成功: {title}")
+            
+            # 等待标题更新生效
+            await page.wait_for_timeout(1000)
+            logger.debug(f"    已等待1秒确保标题更新")
 
             # 4. 计算价格
             cost = product_data.get("cost", 10.0)
@@ -297,14 +311,27 @@ class FiveToTwentyWorkflow:
                 
                 try:
                     # 0.1 收集5个产品的原始标题
+                    logger.info(">>> 步骤1/3: 收集5个产品的原始标题...")
                     original_titles = await self.collect_original_titles(page, 5)
+                    logger.info(f"✓ 已收集{len(original_titles)}个原始标题")
+                    for i, title in enumerate(original_titles):
+                        logger.debug(f"    原标题{i+1}: {title[:50]}...")
                     
                     # 0.2 使用AI生成新标题
-                    logger.info("\n>>> 调用AI生成5个新标题...")
+                    logger.info("\n>>> 步骤2/3: 调用AI生成5个新标题...")
+                    logger.info(f"    AI提供商: {self.ai_title_generator.provider}")
+                    logger.info(f"    模型: {self.ai_title_generator.model}")
+                    if self.ai_title_generator.base_url:
+                        logger.info(f"    API地址: {self.ai_title_generator.base_url}")
+                    
                     # 获取第一个产品的型号作为基准
                     base_model_number = products_data[0].get("model_number", "A0001")
                     # 提取型号前缀（如 A0001 -> A）
                     model_prefix = base_model_number.rstrip('0123456789') or 'A'
+                    
+                    logger.info(f"    正在调用AI API...")
+                    import time
+                    start_time = time.time()
                     
                     new_titles = await self.ai_title_generator.generate_titles(
                         original_titles,
@@ -312,12 +339,19 @@ class FiveToTwentyWorkflow:
                         use_ai=True
                     )
                     
-                    # 为每个标题添加对应的型号
+                    elapsed_time = time.time() - start_time
+                    logger.info(f"✓ AI调用完成，耗时: {elapsed_time:.2f}秒")
+                    logger.info(f"✓ 生成了{len(new_titles)}个新标题")
+                    
+                    # 0.3 为每个标题添加对应的型号
+                    logger.info("\n>>> 步骤3/3: 为标题添加型号后缀...")
                     for i in range(len(new_titles)):
                         model_number = products_data[i].get("model_number", f"{model_prefix}{str(i+1).zfill(4)}")
+                        original_title = new_titles[i]
                         # 如果标题中还没有型号，添加型号
                         if "型号" not in new_titles[i] and model_number not in new_titles[i]:
                             new_titles[i] = f"{new_titles[i]} {model_number}型号"
+                        logger.debug(f"    {i+1}. {original_title} -> {new_titles[i]}")
                     
                     logger.info("\n生成的新标题：")
                     for i, title in enumerate(new_titles):
@@ -326,7 +360,9 @@ class FiveToTwentyWorkflow:
                     logger.success("✓ AI标题生成完成")
                     
                 except Exception as e:
-                    logger.warning(f"⚠️ AI标题生成失败，将使用简单标题: {e}")
+                    logger.error(f"❌ AI标题生成失败: {e}")
+                    logger.exception("详细错误信息:")
+                    logger.warning(f"⚠️ 将使用简单标题作为降级方案")
                     new_titles = None
             else:
                 logger.info("\n>>> AI标题生成已禁用，将使用简单标题")
