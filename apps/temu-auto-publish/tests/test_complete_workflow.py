@@ -16,11 +16,16 @@
 """
 
 import asyncio
+import os
 from pathlib import Path
 
 import pytest
+from dotenv import load_dotenv
 from loguru import logger
 from playwright.async_api import async_playwright
+
+# 加载环境变量
+load_dotenv()
 
 from src.browser.browser_manager import BrowserManager
 from src.browser.login_controller import LoginController
@@ -97,8 +102,8 @@ async def test_five_to_twenty_workflow_only():
         if not await miaoshou_ctrl.navigate_to_collection_box(page):
             pytest.fail("导航到采集箱失败")
 
-        # 3. 切换到"未认领"tab
-        await miaoshou_ctrl.switch_tab(page, "unclaimed")
+        # 3. 切换到"已认领"tab（已认领的产品才能进行编辑操作）
+        await miaoshou_ctrl.switch_tab(page, "claimed")
         await page.wait_for_timeout(1000)
 
         # 4. 执行5→20工作流
