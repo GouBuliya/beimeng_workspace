@@ -233,31 +233,38 @@ class BatchEditController:
             logger.info(f"  📋 第1步：点击预览...")
             preview_selectors = [
                 "button:has-text('预览')",
-                "button.jx-button:has-text('预览')",
+                "button.el-button:has-text('预览')",
                 "button[type='button']:has-text('预览')",
-                ".preview-btn",
-                "a:has-text('预览')"
             ]
             
             preview_clicked = False
             for selector in preview_selectors:
                 try:
-                    btn = self.page.locator(selector).first
-                    if await btn.count() > 0 and await btn.is_visible():
-                        # 滚动到预览按钮
-                        await btn.scroll_into_view_if_needed()
-                        await self.page.wait_for_timeout(300)
-                        
-                        # 点击预览
-                        await btn.click()
-                        logger.success(f"  ✓ 预览按钮已点击")
-                        
-                        # 等待预览加载完成（重要！）
-                        await self.page.wait_for_timeout(2000)
-                        logger.info(f"  ⏳ 等待预览加载...")
-                        
-                        preview_clicked = True
+                    # 获取所有匹配的按钮
+                    all_btns = await self.page.locator(selector).all()
+                    logger.debug(f"  预览选择器 {selector} 找到 {len(all_btns)} 个")
+                    
+                    # 找到第一个可见的按钮
+                    for btn in all_btns:
+                        if await btn.is_visible():
+                            # 滚动到预览按钮
+                            await btn.scroll_into_view_if_needed()
+                            await self.page.wait_for_timeout(300)
+                            
+                            # 点击预览
+                            await btn.click()
+                            logger.success(f"  ✓ 预览按钮已点击")
+                            
+                            # 等待预览加载完成（重要！）
+                            await self.page.wait_for_timeout(2000)
+                            logger.info(f"  ⏳ 等待预览加载...")
+                            
+                            preview_clicked = True
+                            break
+                    
+                    if preview_clicked:
                         break
+                        
                 except Exception as e:
                     logger.debug(f"    预览选择器 {selector} 失败: {e}")
                     continue
@@ -271,35 +278,49 @@ class BatchEditController:
             # 第2步：点击保存修改
             # ========================================
             logger.info(f"  💾 第2步：点击保存修改...")
+            
             save_selectors = [
-                "button:has-text('保存修改')",  # 最优先：完整匹配
-                "button.jx-button--primary:has-text('保存修改')",  # 绿色按钮
+                "button:has-text('保存修改')",
+                "button.el-button:has-text('保存修改')",
                 "button[type='button']:has-text('保存修改')",
-                "button:has-text('保存')",  # 备用：部分匹配
-                "button:has-text('确认')",
-                "button:has-text('提交')",
-                ".save-btn"
+                "button:has-text('保存')",
             ]
             
             save_clicked = False
             for selector in save_selectors:
                 try:
-                    btn = self.page.locator(selector).first
-                    if await btn.count() > 0:
-                        # 滚动到按钮位置
-                        await btn.scroll_into_view_if_needed()
-                        await self.page.wait_for_timeout(500)
+                    # 获取所有匹配的按钮
+                    all_btns = await self.page.locator(selector).all()
+                    logger.debug(f"  保存选择器 {selector} 找到 {len(all_btns)} 个")
+                    
+                    # 找到第一个可见的按钮
+                    for btn in all_btns:
+                        try:
+                            is_visible = await btn.is_visible()
+                            if is_visible:
+                                logger.debug(f"  找到可见的保存按钮")
+                                
+                                # 尝试点击
+                                try:
+                                    await btn.click(timeout=5000)
+                                    logger.success(f"  ✓ 保存按钮已点击")
+                                except:
+                                    # 尝试强制点击
+                                    logger.warning(f"  ⚠️ 普通点击失败，尝试强制点击...")
+                                    await btn.click(force=True)
+                                    logger.success(f"  ✓ 强制点击成功")
+                                
+                                # 等待保存完成
+                                await self.page.wait_for_timeout(2000)
+                                logger.success(f"  ✓ [{step_name}] 保存成功")
+                                save_clicked = True
+                                break
+                        except:
+                            continue
+                    
+                    if save_clicked:
+                        break
                         
-                        # 检查是否可见和可用
-                        if await btn.is_visible():
-                            await btn.click()
-                            logger.success(f"  ✓ 保存按钮已点击")
-                            
-                            # 等待保存完成
-                            await self.page.wait_for_timeout(2000)
-                            logger.success(f"  ✓ [{step_name}] 保存成功")
-                            save_clicked = True
-                            return True
                 except Exception as e:
                     logger.debug(f"    保存选择器 {selector} 失败: {e}")
                     continue
@@ -314,6 +335,8 @@ class BatchEditController:
                 except:
                     pass
                 return False
+            
+            return True
             
         except Exception as e:
             logger.error(f"  ✗ 预览/保存失败: {e}")
