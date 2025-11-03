@@ -201,7 +201,7 @@ class BatchEditController:
             return False
     
     async def click_preview_and_save(self, step_name: str) -> bool:
-        """点击预览和保存按钮.
+        """点击预览和保存按钮（先预览，再保存）.
         
         Args:
             step_name: 步骤名称（用于日志）
@@ -210,13 +210,16 @@ class BatchEditController:
             是否成功保存
         """
         try:
-            # 1. 点击预览
-            logger.info(f"  点击预览...")
+            # ========================================
+            # 第1步：点击预览
+            # ========================================
+            logger.info(f"  📋 第1步：点击预览...")
             preview_selectors = [
                 "button:has-text('预览')",
-                "button:has-text('Preview')",
+                "button.jx-button:has-text('预览')",
+                "button[type='button']:has-text('预览')",
                 ".preview-btn",
-                "button.jx-button:has-text('预览')"
+                "a:has-text('预览')"
             ]
             
             preview_clicked = False
@@ -224,27 +227,44 @@ class BatchEditController:
                 try:
                     btn = self.page.locator(selector).first
                     if await btn.count() > 0 and await btn.is_visible():
+                        # 滚动到预览按钮
+                        await btn.scroll_into_view_if_needed()
+                        await self.page.wait_for_timeout(300)
+                        
+                        # 点击预览
                         await btn.click()
-                        await self.page.wait_for_timeout(1000)
-                        logger.info(f"  ✓ 预览成功")
+                        logger.success(f"  ✓ 预览按钮已点击")
+                        
+                        # 等待预览加载完成（重要！）
+                        await self.page.wait_for_timeout(2000)
+                        logger.info(f"  ⏳ 等待预览加载...")
+                        
                         preview_clicked = True
                         break
-                except:
+                except Exception as e:
+                    logger.debug(f"    预览选择器 {selector} 失败: {e}")
                     continue
             
             if not preview_clicked:
-                logger.warning(f"  ⚠️ 未找到预览按钮")
+                logger.warning(f"  ⚠️ 未找到预览按钮，跳过预览直接保存")
+            else:
+                logger.success(f"  ✓ 预览完成")
             
-            # 2. 点击保存修改
-            logger.info(f"  点击保存修改...")
+            # ========================================
+            # 第2步：点击保存修改
+            # ========================================
+            logger.info(f"  💾 第2步：点击保存修改...")
             save_selectors = [
-                "button:has-text('保存修改')",
-                "button:has-text('保存')",
-                ".save-btn",
-                "button.jx-button--primary:has-text('保存')",
-                "button[type='button']:has-text('保存')"
+                "button:has-text('保存修改')",  # 最优先：完整匹配
+                "button.jx-button--primary:has-text('保存修改')",  # 绿色按钮
+                "button[type='button']:has-text('保存修改')",
+                "button:has-text('保存')",  # 备用：部分匹配
+                "button:has-text('确认')",
+                "button:has-text('提交')",
+                ".save-btn"
             ]
             
+            save_clicked = False
             for selector in save_selectors:
                 try:
                     btn = self.page.locator(selector).first
@@ -256,14 +276,27 @@ class BatchEditController:
                         # 检查是否可见和可用
                         if await btn.is_visible():
                             await btn.click()
+                            logger.success(f"  ✓ 保存按钮已点击")
+                            
+                            # 等待保存完成
                             await self.page.wait_for_timeout(2000)
-                            logger.success(f"  ✓ 保存成功")
+                            logger.success(f"  ✓ [{step_name}] 保存成功")
+                            save_clicked = True
                             return True
                 except Exception as e:
+                    logger.debug(f"    保存选择器 {selector} 失败: {e}")
                     continue
             
-            logger.error(f"  ✗ 未找到可用的保存按钮")
-            return False
+            if not save_clicked:
+                logger.error(f"  ✗ 未找到可用的保存按钮")
+                # 截图调试
+                try:
+                    screenshot_path = f"debug_save_button_{step_name}.png"
+                    await self.page.screenshot(path=screenshot_path)
+                    logger.info(f"  📸 已保存调试截图: {screenshot_path}")
+                except:
+                    pass
+                return False
             
         except Exception as e:
             logger.error(f"  ✗ 预览/保存失败: {e}")

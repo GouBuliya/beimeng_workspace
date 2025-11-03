@@ -85,7 +85,7 @@ async def test_complete_workflow():
         
         print(f"流程ID: {result['workflow_id']}")
         print(f"开始时间: {result['start_time']}")
-        print(f"结束时间: {result['end_time']}")
+        print(f"结束时间: {result.get('end_time', 'N/A')}")
         print(f"总体状态: {'✅ 成功' if result['total_success'] else '❌ 失败'}\n")
         
         print("各阶段结果：")
