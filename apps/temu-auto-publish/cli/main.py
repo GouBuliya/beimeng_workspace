@@ -25,6 +25,7 @@ sys.path.insert(0, str(project_root))
 
 from cli.commands.config import config_app
 from cli.commands.debug import debug_app
+from cli.commands.health import health_app
 from cli.commands.monitor import monitor_app
 from cli.commands.workflow import workflow_app
 from config.settings import settings
@@ -48,6 +49,7 @@ app.add_typer(workflow_app, name="workflow")
 app.add_typer(monitor_app, name="monitor")
 app.add_typer(debug_app, name="debug")
 app.add_typer(config_app, name="config")
+app.add_typer(health_app, name="health")
 
 
 @app.command()

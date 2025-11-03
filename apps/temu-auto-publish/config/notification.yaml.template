@@ -1,0 +1,183 @@
+# Temu自动发布系统 - 通知配置模板
+# 复制此文件并重命名为 notification.yaml，然后填写实际配置
+
+# ========== 钉钉机器人配置 ==========
+dingtalk:
+  enabled: false
+  
+  # Webhook URL配置
+  # 1. 在钉钉群中添加自定义机器人
+  # 2. 选择"加签"安全设置
+  # 3. 复制Webhook URL到这里
+  webhook_url: "https://oapi.dingtalk.com/robot/send?access_token=YOUR_TOKEN"
+  
+  # 高级配置(可选)
+  at_mobiles: []  # @指定人员的手机号列表
+  is_at_all: false  # 是否@所有人
+
+# ========== 企业微信机器人配置 ==========
+wecom:
+  enabled: false
+  
+  # Webhook URL配置
+  # 1. 在企业微信群中添加群机器人
+  # 2. 复制Webhook URL到这里
+  webhook_url: "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR_KEY"
+  
+  # 高级配置(可选)
+  mentioned_list: []  # @指定成员的userid列表
+  mentioned_mobile_list: []  # @指定成员的手机号列表
+
+# ========== 邮件通知配置 ==========
+email:
+  enabled: false
+  
+  # SMTP服务器配置
+  smtp_host: "smtp.example.com"
+  smtp_port: 587
+  use_tls: true
+  
+  # 认证信息
+  # 建议使用环境变量: SMTP_USERNAME, SMTP_PASSWORD
+  username: "your_email@example.com"
+  password: ""  # 留空则从环境变量读取
+  
+  # 发件人和收件人
+  from_addr: "noreply@example.com"
+  from_name: "Temu自动发布系统"
+  to_addrs:
+    - "admin@example.com"
+    - "team@example.com"
+  
+  # 邮件主题前缀
+  subject_prefix: "[Temu自动发布]"
+
+# ========== 通知规则配置 ==========
+rules:
+  # 工作流完成通知
+  workflow_complete:
+    enabled: true
+    channels:  # 发送到哪些渠道
+      - dingtalk
+      - email
+    
+    # 仅在特定条件下通知
+    conditions:
+      on_success: true
+      on_failure: true
+      on_partial_success: true  # 部分成功(有警告)
+  
+  # 阶段完成通知
+  stage_complete:
+    enabled: false  # 默认关闭,避免过于频繁
+    channels:
+      - dingtalk
+    conditions:
+      notify_on_failure: true  # 仅失败时通知
+  
+  # 告警通知
+  alert:
+    enabled: true
+    channels:
+      - dingtalk
+      - wecom
+      - email
+    
+    # 告警级别
+    levels:
+      - error  # 错误级别
+      - warning  # 警告级别(可选)
+  
+  # 健康检查通知
+  health_check:
+    enabled: true
+    channels:
+      - dingtalk
+    
+    # 仅在状态变化时通知
+    notify_on_status_change: true
+    
+    # 或定期通知
+    periodic_report:
+      enabled: false
+      interval: "daily"  # daily/weekly/hourly
+      time: "09:00"  # 时间(HH:MM格式)
+
+# ========== 通知内容配置 ==========
+content:
+  # 消息格式
+  format: "markdown"  # markdown/text/html
+  
+  # 包含的信息
+  include:
+    workflow_id: true
+    timestamp: true
+    duration: true
+    stage_details: true
+    error_details: true
+    metrics: true
+    logs_link: false  # 如果有日志查看系统
+  
+  # 简化模式(仅包含关键信息)
+  simplified: false
+  
+  # 最大长度(字符)
+  max_length: 4096
+
+# ========== 高级配置 ==========
+advanced:
+  # 通知发送重试
+  retry:
+    enabled: true
+    max_attempts: 3
+    backoff_seconds: 5
+  
+  # 通知发送超时(秒)
+  timeout: 10
+  
+  # 批量通知(合并多个消息)
+  batch:
+    enabled: false
+    interval_seconds: 60
+    max_batch_size: 10
+  
+  # 静默时间段(不发送通知)
+  quiet_hours:
+    enabled: false
+    start: "22:00"
+    end: "08:00"
+    timezone: "Asia/Shanghai"
+  
+  # 频率限制(避免通知轰炸)
+  rate_limit:
+    enabled: true
+    max_per_hour: 10
+    max_per_day: 50
+
+# ========== 测试配置 ==========
+test:
+  # 测试通知
+  # 运行: python -m src.core.notification_service --test
+  test_message:
+    title: "测试通知"
+    content: "这是一条测试消息,用于验证通知配置是否正确。"
+    level: "info"
+
+# ========== 配置说明 ==========
+# 
+# 快速开始:
+# 1. 复制此文件为 notification.yaml
+# 2. 配置至少一个通知渠道(钉钉/企业微信/邮件)
+# 3. 在 production.yaml 中引用此配置
+# 4. 运行测试: python -m src.core.notification_service --test
+#
+# 推荐配置:
+# - 开发环境: 仅启用钉钉,发送所有通知
+# - 生产环境: 启用钉钉+邮件,仅发送失败和告警通知
+#
+# 注意事项:
+# - Webhook URL是敏感信息,请勿提交到git
+# - 建议使用环境变量存储敏感配置
+# - 定期检查通知是否正常接收
+# - 配置静默时间段避免夜间打扰
+

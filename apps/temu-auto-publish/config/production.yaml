@@ -1,0 +1,263 @@
+# Temu自动发布系统 - 生产环境配置
+# 此文件包含生产环境的完整配置
+
+# ========== 环境配置 ==========
+environment: production
+
+# ========== 浏览器配置 ==========
+browser:
+  headless: false  # 生产环境建议false,便于监控
+  slow_mo: 50  # 减慢操作速度,提高稳定性
+  viewport:
+    width: 1920
+    height: 1080
+  timeout: 60000  # 60秒超时
+
+# ========== 业务配置 ==========
+business:
+  # 价格倍率
+  price_multiplier: 10
+  supply_price_multiplier: 3
+  
+  # 采集和认领
+  collect_count: 5
+  claim_count: 4
+  
+  # 产地和包装
+  origin: "浙江"
+  packaging:
+    shape: "长方体"
+    type: "硬包装"
+  
+  # 重量和尺寸范围
+  weight_range:
+    min: 5000
+    max: 9999
+  dimension_range:
+    min: 50
+    max: 99
+  
+  # SKU分类
+  sku_category: "组合装500件"
+
+# ========== 重试配置 ==========
+retry:
+  enabled: true
+  max_attempts: 3
+  backoff_factor: 2.0
+  retry_on_errors:
+    - "NetworkError"
+    - "TimeoutError"
+    - "ElementNotFound"
+
+# ========== 超时配置 ==========
+timeout:
+  # 工作流总超时(秒)
+  workflow_total: 3600  # 1小时
+  
+  # 各阶段超时(秒)
+  stage1_five_to_twenty: 900  # 15分钟
+  stage2_batch_edit: 1200  # 20分钟
+  stage3_publish: 600  # 10分钟
+  
+  # 单个操作超时(秒)
+  page_load: 30
+  element_wait: 10
+  dialog_wait: 5
+
+# ========== 通知配置 ==========
+notification:
+  # 钉钉机器人
+  dingtalk:
+    enabled: false  # 设置为true并配置webhook_url启用
+    webhook_url: ""  # 钉钉机器人Webhook URL
+  
+  # 企业微信机器人
+  wecom:
+    enabled: false  # 设置为true并配置webhook_url启用
+    webhook_url: ""  # 企业微信机器人Webhook URL
+  
+  # 邮件通知
+  email:
+    enabled: false  # 设置为true并配置SMTP信息启用
+    smtp_host: "smtp.example.com"
+    smtp_port: 587
+    username: "your_email@example.com"
+    password: ""  # 建议从环境变量读取
+    from_addr: "noreply@example.com"
+    to_addrs:
+      - "admin@example.com"
+    use_tls: true
+  
+  # 通知触发条件
+  triggers:
+    on_success: true  # 成功时通知
+    on_failure: true  # 失败时通知
+    on_warning: true  # 警告时通知
+    on_stage_complete: false  # 每个阶段完成时通知(可能过于频繁)
+
+# ========== 健康检查配置 ==========
+health_check:
+  # 执行前健康检查
+  pre_execution_check: true
+  
+  # 检查项
+  checks:
+    browser: true
+    login: true
+    network: true
+    disk: true
+    memory: true
+    dependencies: true
+    config_files: true
+  
+  # 阈值
+  thresholds:
+    disk_warning_gb: 10.0
+    disk_error_gb: 5.0
+    memory_warning_percent: 80.0
+    memory_error_percent: 90.0
+  
+  # 网络测试URL
+  network_test_urls:
+    - "https://www.baidu.com"
+    - "https://seller.kuajingmaihuo.com"
+  
+  # 健康检查失败时的行为
+  on_unhealthy: "abort"  # abort/warn/ignore
+
+# ========== 日志配置 ==========
+logging:
+  level: "INFO"  # DEBUG/INFO/WARNING/ERROR
+  format: "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}"
+  
+  # 日志文件
+  file:
+    enabled: true
+    path: "data/logs/production.log"
+    rotation: "100 MB"  # 日志轮转大小
+    retention: "30 days"  # 保留时间
+    compression: "zip"  # 压缩格式
+  
+  # 控制台输出
+  console:
+    enabled: true
+    colorize: true
+
+# ========== 指标收集配置 ==========
+metrics:
+  enabled: true
+  storage_dir: "data/metrics"
+  
+  # 收集的指标
+  collect:
+    - "workflow_duration"
+    - "stage_duration"
+    - "success_rate"
+    - "error_count"
+    - "product_count"
+    - "publish_count"
+  
+  # 指标保留时间
+  retention_days: 90
+
+# ========== 工作流配置 ==========
+workflow:
+  # 状态保存
+  state_dir: "data/workflow_states"
+  save_state_interval: 60  # 每60秒保存一次状态
+  
+  # 断点续传
+  enable_resume: true
+  
+  # 失败处理
+  on_failure:
+    save_state: true  # 保存失败状态
+    take_screenshot: true  # 截图
+    save_html: true  # 保存HTML
+  
+  # 并发控制
+  max_concurrent_workflows: 1  # 同时运行的工作流数量
+
+# ========== 定时任务配置 ==========
+scheduler:
+  # 守护进程配置
+  daemon:
+    pid_file: "data/scheduler.pid"
+    log_file: "data/logs/scheduler.log"
+  
+  # 任务配置
+  jobs:
+    # 示例任务1: 每天上午9点发布
+    - name: "morning_publish"
+      enabled: false  # 设置为true启用
+      schedule: "0 9 * * *"  # Cron表达式
+      input_type: "excel"  # excel/json
+      input_path: "data/input/selection.xlsx"
+      staff_name: ""  # 人员筛选(可选)
+      enable_batch_edit: true
+      enable_publish: true
+      use_ai_titles: true
+    
+    # 示例任务2: 工作日下午2点发布
+    - name: "afternoon_publish"
+      enabled: false
+      schedule: "0 14 * * 1-5"  # 周一到周五
+      input_type: "json"
+      input_path: "config/products.json"
+      enable_batch_edit: true
+      enable_publish: false  # 仅编辑不发布
+      use_ai_titles: true
+    
+    # 示例任务3: 每2小时执行一次(测试用)
+    - name: "frequent_test"
+      enabled: false
+      schedule: "0 */2 * * *"
+      input_type: "json"
+      input_path: "config/test_products.json"
+      enable_batch_edit: false
+      enable_publish: false
+      use_ai_titles: false
+
+# ========== 调试配置 ==========
+debug:
+  enabled: false  # 生产环境建议关闭
+  auto_screenshot: false
+  auto_save_html: false
+  enable_timing: true
+  enable_breakpoint: false
+  debug_dir: "data/debug"
+
+# ========== 数据目录配置 ==========
+data:
+  input_dir: "data/input"
+  output_dir: "data/output"
+  temp_dir: "data/temp"
+  logs_dir: "data/logs"
+
+# ========== 安全配置 ==========
+security:
+  # 日志脱敏
+  mask_credentials: true
+  mask_patterns:
+    - "password"
+    - "token"
+    - "secret"
+  
+  # Cookie管理
+  cookie_file: "data/cookies/miaoshou_cookies.json"
+  cookie_encryption: false  # TODO: 实现cookie加密
+
+# ========== AI配置 ==========
+ai:
+  # 标题生成
+  title_generation:
+    enabled: true
+    provider: "openai"  # openai/anthropic/custom
+    model: "gpt-4"
+    temperature: 0.7
+    max_tokens: 200
+  
+  # Fallback行为
+  on_ai_failure: "use_original"  # use_original/skip/abort
+
