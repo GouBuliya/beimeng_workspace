@@ -310,9 +310,6 @@ class BatchEditController:
                                     await btn.click(force=True)
                                     logger.success(f"  ✓ 强制点击成功")
                                 
-                                # 等待保存完成
-                                await self.page.wait_for_timeout(2000)
-                                logger.success(f"  ✓ [{step_name}] 保存成功")
                                 save_clicked = True
                                 break
                         except:
@@ -336,7 +333,68 @@ class BatchEditController:
                     pass
                 return False
             
-            return True
+            # ========================================
+            # 第3步：等待保存进度并点击关闭按钮
+            # ========================================
+            logger.info(f"  ⏳ 等待保存完成...")
+            try:
+                # 等待保存对话框出现（有进度条）
+                await self.page.wait_for_timeout(2000)
+                
+                # 查找并点击"关闭"按钮
+                logger.info(f"  🔘 查找关闭按钮...")
+                close_selectors = [
+                    "button:has-text('关闭')",
+                    "button.el-button:has-text('关闭')",
+                    "button:has-text('确定')",
+                    "button:has-text('完成')",
+                ]
+                
+                close_clicked = False
+                # 等待最多30秒让保存完成
+                for attempt in range(15):  # 15次 x 2秒 = 30秒
+                    for selector in close_selectors:
+                        try:
+                            all_btns = await self.page.locator(selector).all()
+                            for btn in all_btns:
+                                if await btn.is_visible():
+                                    logger.debug(f"  找到关闭按钮: {selector}")
+                                    try:
+                                        await btn.click(timeout=3000)
+                                        logger.success(f"  ✓ 关闭按钮已点击")
+                                        close_clicked = True
+                                        break
+                                    except:
+                                        try:
+                                            await btn.click(force=True)
+                                            logger.success(f"  ✓ 强制点击关闭按钮成功")
+                                            close_clicked = True
+                                            break
+                                        except:
+                                            continue
+                            if close_clicked:
+                                break
+                        except:
+                            continue
+                    
+                    if close_clicked:
+                        break
+                    
+                    # 等待2秒后重试
+                    await self.page.wait_for_timeout(2000)
+                
+                if close_clicked:
+                    logger.success(f"  ✓ [{step_name}] 保存完成并关闭对话框")
+                    await self.page.wait_for_timeout(1000)
+                    return True
+                else:
+                    logger.warning(f"  ⚠️ 未找到关闭按钮，可能已自动关闭")
+                    return True
+                    
+            except Exception as e:
+                logger.warning(f"  ⚠️ 处理关闭按钮时出错: {e}")
+                # 即使关闭按钮失败，也认为保存成功了
+                return True
             
         except Exception as e:
             logger.error(f"  ✗ 预览/保存失败: {e}")
