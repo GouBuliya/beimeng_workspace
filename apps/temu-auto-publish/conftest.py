@@ -3,9 +3,13 @@
 @OUTLINE:
   - pytest_configure(): 配置pytest
   - pytest_asyncio_mode: 设置asyncio模式为auto
+  - login_controller: 登录控制器fixture
+  - miaoshou_controller: 妙手控制器fixture
 @DEPENDENCIES:
   - 外部: pytest, pytest-asyncio
 """
+
+import os
 
 import pytest
 import sys
@@ -40,4 +44,56 @@ def event_loop_policy():
     """设置事件循环策略."""
     import asyncio
     return asyncio.get_event_loop_policy()
+
+
+@pytest.fixture
+async def login_controller():
+    """登录控制器 fixture.
+    
+    提供已登录的 LoginController 实例，用于集成测试。
+    测试结束后自动清理资源。
+    
+    Yields:
+        LoginController: 已登录的控制器实例
+    """
+    from src.browser.login_controller import LoginController
+    
+    controller = LoginController()
+    await controller.browser_manager.start()
+    
+    # 执行登录
+    username = os.getenv("MIAOSHOU_USERNAME")
+    password = os.getenv("MIAOSHOU_PASSWORD")
+    
+    if not username or not password:
+        pytest.skip("未设置 MIAOSHOU_USERNAME 或 MIAOSHOU_PASSWORD 环境变量")
+    
+    success = await controller.login(username, password)
+    if not success:
+        await controller.browser_manager.close()
+        pytest.fail("登录失败")
+    
+    yield controller
+    
+    # 清理
+    await controller.browser_manager.close()
+
+
+@pytest.fixture
+async def miaoshou_controller(login_controller):
+    """妙手控制器 fixture（依赖登录控制器）.
+    
+    提供 MiaoshouController 实例，使用已登录的 login_controller。
+    
+    Args:
+        login_controller: 登录控制器 fixture
+    
+    Yields:
+        MiaoshouController: 妙手控制器实例
+    """
+    from src.browser.miaoshou_controller import MiaoshouController
+    
+    controller = MiaoshouController()
+    yield controller
+
 

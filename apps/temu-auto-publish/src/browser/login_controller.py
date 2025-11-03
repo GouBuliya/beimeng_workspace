@@ -3,8 +3,8 @@
 @OUTLINE:
   - class LoginController: 登录控制器主类
   - async def login(): 执行登录流程
-  - async def check_login_status(): 检查登录状态
-  - async def ensure_logged_in(): 确保已登录状态
+  - async def login_if_needed(): 如果需要则登录（检查状态后按需登录）
+  - async def _check_login_status(): 检查登录状态（私有方法）
 @GOTCHAS:
   - 使用aria-ref定位元素（妙手ERP特有）
   - 优先使用Cookie登录，失效后才执行完整登录
@@ -250,6 +250,63 @@ class LoginController:
         except Exception as e:
             logger.debug(f"检查登录状态失败: {e}")
             return False
+
+    async def login_if_needed(
+        self,
+        username: Optional[str] = None,
+        password: Optional[str] = None,
+    ) -> bool:
+        """如果需要则登录（检查登录状态，未登录则执行登录）.
+
+        这个方法会：
+        1. 启动浏览器（如果未启动）
+        2. 检查登录状态
+        3. 如果未登录，使用提供的或环境变量中的凭据执行登录
+
+        Args:
+            username: 用户名（可选，如果不提供则从环境变量读取）
+            password: 密码（可选，如果不提供则从环境变量读取）
+
+        Returns:
+            True 如果已登录或登录成功
+
+        Examples:
+            >>> controller = LoginController()
+            >>> await controller.login_if_needed()
+            >>> # 或者显式提供凭据
+            >>> await controller.login_if_needed("user", "pass")
+        """
+        import os
+
+        # 1. 启动浏览器（如果未启动）
+        if not self.browser_manager.browser:
+            logger.info("浏览器未启动，正在启动...")
+            await self.browser_manager.start()
+
+        # 2. 检查是否已经登录
+        try:
+            if await self._check_login_status():
+                logger.info("已登录，无需重新登录")
+                return True
+        except Exception as e:
+            logger.debug(f"检查登录状态时出错: {e}")
+
+        # 3. 需要登录，获取凭据
+        if username is None:
+            username = os.getenv("MIAOSHOU_USERNAME")
+            if not username:
+                logger.error("未提供用户名且环境变量 MIAOSHOU_USERNAME 未设置")
+                return False
+
+        if password is None:
+            password = os.getenv("MIAOSHOU_PASSWORD")
+            if not password:
+                logger.error("未提供密码且环境变量 MIAOSHOU_PASSWORD 未设置")
+                return False
+
+        # 4. 执行登录
+        logger.info(f"需要登录，使用用户名: {username}")
+        return await self.login(username, password)
 
 
 # 测试代码
