@@ -432,8 +432,10 @@ class FiveToTwentyWorkflow:
             logger.info(f"[阶段1/2] 认领产品（每个认领{claim_times}次）")
             logger.info("=" * 60)
 
-            # 切换到"未认领"tab
-            await self.miaoshou_ctrl.switch_tab(page, "unclaimed")
+            # 注意：根据SOP步骤5，认领操作在"全部"tab中进行
+            # 产品首次编辑后仍在"全部"tab，直接认领即可
+            # 认领后，产品会自动移动到"已认领"tab
+            logger.info("注意：认领在'全部'tab中进行（SOP步骤5）")
             await page.wait_for_timeout(1000)
 
             claimed_count = 0

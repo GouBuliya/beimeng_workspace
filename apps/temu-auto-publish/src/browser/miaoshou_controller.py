@@ -540,8 +540,31 @@ class MiaoshouController:
             collection_box_config = self.selectors.get("collection_box", {})
             pagination_config = collection_box_config.get("pagination", {})
             
-            select_all_selector = pagination_config.get("select_all", "text='全选'")
-            await page.locator(select_all_selector).click()
+            # 使用更精确的选择器，避免strict mode violation
+            # 优先使用复选框的label，而不是纯文本定位
+            select_all_selectors = [
+                ".jx-pagination__total .jx-checkbox__label",  # 分页器左侧的全选checkbox
+                "label.jx-checkbox:has-text('全选')",
+                ".jx-checkbox__label:has-text('全选')",
+                "text='全选'"
+            ]
+            
+            clicked = False
+            for selector in select_all_selectors:
+                try:
+                    locator = page.locator(selector).first
+                    if await locator.count() > 0:
+                        await locator.click()
+                        clicked = True
+                        logger.debug(f"使用选择器成功全选: {selector}")
+                        break
+                except Exception as e:
+                    logger.debug(f"选择器 {selector} 失败: {e}")
+                    continue
+            
+            if not clicked:
+                raise Exception("所有全选选择器都失败")
+            
             await page.wait_for_timeout(500)
 
             logger.success("✓ 已全选产品")

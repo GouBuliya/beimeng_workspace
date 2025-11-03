@@ -163,8 +163,8 @@ class ProductionRunner:
         
         if self.input_type == "excel":
             # 使用SelectionTableReader读取Excel
-            reader = SelectionTableReader(str(self.input_path))
-            products = reader.read()
+            reader = SelectionTableReader()
+            products = reader.read_excel(str(self.input_path))
             
             # 转换为标准格式
             products_data = []
@@ -182,6 +182,13 @@ class ProductionRunner:
                 products_data.append(product_dict)
             
             console.print(f"[green]✓[/green] 已从Excel加载 {len(products_data)} 个产品")
+            
+            # SOP工作流每次处理5个产品，如果超过5个，只取前5个
+            if len(products_data) > 5:
+                console.print(f"[yellow]⚠[/yellow] 产品数量超过5个，本次只处理前5个产品")
+                console.print(f"   剩余 {len(products_data) - 5} 个产品将在后续批次处理")
+                products_data = products_data[:5]
+            
             return products_data
         
         elif self.input_type == "json":
