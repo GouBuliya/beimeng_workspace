@@ -36,6 +36,24 @@
     "common_collection_box": "text='公用采集箱'"
   },
   
+  "temu_collect_box": {
+    "comment": "Temu全托管采集箱 - 批量编辑入口",
+    "url": "https://erp.91miaoshou.com/pddkj/collect_box/items",
+    "tabs": {
+      "all": ".jx-radio-button:has-text('全部')",
+      "unpublished": ".jx-radio-button:has-text('未发布')",
+      "scheduled": ".jx-radio-button:has-text('定时发布')",
+      "published": ".jx-radio-button:has-text('已发布')"
+    },
+    "action_buttons": {
+      "batch_edit": "button:has-text('批量编辑')",
+      "select_all": "text='全选'",
+      "select_shop": "button:has-text('选择店铺')",
+      "set_price": "button:has-text('设置供货价')",
+      "batch_publish": "button:has-text('批量发布')"
+    }
+  },
+  
   "collection_box": {
     "url": "https://erp.91miaoshou.com/common_collect_box/items",
     "search_box": {

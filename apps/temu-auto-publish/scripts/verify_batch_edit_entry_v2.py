@@ -46,13 +46,8 @@ async def verify_batch_edit_entry():
         print("🧭 [2/7] 导航到 Temu全托管采集箱...")
         print("      💡 注意：批量编辑只能在Temu全托管采集箱中进行\n")
         
-        # 尝试找到正确的URL
-        # 可能的URL：
-        # - https://erp.91miaoshou.com/pddk/collect_box/items
-        # - 或者通过菜单导航
-        
-        # 先尝试直接访问
-        temu_box_url = "https://erp.91miaoshou.com/pddk/collect_box/items"
+        # Temu全托管采集箱的正确URL
+        temu_box_url = "https://erp.91miaoshou.com/pddkj/collect_box/items"
         await page.goto(temu_box_url)
         await page.wait_for_timeout(3000)
         
@@ -62,7 +57,7 @@ async def verify_batch_edit_entry():
         print(f"      当前URL: {current_url}")
         print(f"      页面标题: {page_title}")
         
-        if "pddk" in current_url or "Temu" in page_title or "全托管" in page_title:
+        if "pddkj" in current_url or "Temu" in page_title or "全托管" in page_title:
             print("      ✅ 已到达 Temu全托管采集箱\n")
         else:
             print("      ⚠️  可能未到达正确页面，尝试通过菜单导航...\n")
