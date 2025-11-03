@@ -148,15 +148,18 @@ class BatchEditController:
         Returns:
             是否成功点击
         """
-        logger.info(f"[步骤{step_num}] {step_name}")
+        logger.info(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        logger.info(f"[步骤 {step_num}] {step_name}")
+        logger.info(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         
         try:
-            # 1. 尝试多个选择器
+            # 1. 尝试多个选择器定位步骤
             selectors = [
                 f"text='{step_name}'",
                 f"button:has-text('{step_name}')",
                 f"a:has-text('{step_name}')",
-                f".step-item:has-text('{step_name}')"
+                f".step-item:has-text('{step_name}')",
+                f"div:has-text('{step_name}')"
             ]
             
             step_elem = None
@@ -165,6 +168,7 @@ class BatchEditController:
                     elem = self.page.locator(selector).first
                     if await elem.count() > 0:
                         step_elem = elem
+                        logger.debug(f"  使用选择器: {selector}")
                         break
                 except:
                     continue
@@ -180,20 +184,33 @@ class BatchEditController:
             except:
                 pass
             
-            # 3. 尝试点击，如果被遮挡则使用force
+            # 3. 点击步骤（处理遮挡情况）
             try:
                 await step_elem.click(timeout=5000)
-                logger.info(f"  ✓ 已点击步骤")
+                logger.success(f"  ✓ 已点击步骤导航")
             except PlaywrightTimeoutError:
                 logger.warning(f"  ⚠️ 元素被遮挡，尝试强制点击...")
                 try:
                     await step_elem.click(force=True)
-                    logger.info(f"  ✓ 强制点击成功")
+                    logger.success(f"  ✓ 强制点击成功")
                 except Exception as e:
                     logger.error(f"  ✗ 强制点击也失败: {e}")
                     return False
             
-            await self.page.wait_for_timeout(1500)
+            # 4. 等待页面内容加载（重要！增加等待时间）
+            logger.info(f"  ⏳ 等待步骤页面加载...")
+            await self.page.wait_for_timeout(3000)  # 从1.5秒增加到3秒
+            
+            # 5. 验证页面是否加载（检查预览和保存按钮）
+            try:
+                preview_btn = self.page.locator("button:has-text('预览')").first
+                if await preview_btn.count() > 0:
+                    logger.success(f"  ✓ 步骤页面已加载")
+                else:
+                    logger.warning(f"  ⚠️ 未检测到预览按钮，可能页面未完全加载")
+            except:
+                pass
+            
             return True
             
         except Exception as e:
