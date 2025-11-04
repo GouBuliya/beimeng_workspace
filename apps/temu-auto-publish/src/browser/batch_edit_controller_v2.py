@@ -68,7 +68,7 @@ class BatchEditController:
             logger.info(f"导航到: {self.temu_box_url}")
             await self.page.goto(self.temu_box_url, timeout=60000)
             await self.page.wait_for_load_state("networkidle", timeout=60000)
-            await self.page.wait_for_timeout(3000)
+            await self.page.wait_for_timeout(1500)  # 3000 -> 1500ms
             
             # 2. 全选产品
             logger.info(f"选择 {select_count} 个产品...")
@@ -87,7 +87,7 @@ class BatchEditController:
                         btn = self.page.locator(selector).first
                         if await btn.count() > 0:
                             await btn.click(timeout=10000)
-                            await self.page.wait_for_timeout(1000)
+                            await self.page.wait_for_timeout(500)  # 1000 -> 500ms
                             logger.success("✓ 已全选产品")
                             selected = True
                             break
@@ -115,7 +115,7 @@ class BatchEditController:
             try:
                 batch_edit_btn = self.page.locator("button:has-text('批量编辑')").first
                 await batch_edit_btn.click(timeout=10000)
-                await self.page.wait_for_timeout(3000)
+                await self.page.wait_for_timeout(2000)  # 3000 -> 2000ms
                 logger.success("✓ 已进入批量编辑页面")
             except Exception as e:
                 logger.error(f"无法进入批量编辑: {e}")
@@ -123,7 +123,7 @@ class BatchEditController:
             
             # 4. 验证是否进入批量编辑页面
             logger.info("验证批量编辑页面...")
-            await self.page.wait_for_timeout(2000)  # 额外等待页面加载
+            await self.page.wait_for_timeout(1000)  # 2000 -> 1000ms
             
             try:
                 # 检查多个可能的标志
@@ -226,7 +226,7 @@ class BatchEditController:
             
             # 4. 等待页面内容加载（重要！增加等待时间）
             logger.info(f"  ⏳ 等待步骤页面加载...")
-            await self.page.wait_for_timeout(3000)  # 从1.5秒增加到3秒
+            await self.page.wait_for_timeout(2000)  # 3000 -> 2000ms 关键等待
             
             # 5. 验证页面是否加载（检查预览和保存按钮）
             try:
@@ -366,7 +366,7 @@ class BatchEditController:
             logger.info(f"  ⏳ 等待保存完成...")
             try:
                 # 等待保存对话框出现（有进度条）
-                await self.page.wait_for_timeout(2000)
+                await self.page.wait_for_timeout(1500)  # 2000 -> 1500ms
                 
                 # 查找并点击"关闭"按钮
                 logger.info(f"  🔘 查找关闭按钮...")
@@ -407,8 +407,8 @@ class BatchEditController:
                     if close_clicked:
                         break
                     
-                    # 等待2秒后重试
-                    await self.page.wait_for_timeout(2000)
+                    # 等待1.5秒后重试
+                    await self.page.wait_for_timeout(1500)  # 2000 -> 1500ms
                 
                 if close_clicked:
                     logger.success(f"  ✓ [{step_name}] 保存完成并关闭对话框")
