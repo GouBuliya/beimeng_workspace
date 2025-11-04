@@ -64,11 +64,20 @@ class BatchEditController:
         logger.info("=" * 60)
         
         try:
-            # 1. 导航到Temu全托管采集箱
+            # 1. 导航到Temu全托管采集箱（优化等待策略 + 并行处理）
             logger.info(f"导航到: {self.temu_box_url}")
             await self.page.goto(self.temu_box_url, timeout=60000)
-            await self.page.wait_for_load_state("networkidle", timeout=60000)
-            await self.page.wait_for_timeout(1500)  # 3000 -> 1500ms
+            
+            # 并行等待多个条件
+            try:
+                await asyncio.gather(
+                    self.page.wait_for_load_state("domcontentloaded", timeout=60000),
+                    self.page.locator("text='全选'").first.wait_for(state="visible", timeout=10000)
+                )
+                logger.debug("✓ 页面已加载，关键元素可见")
+            except:
+                # fallback: 如果元素未找到，等待500ms
+                await self.page.wait_for_timeout(500)
             
             # 2. 全选产品
             logger.info(f"选择 {select_count} 个产品...")
@@ -87,7 +96,7 @@ class BatchEditController:
                         btn = self.page.locator(selector).first
                         if await btn.count() > 0:
                             await btn.click(timeout=10000)
-                            await self.page.wait_for_timeout(500)  # 1000 -> 500ms
+                            # 移除不必要的500ms等待，按钮点击已有反馈
                             logger.success("✓ 已全选产品")
                             selected = True
                             break
@@ -114,52 +123,24 @@ class BatchEditController:
             logger.info("点击批量编辑按钮...")
             try:
                 batch_edit_btn = self.page.locator("button:has-text('批量编辑')").first
+                await batch_edit_btn.wait_for(state="visible", timeout=5000)
                 await batch_edit_btn.click(timeout=10000)
-                await self.page.wait_for_timeout(2000)  # 3000 -> 2000ms
-                logger.success("✓ 已进入批量编辑页面")
+                logger.success("✓ 已点击批量编辑按钮")
+                # 等待批量编辑页面关键元素出现
+                try:
+                    await self.page.locator("button:has-text('预览')").first.wait_for(state="visible", timeout=10000)
+                    logger.success("✓ 已进入批量编辑页面")
+                except:
+                    # fallback: 等待1秒
+                    await self.page.wait_for_timeout(1000)
             except Exception as e:
                 logger.error(f"无法进入批量编辑: {e}")
                 return False
             
-            # 4. 验证是否进入批量编辑页面
-            logger.info("验证批量编辑页面...")
-            await self.page.wait_for_timeout(1000)  # 2000 -> 1000ms
-            
-            try:
-                # 检查多个可能的标志
-                verification_selectors = [
-                    "text='标题'",
-                    "text='英语标题'",
-                    "text='类目属性'",
-                    ".batch-edit",  # 可能的批量编辑容器类名
-                    "text='预览'",
-                    "text='保存修改'"
-                ]
-                
-                for selector in verification_selectors:
-                    try:
-                        elem = self.page.locator(selector).first
-                        if await elem.count() > 0:
-                            logger.success(f"✓ 批量编辑页面加载成功（找到: {selector}）")
-                            return True
-                    except:
-                        continue
-                
-                # 如果都找不到，尝试截图并警告
-                logger.warning("⚠️ 未找到明确的批量编辑页面标志，但继续执行...")
-                try:
-                    await self.page.screenshot(path="debug_batch_edit_page.png")
-                    logger.info("📸 已保存截图: debug_batch_edit_page.png")
-                except:
-                    pass
-                
-                # 尝试继续执行（可能页面已经正确加载但我们的选择器不对）
-                return True
-                
-            except Exception as e:
-                logger.warning(f"⚠️ 验证批量编辑页面时出错: {e}")
-                # 即使验证失败也返回True，让后续步骤去判断
-                return True
+            # 4. 验证是否进入批量编辑页面（已通过步骤3的智能等待验证）
+            # 移除不必要的验证等待，步骤3已经等待预览按钮可见
+            logger.success("✓ 批量编辑页面准备就绪")
+            return True
             
         except Exception as e:
             logger.error(f"导航失败: {e}")
@@ -224,19 +205,17 @@ class BatchEditController:
                     logger.error(f"  ✗ 强制点击也失败: {e}")
                     return False
             
-            # 4. 等待页面内容加载（重要！增加等待时间）
+            # 4. 等待页面内容加载（智能等待预览按钮）
             logger.info(f"  ⏳ 等待步骤页面加载...")
-            await self.page.wait_for_timeout(2000)  # 3000 -> 2000ms 关键等待
-            
-            # 5. 验证页面是否加载（检查预览和保存按钮）
             try:
+                # 智能等待：等待预览按钮出现
                 preview_btn = self.page.locator("button:has-text('预览')").first
-                if await preview_btn.count() > 0:
-                    logger.success(f"  ✓ 步骤页面已加载")
-                else:
-                    logger.warning(f"  ⚠️ 未检测到预览按钮，可能页面未完全加载")
+                await preview_btn.wait_for(state="visible", timeout=5000)
+                logger.success(f"  ✓ 步骤页面已加载（预览按钮可见）")
             except:
-                pass
+                # fallback: 如果找不到预览按钮，等待1秒
+                logger.debug(f"  未检测到预览按钮，使用fallback等待")
+                await self.page.wait_for_timeout(1000)
             
             return True
             
@@ -510,12 +489,57 @@ class BatchEditController:
         return await self.click_preview_and_save("类目属性")
     
     async def step_04_main_sku(self) -> bool:
-        """步骤7.4：主货号（不改动）."""
+        """步骤7.4：主货号（填写或保持默认）."""
         if not await self.click_step("主货号", "7.4"):
             return False
         
-        logger.info("  ℹ️ 主货号不改动，直接预览+保存")
-        return await self.click_preview_and_save("主货号")
+        try:
+            logger.info("  检查主货号是否需要填写...")
+            
+            # 等待输入框加载
+            await self.page.wait_for_timeout(1000)
+            
+            # 查找主货号输入框
+            sku_input_selectors = [
+                "input[placeholder*='主货号']",
+                "input[placeholder*='货号']",
+                "input[placeholder*='SKU']",
+                ".el-input__inner",
+                "input[type='text']"
+            ]
+            
+            # 检查是否有输入框
+            input_found = False
+            for selector in sku_input_selectors:
+                try:
+                    all_inputs = await self.page.locator(selector).all()
+                    logger.debug(f"  选择器 {selector} 找到 {len(all_inputs)} 个输入框")
+                    
+                    for input_elem in all_inputs:
+                        if await input_elem.is_visible():
+                            # 检查输入框是否为空
+                            current_value = await input_elem.input_value()
+                            if current_value:
+                                logger.info(f"  ℹ️ 主货号已有值：{current_value}，保持不变")
+                            else:
+                                logger.info(f"  ⚠️ 主货号为空，保持默认")
+                            input_found = True
+                            break
+                    
+                    if input_found:
+                        break
+                except Exception as e:
+                    logger.debug(f"  选择器 {selector} 失败: {e}")
+                    continue
+            
+            if not input_found:
+                logger.info("  ℹ️ 未找到主货号输入框或已自动填充")
+            
+            return await self.click_preview_and_save("主货号")
+            
+        except Exception as e:
+            logger.error(f"  ✗ 操作失败: {e}")
+            return False
     
     async def step_05_packaging(self, image_url: Optional[str] = None) -> bool:
         """步骤7.5：外包装（长方体+硬包装）.
@@ -1118,7 +1142,11 @@ class BatchEditController:
         """执行18步完整流程.
         
         Args:
-            product_data: 产品数据（成本价等），可选
+            product_data: 产品数据字典，包含:
+                - cost_price: 成本价
+                - product_name: 产品名称（用于从Excel读取数据）
+                - weight: 重量（可选）
+                - length/width/height: 尺寸（可选）
             
         Returns:
             执行结果字典
@@ -1136,8 +1164,13 @@ class BatchEditController:
         
         # 获取产品数据
         cost_price = product_data.get("cost_price") if product_data else None
+        product_name = product_data.get("product_name") if product_data else None
+        weight = product_data.get("weight") if product_data else None
+        length = product_data.get("length") if product_data else None
+        width = product_data.get("width") if product_data else None
+        height = product_data.get("height") if product_data else None
         
-        # 执行18步
+        # 执行18步（传递正确的参数）
         steps = [
             ("7.1", "标题", self.step_01_title()),
             ("7.2", "英语标题", self.step_02_english_title()),
@@ -1147,12 +1180,12 @@ class BatchEditController:
             ("7.6", "产地", self.step_06_origin()),
             ("7.7", "定制品", self.step_07_customization()),
             ("7.8", "敏感属性", self.step_08_sensitive_attrs()),
-            ("7.9", "重量", self.step_09_weight()),
-            ("7.10", "尺寸", self.step_10_dimensions()),
+            ("7.9", "重量", self.step_09_weight(weight=weight, product_name=product_name)),
+            ("7.10", "尺寸", self.step_10_dimensions(length=length, width=width, height=height, product_name=product_name)),
             ("7.11", "平台SKU", self.step_11_platform_sku()),
             ("7.12", "SKU分类", self.step_12_sku_category()),
             ("7.13", "尺码表", self.step_13_size_chart()),
-            ("7.14", "建议售价", self.step_14_suggested_price(cost_price)),
+            ("7.14", "建议售价", self.step_14_suggested_price(cost_price=cost_price, product_name=product_name)),
             ("7.15", "包装清单", self.step_15_package_list()),
             ("7.16", "轮播图", self.step_16_carousel_images()),
             ("7.17", "颜色图", self.step_17_color_images()),

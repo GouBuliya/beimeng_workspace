@@ -93,14 +93,19 @@ class BrowserManager:
         if headless is None:
             headless = browser_config.get("headless", False)
 
-        # 启动参数
+        # 启动参数（添加性能优化选项）
         launch_options = {
             "headless": headless,
             "args": [
                 "--disable-blink-features=AutomationControlled",
                 "--disable-dev-shm-usage",
+                "--disable-gpu",  # 禁用GPU加速
                 "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-web-security",  # 跨域问题
+                "--disable-features=IsolateOrigins,site-per-process",
             ],
+            "slow_mo": 300 if not headless else 0,  # 有头模式减速300ms便于观察
         }
 
         # 启动浏览器
@@ -132,6 +137,21 @@ class BrowserManager:
         # 应用反检测补丁
         if self.config.get("stealth", {}).get("enabled", True):
             await self._apply_stealth()
+        
+        # 添加禁用动画的初始化脚本（性能优化）
+        await self.context.add_init_script("""
+            // 禁用CSS动画和过渡效果，加速页面交互
+            const style = document.createElement('style');
+            style.innerHTML = `
+                *, ::before, ::after {
+                    transition: none !important;
+                    animation: none !important;
+                    animation-duration: 0s !important;
+                    animation-delay: 0s !important;
+                }
+            `;
+            document.head.appendChild(style);
+        """)
 
         # 创建页面
         self.page = await self.context.new_page()
