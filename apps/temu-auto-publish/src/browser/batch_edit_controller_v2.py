@@ -414,23 +414,58 @@ class BatchEditController:
             return False
         
         try:
-            logger.info("  填写英语标题（按空格）...")
-            # 查找输入框
+            logger.info("  填写英语标题（输入空格）...")
+            
+            # 等待页面加载
+            await self.page.wait_for_timeout(1000)
+            
+            # 查找输入框 - 使用更多选择器
             input_selectors = [
                 "input[placeholder*='英语']",
                 "input[placeholder*='英文']",
-                "textarea[placeholder*='英语']"
+                "input[placeholder*='English']",
+                "textarea[placeholder*='英语']",
+                "textarea[placeholder*='英文']",
+                ".el-input__inner",  # Element UI 输入框
+                "input[type='text']",
+                "textarea"
             ]
             
+            filled = False
             for selector in input_selectors:
                 try:
-                    input_elem = self.page.locator(selector).first
-                    if await input_elem.count() > 0:
-                        await input_elem.fill(" ")  # 按空格
-                        logger.info("  ✓ 已输入空格")
+                    # 获取所有匹配的输入框
+                    all_inputs = await self.page.locator(selector).all()
+                    logger.debug(f"  选择器 {selector} 找到 {len(all_inputs)} 个输入框")
+                    
+                    for input_elem in all_inputs:
+                        try:
+                            # 检查是否可见
+                            if await input_elem.is_visible():
+                                # 先清空
+                                await input_elem.clear()
+                                # 填写空格
+                                await input_elem.fill(" ")
+                                logger.success(f"  ✓ 已输入空格（使用选择器: {selector}）")
+                                filled = True
+                                break
+                        except Exception as e:
+                            logger.debug(f"    输入框不可用: {e}")
+                            continue
+                    
+                    if filled:
                         break
-                except:
+                except Exception as e:
+                    logger.debug(f"  选择器 {selector} 失败: {e}")
                     continue
+            
+            if not filled:
+                logger.warning("  ⚠️ 未找到英语标题输入框，尝试截图调试")
+                try:
+                    await self.page.screenshot(path="debug_english_title.png")
+                    logger.info("  📸 已保存截图: debug_english_title.png")
+                except:
+                    pass
             
             return await self.click_preview_and_save("英语标题")
         except Exception as e:
