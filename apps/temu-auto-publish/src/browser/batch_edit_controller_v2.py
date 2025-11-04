@@ -716,74 +716,100 @@ class BatchEditController:
             # 等待页面加载
             await self.page.wait_for_timeout(1000)
             
-            # 查找产地输入框
+            # 查找产地输入框（重点：跳过type=number的输入框）
             origin_input_selectors = [
-                "input[placeholder*='产地']",
-                "input[placeholder*='省份']",
-                ".el-input__inner",
-                "input[type='text']"
+                "input[placeholder='请选择或输入搜索']",  # 最精确的选择器
+                "input[placeholder*='搜索']",
+                "text='产地' >> ../.. >> input[placeholder*='搜索']",
             ]
             
             input_found = False
             for selector in origin_input_selectors:
                 try:
                     all_inputs = await self.page.locator(selector).all()
+                    logger.debug(f"  选择器 '{selector}' 找到 {len(all_inputs)} 个元素")
+                    
                     for input_elem in all_inputs:
-                        if await input_elem.is_visible():
-                            # 步骤1: 先输入"浙江"触发搜索
-                            await input_elem.clear()
-                            await input_elem.fill("浙江")
-                            logger.info("  ✓ 已输入搜索关键词：浙江")
-                            input_found = True
+                        try:
+                            # 确保不是number类型的输入框
+                            input_type = await input_elem.get_attribute("type")
+                            if input_type == "number":
+                                logger.debug(f"    跳过number类型输入框")
+                                continue
                             
-                            # 等待下拉列表出现
-                            await self.page.wait_for_timeout(1500)
-                            
-                            # 步骤2: 在下拉列表中选择"中国大陆 / 浙江省"
-                            option_selectors = [
-                                "text='中国大陆 / 浙江省'",
-                                "text='中国大陆/浙江省'",
-                                ".el-select-dropdown__item:has-text('中国大陆 / 浙江省')",
-                                ".el-select-dropdown__item:has-text('浙江省')",
-                                "li:has-text('中国大陆 / 浙江省')",
-                                "li:has-text('浙江省')",
-                                ".jx-pro-option:has-text('中国大陆')",
-                                ".jx-pro-option:has-text('浙江省')"
-                            ]
-                            
-                            selected = False
-                            for opt_selector in option_selectors:
-                                try:
-                                    option = self.page.locator(opt_selector).first
-                                    if await option.count() > 0:
-                                        # 等待选项可见
-                                        await option.wait_for(state="visible", timeout=3000)
+                            if await input_elem.is_visible():
+                                # 步骤1: 先输入"浙江"触发搜索
+                                await input_elem.click()  # 先点击聚焦
+                                await self.page.wait_for_timeout(200)
+                                await input_elem.clear()
+                                await input_elem.fill("浙江")
+                                logger.info("  ✓ 已输入搜索关键词：浙江")
+                                input_found = True
+                                
+                                # 等待下拉列表出现
+                                await self.page.wait_for_timeout(1500)
+                                
+                                # 步骤2: 在下拉列表中选择"中国大陆 / 浙江省"
+                                option_selectors = [
+                                    ".el-select-dropdown__item:has-text('中国大陆')",
+                                    ".el-select-dropdown__item:has-text('浙江省')",
+                                    "li.el-select-dropdown__item:has-text('浙江')",
+                                    ".jx-pro-option:has-text('中国大陆')",
+                                    "li[role='option']:has-text('浙江')",
+                                    "text='中国大陆 / 浙江省'",
+                                    "text='中国大陆/浙江省'"
+                                ]
+                                
+                                selected = False
+                                for opt_selector in option_selectors:
+                                    try:
+                                        options = await self.page.locator(opt_selector).all()
+                                        logger.debug(f"    选项选择器 '{opt_selector}' 找到 {len(options)} 个")
                                         
-                                        # 检查选项文本是否包含"中国大陆"和"浙江省"
-                                        option_text = await option.inner_text()
-                                        if "中国大陆" in option_text and "浙江" in option_text:
-                                            await option.click()
-                                            logger.success(f"  ✓ 已选择：{option_text.strip()}（选择器: {opt_selector}）")
-                                            selected = True
+                                        for option in options:
+                                            try:
+                                                # 等待选项可见
+                                                await option.wait_for(state="visible", timeout=2000)
+                                                
+                                                # 获取选项文本
+                                                option_text = await option.inner_text()
+                                                option_text = option_text.strip()
+                                                
+                                                # 检查是否包含"中国大陆"和"浙江"
+                                                if "中国大陆" in option_text and "浙江" in option_text:
+                                                    await option.click()
+                                                    logger.success(f"  ✓ 已选择：{option_text}")
+                                                    selected = True
+                                                    break
+                                            except Exception as e:
+                                                logger.debug(f"      选项点击失败: {e}")
+                                                continue
+                                        
+                                        if selected:
                                             break
-                                except Exception as e:
-                                    logger.debug(f"    选项选择器 {opt_selector} 失败: {e}")
-                                    continue
-                            
-                            if not selected:
-                                # 尝试按回车键确认
-                                try:
-                                    await input_elem.press("Enter")
-                                    logger.info("  ✓ 已按回车确认")
-                                except:
-                                    logger.warning("  ⚠️ 未找到下拉选项，但已输入文本")
-                            
-                            break
+                                    except Exception as e:
+                                        logger.debug(f"    选项选择器 {opt_selector} 失败: {e}")
+                                        continue
+                                
+                                if not selected:
+                                    # 尝试按回车键或Down+Enter
+                                    try:
+                                        await input_elem.press("ArrowDown")
+                                        await self.page.wait_for_timeout(300)
+                                        await input_elem.press("Enter")
+                                        logger.info("  ✓ 已按ArrowDown+Enter确认")
+                                    except:
+                                        logger.warning("  ⚠️ 未找到下拉选项，但已输入文本")
+                                
+                                break
+                        except Exception as e:
+                            logger.debug(f"    处理输入框失败: {e}")
+                            continue
                     
                     if input_found:
                         break
                 except Exception as e:
-                    logger.debug(f"  输入框选择器 {selector} 失败: {e}")
+                    logger.debug(f"  选择器 {selector} 失败: {e}")
                     continue
             
             if not input_found:
