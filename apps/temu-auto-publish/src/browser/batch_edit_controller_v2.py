@@ -716,51 +716,47 @@ class BatchEditController:
             # 等待页面加载
             await self.page.wait_for_timeout(1000)
             
-            # 策略：优先找到"产地"标签附近的输入框
-            origin_input_selectors = [
-                # 策略1: 通过文本"产地"定位到其父容器中的输入框
-                "text='产地' >> xpath=../following-sibling::*//input[contains(@placeholder, '搜索')]",
-                "text='产地' >> xpath=../..//input[contains(@placeholder, '搜索')]",
-                # 策略2: 直接查找所有搜索输入框（作为fallback）
-                "input[placeholder='请选择或输入搜索']",
+            # 策略：精准定位 - 直接找到可用的输入框，不遍历无用的
+            # 根据页面结构分析，产地输入框特征：
+            # 1. 不是 type="number"
+            # 2. 不是 readonly
+            # 3. 不是 disabled
+            # 4. placeholder包含"搜索"
+            # 5. 可以接收点击（不被遮挡）
+            
+            # 使用组合选择器直接定位
+            precise_selectors = [
+                # 最精准：排除所有不可用属性，只找可用的输入框
+                "input[placeholder='请选择或输入搜索']:not([readonly]):not([disabled]):not([type='number'])",
+                # 备用：通过可见性和类名筛选
+                ".jx-cascader__search-input:visible",
             ]
             
             input_found = False
-            for selector_idx, selector in enumerate(origin_input_selectors):
+            
+            for selector in precise_selectors:
                 try:
+                    # 获取所有匹配的输入框
                     all_inputs = await self.page.locator(selector).all()
-                    logger.debug(f"  选择器 {selector_idx+1}/3: '{selector[:60]}...' 找到 {len(all_inputs)} 个元素")
+                    logger.debug(f"  精准选择器 '{selector[:50]}...' 找到 {len(all_inputs)} 个候选")
                     
-                    for input_idx, input_elem in enumerate(all_inputs):
+                    # 遍历找到第一个可点击的（通常就是我们要的那个）
+                    for idx, input_elem in enumerate(all_inputs):
                         try:
-                            # 快速检查：跳过number类型和readonly/disabled
-                            input_type = await input_elem.get_attribute("type")
-                            is_readonly = await input_elem.get_attribute("readonly")
-                            is_disabled = await input_elem.get_attribute("disabled")
-                            
-                            if input_type == "number":
-                                logger.debug(f"    [{input_idx+1}] 跳过number类型")
-                                continue
-                            if is_readonly is not None:
-                                logger.debug(f"    [{input_idx+1}] 跳过readonly")
-                                continue
-                            if is_disabled is not None:
-                                logger.debug(f"    [{input_idx+1}] 跳过disabled")
-                                continue
-                            
                             # 检查可见性
                             if not await input_elem.is_visible():
-                                logger.debug(f"    [{input_idx+1}] 跳过不可见元素")
                                 continue
                             
-                            # 尝试点击，设置短超时（3秒）快速失败
-                            logger.debug(f"    [{input_idx+1}] 尝试点击（3秒超时）...")
+                            # 尝试点击（短超时1秒，快速验证是否可点击）
+                            logger.debug(f"    尝试候选 {idx+1}/{len(all_inputs)}...")
                             try:
-                                await input_elem.click(timeout=3000)  # 3秒超时，快速失败
+                                await input_elem.click(timeout=1000)  # 1秒超时，更快失败
+                                
+                                # 成功点击，立即填写
                                 await self.page.wait_for_timeout(200)
                                 await input_elem.clear()
                                 await input_elem.fill("浙江")
-                                logger.success(f"  ✓ 已输入搜索关键词：浙江（使用第 {input_idx+1} 个输入框）")
+                                logger.success(f"  ✓ 已输入搜索关键词：浙江（精准定位第 {idx+1} 个）")
                                 input_found = True
                                 
                                 # 等待下拉列表出现
@@ -772,23 +768,17 @@ class BatchEditController:
                                     "text='中国大陆/浙江省'",
                                     ".el-select-dropdown__item:has-text('中国大陆')",
                                     ".el-select-dropdown__item:has-text('浙江省')",
-                                    "li.el-select-dropdown__item:has-text('浙江')",
                                 ]
                                 
                                 selected = False
                                 for opt_selector in option_selectors:
                                     try:
                                         options = await self.page.locator(opt_selector).all()
-                                        logger.debug(f"    选项选择器 '{opt_selector[:40]}' 找到 {len(options)} 个")
                                         
                                         for option in options:
                                             try:
-                                                # 使用短超时快速判断
                                                 await option.wait_for(state="visible", timeout=1000)
-                                                
-                                                # 获取选项文本
-                                                option_text = await option.inner_text()
-                                                option_text = option_text.strip()
+                                                option_text = (await option.inner_text()).strip()
                                                 
                                                 # 检查是否包含"中国大陆"和"浙江"
                                                 if "中国大陆" in option_text and "浙江" in option_text:
@@ -796,14 +786,12 @@ class BatchEditController:
                                                     logger.success(f"  ✓ 已选择：{option_text}")
                                                     selected = True
                                                     break
-                                            except Exception as e:
-                                                logger.debug(f"      选项处理失败: {str(e)[:50]}")
+                                            except:
                                                 continue
                                         
                                         if selected:
                                             break
-                                    except Exception as e:
-                                        logger.debug(f"    选项选择器失败: {str(e)[:50]}")
+                                    except:
                                         continue
                                 
                                 if not selected:
@@ -816,23 +804,20 @@ class BatchEditController:
                                     except:
                                         logger.warning("  ⚠️ 未找到下拉选项，但已输入文本")
                                 
-                                break  # 成功找到并填写，跳出循环
+                                break  # 成功，跳出循环
                                 
-                            except Exception as click_error:
-                                # 点击失败（可能被遮挡），快速跳过
-                                error_msg = str(click_error)[:80]
-                                logger.debug(f"    [{input_idx+1}] 点击失败（跳过）: {error_msg}")
+                            except:
+                                # 点击失败，快速尝试下一个
                                 continue
                                 
-                        except Exception as e:
-                            logger.debug(f"    [{input_idx+1}] 处理失败: {str(e)[:60]}")
+                        except:
                             continue
                     
                     if input_found:
                         break  # 找到可用输入框，停止尝试其他选择器
                         
                 except Exception as e:
-                    logger.debug(f"  选择器 {selector_idx+1} 失败: {str(e)[:60]}")
+                    logger.debug(f"  选择器失败: {str(e)[:60]}")
                     continue
             
             if not input_found:
