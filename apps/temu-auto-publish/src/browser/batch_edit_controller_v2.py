@@ -455,45 +455,111 @@ class BatchEditController:
         logger.info("  ℹ️ 主货号不改动，直接预览+保存")
         return await self.click_preview_and_save("主货号")
     
-    async def step_05_packaging(self) -> bool:
-        """步骤7.5：外包装（长方体+硬包装）."""
+    async def step_05_packaging(self, image_url: Optional[str] = None) -> bool:
+        """步骤7.5：外包装（长方体+硬包装）.
+        
+        Args:
+            image_url: 外包装图片URL（可选）
+        """
         if not await self.click_step("外包装", "7.5"):
             return False
         
         try:
             logger.info("  填写外包装信息...")
             
-            # 选择长方体
+            # 1. 选择外包装形状：长方体
             logger.info("    - 外包装形状：长方体")
+            shape_selected = False
             shape_selectors = [
                 "text='长方体'",
                 "label:has-text('长方体')",
-                "input[value='长方体']"
+                ".el-radio:has-text('长方体')",
+                "input[value='长方体']",
+                ".el-select-dropdown__item:has-text('长方体')"
             ]
+            
             for selector in shape_selectors:
                 try:
-                    elem = self.page.locator(selector).first
-                    if await elem.count() > 0:
-                        await elem.click()
+                    all_elems = await self.page.locator(selector).all()
+                    for elem in all_elems:
+                        if await elem.is_visible():
+                            await elem.click()
+                            logger.info("      ✓ 已选择长方体")
+                            shape_selected = True
+                            break
+                    if shape_selected:
                         break
-                except:
+                except Exception as e:
+                    logger.debug(f"      选择器 {selector} 失败: {e}")
                     continue
             
-            # 选择硬包装
+            if not shape_selected:
+                logger.warning("      ⚠️ 未找到长方体选项")
+            
+            await self.page.wait_for_timeout(500)
+            
+            # 2. 选择外包装类型：硬包装
             logger.info("    - 外包装类型：硬包装")
+            type_selected = False
             type_selectors = [
                 "text='硬包装'",
                 "label:has-text('硬包装')",
-                "input[value='硬包装']"
+                ".el-radio:has-text('硬包装')",
+                "input[value='硬包装']",
+                ".el-select-dropdown__item:has-text('硬包装')"
             ]
+            
             for selector in type_selectors:
                 try:
-                    elem = self.page.locator(selector).first
-                    if await elem.count() > 0:
-                        await elem.click()
+                    all_elems = await self.page.locator(selector).all()
+                    for elem in all_elems:
+                        if await elem.is_visible():
+                            await elem.click()
+                            logger.info("      ✓ 已选择硬包装")
+                            type_selected = True
+                            break
+                    if type_selected:
                         break
-                except:
+                except Exception as e:
+                    logger.debug(f"      选择器 {selector} 失败: {e}")
                     continue
+            
+            if not type_selected:
+                logger.warning("      ⚠️ 未找到硬包装选项")
+            
+            await self.page.wait_for_timeout(500)
+            
+            # 3. 上传图片（如果提供了URL）
+            if image_url:
+                logger.info(f"    - 上传外包装图片: {image_url}")
+                try:
+                    # 查找"使用网络图片"按钮
+                    network_img_btn = self.page.locator("button:has-text('使用网络图片')").first
+                    if await network_img_btn.count() > 0 and await network_img_btn.is_visible():
+                        await network_img_btn.click()
+                        await self.page.wait_for_timeout(1000)
+                        
+                        # 输入图片URL
+                        url_input = self.page.locator("input[placeholder*='图片'], textarea").first
+                        if await url_input.count() > 0:
+                            await url_input.fill(image_url)
+                            await self.page.wait_for_timeout(500)
+                            
+                            # 点击确定按钮
+                            confirm_btn = self.page.locator("button:has-text('确定'), button:has-text('确认')").first
+                            if await confirm_btn.count() > 0:
+                                await confirm_btn.click()
+                                logger.info("      ✓ 图片URL已上传")
+                            else:
+                                logger.warning("      ⚠️ 未找到确定按钮")
+                        else:
+                            logger.warning("      ⚠️ 未找到图片URL输入框")
+                    else:
+                        logger.debug("      未找到网络图片按钮")
+                except Exception as e:
+                    logger.warning(f"      ⚠️ 图片上传失败: {e}")
+            else:
+                logger.info("    - 跳过图片上传（未提供URL）")
             
             await self.page.wait_for_timeout(500)
             return await self.click_preview_and_save("外包装")
@@ -547,26 +613,52 @@ class BatchEditController:
         logger.info("  ℹ️ 敏感属性不改动，直接预览+保存")
         return await self.click_preview_and_save("敏感属性")
     
-    async def step_09_weight(self, weight: Optional[int] = None) -> bool:
+    async def step_09_weight(self, weight: Optional[int] = None, product_name: Optional[str] = None) -> bool:
         """步骤7.9：重量（5000-9999G）.
         
         Args:
-            weight: 重量（克），如果不提供则随机生成
+            weight: 重量（克），如果不提供则尝试从Excel读取或随机生成
+            product_name: 产品名称，用于从Excel读取数据
         """
         if not await self.click_step("重量", "7.9"):
             return False
         
         try:
+            # 1. 如果未提供重量，尝试从Excel读取
+            if weight is None and product_name:
+                try:
+                    from src.data_processor.product_data_reader import ProductDataReader
+                    reader = ProductDataReader()
+                    weight = reader.get_weight(product_name)
+                    if weight:
+                        logger.info(f"  从Excel读取到重量: {weight}G")
+                except Exception as e:
+                    logger.debug(f"  从Excel读取重量失败: {e}")
+            
+            # 2. 如果仍然没有重量，生成随机值
             if weight is None:
-                weight = random.randint(5000, 9999)
+                from src.data_processor.product_data_reader import ProductDataReader
+                weight = ProductDataReader.generate_random_weight()
+                logger.info(f"  使用随机重量: {weight}G")
             
             logger.info(f"  填写重量：{weight}G...")
             
             # 查找重量输入框
-            weight_input = self.page.locator("input[placeholder*='重量'], input[placeholder*='克']").first
-            if await weight_input.count() > 0:
-                await weight_input.fill(str(weight))
-                logger.info(f"  ✓ 已输入：{weight}G")
+            weight_input_selectors = [
+                "input[placeholder*='重量']",
+                "input[placeholder*='克']",
+                "input[placeholder*='weight']"
+            ]
+            
+            for selector in weight_input_selectors:
+                try:
+                    weight_input = self.page.locator(selector).first
+                    if await weight_input.count() > 0:
+                        await weight_input.fill(str(weight))
+                        logger.info(f"  ✓ 已输入：{weight}G")
+                        break
+                except:
+                    continue
             
             return await self.click_preview_and_save("重量")
             
@@ -578,40 +670,89 @@ class BatchEditController:
         self,
         length: Optional[int] = None,
         width: Optional[int] = None,
-        height: Optional[int] = None
+        height: Optional[int] = None,
+        product_name: Optional[str] = None
     ) -> bool:
         """步骤7.10：尺寸（50-99cm，长>宽>高）.
         
         Args:
-            length: 长度（cm），如果不提供则随机生成
+            length: 长度（cm），如果不提供则尝试从Excel读取或随机生成
             width: 宽度（cm）
             height: 高度（cm）
+            product_name: 产品名称，用于从Excel读取数据
         """
         if not await self.click_step("尺寸", "7.10"):
             return False
         
         try:
-            # 生成随机尺寸（确保长>宽>高）
+            # 1. 如果未提供尺寸，尝试从Excel读取
+            if length is None and width is None and height is None and product_name:
+                try:
+                    from src.data_processor.product_data_reader import ProductDataReader
+                    reader = ProductDataReader()
+                    dimensions = reader.get_dimensions(product_name)
+                    if dimensions:
+                        length = dimensions['length']
+                        width = dimensions['width']
+                        height = dimensions['height']
+                        logger.info(f"  从Excel读取到尺寸: {length} × {width} × {height} cm")
+                except Exception as e:
+                    logger.debug(f"  从Excel读取尺寸失败: {e}")
+            
+            # 2. 如果仍然没有尺寸，生成随机值
             if length is None:
-                length = random.randint(80, 99)
-                width = random.randint(60, length - 10)
-                height = random.randint(50, width - 5)
+                from src.data_processor.product_data_reader import ProductDataReader
+                dims = ProductDataReader.generate_random_dimensions()
+                length = dims['length']
+                width = dims['width']
+                height = dims['height']
+                logger.info(f"  使用随机尺寸: {length} × {width} × {height} cm")
+            
+            # 3. 验证并修正尺寸（确保长>宽>高）
+            from src.data_processor.product_data_reader import ProductDataReader
+            length, width, height = ProductDataReader.validate_and_fix_dimensions(length, width, height)
             
             logger.info(f"  填写尺寸：{length} × {width} × {height} cm...")
             
             # 查找输入框
-            length_input = self.page.locator("input[placeholder*='长']").first
-            width_input = self.page.locator("input[placeholder*='宽']").first
-            height_input = self.page.locator("input[placeholder*='高']").first
+            length_selectors = ["input[placeholder*='长']", "input[name*='length']"]
+            width_selectors = ["input[placeholder*='宽']", "input[name*='width']"]
+            height_selectors = ["input[placeholder*='高']", "input[name*='height']"]
             
-            if await length_input.count() > 0:
-                await length_input.fill(str(length))
-            if await width_input.count() > 0:
-                await width_input.fill(str(width))
-            if await height_input.count() > 0:
-                await height_input.fill(str(height))
+            # 填写长度
+            for selector in length_selectors:
+                try:
+                    length_input = self.page.locator(selector).first
+                    if await length_input.count() > 0:
+                        await length_input.fill(str(length))
+                        logger.debug(f"  ✓ 长度: {length}cm")
+                        break
+                except:
+                    continue
             
-            logger.info(f"  ✓ 已输入尺寸（长>宽>高）")
+            # 填写宽度
+            for selector in width_selectors:
+                try:
+                    width_input = self.page.locator(selector).first
+                    if await width_input.count() > 0:
+                        await width_input.fill(str(width))
+                        logger.debug(f"  ✓ 宽度: {width}cm")
+                        break
+                except:
+                    continue
+            
+            # 填写高度
+            for selector in height_selectors:
+                try:
+                    height_input = self.page.locator(selector).first
+                    if await height_input.count() > 0:
+                        await height_input.fill(str(height))
+                        logger.debug(f"  ✓ 高度: {height}cm")
+                        break
+                except:
+                    continue
+            
+            logger.info(f"  ✓ 已输入尺寸（验证：{length} > {width} > {height}）")
             
             return await self.click_preview_and_save("尺寸")
             
@@ -628,11 +769,39 @@ class BatchEditController:
             logger.info("  点击自定义SKU编码...")
             
             # 查找并点击"自定义SKU编码"按钮
-            custom_sku_btn = self.page.locator("button:has-text('自定义SKU编码'), text='自定义SKU编码'").first
-            if await custom_sku_btn.count() > 0:
-                await custom_sku_btn.click()
-                logger.info("  ✓ 已点击自定义SKU编码")
+            custom_sku_selectors = [
+                "button:has-text('自定义SKU编码')",
+                "text='自定义SKU编码'",
+                "label:has-text('自定义SKU编码')",
+                ".el-button:has-text('自定义SKU编码')",
+                "span:has-text('自定义SKU编码')"
+            ]
             
+            clicked = False
+            for selector in custom_sku_selectors:
+                try:
+                    all_elems = await self.page.locator(selector).all()
+                    for elem in all_elems:
+                        if await elem.is_visible():
+                            await elem.click()
+                            logger.info("  ✓ 已点击自定义SKU编码")
+                            clicked = True
+                            break
+                    if clicked:
+                        break
+                except Exception as e:
+                    logger.debug(f"  选择器 {selector} 失败: {e}")
+                    continue
+            
+            if not clicked:
+                logger.warning("  ⚠️ 未找到自定义SKU编码按钮，尝试强制点击")
+                try:
+                    await self.page.locator("button:has-text('自定义SKU编码')").first.click(force=True)
+                    logger.info("  ✓ 强制点击成功")
+                except:
+                    logger.warning("  ⚠️ 未找到自定义SKU编码按钮")
+            
+            await self.page.wait_for_timeout(500)
             return await self.click_preview_and_save("平台SKU")
             
         except Exception as e:
@@ -651,19 +820,32 @@ class BatchEditController:
             option_selectors = [
                 "text='组合装500件'",
                 "label:has-text('组合装500件')",
-                "input[value*='组合装500']"
+                ".el-radio:has-text('组合装500件')",
+                "input[value*='组合装500']",
+                ".el-select-dropdown__item:has-text('组合装500')",
+                "span:has-text('组合装500件')"
             ]
             
+            selected = False
             for selector in option_selectors:
                 try:
-                    elem = self.page.locator(selector).first
-                    if await elem.count() > 0:
-                        await elem.click()
-                        logger.info("  ✓ 已选择：组合装500件")
+                    all_elems = await self.page.locator(selector).all()
+                    for elem in all_elems:
+                        if await elem.is_visible():
+                            await elem.click()
+                            logger.info("  ✓ 已选择：组合装500件")
+                            selected = True
+                            break
+                    if selected:
                         break
-                except:
+                except Exception as e:
+                    logger.debug(f"  选择器 {selector} 失败: {e}")
                     continue
             
+            if not selected:
+                logger.warning("  ⚠️ 未找到组合装500件选项")
+            
+            await self.page.wait_for_timeout(500)
             return await self.click_preview_and_save("SKU分类")
             
         except Exception as e:
@@ -678,27 +860,52 @@ class BatchEditController:
         logger.info("  ℹ️ 尺码表不用修改")
         return await self.click_preview_and_save("尺码表")
     
-    async def step_14_suggested_price(self, cost_price: Optional[float] = None) -> bool:
+    async def step_14_suggested_price(self, cost_price: Optional[float] = None, product_name: Optional[str] = None) -> bool:
         """步骤7.14：建议售价（成本价×10）.
         
         Args:
-            cost_price: 成本价，如果不提供则跳过
+            cost_price: 成本价，如果不提供则尝试从Excel读取
+            product_name: 产品名称，用于从Excel读取数据
         """
         if not await self.click_step("建议售价", "7.14"):
             return False
         
         try:
+            # 1. 如果未提供成本价，尝试从Excel读取
+            if cost_price is None and product_name:
+                try:
+                    from src.data_processor.product_data_reader import ProductDataReader
+                    reader = ProductDataReader()
+                    cost_price = reader.get_cost_price(product_name)
+                    if cost_price:
+                        logger.info(f"  从Excel读取到成本价: ¥{cost_price}")
+                except Exception as e:
+                    logger.debug(f"  从Excel读取成本价失败: {e}")
+            
+            # 2. 如果有成本价，计算建议售价（成本价×10）
             if cost_price:
                 suggested_price = cost_price * 10
-                logger.info(f"  填写建议售价：¥{suggested_price}...")
+                logger.info(f"  填写建议售价：¥{suggested_price} (成本价 ¥{cost_price} × 10)...")
                 
                 # 查找价格输入框
-                price_input = self.page.locator("input[placeholder*='价格'], input[type='number']").first
-                if await price_input.count() > 0:
-                    await price_input.fill(str(suggested_price))
-                    logger.info(f"  ✓ 已输入：¥{suggested_price}")
+                price_input_selectors = [
+                    "input[placeholder*='价格']",
+                    "input[placeholder*='售价']",
+                    "input[type='number']",
+                    "input[placeholder*='建议']"
+                ]
+                
+                for selector in price_input_selectors:
+                    try:
+                        price_input = self.page.locator(selector).first
+                        if await price_input.count() > 0:
+                            await price_input.fill(str(suggested_price))
+                            logger.info(f"  ✓ 已输入：¥{suggested_price}")
+                            break
+                    except:
+                        continue
             else:
-                logger.info("  ℹ️ 未提供成本价，跳过填写")
+                logger.info("  ℹ️ 无成本价数据，跳过填写（SOP要求：不做要求随便填）")
             
             return await self.click_preview_and_save("建议售价")
             
@@ -730,13 +937,59 @@ class BatchEditController:
         logger.info("  ℹ️ 颜色图不需要修改")
         return await self.click_preview_and_save("颜色图")
     
-    async def step_18_manual(self) -> bool:
-        """步骤7.18：产品说明书（上传文件）."""
+    async def step_18_manual(self, manual_file_path: Optional[str] = None) -> bool:
+        """步骤7.18：产品说明书（上传PDF文件）.
+        
+        Args:
+            manual_file_path: 说明书PDF文件的绝对路径（可选）
+        """
         if not await self.click_step("产品说明书", "7.18"):
             return False
         
-        logger.info("  ℹ️ 产品说明书需要上传文件，实际使用时处理")
-        return await self.click_preview_and_save("产品说明书")
+        try:
+            # 如果提供了文件路径，尝试上传
+            if manual_file_path:
+                from pathlib import Path
+                file_path = Path(manual_file_path)
+                
+                if not file_path.exists():
+                    logger.warning(f"  ⚠️ 文件不存在: {manual_file_path}")
+                    logger.info("  ℹ️ 跳过文件上传，直接预览+保存")
+                else:
+                    logger.info(f"  上传产品说明书: {file_path.name}...")
+                    
+                    # 查找文件上传输入框
+                    file_input_selectors = [
+                        "input[type='file']",
+                        "input[accept*='pdf']",
+                        "input[accept*='.pdf']"
+                    ]
+                    
+                    uploaded = False
+                    for selector in file_input_selectors:
+                        try:
+                            file_input = self.page.locator(selector).first
+                            if await file_input.count() > 0:
+                                await file_input.set_input_files(str(file_path))
+                                logger.info(f"  ✓ 文件已上传: {file_path.name}")
+                                uploaded = True
+                                await self.page.wait_for_timeout(2000)  # 等待上传完成
+                                break
+                        except Exception as e:
+                            logger.debug(f"  上传选择器 {selector} 失败: {e}")
+                            continue
+                    
+                    if not uploaded:
+                        logger.warning("  ⚠️ 未找到文件上传输入框")
+            else:
+                logger.info("  ℹ️ 未提供说明书文件，跳过上传")
+            
+            return await self.click_preview_and_save("产品说明书")
+            
+        except Exception as e:
+            logger.error(f"  ✗ 操作失败: {e}")
+            # 即使上传失败，也尝试预览+保存
+            return await self.click_preview_and_save("产品说明书")
     
     async def execute_all_steps(self, product_data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """执行18步完整流程.

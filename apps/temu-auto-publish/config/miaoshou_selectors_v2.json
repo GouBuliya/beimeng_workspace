@@ -169,12 +169,135 @@
   },
   
   "batch_edit": {
-    "comment": "批量编辑功能 - 通过选择多个产品后点击'认领到'按钮进入",
+    "comment": "批量编辑功能 - 18步编辑流程",
     "entry_point": {
-      "select_products": "使用 collection_box.product_list.checkbox_template 选择多个产品",
-      "click_claim_to": "使用 collection_box.action_buttons.claim_to 进入批量编辑"
+      "select_products": "使用 temu_collect_box 选择多个产品",
+      "click_batch_edit": "使用 temu_collect_box.action_buttons.batch_edit 进入批量编辑"
     },
-    "note": "批量编辑页面的具体选择器需要在实际进入页面后再获取"
+    "steps": {
+      "step_01_title": {
+        "comment": "7.1 标题 - 不改动",
+        "step_button": "text='标题'",
+        "preview_button": "button:has-text('预览')",
+        "save_button": "button:has-text('保存修改')"
+      },
+      "step_02_english_title": {
+        "comment": "7.2 英语标题 - 按空格",
+        "step_button": "text='英语标题'",
+        "input": "input[placeholder*='英语'], input[placeholder*='英文'], textarea[placeholder*='英语']"
+      },
+      "step_03_category_attrs": {
+        "comment": "7.3 类目属性 - 参考采集链接填写",
+        "step_button": "text='类目属性'"
+      },
+      "step_04_main_sku": {
+        "comment": "7.4 主货号 - 不改动",
+        "step_button": "text='主货号'"
+      },
+      "step_05_packaging": {
+        "comment": "7.5 外包装 - 长方体+硬包装",
+        "step_button": "text='外包装'",
+        "shape_selectors": [
+          "text='长方体'",
+          "label:has-text('长方体')",
+          ".el-radio:has-text('长方体')",
+          "input[value='长方体']"
+        ],
+        "type_selectors": [
+          "text='硬包装'",
+          "label:has-text('硬包装')",
+          ".el-radio:has-text('硬包装')",
+          "input[value='硬包装']"
+        ],
+        "image_network_button": "button:has-text('使用网络图片')",
+        "image_url_input": "input[placeholder*='图片'], textarea"
+      },
+      "step_06_origin": {
+        "comment": "7.6 产地 - 浙江",
+        "step_button": "text='产地'",
+        "input": "input[placeholder*='产地'], input[placeholder*='省份']"
+      },
+      "step_07_customization": {
+        "comment": "7.7 定制品 - 不改动",
+        "step_button": "text='定制品'"
+      },
+      "step_08_sensitive_attrs": {
+        "comment": "7.8 敏感属性 - 不改动",
+        "step_button": "text='敏感属性'"
+      },
+      "step_09_weight": {
+        "comment": "7.9 重量 - 5000-9999G",
+        "step_button": "text='重量'",
+        "input": "input[placeholder*='重量'], input[placeholder*='克'], input[placeholder*='weight']"
+      },
+      "step_10_dimensions": {
+        "comment": "7.10 尺寸 - 50-99cm，长>宽>高",
+        "step_button": "text='尺寸'",
+        "length_input": "input[placeholder*='长'], input[name*='length']",
+        "width_input": "input[placeholder*='宽'], input[name*='width']",
+        "height_input": "input[placeholder*='高'], input[name*='height']"
+      },
+      "step_11_platform_sku": {
+        "comment": "7.11 平台SKU - 点击自定义SKU编码",
+        "step_button": "text='平台SKU'",
+        "custom_sku_button": [
+          "button:has-text('自定义SKU编码')",
+          "text='自定义SKU编码'",
+          "label:has-text('自定义SKU编码')"
+        ]
+      },
+      "step_12_sku_category": {
+        "comment": "7.12 SKU分类 - 组合装500件",
+        "step_button": "text='SKU分类'",
+        "combo_500_selectors": [
+          "text='组合装500件'",
+          "label:has-text('组合装500件')",
+          ".el-radio:has-text('组合装500件')",
+          "input[value*='组合装500']"
+        ]
+      },
+      "step_13_size_chart": {
+        "comment": "7.13 尺码表 - 不改动",
+        "step_button": "text='尺码表'"
+      },
+      "step_14_suggested_price": {
+        "comment": "7.14 建议售价 - 成本价×10",
+        "step_button": "text='建议售价'",
+        "price_input": "input[placeholder*='价格'], input[placeholder*='售价'], input[type='number']"
+      },
+      "step_15_package_list": {
+        "comment": "7.15 包装清单 - 不改动",
+        "step_button": "text='包装清单'"
+      },
+      "step_16_carousel_images": {
+        "comment": "7.16 轮播图 - 暂时不需要",
+        "step_button": "text='轮播图'"
+      },
+      "step_17_color_images": {
+        "comment": "7.17 颜色图 - 不需要",
+        "step_button": "text='颜色图'"
+      },
+      "step_18_manual": {
+        "comment": "7.18 产品说明书 - 上传PDF",
+        "step_button": "text='产品说明书'",
+        "file_input": "input[type='file'], input[accept*='pdf']"
+      }
+    },
+    "common_actions": {
+      "preview_button": "button:has-text('预览')",
+      "save_button": [
+        "button:has-text('保存修改')",
+        "button.el-button:has-text('保存修改')",
+        "button[type='button']:has-text('保存修改')",
+        "button:has-text('保存')"
+      ],
+      "close_button": [
+        "button:has-text('关闭')",
+        "button:has-text('确定')",
+        "button:has-text('完成')"
+      ],
+      "confirm_button": "button:has-text('确定'), button:has-text('确认')"
+    }
   },
   
   "publish_flow": {
