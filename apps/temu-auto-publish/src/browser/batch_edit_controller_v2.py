@@ -423,55 +423,43 @@ class BatchEditController:
             logger.info("  填写英语标题（输入空格）...")
             
             # 等待页面加载
-            await self.page.wait_for_timeout(1000)
+            await self.page.wait_for_timeout(500)
             
-            # 查找输入框 - 使用更多选择器
-            input_selectors = [
-                "input[placeholder*='英语']",
-                "input[placeholder*='英文']",
-                "input[placeholder*='English']",
-                "textarea[placeholder*='英语']",
-                "textarea[placeholder*='英文']",
-                ".el-input__inner",  # Element UI 输入框
-                "input[type='text']",
-                "textarea"
+            # 精准定位：排除disabled/readonly，优先匹配placeholder包含"英"的输入框
+            precise_selectors = [
+                "input[placeholder*='英']:not([disabled]):not([readonly])",
+                "textarea[placeholder*='英']:not([disabled]):not([readonly])",
+                "input[placeholder*='English']:not([disabled]):not([readonly])",
             ]
             
             filled = False
-            for selector in input_selectors:
+            for selector in precise_selectors:
                 try:
-                    # 获取所有匹配的输入框
-                    all_inputs = await self.page.locator(selector).all()
-                    logger.debug(f"  选择器 {selector} 找到 {len(all_inputs)} 个输入框")
+                    inputs = await self.page.locator(selector).all()
+                    logger.debug(f"  精准选择器找到 {len(inputs)} 个候选")
                     
-                    for input_elem in all_inputs:
+                    for input_elem in inputs:
+                        if not await input_elem.is_visible():
+                            continue
+                        
                         try:
-                            # 检查是否可见
-                            if await input_elem.is_visible():
-                                # 先清空
-                                await input_elem.clear()
-                                # 填写空格
-                                await input_elem.fill(" ")
-                                logger.success(f"  ✓ 已输入空格（使用选择器: {selector}）")
-                                filled = True
-                                break
-                        except Exception as e:
-                            logger.debug(f"    输入框不可用: {e}")
+                            # 快速点击测试（500ms超时）
+                            await input_elem.click(timeout=500)
+                            await input_elem.clear()
+                            await input_elem.fill(" ")
+                            logger.success(f"  ✓ 已输入空格（精准定位）")
+                            filled = True
+                            break
+                        except:
                             continue
                     
                     if filled:
                         break
-                except Exception as e:
-                    logger.debug(f"  选择器 {selector} 失败: {e}")
+                except:
                     continue
             
             if not filled:
-                logger.warning("  ⚠️ 未找到英语标题输入框，尝试截图调试")
-                try:
-                    await self.page.screenshot(path="debug_english_title.png")
-                    logger.info("  📸 已保存截图: debug_english_title.png")
-                except:
-                    pass
+                logger.warning("  ⚠️ 未找到英语标题输入框")
             
             return await self.click_preview_and_save("英语标题")
         except Exception as e:
@@ -495,45 +483,33 @@ class BatchEditController:
         
         try:
             logger.info("  检查主货号是否需要填写...")
+            await self.page.wait_for_timeout(500)
             
-            # 等待输入框加载
-            await self.page.wait_for_timeout(1000)
-            
-            # 查找主货号输入框
-            sku_input_selectors = [
-                "input[placeholder*='主货号']",
-                "input[placeholder*='货号']",
-                "input[placeholder*='SKU']",
-                ".el-input__inner",
-                "input[type='text']"
+            # 精准定位：排除disabled/readonly
+            precise_selectors = [
+                "input[placeholder*='货号']:not([disabled]):not([readonly])",
+                "input[placeholder*='SKU']:not([disabled]):not([readonly])",
             ]
             
-            # 检查是否有输入框
             input_found = False
-            for selector in sku_input_selectors:
+            for selector in precise_selectors:
                 try:
-                    all_inputs = await self.page.locator(selector).all()
-                    logger.debug(f"  选择器 {selector} 找到 {len(all_inputs)} 个输入框")
+                    inputs = await self.page.locator(selector).all()
                     
-                    for input_elem in all_inputs:
+                    for input_elem in inputs:
                         if await input_elem.is_visible():
-                            # 检查输入框是否为空
                             current_value = await input_elem.input_value()
                             if current_value:
                                 logger.info(f"  ℹ️ 主货号已有值：{current_value}，保持不变")
                             else:
-                                logger.info(f"  ⚠️ 主货号为空，保持默认")
+                                logger.info(f"  ℹ️ 主货号为空，保持默认")
                             input_found = True
                             break
                     
                     if input_found:
                         break
-                except Exception as e:
-                    logger.debug(f"  选择器 {selector} 失败: {e}")
+                except:
                     continue
-            
-            if not input_found:
-                logger.info("  ℹ️ 未找到主货号输入框或已自动填充")
             
             return await self.click_preview_and_save("主货号")
             
@@ -862,7 +838,7 @@ class BatchEditController:
             return False
         
         try:
-            # 1. 如果未提供重量，尝试从Excel读取
+            # 获取重量值
             if weight is None and product_name:
                 try:
                     from src.data_processor.product_data_reader import ProductDataReader
@@ -873,7 +849,6 @@ class BatchEditController:
                 except Exception as e:
                     logger.debug(f"  从Excel读取重量失败: {e}")
             
-            # 2. 如果仍然没有重量，生成随机值
             if weight is None:
                 from src.data_processor.product_data_reader import ProductDataReader
                 weight = ProductDataReader.generate_random_weight()
@@ -881,17 +856,16 @@ class BatchEditController:
             
             logger.info(f"  填写重量：{weight}G...")
             
-            # 查找重量输入框
-            weight_input_selectors = [
-                "input[placeholder*='重量']",
-                "input[placeholder*='克']",
-                "input[placeholder*='weight']"
+            # 精准定位：排除disabled/readonly
+            precise_selectors = [
+                "input[placeholder*='重量']:not([disabled]):not([readonly])",
+                "input[placeholder*='克']:not([disabled]):not([readonly])",
             ]
             
-            for selector in weight_input_selectors:
+            for selector in precise_selectors:
                 try:
                     weight_input = self.page.locator(selector).first
-                    if await weight_input.count() > 0:
+                    if await weight_input.count() > 0 and await weight_input.is_visible():
                         await weight_input.fill(str(weight))
                         logger.info(f"  ✓ 已输入：{weight}G")
                         break
@@ -923,7 +897,7 @@ class BatchEditController:
             return False
         
         try:
-            # 1. 如果未提供尺寸，尝试从Excel读取
+            # 获取尺寸值
             if length is None and width is None and height is None and product_name:
                 try:
                     from src.data_processor.product_data_reader import ProductDataReader
@@ -937,7 +911,6 @@ class BatchEditController:
                 except Exception as e:
                     logger.debug(f"  从Excel读取尺寸失败: {e}")
             
-            # 2. 如果仍然没有尺寸，生成随机值
             if length is None:
                 from src.data_processor.product_data_reader import ProductDataReader
                 dims = ProductDataReader.generate_random_dimensions()
@@ -946,22 +919,22 @@ class BatchEditController:
                 height = dims['height']
                 logger.info(f"  使用随机尺寸: {length} × {width} × {height} cm")
             
-            # 3. 验证并修正尺寸（确保长>宽>高）
+            # 验证并修正尺寸
             from src.data_processor.product_data_reader import ProductDataReader
             length, width, height = ProductDataReader.validate_and_fix_dimensions(length, width, height)
             
             logger.info(f"  填写尺寸：{length} × {width} × {height} cm...")
             
-            # 查找输入框
-            length_selectors = ["input[placeholder*='长']", "input[name*='length']"]
-            width_selectors = ["input[placeholder*='宽']", "input[name*='width']"]
-            height_selectors = ["input[placeholder*='高']", "input[name*='height']"]
+            # 精准定位：排除disabled/readonly
+            length_selectors = ["input[placeholder*='长']:not([disabled]):not([readonly])"]
+            width_selectors = ["input[placeholder*='宽']:not([disabled]):not([readonly])"]
+            height_selectors = ["input[placeholder*='高']:not([disabled]):not([readonly])"]
             
             # 填写长度
             for selector in length_selectors:
                 try:
                     length_input = self.page.locator(selector).first
-                    if await length_input.count() > 0:
+                    if await length_input.count() > 0 and await length_input.is_visible():
                         await length_input.fill(str(length))
                         logger.debug(f"  ✓ 长度: {length}cm")
                         break
@@ -972,7 +945,7 @@ class BatchEditController:
             for selector in width_selectors:
                 try:
                     width_input = self.page.locator(selector).first
-                    if await width_input.count() > 0:
+                    if await width_input.count() > 0 and await width_input.is_visible():
                         await width_input.fill(str(width))
                         logger.debug(f"  ✓ 宽度: {width}cm")
                         break
@@ -983,7 +956,7 @@ class BatchEditController:
             for selector in height_selectors:
                 try:
                     height_input = self.page.locator(selector).first
-                    if await height_input.count() > 0:
+                    if await height_input.count() > 0 and await height_input.is_visible():
                         await height_input.fill(str(height))
                         logger.debug(f"  ✓ 高度: {height}cm")
                         break
@@ -1109,7 +1082,7 @@ class BatchEditController:
             return False
         
         try:
-            # 1. 如果未提供成本价，尝试从Excel读取
+            # 获取成本价
             if cost_price is None and product_name:
                 try:
                     from src.data_processor.product_data_reader import ProductDataReader
@@ -1120,23 +1093,21 @@ class BatchEditController:
                 except Exception as e:
                     logger.debug(f"  从Excel读取成本价失败: {e}")
             
-            # 2. 如果有成本价，计算建议售价（成本价×10）
             if cost_price:
                 suggested_price = cost_price * 10
                 logger.info(f"  填写建议售价：¥{suggested_price} (成本价 ¥{cost_price} × 10)...")
                 
-                # 查找价格输入框
-                price_input_selectors = [
-                    "input[placeholder*='价格']",
-                    "input[placeholder*='售价']",
-                    "input[type='number']",
-                    "input[placeholder*='建议']"
+                # 精准定位：排除disabled/readonly，优先匹配type=number
+                precise_selectors = [
+                    "input[placeholder*='价格']:not([disabled]):not([readonly])[type='number']",
+                    "input[placeholder*='售价']:not([disabled]):not([readonly])[type='number']",
+                    "input[placeholder*='建议']:not([disabled]):not([readonly])[type='number']",
                 ]
                 
-                for selector in price_input_selectors:
+                for selector in precise_selectors:
                     try:
                         price_input = self.page.locator(selector).first
-                        if await price_input.count() > 0:
+                        if await price_input.count() > 0 and await price_input.is_visible():
                             await price_input.fill(str(suggested_price))
                             logger.info(f"  ✓ 已输入：¥{suggested_price}")
                             break
