@@ -604,28 +604,89 @@ class BatchEditController:
             return False
     
     async def step_06_origin(self) -> bool:
-        """步骤7.6：产地（浙江）."""
+        """步骤7.6：产地（中国大陆 / 浙江省）."""
         if not await self.click_step("产地", "7.6"):
             return False
         
         try:
-            logger.info("  填写产地：浙江...")
+            logger.info("  填写产地：中国大陆 / 浙江省...")
+            
+            # 等待页面加载
+            await self.page.wait_for_timeout(1000)
             
             # 查找产地输入框
-            origin_input = self.page.locator("input[placeholder*='产地'], input[placeholder*='省份']").first
-            if await origin_input.count() > 0:
-                await origin_input.fill("浙江")
-                await self.page.wait_for_timeout(1000)
-                
-                # 选择下拉选项
+            origin_input_selectors = [
+                "input[placeholder*='产地']",
+                "input[placeholder*='省份']",
+                ".el-input__inner",
+                "input[type='text']"
+            ]
+            
+            input_found = False
+            for selector in origin_input_selectors:
                 try:
-                    option = self.page.locator("text='浙江', text='中国大陆/浙江省'").first
-                    if await option.count() > 0:
-                        await option.click()
-                        logger.info("  ✓ 已选择：浙江")
+                    all_inputs = await self.page.locator(selector).all()
+                    for input_elem in all_inputs:
+                        if await input_elem.is_visible():
+                            # 填写"中国大陆 / 浙江省"
+                            await input_elem.clear()
+                            await input_elem.fill("中国大陆 / 浙江省")
+                            logger.info("  ✓ 已输入：中国大陆 / 浙江省")
+                            input_found = True
+                            
+                            # 等待下拉列表出现
+                            await self.page.wait_for_timeout(1500)
+                            
+                            # 选择下拉选项
+                            option_selectors = [
+                                "text='中国大陆 / 浙江省'",
+                                "text='中国大陆/浙江省'",
+                                ".el-select-dropdown__item:has-text('中国大陆')",
+                                ".el-select-dropdown__item:has-text('浙江省')",
+                                "li:has-text('中国大陆 / 浙江省')",
+                                "li:has-text('浙江省')"
+                            ]
+                            
+                            selected = False
+                            for opt_selector in option_selectors:
+                                try:
+                                    option = self.page.locator(opt_selector).first
+                                    if await option.count() > 0:
+                                        # 检查是否可见
+                                        if await option.is_visible():
+                                            await option.click()
+                                            logger.success(f"  ✓ 已选择：中国大陆 / 浙江省（选择器: {opt_selector}）")
+                                            selected = True
+                                            break
+                                except Exception as e:
+                                    logger.debug(f"    选项选择器 {opt_selector} 失败: {e}")
+                                    continue
+                            
+                            if not selected:
+                                # 尝试按回车键确认
+                                try:
+                                    await input_elem.press("Enter")
+                                    logger.info("  ✓ 已按回车确认")
+                                except:
+                                    logger.warning("  ⚠️ 未找到下拉选项，但已输入文本")
+                            
+                            break
+                    
+                    if input_found:
+                        break
+                except Exception as e:
+                    logger.debug(f"  输入框选择器 {selector} 失败: {e}")
+                    continue
+            
+            if not input_found:
+                logger.warning("  ⚠️ 未找到产地输入框")
+                try:
+                    await self.page.screenshot(path="debug_origin.png")
+                    logger.info("  📸 已保存截图: debug_origin.png")
                 except:
                     pass
             
+            await self.page.wait_for_timeout(500)
             return await self.click_preview_and_save("产地")
             
         except Exception as e:
