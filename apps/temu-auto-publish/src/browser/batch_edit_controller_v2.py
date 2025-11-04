@@ -553,65 +553,96 @@ class BatchEditController:
         try:
             logger.info("  填写外包装信息...")
             
+            # 等待页面加载完成
+            await self.page.wait_for_timeout(1000)
+            
             # 1. 选择外包装形状：长方体
             logger.info("    - 外包装形状：长方体")
             shape_selected = False
-            shape_selectors = [
-                "text='长方体'",
-                "label:has-text('长方体')",
-                ".el-radio:has-text('长方体')",
-                "input[value='长方体']",
-                ".el-select-dropdown__item:has-text('长方体')"
-            ]
             
-            for selector in shape_selectors:
+            # 先尝试查找所有单选框，然后筛选"长方体"
+            try:
+                # 方法1: 通过span文本定位
+                shape_span = self.page.locator("span.el-radio__label:has-text('长方体')").first
+                if await shape_span.count() > 0 and await shape_span.is_visible():
+                    # 点击对应的radio输入框
+                    radio = shape_span.locator("..").locator("input[type='radio']").first
+                    if await radio.count() > 0:
+                        await radio.click(force=True)
+                        logger.info("      ✓ 已选择长方体（通过radio）")
+                        shape_selected = True
+                    else:
+                        # 直接点击span
+                        await shape_span.click()
+                        logger.info("      ✓ 已选择长方体（通过span）")
+                        shape_selected = True
+            except Exception as e:
+                logger.debug(f"      方法1失败: {e}")
+            
+            # 方法2: 直接查找包含"长方体"文本的label
+            if not shape_selected:
                 try:
-                    all_elems = await self.page.locator(selector).all()
-                    for elem in all_elems:
-                        if await elem.is_visible():
-                            await elem.click()
-                            logger.info("      ✓ 已选择长方体")
-                            shape_selected = True
-                            break
-                    if shape_selected:
-                        break
+                    label = self.page.locator("label:has-text('长方体')").first
+                    if await label.count() > 0 and await label.is_visible():
+                        await label.click()
+                        logger.info("      ✓ 已选择长方体（通过label）")
+                        shape_selected = True
                 except Exception as e:
-                    logger.debug(f"      选择器 {selector} 失败: {e}")
-                    continue
+                    logger.debug(f"      方法2失败: {e}")
             
+            # 方法3: 截图并提示
             if not shape_selected:
                 logger.warning("      ⚠️ 未找到长方体选项")
+                try:
+                    await self.page.screenshot(path="debug_packaging_shape.png")
+                    logger.info("      📸 已保存截图: debug_packaging_shape.png")
+                except:
+                    pass
             
             await self.page.wait_for_timeout(500)
             
             # 2. 选择外包装类型：硬包装
             logger.info("    - 外包装类型：硬包装")
             type_selected = False
-            type_selectors = [
-                "text='硬包装'",
-                "label:has-text('硬包装')",
-                ".el-radio:has-text('硬包装')",
-                "input[value='硬包装']",
-                ".el-select-dropdown__item:has-text('硬包装')"
-            ]
             
-            for selector in type_selectors:
+            # 先尝试查找所有单选框，然后筛选"硬包装"
+            try:
+                # 方法1: 通过span文本定位
+                type_span = self.page.locator("span.el-radio__label:has-text('硬包装')").first
+                if await type_span.count() > 0 and await type_span.is_visible():
+                    # 点击对应的radio输入框
+                    radio = type_span.locator("..").locator("input[type='radio']").first
+                    if await radio.count() > 0:
+                        await radio.click(force=True)
+                        logger.info("      ✓ 已选择硬包装（通过radio）")
+                        type_selected = True
+                    else:
+                        # 直接点击span
+                        await type_span.click()
+                        logger.info("      ✓ 已选择硬包装（通过span）")
+                        type_selected = True
+            except Exception as e:
+                logger.debug(f"      方法1失败: {e}")
+            
+            # 方法2: 直接查找包含"硬包装"文本的label
+            if not type_selected:
                 try:
-                    all_elems = await self.page.locator(selector).all()
-                    for elem in all_elems:
-                        if await elem.is_visible():
-                            await elem.click()
-                            logger.info("      ✓ 已选择硬包装")
-                            type_selected = True
-                            break
-                    if type_selected:
-                        break
+                    label = self.page.locator("label:has-text('硬包装')").first
+                    if await label.count() > 0 and await label.is_visible():
+                        await label.click()
+                        logger.info("      ✓ 已选择硬包装（通过label）")
+                        type_selected = True
                 except Exception as e:
-                    logger.debug(f"      选择器 {selector} 失败: {e}")
-                    continue
+                    logger.debug(f"      方法2失败: {e}")
             
+            # 方法3: 截图并提示
             if not type_selected:
                 logger.warning("      ⚠️ 未找到硬包装选项")
+                try:
+                    await self.page.screenshot(path="debug_packaging_type.png")
+                    logger.info("      📸 已保存截图: debug_packaging_type.png")
+                except:
+                    pass
             
             await self.page.wait_for_timeout(500)
             
