@@ -706,12 +706,12 @@ class BatchEditController:
             return False
     
     async def step_06_origin(self) -> bool:
-        """步骤7.6：产地（中国大陆 / 浙江省）."""
+        """步骤7.6：产地（先输入"浙江"，然后选择"中国大陆 / 浙江省"）."""
         if not await self.click_step("产地", "7.6"):
             return False
         
         try:
-            logger.info("  填写产地：中国大陆 / 浙江省...")
+            logger.info("  填写产地：浙江 -> 中国大陆 / 浙江省...")
             
             # 等待页面加载
             await self.page.wait_for_timeout(1000)
@@ -730,23 +730,25 @@ class BatchEditController:
                     all_inputs = await self.page.locator(selector).all()
                     for input_elem in all_inputs:
                         if await input_elem.is_visible():
-                            # 填写"中国大陆 / 浙江省"
+                            # 步骤1: 先输入"浙江"触发搜索
                             await input_elem.clear()
-                            await input_elem.fill("中国大陆 / 浙江省")
-                            logger.info("  ✓ 已输入：中国大陆 / 浙江省")
+                            await input_elem.fill("浙江")
+                            logger.info("  ✓ 已输入搜索关键词：浙江")
                             input_found = True
                             
                             # 等待下拉列表出现
                             await self.page.wait_for_timeout(1500)
                             
-                            # 选择下拉选项
+                            # 步骤2: 在下拉列表中选择"中国大陆 / 浙江省"
                             option_selectors = [
                                 "text='中国大陆 / 浙江省'",
                                 "text='中国大陆/浙江省'",
-                                ".el-select-dropdown__item:has-text('中国大陆')",
+                                ".el-select-dropdown__item:has-text('中国大陆 / 浙江省')",
                                 ".el-select-dropdown__item:has-text('浙江省')",
                                 "li:has-text('中国大陆 / 浙江省')",
-                                "li:has-text('浙江省')"
+                                "li:has-text('浙江省')",
+                                ".jx-pro-option:has-text('中国大陆')",
+                                ".jx-pro-option:has-text('浙江省')"
                             ]
                             
                             selected = False
@@ -754,10 +756,14 @@ class BatchEditController:
                                 try:
                                     option = self.page.locator(opt_selector).first
                                     if await option.count() > 0:
-                                        # 检查是否可见
-                                        if await option.is_visible():
+                                        # 等待选项可见
+                                        await option.wait_for(state="visible", timeout=3000)
+                                        
+                                        # 检查选项文本是否包含"中国大陆"和"浙江省"
+                                        option_text = await option.inner_text()
+                                        if "中国大陆" in option_text and "浙江" in option_text:
                                             await option.click()
-                                            logger.success(f"  ✓ 已选择：中国大陆 / 浙江省（选择器: {opt_selector}）")
+                                            logger.success(f"  ✓ 已选择：{option_text.strip()}（选择器: {opt_selector}）")
                                             selected = True
                                             break
                                 except Exception as e:
