@@ -556,43 +556,53 @@ class BatchEditController:
             # 等待页面加载完成
             await self.page.wait_for_timeout(1000)
             
-            # 1. 选择外包装形状：长方体
+            # 1. 选择外包装形状：长方体（使用下拉选择框）
             logger.info("    - 外包装形状：长方体")
             shape_selected = False
             
-            # 先尝试查找所有单选框，然后筛选"长方体"
             try:
-                # 方法1: 通过span文本定位
-                shape_span = self.page.locator("span.el-radio__label:has-text('长方体')").first
-                if await shape_span.count() > 0 and await shape_span.is_visible():
-                    # 点击对应的radio输入框
-                    radio = shape_span.locator("..").locator("input[type='radio']").first
-                    if await radio.count() > 0:
-                        await radio.click(force=True)
-                        logger.info("      ✓ 已选择长方体（通过radio）")
-                        shape_selected = True
+                # 查找"外包装形状"标签，然后找到对应的下拉框
+                shape_label = self.page.locator("text='外包装形状'").first
+                if await shape_label.count() > 0:
+                    # 找到同一行的el-select下拉框
+                    parent = shape_label.locator("..").locator("..")
+                    select_input = parent.locator(".el-input__inner, input.el-input__inner").first
+                    
+                    if await select_input.count() > 0 and await select_input.is_visible():
+                        # 点击下拉框打开选项
+                        await select_input.click()
+                        logger.debug("      已点击外包装形状下拉框")
+                        await self.page.wait_for_timeout(500)
+                        
+                        # 选择"长方体"选项
+                        option_selectors = [
+                            ".el-select-dropdown__item:has-text('长方体')",
+                            "li.el-select-dropdown__item:has-text('长方体')",
+                            ".jx-pro-option:has-text('长方体')"
+                        ]
+                        
+                        for selector in option_selectors:
+                            try:
+                                option = self.page.locator(selector).first
+                                if await option.count() > 0:
+                                    # 等待选项可见
+                                    await option.wait_for(state="visible", timeout=3000)
+                                    await option.click()
+                                    logger.info("      ✓ 已选择长方体")
+                                    shape_selected = True
+                                    break
+                            except Exception as e:
+                                logger.debug(f"      选项选择器 {selector} 失败: {e}")
+                                continue
                     else:
-                        # 直接点击span
-                        await shape_span.click()
-                        logger.info("      ✓ 已选择长方体（通过span）")
-                        shape_selected = True
+                        logger.warning("      ⚠️ 未找到外包装形状下拉框")
+                else:
+                    logger.warning("      ⚠️ 未找到'外包装形状'标签")
             except Exception as e:
-                logger.debug(f"      方法1失败: {e}")
+                logger.warning(f"      ⚠️ 选择外包装形状失败: {e}")
             
-            # 方法2: 直接查找包含"长方体"文本的label
             if not shape_selected:
-                try:
-                    label = self.page.locator("label:has-text('长方体')").first
-                    if await label.count() > 0 and await label.is_visible():
-                        await label.click()
-                        logger.info("      ✓ 已选择长方体（通过label）")
-                        shape_selected = True
-                except Exception as e:
-                    logger.debug(f"      方法2失败: {e}")
-            
-            # 方法3: 截图并提示
-            if not shape_selected:
-                logger.warning("      ⚠️ 未找到长方体选项")
+                logger.warning("      ⚠️ 未能选择长方体")
                 try:
                     await self.page.screenshot(path="debug_packaging_shape.png")
                     logger.info("      📸 已保存截图: debug_packaging_shape.png")
@@ -601,43 +611,53 @@ class BatchEditController:
             
             await self.page.wait_for_timeout(500)
             
-            # 2. 选择外包装类型：硬包装
+            # 2. 选择外包装类型：硬包装（使用下拉选择框）
             logger.info("    - 外包装类型：硬包装")
             type_selected = False
             
-            # 先尝试查找所有单选框，然后筛选"硬包装"
             try:
-                # 方法1: 通过span文本定位
-                type_span = self.page.locator("span.el-radio__label:has-text('硬包装')").first
-                if await type_span.count() > 0 and await type_span.is_visible():
-                    # 点击对应的radio输入框
-                    radio = type_span.locator("..").locator("input[type='radio']").first
-                    if await radio.count() > 0:
-                        await radio.click(force=True)
-                        logger.info("      ✓ 已选择硬包装（通过radio）")
-                        type_selected = True
+                # 查找"外包装类型"标签，然后找到对应的下拉框
+                type_label = self.page.locator("text='外包装类型'").first
+                if await type_label.count() > 0:
+                    # 找到同一行的el-select下拉框
+                    parent = type_label.locator("..").locator("..")
+                    select_input = parent.locator(".el-input__inner, input.el-input__inner").first
+                    
+                    if await select_input.count() > 0 and await select_input.is_visible():
+                        # 点击下拉框打开选项
+                        await select_input.click()
+                        logger.debug("      已点击外包装类型下拉框")
+                        await self.page.wait_for_timeout(500)
+                        
+                        # 选择"硬包装"选项
+                        option_selectors = [
+                            ".el-select-dropdown__item:has-text('硬包装')",
+                            "li.el-select-dropdown__item:has-text('硬包装')",
+                            ".jx-pro-option:has-text('硬包装')"
+                        ]
+                        
+                        for selector in option_selectors:
+                            try:
+                                option = self.page.locator(selector).first
+                                if await option.count() > 0:
+                                    # 等待选项可见
+                                    await option.wait_for(state="visible", timeout=3000)
+                                    await option.click()
+                                    logger.info("      ✓ 已选择硬包装")
+                                    type_selected = True
+                                    break
+                            except Exception as e:
+                                logger.debug(f"      选项选择器 {selector} 失败: {e}")
+                                continue
                     else:
-                        # 直接点击span
-                        await type_span.click()
-                        logger.info("      ✓ 已选择硬包装（通过span）")
-                        type_selected = True
+                        logger.warning("      ⚠️ 未找到外包装类型下拉框")
+                else:
+                    logger.warning("      ⚠️ 未找到'外包装类型'标签")
             except Exception as e:
-                logger.debug(f"      方法1失败: {e}")
+                logger.warning(f"      ⚠️ 选择外包装类型失败: {e}")
             
-            # 方法2: 直接查找包含"硬包装"文本的label
             if not type_selected:
-                try:
-                    label = self.page.locator("label:has-text('硬包装')").first
-                    if await label.count() > 0 and await label.is_visible():
-                        await label.click()
-                        logger.info("      ✓ 已选择硬包装（通过label）")
-                        type_selected = True
-                except Exception as e:
-                    logger.debug(f"      方法2失败: {e}")
-            
-            # 方法3: 截图并提示
-            if not type_selected:
-                logger.warning("      ⚠️ 未找到硬包装选项")
+                logger.warning("      ⚠️ 未能选择硬包装")
                 try:
                     await self.page.screenshot(path="debug_packaging_type.png")
                     logger.info("      📸 已保存截图: debug_packaging_type.png")

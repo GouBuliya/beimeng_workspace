@@ -268,7 +268,7 @@
       "step_15_package_list": {
         "comment": "7.15 包装清单 - 不改动",
         "step_button": "text='包装清单'"
-      },
+    },
       "step_16_carousel_images": {
         "comment": "7.16 轮播图 - 暂时不需要",
         "step_button": "text='轮播图'"
