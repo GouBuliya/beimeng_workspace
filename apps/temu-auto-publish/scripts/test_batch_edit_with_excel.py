@@ -12,14 +12,22 @@ from dotenv import load_dotenv
 
 # 添加项目根目录到路径
 project_root = Path(__file__).parent.parent
+workspace_root = project_root.parent.parent
 sys.path.insert(0, str(project_root))
-sys.path.insert(0, str(project_root.parent.parent))
+sys.path.insert(0, str(workspace_root))
 
-# 加载环境变量
-load_dotenv(project_root.parent.parent / ".env")
+# 先导入logger（在加载环境变量前）
+from packages.common.logger import logger
+
+# 加载环境变量（从workspace根目录）
+env_path = workspace_root / ".env"
+if env_path.exists():
+    load_dotenv(env_path)
+    logger.debug(f"已加载环境变量: {env_path}")
+else:
+    logger.warning(f"环境变量文件不存在: {env_path}")
 
 from playwright.async_api import async_playwright
-from packages.common.logger import logger
 from src.browser.login_controller import LoginController
 from src.browser.batch_edit_controller_v2 import BatchEditController
 from src.data_processor.product_data_reader import ProductDataReader
