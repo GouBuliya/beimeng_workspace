@@ -423,20 +423,10 @@ class CompletePublishWorkflow:
     ) -> StageOutcome:
         """阶段 3: Temu 全托管批量编辑 18 步."""
 
-        target_count = max(edited_products.__len__() * self.claim_times, 20)
-        navigation_ok = await batch_edit_ctrl.navigate_to_batch_edit(select_count=target_count)
-        if not navigation_ok:
-            return StageOutcome(
-                name="stage3_batch_edit",
-                success=False,
-                message="无法进入Temu全托管批量编辑页面",
-                details={},
-            )
-
         reference = edited_products[0] if edited_products else None
 
         if self.use_codegen_batch_edit:
-            # 使用 codegen 录制的批量编辑模块
+            # 使用 codegen 录制的批量编辑模块(自带导航)
             logger.info("使用 Codegen 录制模块执行批量编辑 18 步")
 
             payload = {
@@ -474,8 +464,18 @@ class CompletePublishWorkflow:
                 details=batch_result,
             )
         else:
-            # 使用原有的批量编辑控制器
+            # 使用原有的批量编辑控制器(需要先导航)
             logger.info("使用原有批量编辑控制器执行 18 步")
+
+            target_count = max(edited_products.__len__() * self.claim_times, 20)
+            navigation_ok = await batch_edit_ctrl.navigate_to_batch_edit(select_count=target_count)
+            if not navigation_ok:
+                return StageOutcome(
+                    name="stage3_batch_edit",
+                    success=False,
+                    message="无法进入Temu全托管批量编辑页面",
+                    details={},
+                )
 
             payload = {
                 "product_name": reference.selection.product_name if reference else "",

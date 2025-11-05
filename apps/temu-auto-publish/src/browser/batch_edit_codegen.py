@@ -89,8 +89,25 @@ async def run_batch_edit(page: Page, payload: dict[str, Any]) -> dict[str, Any]:
     try:
         logger.info("开始执行批量编辑 18 步流程(基于 Codegen 录制)")
 
-        # 0. 打开批量编辑弹窗
-        await _open_batch_edit_popover(page)
+        # 0. 确保在 Temu 全托管采集箱页面
+        current_url = page.url
+        target_url = "https://erp.91miaoshou.com/pddkj/collect_box/items"
+        if target_url not in current_url:
+            logger.info(f"导航到 Temu 全托管采集箱: {target_url}")
+            await page.goto(target_url, timeout=60000)
+            await page.wait_for_load_state("domcontentloaded", timeout=60000)
+            await page.wait_for_timeout(2000)  # 等待页面完全加载
+
+        # 1. 全选产品
+        logger.info("全选产品...")
+        await page.locator(".jx-checkbox").first.click()
+        await page.wait_for_timeout(1000)
+
+        # 2. 打开批量编辑弹窗
+        logger.info("打开批量编辑菜单...")
+        await page.get_by_text("批量编辑").click()
+        await page.wait_for_timeout(1000)
+
         logger.info("批量编辑弹窗已打开")
 
         # 执行 18 个步骤
