@@ -119,13 +119,51 @@ class BatchEditController:
                 logger.warning(f"选择产品失败: {e}")
                 return False
             
-            # 3. 点击批量编辑按钮
+            # 3. 关闭可能遮挡的对话框（新手指南、帮助等）
+            logger.info("检查并关闭遮挡对话框...")
+            try:
+                # 查找所有可能的关闭按钮
+                close_selectors = [
+                    ".jx-overlay-dialog .jx-button:has-text('知道了')",
+                    ".jx-overlay-dialog .jx-button:has-text('关闭')",
+                    ".jx-overlay-dialog .jx-dialog__headerbtn",
+                    ".jx-overlay .jx-icon-close",
+                    "button:has-text('知道了')",
+                    "button:has-text('我知道了')",
+                    "[aria-label='Close']"
+                ]
+                
+                for selector in close_selectors:
+                    try:
+                        close_btn = self.page.locator(selector).first
+                        if await close_btn.count() > 0 and await close_btn.is_visible():
+                            await close_btn.click(timeout=2000)
+                            logger.debug(f"✓ 已关闭遮挡对话框: {selector}")
+                            await self.page.wait_for_timeout(500)
+                            break
+                    except:
+                        continue
+                
+                logger.debug("✓ 对话框检查完成")
+            except Exception as e:
+                logger.debug(f"对话框关闭检查异常（可忽略）: {e}")
+            
+            # 4. 点击批量编辑按钮
             logger.info("点击批量编辑按钮...")
             try:
                 batch_edit_btn = self.page.locator("button:has-text('批量编辑')").first
                 await batch_edit_btn.wait_for(state="visible", timeout=5000)
-                await batch_edit_btn.click(timeout=10000)
-                logger.success("✓ 已点击批量编辑按钮")
+                
+                # 尝试普通点击
+                try:
+                    await batch_edit_btn.click(timeout=5000)
+                    logger.success("✓ 已点击批量编辑按钮")
+                except:
+                    # 如果普通点击失败，尝试强制点击
+                    logger.warning("⚠️ 普通点击失败，尝试强制点击...")
+                    await batch_edit_btn.click(force=True)
+                    logger.success("✓ 强制点击成功")
+                
                 # 等待批量编辑页面关键元素出现
                 try:
                     await self.page.locator("button:has-text('预览')").first.wait_for(state="visible", timeout=10000)
@@ -161,28 +199,55 @@ class BatchEditController:
         logger.info(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         
         try:
-            # 1. 尝试多个选择器定位步骤
-            selectors = [
-                f"text='{step_name}'",
-                f"button:has-text('{step_name}')",
-                f"a:has-text('{step_name}')",
-                f".step-item:has-text('{step_name}')",
-                f"div:has-text('{step_name}')"
+            # 1. 尝试多个选择器定位步骤（限定在批量编辑弹窗内）
+            # 批量编辑弹窗的选择器
+            dialog_selectors = [
+                ".multi-batch-edit-dialog",  # 主对话框
+                ".el-dialog__wrapper:has-text('批量产品编辑')",  # 包含标题的wrapper
+                ".batch-edit-detail-dialog",  # 详情对话框
             ]
             
+            # 在弹窗内查找步骤
             step_elem = None
-            for selector in selectors:
+            used_selector = None
+            
+            for dialog_selector in dialog_selectors:
+                # 检查弹窗是否存在且可见
                 try:
-                    elem = self.page.locator(selector).first
-                    if await elem.count() > 0:
-                        step_elem = elem
-                        logger.debug(f"  使用选择器: {selector}")
+                    dialog = self.page.locator(dialog_selector).first
+                    if await dialog.count() == 0:
+                        continue
+                    
+                    # 在弹窗内查找步骤
+                    step_selectors = [
+                        f"{dialog_selector} >> text='{step_name}'",
+                        f"{dialog_selector} button:has-text('{step_name}')",
+                        f"{dialog_selector} a:has-text('{step_name}')",
+                        f"{dialog_selector} .step-item:has-text('{step_name}')",
+                        f"{dialog_selector} div:has-text('{step_name}')",
+                    ]
+                    
+                    for selector in step_selectors:
+                        try:
+                            elem = self.page.locator(selector).first
+                            if await elem.count() > 0:
+                                step_elem = elem
+                                used_selector = selector
+                                logger.debug(f"  使用选择器: {selector}")
+                                break
+                        except:
+                            continue
+                    
+                    if step_elem:
                         break
-                except:
+                        
+                except Exception as e:
+                    logger.debug(f"  弹窗选择器 {dialog_selector} 检查失败: {e}")
                     continue
             
             if not step_elem:
                 logger.error(f"  ✗ 未找到步骤: {step_name}")
+                logger.debug(f"  已尝试的弹窗选择器: {dialog_selectors}")
                 return False
             
             # 2. 滚动到元素位置
@@ -233,14 +298,38 @@ class BatchEditController:
             是否成功保存
         """
         try:
+            # 确定批量编辑弹窗选择器
+            dialog_selectors = [
+                ".multi-batch-edit-dialog",
+                ".el-dialog__wrapper:has-text('批量产品编辑')",
+                ".batch-edit-detail-dialog",
+            ]
+            
+            # 查找可见的弹窗
+            active_dialog = None
+            for selector in dialog_selectors:
+                try:
+                    dialog = self.page.locator(selector).first
+                    if await dialog.count() > 0 and await dialog.is_visible():
+                        active_dialog = selector
+                        logger.debug(f"  找到活跃弹窗: {selector}")
+                        break
+                except:
+                    continue
+            
+            if not active_dialog:
+                logger.warning("  ⚠️ 未找到批量编辑弹窗")
+                # fallback: 不限定范围
+                active_dialog = ""
+            
             # ========================================
             # 第1步：点击预览
             # ========================================
             logger.info(f"  📋 第1步：点击预览...")
             preview_selectors = [
-                "button:has-text('预览')",
-                "button.el-button:has-text('预览')",
-                "button[type='button']:has-text('预览')",
+                f"{active_dialog} button:has-text('预览')".strip(),
+                f"{active_dialog} button.el-button:has-text('预览')".strip(),
+                f"{active_dialog} button[type='button']:has-text('预览')".strip(),
             ]
             
             preview_clicked = False
@@ -286,10 +375,10 @@ class BatchEditController:
             logger.info(f"  💾 第2步：点击保存修改...")
             
             save_selectors = [
-                "button:has-text('保存修改')",
-                "button.el-button:has-text('保存修改')",
-                "button[type='button']:has-text('保存修改')",
-                "button:has-text('保存')",
+                f"{active_dialog} button:has-text('保存修改')".strip(),
+                f"{active_dialog} button.el-button:has-text('保存修改')".strip(),
+                f"{active_dialog} button[type='button']:has-text('保存修改')".strip(),
+                f"{active_dialog} button:has-text('保存')".strip(),
             ]
             
             save_clicked = False
