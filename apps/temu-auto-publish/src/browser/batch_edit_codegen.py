@@ -98,12 +98,15 @@ async def run_batch_edit(page: Page, payload: dict[str, Any]) -> dict[str, Any]:
             await page.wait_for_load_state("domcontentloaded", timeout=60000)
             await page.wait_for_timeout(2000)  # 等待页面完全加载
 
-        # 1. 全选产品
+        # 1. 检测并关闭弹窗
+        await _close_popups(page)
+
+        # 2. 全选产品
         logger.info("全选产品...")
         await page.locator(".jx-checkbox").first.click()
         await page.wait_for_timeout(1000)
 
-        # 2. 打开批量编辑弹窗
+        # 3. 打开批量编辑弹窗
         logger.info("打开批量编辑菜单...")
         await page.get_by_text("批量编辑").click()
         await page.wait_for_timeout(1000)
@@ -161,6 +164,56 @@ async def _open_batch_edit_popover(page: Page) -> None:
     """
     # 点击第一个复选框(全选)
     await page.locator(".jx-checkbox").first.click()
+    await page.wait_for_timeout(500)
+
+
+async def _close_popups(page: Page) -> None:
+    """检测并关闭页面弹窗。
+
+    Args:
+        page: Playwright 页面对象。
+    """
+    logger.info("检测页面弹窗...")
+
+    # 常见弹窗关闭按钮的选择器列表
+    popup_selectors = [
+        "button:has-text('关闭')",
+        "button:has-text('我知道了')",
+        "button:has-text('取消')",
+        ".el-dialog__close",
+        ".el-icon-close",
+        "[aria-label='关闭此对话框']",
+        "text='关闭'",
+    ]
+
+    closed_count = 0
+    for selector in popup_selectors:
+        try:
+            # 查找所有匹配的关闭按钮
+            close_buttons = page.locator(selector)
+            count = await close_buttons.count()
+
+            if count > 0:
+                logger.debug(f"发现 {count} 个弹窗(选择器: {selector})")
+                # 点击所有可见的关闭按钮
+                for i in range(count):
+                    try:
+                        button = close_buttons.nth(i)
+                        if await button.is_visible(timeout=1000):
+                            await button.click(timeout=2000)
+                            closed_count += 1
+                            logger.success(f"✓ 已关闭弹窗 {closed_count}")
+                            await page.wait_for_timeout(500)
+                    except Exception:
+                        continue
+        except Exception:
+            continue
+
+    if closed_count > 0:
+        logger.success(f"✓ 总共关闭了 {closed_count} 个弹窗")
+    else:
+        logger.info("未发现需要关闭的弹窗")
+
     await page.wait_for_timeout(500)
 
 
