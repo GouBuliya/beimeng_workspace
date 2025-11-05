@@ -39,6 +39,7 @@ from config.settings import settings
 
 from ..browser.batch_edit_codegen import run_batch_edit
 from ..browser.batch_edit_controller_v2 import BatchEditController
+from ..browser.first_edit_codegen import open_edit_dialog_codegen
 from ..browser.first_edit_controller import FirstEditController
 from ..browser.login_controller import LoginController
 from ..browser.miaoshou_controller import MiaoshouController
@@ -131,6 +132,7 @@ class CompletePublishWorkflow:
         selection_table: Path | str | None = None,
         use_ai_titles: bool = True,
         use_codegen_batch_edit: bool = True,
+        use_codegen_first_edit: bool = False,
     ) -> None:
         """初始化工作流控制器.
 
@@ -147,6 +149,7 @@ class CompletePublishWorkflow:
         self.settings = settings
         self.use_ai_titles = use_ai_titles
         self.use_codegen_batch_edit = use_codegen_batch_edit
+        self.use_codegen_first_edit = use_codegen_first_edit
         self.collect_count = max(1, min(self.settings.business.collect_count, 5))
         self.claim_times = max(1, self.settings.business.claim_count)
         self.headless = headless if headless is not None else self.settings.browser.headless
@@ -284,9 +287,14 @@ class CompletePublishWorkflow:
                 [],
             )
 
+        async def open_edit_dialog(index: int) -> bool:
+            if self.use_codegen_first_edit:
+                return await open_edit_dialog_codegen(page, index)
+            return await miaoshou_ctrl.click_edit_product_by_index(page, index)
+
         original_titles: list[str] = []
         for index in range(len(selections)):
-            opened = await miaoshou_ctrl.click_edit_product_by_index(page, index)
+            opened = await open_edit_dialog(index)
             if not opened:
                 original_titles.append(selections[index].product_name)
                 continue
@@ -302,7 +310,7 @@ class CompletePublishWorkflow:
         step_errors: list[str] = []
 
         for index, selection in enumerate(selections[: self.collect_count]):
-            opened = await miaoshou_ctrl.click_edit_product_by_index(page, index)
+            opened = await open_edit_dialog(index)
             if not opened:
                 step_errors.append(f"第{index + 1}个商品编辑弹窗打开失败")
                 continue
@@ -327,14 +335,40 @@ class CompletePublishWorkflow:
             dimensions = self._resolve_dimensions(selection)
 
             try:
-                edit_success = await first_edit_ctrl.complete_first_edit(
-                    page=page,
-                    title=new_title,
-                    price=price_result.real_supply_price,
-                    stock=500,
-                    weight=weight_g,
-                    dimensions=dimensions,
-                )
+                if self.use_codegen_first_edit:
+                    # 使用 codegen 录制的弹窗填写逻辑
+                    from ..browser.first_edit_dialog_codegen import fill_first_edit_dialog_codegen
+
+                    payload = {
+                        "title": new_title,
+                        "origin": "Guangdong,China",
+                        "product_use": "多用途",
+                        "shape": "矩形",
+                        "material": "塑料",
+                        "closure_type": "磁性",
+                        "style": "现代",
+                        "brand_name": "佰森物语",
+                        "product_number": selection.model_number or f"RC{index:07d}",
+                        "price": price_result.real_supply_price,
+                        "stock": 500,
+                        "weight_g": weight_g,
+                        "length_cm": dimensions[0],
+                        "width_cm": dimensions[1],
+                        "height_cm": dimensions[2],
+                    }
+
+                    edit_success = await fill_first_edit_dialog_codegen(page, payload)
+                else:
+                    # 使用原有的 FirstEditController
+                    edit_success = await first_edit_ctrl.complete_first_edit(
+                        page=page,
+                        title=new_title,
+                        price=price_result.real_supply_price,
+                        stock=500,
+                        weight=weight_g,
+                        dimensions=dimensions,
+                    )
+
                 if not edit_success:
                     step_errors.append(f"第{index + 1}个商品首次编辑未完成")
                     continue

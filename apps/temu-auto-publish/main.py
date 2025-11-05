@@ -9,5 +9,6 @@
 
 from src.workflows.complete_publish_workflow import CompletePublishWorkflow
 
-workflow = CompletePublishWorkflow()
+# 启用 Codegen 录制的首次编辑弹窗填写模块
+workflow = CompletePublishWorkflow(use_codegen_first_edit=True)
 workflow.execute()
