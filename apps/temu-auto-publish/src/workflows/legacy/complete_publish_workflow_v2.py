@@ -24,9 +24,9 @@ from datetime import datetime
 from loguru import logger
 from playwright.async_api import Page
 
-from ..browser.first_edit_controller import FirstEditController
-from ..browser.batch_edit_controller_v2 import BatchEditController
-from ..browser.miaoshou_controller import MiaoshouController
+from ...browser.first_edit_controller import FirstEditController
+from ...browser.batch_edit_controller_v2 import BatchEditController
+from ...browser.miaoshou_controller import MiaoshouController
 
 
 class CompletePublishWorkflow:
