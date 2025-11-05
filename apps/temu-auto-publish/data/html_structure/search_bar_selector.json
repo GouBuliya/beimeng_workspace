@@ -1,0 +1,18 @@
+{
+  "source": "apps/temu-auto-publish/debug/search_area.html",
+  "placeholder_text": "全部关联货源",
+  "input_attributes": {
+    "type": "text",
+    "class": "jx-select__input is-small",
+    "autocomplete": "none",
+    "tabindex": "0",
+    "role": "combobox",
+    "spellcheck": "false",
+    "activedescendant": "",
+    "controls": "jx-id-1990-14",
+    "expanded": "false",
+    "haspopup": "listbox",
+    "id": "jx-id-1990-124",
+    "style": "min-width: 11px;"
+  }
+}

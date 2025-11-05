@@ -1,342 +1,679 @@
 """
-@PURPOSE: 完整发布工作流，集成从5→20到批量编辑到发布的全流程（SOP步骤4-11）
+@PURPOSE: 基于最新 SOP 的 Temu 发布工作流, 实现首次编辑、认领、批量编辑与发布全流程
 @OUTLINE:
-  - class CompletePublishWorkflow: 完整工作流控制类
-  - async def execute(): 执行完整流程
-  - async def execute_with_retry(): 带重试的执行
-@GOTCHAS:
-  - 工作流分为三个阶段：5→20、批量编辑、发布
-  - 需要等待每个阶段完成后再进入下一阶段
-  - 批量编辑步骤较多，需要足够的等待时间
-@TECH_DEBT:
-  - TODO: 添加断点续传功能
-  - TODO: 添加详细的进度追踪
-  - TODO: 支持部分失败的恢复
+  - dataclass StageOutcome: 阶段执行结果
+  - dataclass EditedProduct: 首次编辑阶段产物
+  - dataclass WorkflowExecutionResult: 整体执行结果
+  - class CompletePublishWorkflow: 工作流主体
+      - execute(): 同步入口
+      - _run(): 异步总控
+      - _stage_first_edit(): 阶段 1 首次编辑
+      - _stage_claim_products(): 阶段 2 认领
+      - _stage_batch_edit(): 阶段 3 批量编辑 18 步
+      - _stage_publish(): 阶段 4 选择店铺/供货价/发布
+      - 若干辅助方法: 数据准备、标题生成、凭证/店铺解析
 @DEPENDENCIES:
-  - 内部: workflows.five_to_twenty_workflow, browser.batch_edit_controller, browser.publish_controller
-  - 外部: playwright, loguru
-@RELATED: five_to_twenty_workflow.py, batch_edit_controller.py, publish_controller.py
+  - 内部: browser.*, data_processor.*
+  - 外部: playwright (runtime), loguru
+@RELATED: legacy 目录中的历史工作流实现
 """
 
+from __future__ import annotations
+
 import asyncio
-from typing import Dict, List, Optional
+import os
+from collections.abc import Sequence
+from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
+from typing import Any
 
 from loguru import logger
-from playwright.async_api import Page
 
-from ..browser.batch_edit_controller import BatchEditController
+try:  # pragma: no cover - optional dependency
+    from dotenv import load_dotenv
+except ImportError:  # pragma: no cover
+    load_dotenv = None  # type: ignore[assignment]
+
+from config.settings import settings
+
+from ..browser.batch_edit_codegen import run_batch_edit
+from ..browser.batch_edit_controller_v2 import BatchEditController
+from ..browser.first_edit_controller import FirstEditController
+from ..browser.login_controller import LoginController
 from ..browser.miaoshou_controller import MiaoshouController
 from ..browser.publish_controller import PublishController
-from .five_to_twenty_workflow import FiveToTwentyWorkflow
+from ..data_processor.ai_title_generator import AITitleGenerator
+from ..data_processor.price_calculator import PriceCalculator, PriceResult
+from ..data_processor.product_data_reader import ProductDataReader
+from ..data_processor.selection_table_reader import ProductSelectionRow, SelectionTableReader
+
+
+@dataclass(slots=True)
+class StageOutcome:
+    """阶段执行结果数据结构."""
+
+    name: str
+    success: bool
+    message: str
+    details: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class EditedProduct:
+    """首次编辑后用于后续阶段的数据载体."""
+
+    index: int
+    selection: ProductSelectionRow
+    title: str
+    cost_price: float
+    price: PriceResult
+    weight_g: int
+    dimensions_cm: tuple[int, int, int]
+
+    def to_payload(self) -> dict[str, Any]:
+        """转换为可序列化的业务字典."""
+
+        return {
+            "index": self.index,
+            "product_name": self.selection.product_name,
+            "model_number": self.selection.model_number,
+            "owner": self.selection.owner,
+            "title": self.title,
+            "cost_price": self.cost_price,
+            "suggested_price": self.price.suggested_price,
+            "supply_price": self.price.supply_price,
+            "real_supply_price": self.price.real_supply_price,
+            "weight_g": self.weight_g,
+            "dimensions_cm": {
+                "length": self.dimensions_cm[0],
+                "width": self.dimensions_cm[1],
+                "height": self.dimensions_cm[2],
+            },
+        }
+
+
+@dataclass(slots=True)
+class WorkflowExecutionResult:
+    """整体工作流执行结果."""
+
+    workflow_id: str
+    total_success: bool
+    stages: list[StageOutcome]
+    errors: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        """转换为易于序列化的字典结构."""
+
+        return {
+            "workflow_id": self.workflow_id,
+            "total_success": self.total_success,
+            "errors": list(self.errors),
+            "stages": [
+                {
+                    "name": stage.name,
+                    "success": stage.success,
+                    "message": stage.message,
+                    "details": stage.details,
+                }
+                for stage in self.stages
+            ],
+        }
 
 
 class CompletePublishWorkflow:
-    """完整发布工作流（SOP步骤4-11）.
+    """Temu 商品发布完整工作流 (SOP 步骤 1-11)."""
 
-    集成三个主要阶段：
-    1. 阶段1（步骤4-6）：5→20工作流
-       - 首次编辑5条链接
-       - 每条认领4次
-       - 生成20条产品
-    
-    2. 阶段2（步骤7）：批量编辑18步
-       - 全选20条产品
-       - 执行18步批量编辑流程
-    
-    3. 阶段3（步骤8-11）：发布流程
-       - 选择店铺
-       - 设置供货价
-       - 批量发布
-       - 查看结果
-
-    Attributes:
-        five_to_twenty: 5→20工作流控制器
-        batch_edit_ctrl: 批量编辑控制器
-        publish_ctrl: 发布控制器
-        miaoshou_ctrl: 妙手采集箱控制器
-
-    Examples:
-        >>> workflow = CompletePublishWorkflow()
-        >>> result = await workflow.execute(page, products_data, shop_name="测试店铺")
-        >>> result["success"]
-        True
-    """
-
-    def __init__(self, use_ai_titles: bool = True):
-        """初始化完整工作流控制器.
-        
-        Args:
-            use_ai_titles: 是否使用AI生成标题（默认True）
-        """
-        self.five_to_twenty = FiveToTwentyWorkflow(use_ai_titles=use_ai_titles)
-        self.batch_edit_ctrl = BatchEditController()
-        self.publish_ctrl = PublishController()
-        self.miaoshou_ctrl = MiaoshouController()
-        self.use_ai_titles = use_ai_titles
-        
-        logger.info(f"完整发布工作流控制器已初始化（SOP步骤4-11，AI标题: {'启用' if use_ai_titles else '禁用'}）")
-
-    async def execute(
+    def __init__(
         self,
-        page: Page,
-        products_data: List[Dict],
-        shop_name: Optional[str] = None,
-        enable_batch_edit: bool = True,
-        enable_publish: bool = True
-    ) -> Dict:
-        """执行完整的发布工作流.
+        *,
+        headless: bool | None = None,
+        selection_table: Path | str | None = None,
+        use_ai_titles: bool = True,
+        use_codegen_batch_edit: bool = True,
+    ) -> None:
+        """初始化工作流控制器.
 
         Args:
-            page: Playwright页面对象
-            products_data: 5个产品的数据列表
-            shop_name: 店铺名称（可选）
-            enable_batch_edit: 是否启用批量编辑（默认True）
-            enable_publish: 是否启用发布流程（默认True）
-
-        Returns:
-            执行结果字典：{
-                "success": bool,
-                "stage1_result": Dict,  # 5→20结果
-                "stage2_result": Dict,  # 批量编辑结果
-                "stage3_result": Dict,  # 发布结果
-                "errors": List[str]
-            }
-
-        Examples:
-            >>> result = await workflow.execute(page, products_data)
-            >>> result["success"]
-            True
+            headless: 浏览器是否使用无头模式; None 时读取配置文件.
+            selection_table: 选品表路径, 默认读取 data/input/selection.xlsx.
+            use_ai_titles: 是否启用 AI 生成标题 (失败时自动回退).
+            use_codegen_batch_edit: 是否使用 codegen 录制的批量编辑模块 (默认 True).
         """
-        logger.info("=" * 100)
-        logger.info("开始执行完整发布工作流（SOP步骤4-11）")
-        logger.info("=" * 100)
 
-        result = {
-            "success": False,
-            "stage1_result": {},
-            "stage2_result": {},
-            "stage3_result": {},
-            "errors": []
-        }
+        if load_dotenv:  # pragma: no cover - 环境可选
+            load_dotenv()
+
+        self.settings = settings
+        self.use_ai_titles = use_ai_titles
+        self.use_codegen_batch_edit = use_codegen_batch_edit
+        self.collect_count = max(1, min(self.settings.business.collect_count, 5))
+        self.claim_times = max(1, self.settings.business.claim_count)
+        self.headless = headless if headless is not None else self.settings.browser.headless
+
+        self.selection_table_path = (
+            Path(selection_table)
+            if selection_table
+            else Path(self.settings.data_input_dir) / "selection.xlsx"
+        )
+
+        self.selection_reader = SelectionTableReader()
+        self.product_reader = ProductDataReader()
+        self.price_calculator = PriceCalculator(
+            suggested_multiplier=self.settings.business.price_multiplier,
+            supply_multiplier=self.settings.business.supply_price_multiplier,
+        )
+
+    def execute(self) -> WorkflowExecutionResult:
+        """同步入口, 包装 asyncio 运行."""
+
+        logger.info("启动 Temu 完整发布工作流 (SOTA 模式)")
+        return asyncio.run(self._run())
+
+    async def _run(self) -> WorkflowExecutionResult:
+        workflow_id = f"temu_publish_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        stages: list[StageOutcome] = []
+        errors: list[str] = []
+
+        login_ctrl = LoginController()
 
         try:
-            # ========== 阶段1：5→20工作流（SOP步骤4-6）==========
-            logger.info("\n" + "▶" * 50)
-            logger.info("【阶段1/3】5→20工作流（SOP步骤4-6）")
-            logger.info("▶" * 50)
+            username, password = self._resolve_credentials()
+            if not username or not password:
+                raise RuntimeError("缺少登录凭证 (MIAOSHOU_USERNAME/MIAOSHOU_PASSWORD)")
 
-            # 1. 导航到采集箱
-            logger.info("导航到采集箱页面...")
-            if not await self.miaoshou_ctrl.navigate_to_collection_box(page):
-                raise Exception("导航到采集箱失败")
-            await page.wait_for_timeout(2000)
-            
-            # 2. 切换到"全部"tab
-            logger.info("切换到'全部'tab...")
-            if not await self.miaoshou_ctrl.switch_tab(page, "all"):
-                raise Exception("切换到'全部'tab失败")
-            await page.wait_for_timeout(1000)
-            
-            # 3. 筛选人员并搜索（如果配置了人员名称）
-            staff_name = products_data[0].get("staff_name") if products_data else None
-            if staff_name:
-                logger.info(f"筛选人员: {staff_name}")
-                if not await self.miaoshou_ctrl.filter_and_search(page, staff_name):
-                    logger.warning(f"⚠️ 人员筛选失败，但继续执行（人员: {staff_name}）")
-                    # 不失败，继续执行（可能人员筛选不是必须的）
-                await page.wait_for_timeout(1000)
-
-            # 4. 执行5→20工作流
-            stage1_result = await self.five_to_twenty.execute(page, products_data)
-            result["stage1_result"] = stage1_result
-
-            if not stage1_result.get("success"):
-                error_msg = "阶段1失败：5→20工作流未成功完成"
-                result["errors"].append(error_msg)
-                logger.error(f"✗ {error_msg}")
-                logger.warning("⚠️  后续阶段将被跳过")
-                return result
-
-            logger.success(f"✓ 阶段1完成：成功生成{stage1_result.get('final_count', 0)}条产品")
-            await page.wait_for_timeout(2000)  # 等待UI更新
-
-            # ========== 阶段2：批量编辑18步（SOP步骤7）==========
-            if enable_batch_edit:
-                logger.info("\n" + "▶" * 50)
-                logger.info("【阶段2/3】批量编辑18步（SOP步骤7）")
-                logger.info("▶" * 50)
-
-                try:
-                    # 1. 切换到"已认领"tab
-                    await self.miaoshou_ctrl.switch_tab(page, "claimed")
-                    await page.wait_for_timeout(1000)
-
-                    # 2. 全选20条产品
-                    logger.info("全选20条产品...")
-                    if not await self.miaoshou_ctrl.select_all_products(page):
-                        raise Exception("全选产品失败")
-
-                    # 3. 进入批量编辑模式
-                    logger.info("进入批量编辑模式...")
-                    if not await self.batch_edit_ctrl.enter_batch_edit_mode(page):
-                        raise Exception("进入批量编辑模式失败")
-
-                    # 4. 执行18步批量编辑
-                    logger.info("执行18步批量编辑流程...")
-                    if await self.batch_edit_ctrl.execute_batch_edit_steps(page, products_data):
-                        result["stage2_result"] = {"success": True, "steps_completed": 18}
-                        logger.success("✓ 阶段2完成：批量编辑18步执行成功")
-                    else:
-                        raise Exception("批量编辑步骤执行失败")
-
-                    await page.wait_for_timeout(2000)
-
-                except Exception as e:
-                    error_msg = f"阶段2失败：{e}"
-                    result["errors"].append(error_msg)
-                    result["stage2_result"] = {"success": False, "error": str(e)}
-                    logger.error(f"✗ {error_msg}")
-                    logger.warning("⚠️  批量编辑失败，但可以继续发布流程")
-            else:
-                logger.info("\n⏭️  阶段2已跳过（批量编辑已禁用）")
-                result["stage2_result"] = {"success": True, "skipped": True}
-
-            # ========== 阶段3：发布流程（SOP步骤8-11）==========
-            if enable_publish:
-                logger.info("\n" + "▶" * 50)
-                logger.info("【阶段3/3】发布流程（SOP步骤8-11）")
-                logger.info("▶" * 50)
-
-                try:
-                    stage3_result = await self.publish_ctrl.execute_publish_workflow(
-                        page, products_data, shop_name
-                    )
-                    result["stage3_result"] = stage3_result
-
-                    if not stage3_result.get("success"):
-                        raise Exception("发布流程未成功完成")
-
-                    logger.success("✓ 阶段3完成：发布流程执行成功")
-
-                except Exception as e:
-                    error_msg = f"阶段3失败：{e}"
-                    result["errors"].append(error_msg)
-                    result["stage3_result"] = {"success": False, "error": str(e)}
-                    logger.error(f"✗ {error_msg}")
-            else:
-                logger.info("\n⏭️  阶段3已跳过（发布流程已禁用）")
-                result["stage3_result"] = {"success": True, "skipped": True}
-
-            # ========== 最终结果 ==========
-            result["success"] = (
-                result["stage1_result"].get("success", False) and
-                result["stage2_result"].get("success", False) and
-                result["stage3_result"].get("success", False)
+            login_success = await login_ctrl.login(
+                username=username,
+                password=password,
+                headless=self.headless,
             )
+            if not login_success:
+                raise RuntimeError("登录妙手ERP失败, 请检查账号密码或 Cookie")
 
-            logger.info("\n" + "=" * 100)
-            logger.info("完整发布工作流执行完成")
-            logger.info("=" * 100)
-            logger.info(f"阶段1（5→20）：{'✓ 成功' if result['stage1_result'].get('success') else '✗ 失败'}")
-            logger.info(f"阶段2（批量编辑）：{'✓ 成功' if result['stage2_result'].get('success') else '✗ 失败'}")
-            logger.info(f"阶段3（发布）：{'✓ 成功' if result['stage3_result'].get('success') else '✗ 失败'}")
-            logger.info(f"总体结果：{'✓ 成功' if result['success'] else '✗ 失败'}")
-            logger.info("=" * 100)
+            page = login_ctrl.browser_manager.page
+            assert page is not None, "Playwright page 未初始化"
 
-            return result
+            miaoshou_ctrl = MiaoshouController()
+            first_edit_ctrl = FirstEditController()
+            batch_edit_ctrl = BatchEditController(page)
+            publish_ctrl = PublishController()
 
-        except Exception as e:
-            error_msg = f"工作流执行异常: {e}"
-            result["errors"].append(error_msg)
-            logger.error(error_msg)
-            return result
+            selection_rows = self._prepare_selection_rows()
 
-    async def execute_with_retry(
-        self,
-        page: Page,
-        products_data: List[Dict],
-        shop_name: Optional[str] = None,
-        max_retries: int = 3,
-        enable_batch_edit: bool = True,
-        enable_publish: bool = True
-    ) -> Dict:
-        """带重试机制的执行完整工作流.
-
-        Args:
-            page: Playwright页面对象
-            products_data: 5个产品的数据列表
-            shop_name: 店铺名称（可选）
-            max_retries: 最大重试次数（默认3次）
-            enable_batch_edit: 是否启用批量编辑
-            enable_publish: 是否启用发布流程
-
-        Returns:
-            执行结果字典
-
-        Examples:
-            >>> result = await workflow.execute_with_retry(page, products_data, max_retries=3)
-            >>> result["success"]
-            True
-        """
-        logger.info(f"开始执行完整工作流（最多重试{max_retries}次）...")
-
-        for attempt in range(max_retries):
-            logger.info(f"\n尝试第{attempt + 1}/{max_retries}次...")
-
-            result = await self.execute(
+            stage1, edited_products = await self._stage_first_edit(
                 page,
-                products_data,
-                shop_name,
-                enable_batch_edit,
-                enable_publish
+                miaoshou_ctrl,
+                first_edit_ctrl,
+                selection_rows,
+            )
+            stages.append(stage1)
+            if not stage1.success:
+                errors.append(stage1.message)
+                return WorkflowExecutionResult(workflow_id, False, stages, errors)
+
+            stage2 = await self._stage_claim_products(
+                page,
+                miaoshou_ctrl,
+                edited_products,
+            )
+            stages.append(stage2)
+            if not stage2.success:
+                errors.append(stage2.message)
+                return WorkflowExecutionResult(workflow_id, False, stages, errors)
+
+            stage3 = await self._stage_batch_edit(
+                page,
+                batch_edit_ctrl,
+                edited_products,
+            )
+            stages.append(stage3)
+            if not stage3.success:
+                errors.append(stage3.message)
+                return WorkflowExecutionResult(workflow_id, False, stages, errors)
+
+            stage4 = await self._stage_publish(
+                page,
+                publish_ctrl,
+                edited_products,
+            )
+            stages.append(stage4)
+            if not stage4.success:
+                errors.append(stage4.message)
+
+            total_success = stage4.success and all(stage.success for stage in stages)
+            return WorkflowExecutionResult(workflow_id, total_success, stages, errors)
+
+        finally:
+            if login_ctrl.browser_manager and login_ctrl.browser_manager.browser:
+                await login_ctrl.browser_manager.close()
+
+    async def _stage_first_edit(
+        self,
+        page,
+        miaoshou_ctrl: MiaoshouController,
+        first_edit_ctrl: FirstEditController,
+        selections: Sequence[ProductSelectionRow],
+    ) -> tuple[StageOutcome, list[EditedProduct]]:
+        """阶段 1: 妙手公用采集箱首次编辑流程."""
+
+        if not selections:
+            return (
+                StageOutcome(
+                    name="stage1_first_edit",
+                    success=False,
+                    message="未找到可用的选品数据",
+                    details={},
+                ),
+                [],
             )
 
-            if result.get("success"):
-                logger.success(f"✓ 第{attempt + 1}次尝试成功！")
-                return result
-            else:
-                logger.warning(f"⚠️  第{attempt + 1}次尝试失败")
-                if attempt < max_retries - 1:
-                    wait_time = (attempt + 1) * 5  # 递增等待时间
-                    logger.info(f"等待{wait_time}秒后重试...")
-                    await page.wait_for_timeout(wait_time * 1000)
+        staff_name = selections[0].owner
+        navigation_success = await miaoshou_ctrl.navigate_and_filter_collection_box(
+            page,
+            filter_by_user=staff_name,
+            switch_to_tab="all",
+        )
+        if not navigation_success:
+            return (
+                StageOutcome(
+                    name="stage1_first_edit",
+                    success=False,
+                    message="导航或筛选妙手公用采集箱失败",
+                    details={},
+                ),
+                [],
+            )
 
-        logger.error(f"✗ 工作流执行失败，已重试{max_retries}次")
-        return result
+        original_titles: list[str] = []
+        for index in range(len(selections)):
+            opened = await miaoshou_ctrl.click_edit_product_by_index(page, index)
+            if not opened:
+                original_titles.append(selections[index].product_name)
+                continue
+
+            await first_edit_ctrl.wait_for_dialog(page)
+            title = await first_edit_ctrl.get_original_title(page)
+            original_titles.append(title or selections[index].product_name)
+            await first_edit_ctrl.close_dialog(page)
+            await page.wait_for_timeout(400)
+
+        ai_generator = AITitleGenerator()
+        edited_products: list[EditedProduct] = []
+        step_errors: list[str] = []
+
+        for index, selection in enumerate(selections[: self.collect_count]):
+            opened = await miaoshou_ctrl.click_edit_product_by_index(page, index)
+            if not opened:
+                step_errors.append(f"第{index + 1}个商品编辑弹窗打开失败")
+                continue
+
+            await first_edit_ctrl.wait_for_dialog(page)
+            category_ok, category_name = await first_edit_ctrl.check_category(page)
+            if not category_ok:
+                logger.warning("类目疑似不合规: %s", category_name)
+
+            model_suffix = f"{selection.model_number}型号"
+            new_title = await self._generate_title(
+                ai_generator,
+                original_titles,
+                model_suffix,
+                index,
+            )
+
+            cost_price = self._resolve_cost_price(selection)
+            price_result = self.price_calculator.calculate_batch([cost_price])[0]
+
+            weight_g = self._resolve_weight(selection)
+            dimensions = self._resolve_dimensions(selection)
+
+            try:
+                edit_success = await first_edit_ctrl.complete_first_edit(
+                    page=page,
+                    title=new_title,
+                    price=price_result.real_supply_price,
+                    stock=500,
+                    weight=weight_g,
+                    dimensions=dimensions,
+                )
+                if not edit_success:
+                    step_errors.append(f"第{index + 1}个商品首次编辑未完成")
+                    continue
+
+                edited_products.append(
+                    EditedProduct(
+                        index=index,
+                        selection=selection,
+                        title=new_title,
+                        cost_price=cost_price,
+                        price=price_result,
+                        weight_g=weight_g,
+                        dimensions_cm=dimensions,
+                    )
+                )
+            except Exception as exc:
+                step_errors.append(f"第{index + 1}个商品编辑异常: {exc}")
+            finally:
+                await page.wait_for_timeout(600)
+
+        success = len(edited_products) == self.collect_count and not step_errors
+        message = (
+            f"完成首次编辑 {len(edited_products)}/{self.collect_count} 条"
+            if success
+            else "部分首次编辑失败, 详见 details.errors"
+        )
+        details = {
+            "owner": staff_name,
+            "edited_products": [prod.to_payload() for prod in edited_products],
+            "errors": step_errors,
+        }
+
+        return StageOutcome("stage1_first_edit", success, message, details), edited_products
+
+    async def _stage_claim_products(
+        self,
+        page,
+        miaoshou_ctrl: MiaoshouController,
+        edited_products: Sequence[EditedProduct],
+    ) -> StageOutcome:
+        """阶段 2: 5 条链接 x 4 次认领."""
+
+        if not edited_products:
+            return StageOutcome(
+                name="stage2_claim",
+                success=False,
+                message="无可认领的商品数据",
+                details={},
+            )
+
+        await miaoshou_ctrl.switch_tab(page, "all")
+        claim_results: list[bool] = []
+
+        for product in edited_products:
+            success = await miaoshou_ctrl.claim_product_multiple_times(
+                page,
+                product_index=product.index,
+                times=self.claim_times,
+            )
+            claim_results.append(success)
+
+        expected_total = len(edited_products) * self.claim_times
+        verify_success = await miaoshou_ctrl.verify_claim_success(
+            page,
+            expected_count=expected_total,
+        )
+
+        overall_success = all(claim_results) and verify_success
+        message = (
+            f"认领成功 {expected_total} 次" if overall_success else "认领结果存在异常, 详见 details"
+        )
+
+        details = {
+            "claim_results": claim_results,
+            "expected_total": expected_total,
+            "verify_success": verify_success,
+        }
+
+        return StageOutcome("stage2_claim", overall_success, message, details)
+
+    async def _stage_batch_edit(
+        self,
+        page,
+        batch_edit_ctrl: BatchEditController,
+        edited_products: Sequence[EditedProduct],
+    ) -> StageOutcome:
+        """阶段 3: Temu 全托管批量编辑 18 步."""
+
+        target_count = max(edited_products.__len__() * self.claim_times, 20)
+        navigation_ok = await batch_edit_ctrl.navigate_to_batch_edit(select_count=target_count)
+        if not navigation_ok:
+            return StageOutcome(
+                name="stage3_batch_edit",
+                success=False,
+                message="无法进入Temu全托管批量编辑页面",
+                details={},
+            )
+
+        reference = edited_products[0] if edited_products else None
+
+        if self.use_codegen_batch_edit:
+            # 使用 codegen 录制的批量编辑模块
+            logger.info("使用 Codegen 录制模块执行批量编辑 18 步")
+
+            payload = {
+                "category_path": ["收纳用品", "收纳篮、箱子、盒子", "盖式储物箱"],
+                "category_attrs": {
+                    "product_use": "多用途",
+                    "shape": "其他形状",
+                    "material": "其他材料",
+                    "closure_type": "其他闭合类型",
+                    "style": "当代",
+                },
+                "outer_package_image": "",  # 从空间选择,不需要本地路径
+                "manual_file": str(
+                    Path(self.settings.data_input_dir) / "超多小语种版说明书(1).pdf"
+                ),
+            }
+
+            batch_result = await run_batch_edit(page, payload)
+
+            total = batch_result.get("total_steps", 18)
+            success_steps = batch_result.get("completed_steps", 0)
+            threshold = int(total * 0.9)
+            overall_success = batch_result.get("success", False)
+
+            message = (
+                f"批量编辑成功 {success_steps}/{total} 步 (Codegen)"
+                if overall_success
+                else f"批量编辑仅成功 {success_steps}/{total} 步 (Codegen), 低于阈值 {threshold}"
+            )
+
+            return StageOutcome(
+                name="stage3_batch_edit",
+                success=overall_success,
+                message=message,
+                details=batch_result,
+            )
+        else:
+            # 使用原有的批量编辑控制器
+            logger.info("使用原有批量编辑控制器执行 18 步")
+
+            payload = {
+                "product_name": reference.selection.product_name if reference else "",
+                "cost_price": reference.cost_price if reference else 0.0,
+                "weight": reference.weight_g if reference else 6000,
+                "length": reference.dimensions_cm[0] if reference else 85,
+                "width": reference.dimensions_cm[1] if reference else 60,
+                "height": reference.dimensions_cm[2] if reference else 50,
+            }
+
+            batch_result = await batch_edit_ctrl.execute_all_steps(payload)
+
+            total = batch_result.get("total", 18)
+            success_steps = batch_result.get("success", 0)
+            threshold = int(total * 0.9)
+            overall_success = success_steps >= threshold
+            message = (
+                f"批量编辑成功 {success_steps}/{total} 步"
+                if overall_success
+                else f"批量编辑仅成功 {success_steps}/{total} 步, 低于阈值 {threshold}"
+            )
+
+            return StageOutcome(
+                name="stage3_batch_edit",
+                success=overall_success,
+                message=message,
+                details=batch_result,
+            )
+
+    async def _stage_publish(
+        self,
+        page,
+        publish_ctrl: PublishController,
+        edited_products: Sequence[EditedProduct],
+    ) -> StageOutcome:
+        """阶段 4: 选择店铺、设置供货价、批量发布."""
+
+        shop_name = self._resolve_shop_name(edited_products)
+        costs = [{"cost": product.cost_price} for product in edited_products]
+
+        selection_ok = await publish_ctrl.select_shop(page, shop_name)
+        if not selection_ok:
+            return StageOutcome(
+                name="stage4_publish",
+                success=False,
+                message=f"选择店铺 {shop_name} 失败",
+                details={},
+            )
+
+        set_price_ok = await publish_ctrl.set_supply_price(page, costs)
+        publish_ok = await publish_ctrl.batch_publish(page)
+        publish_result = await publish_ctrl.check_publish_result(page)
+
+        success = bool(set_price_ok and publish_ok and publish_result.get("success", True))
+        message = "批量发布完成" if success else "批量发布存在失败, 请检查发布记录"
+
+        details = {
+            "shop_name": shop_name,
+            "set_price_success": set_price_ok,
+            "publish_result": publish_result,
+        }
+
+        return StageOutcome("stage4_publish", success, message, details)
+
+    def _prepare_selection_rows(self) -> list[ProductSelectionRow]:
+        """读取/生成选品数据."""
+
+        rows: list[ProductSelectionRow] = []
+        if self.selection_table_path.exists():
+            try:
+                rows = self.selection_reader.read_excel(str(self.selection_table_path))
+            except Exception as exc:
+                logger.warning("读取选品表失败, 使用默认数据: %s", exc)
+
+        if not rows:
+            logger.warning("未找到有效选品表, 使用默认占位数据")
+            rows = [
+                ProductSelectionRow(
+                    owner="自动化账号",
+                    product_name=f"标准测试商品{i + 1}",
+                    model_number=f"A{i + 101:04d}",
+                    color_spec="标准",
+                    collect_count=self.collect_count,
+                    cost_price=20.0,
+                )
+                for i in range(self.collect_count)
+            ]
+
+        if len(rows) < self.collect_count:
+            logger.warning(
+                "选品数据仅有 %s 条, 低于预期 %s 条",
+                len(rows),
+                self.collect_count,
+            )
+
+        return list(rows[: self.collect_count])
+
+    def _resolve_credentials(self) -> tuple[str, str]:
+        """解析登录凭证."""
+
+        username = (
+            os.getenv("MIAOSHOU_USERNAME")
+            or os.getenv("TEMU_USERNAME")
+            or self.settings.temu_username
+        )
+        password = (
+            os.getenv("MIAOSHOU_PASSWORD")
+            or os.getenv("TEMU_PASSWORD")
+            or self.settings.temu_password
+        )
+        return username or "", password or ""
+
+    def _resolve_cost_price(self, selection: ProductSelectionRow) -> float:
+        """根据选品或Excel推断成本价."""
+
+        if selection.cost_price:
+            return float(selection.cost_price)
+
+        cost = self.product_reader.get_cost_price(selection.product_name)
+        if cost:
+            return float(cost)
+
+        logger.warning("无法获取成本价, 使用默认 20.0 元")
+        return 20.0
+
+    def _resolve_weight(self, selection: ProductSelectionRow) -> int:
+        """解析或生成重量 (克)."""
+
+        weight = self.product_reader.get_weight(selection.product_name)
+        if weight:
+            return int(weight)
+        return ProductDataReader.generate_random_weight()
+
+    def _resolve_dimensions(self, selection: ProductSelectionRow) -> tuple[int, int, int]:
+        """解析或生成尺寸 (长宽高, 厘米)."""
+
+        dims = self.product_reader.get_dimensions(selection.product_name)
+        if dims:
+            return (
+                int(dims["length"]),
+                int(dims["width"]),
+                int(dims["height"]),
+            )
+        random_dims = ProductDataReader.generate_random_dimensions()
+        return (
+            int(random_dims["length"]),
+            int(random_dims["width"]),
+            int(random_dims["height"]),
+        )
+
+    async def _generate_title(
+        self,
+        generator: AITitleGenerator,
+        original_titles: Sequence[str],
+        model_suffix: str,
+        product_index: int,
+    ) -> str:
+        """调用AI或回退方案生成新标题."""
+
+        try:
+            titles = await generator.generate_titles(
+                list(original_titles),
+                model_number=model_suffix,
+                use_ai=self.use_ai_titles,
+            )
+            if titles:
+                idx = product_index if product_index < len(titles) else 0
+                return titles[idx]
+        except Exception as exc:
+            logger.warning("AI 生成标题失败, 使用降级方案: %s", exc)
+
+        fallback_source = (
+            original_titles[product_index]
+            if product_index < len(original_titles)
+            else original_titles[0]
+        )
+        return f"{fallback_source} {model_suffix}"
+
+    def _resolve_shop_name(self, edited_products: Sequence[EditedProduct]) -> str:
+        """解析发布店铺名称."""
+
+        env_shop = os.getenv("MIAOSHOU_SHOP_NAME") or os.getenv("TEMU_SHOP_NAME")
+        if env_shop:
+            return env_shop
+
+        workflow_shop = getattr(self.settings.workflow, "default_shop", None)
+        if workflow_shop:
+            return str(workflow_shop)
+
+        if edited_products:
+            return edited_products[0].selection.owner or "自动化店铺"
+
+        return "自动化店铺"
 
 
-# 便捷函数
-async def execute_complete_workflow(
-    page: Page,
-    products_data: List[Dict],
-    shop_name: Optional[str] = None,
-    enable_batch_edit: bool = True,
-    enable_publish: bool = True
-) -> Dict:
-    """执行完整发布工作流的便捷函数.
-
-    Args:
-        page: Playwright页面对象
-        products_data: 5个产品的数据列表
-        shop_name: 店铺名称（可选）
-        enable_batch_edit: 是否启用批量编辑
-        enable_publish: 是否启用发布流程
-
-    Returns:
-        执行结果字典
-
-    Examples:
-        >>> result = await execute_complete_workflow(page, products_data, "测试店铺")
-        >>> result["success"]
-        True
-    """
-    workflow = CompletePublishWorkflow()
-    return await workflow.execute(page, products_data, shop_name, enable_batch_edit, enable_publish)
-
-
-# 测试代码
-if __name__ == "__main__":
-    # 这个工作流需要配合Page对象和真实数据使用
-    # 测试请在集成测试中进行
-    pass
-
+__all__ = [
+    "CompletePublishWorkflow",
+    "EditedProduct",
+    "StageOutcome",
+    "WorkflowExecutionResult",
+]

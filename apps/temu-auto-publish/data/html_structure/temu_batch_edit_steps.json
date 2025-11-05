@@ -1,0 +1,112 @@
+{
+  "source": "apps/temu-auto-publish/debug/batch_edit_page_source.html",
+  "batch_edit_steps": [
+    {
+      "label_text": "标题",
+      "attributes": null
+    },
+    {
+      "label_text": "英语标题",
+      "attributes": null
+    },
+    {
+      "label_text": "类目属性",
+      "attributes": null
+    },
+    {
+      "label_text": "主货号",
+      "attributes": null
+    },
+    {
+      "label_text": "外包装",
+      "attributes": null
+    },
+    {
+      "label_text": "产地",
+      "attributes": null
+    },
+    {
+      "label_text": "品牌",
+      "attributes": null
+    },
+    {
+      "label_text": "定制品",
+      "attributes": null
+    },
+    {
+      "label_text": "详情文字",
+      "attributes": null
+    },
+    {
+      "label_text": "规格名称",
+      "attributes": null
+    },
+    {
+      "label_text": "敏感属性",
+      "attributes": null
+    },
+    {
+      "label_text": "重量",
+      "attributes": null
+    },
+    {
+      "label_text": "尺寸",
+      "attributes": null
+    },
+    {
+      "label_text": "平台SKU",
+      "attributes": null
+    },
+    {
+      "label_text": "SKU分类",
+      "attributes": null
+    },
+    {
+      "label_text": "尺码表",
+      "attributes": null
+    },
+    {
+      "label_text": "模特信息",
+      "attributes": null
+    },
+    {
+      "label_text": "建议售价",
+      "attributes": null
+    },
+    {
+      "label_text": "包装清单",
+      "attributes": null
+    },
+    {
+      "label_text": "轮播图",
+      "attributes": null
+    },
+    {
+      "label_text": "颜色图",
+      "attributes": null
+    },
+    {
+      "label_text": "预览图",
+      "attributes": null
+    },
+    {
+      "label_text": "描述图优化",
+      "attributes": null
+    },
+    {
+      "label_text": "产品视频",
+      "attributes": null
+    },
+    {
+      "label_text": "添加水印",
+      "attributes": null
+    },
+    {
+      "label_text": "产品说明书",
+      "attributes": null
+    }
+  ],
+  "metadata": {
+    "total_steps_found": 26
+  }
+}

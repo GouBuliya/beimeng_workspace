@@ -24,7 +24,7 @@
 import asyncio
 import json
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Sequence
 
 from loguru import logger
 from playwright.async_api import Page
@@ -46,6 +46,16 @@ class MiaoshouController:
         >>> ctrl = MiaoshouController()
         >>> await ctrl.navigate_to_collection_box(page)
     """
+
+    _DEFAULT_EDIT_BUTTON_SELECTORS: List[str] = [
+        "button:has-text('编辑')",
+        "button:has-text('首次编辑')",
+        "a:has-text('首次编辑')",
+        "a:has-text('编辑')",
+        "span:has-text('首次编辑')",
+        "text='首次编辑'",
+        "text='编辑'",
+    ]
 
     def __init__(self, selector_path: str = "config/miaoshou_selectors_v2.json"):
         """初始化妙手控制器.
@@ -76,6 +86,55 @@ class MiaoshouController:
         except Exception as e:
             logger.warning(f"加载选择器配置失败: {e}")
             return {}
+
+    def _normalize_selector_value(self, value: object) -> List[str]:
+        """将选择器配置值规范化为列表."""
+
+        if value is None:
+            return []
+
+        if isinstance(value, list):
+            selectors: List[str] = []
+            for item in value:
+                selectors.extend(self._normalize_selector_value(item))
+            return selectors
+
+        if isinstance(value, str):
+            parts = [part.strip() for part in value.split(",") if part.strip()]
+            return parts
+
+        normalized = str(value).strip()
+        return [normalized] if normalized else []
+
+    def _resolve_selectors(
+        self,
+        config: Dict[str, object],
+        keys: Sequence[str],
+        default: Sequence[str],
+    ) -> List[str]:
+        """解析配置中某个键对应的选择器列表."""
+
+        selectors: List[str] = []
+        for key in keys:
+            if key not in config:
+                continue
+            selectors.extend(self._normalize_selector_value(config.get(key)))
+
+        unique_selectors: List[str] = []
+        for selector in selectors:
+            if selector and selector not in unique_selectors:
+                unique_selectors.append(selector)
+
+        if unique_selectors:
+            return unique_selectors
+
+        fallback_selectors: List[str] = []
+        for selector in default:
+            candidate = selector.strip()
+            if candidate and candidate not in fallback_selectors:
+                fallback_selectors.append(candidate)
+
+        return fallback_selectors
 
     async def navigate_to_collection_box(self, page: Page, use_sidebar: bool = False) -> bool:
         """导航到公用采集箱.
@@ -593,21 +652,44 @@ class MiaoshouController:
             collection_box_config = self.selectors.get("collection_box", {})
             product_list_config = collection_box_config.get("product_list", {})
 
-            # 第一个产品的编辑按钮
-            edit_btn_selector = product_list_config.get("edit_btn_template", "button:has-text('编辑')")
-            await page.locator(edit_btn_selector).first.click()
-            await page.wait_for_timeout(2000)  # 等待弹窗加载
+            selectors = self._resolve_selectors(
+                product_list_config,
+                keys=("edit_btn_selectors", "edit_btn_template"),
+                default=self._DEFAULT_EDIT_BUTTON_SELECTORS,
+            )
 
-            # 验证弹窗是否打开
             first_edit_config = self.selectors.get("first_edit_dialog", {})
             close_btn_selector = first_edit_config.get("close_btn", "button:has-text('关闭')")
 
-            if await page.locator(close_btn_selector).is_visible():
-                logger.success("✓ 编辑弹窗已打开")
-                return True
-            else:
-                logger.error("✗ 编辑弹窗未打开")
-                return False
+            for selector in selectors:
+                try:
+                    edit_buttons = page.locator(selector)
+                    count = await edit_buttons.count()
+                    if count == 0:
+                        logger.debug(f"选择器 {selector} 未找到任何编辑按钮")
+                        continue
+
+                    logger.debug(
+                        f"使用选择器 {selector} 尝试点击第一个编辑按钮 (找到 {count} 个)"
+                    )
+                    await edit_buttons.first.click()
+                    await page.wait_for_timeout(2000)
+
+                    if await page.locator(close_btn_selector).first.is_visible():
+                        logger.success("✓ 编辑弹窗已打开")
+                        return True
+
+                    logger.warning(
+                        f"使用选择器 {selector} 点击后未检测到编辑弹窗, 尝试下一个选择器"
+                    )
+                except Exception as selector_error:
+                    logger.debug(
+                        f"选择器 {selector} 点击编辑按钮失败: {selector_error}"
+                    )
+                await page.wait_for_timeout(500)
+
+            logger.error("✗ 所有编辑按钮选择器均尝试失败, 未能打开编辑弹窗")
+            return False
 
         except Exception as e:
             logger.error(f"打开编辑弹窗失败: {e}")
@@ -633,30 +715,51 @@ class MiaoshouController:
             collection_box_config = self.selectors.get("collection_box", {})
             product_list_config = collection_box_config.get("product_list", {})
 
-            # 指定索引的产品编辑按钮
-            edit_btn_selector = product_list_config.get("edit_btn_template", "button:has-text('编辑')")
-            edit_buttons = page.locator(edit_btn_selector)
-            
-            # 检查是否有足够的产品
-            count = await edit_buttons.count()
-            if count <= index:
-                logger.error(f"✗ 产品数量不足，当前只有{count}个产品")
-                return False
-            
-            # 点击指定索引的编辑按钮
-            await edit_buttons.nth(index).click()
-            await page.wait_for_timeout(2000)  # 等待弹窗加载
+            selectors = self._resolve_selectors(
+                product_list_config,
+                keys=("edit_btn_selectors", "edit_btn_template"),
+                default=self._DEFAULT_EDIT_BUTTON_SELECTORS,
+            )
 
-            # 验证弹窗是否打开
             first_edit_config = self.selectors.get("first_edit_dialog", {})
             close_btn_selector = first_edit_config.get("close_btn", "button:has-text('关闭')")
 
-            if await page.locator(close_btn_selector).first.is_visible():
-                logger.success(f"✓ 第{index+1}个产品编辑弹窗已打开")
-                return True
-            else:
-                logger.error("✗ 编辑弹窗未打开")
-                return False
+            for selector in selectors:
+                try:
+                    edit_buttons = page.locator(selector)
+                    count = await edit_buttons.count()
+                    if count == 0:
+                        logger.debug(f"选择器 {selector} 未找到任何编辑按钮")
+                        continue
+
+                    if count <= index:
+                        logger.debug(
+                            f"选择器 {selector} 找到 {count} 个编辑按钮, 不足以访问索引 {index}"
+                        )
+                        continue
+
+                    logger.debug(
+                        f"使用选择器 {selector} 点击第{index + 1}个编辑按钮 / 共 {count} 个"
+                    )
+
+                    await edit_buttons.nth(index).click()
+                    await page.wait_for_timeout(2000)
+
+                    if await page.locator(close_btn_selector).first.is_visible():
+                        logger.success(f"✓ 第{index+1}个产品编辑弹窗已打开")
+                        return True
+
+                    logger.warning(
+                        f"使用选择器 {selector} 点击后未检测到编辑弹窗, 尝试下一个选择器"
+                    )
+                except Exception as selector_error:
+                    logger.debug(
+                        f"选择器 {selector} 点击索引 {index} 的编辑按钮失败: {selector_error}"
+                    )
+                await page.wait_for_timeout(500)
+
+            logger.error("✗ 所有编辑按钮选择器均尝试失败, 未能打开编辑弹窗")
+            return False
 
         except Exception as e:
             logger.error(f"打开编辑弹窗失败: {e}")

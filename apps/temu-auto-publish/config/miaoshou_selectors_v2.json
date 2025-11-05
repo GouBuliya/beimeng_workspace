@@ -81,7 +81,15 @@
     },
     "product_list": {
       "checkbox_template": "input[type='checkbox']",
-      "edit_btn_template": "button:has-text('编辑')",
+      "edit_btn_selectors": [
+        "button:has-text('编辑')",
+        "button:has-text('首次编辑')",
+        "a:has-text('首次编辑')",
+        "a:has-text('编辑')",
+        "text='首次编辑'",
+        "span:has-text('首次编辑')",
+        "text='编辑'"
+      ],
       "delete_btn_template": "button:has-text('删除')",
       "claim_to_btn_template": "button:has-text('认领到')",
       "note_btn_template": "button:has-text('备注')"

@@ -160,25 +160,13 @@
 ### 方式1：使用完整工作流控制器
 
 ```python
-from src.workflows.complete_publish_workflow_v2 import CompletePublishWorkflow
+from src.workflows.complete_publish_workflow import CompletePublishWorkflow
 
-# 准备产品数据
-product_data_list = [
-    {
-        "id": "P001",
-        "name": "药箱收纳盒",
-        "cost_price": 150.0,
-        "supply_price": 450.0
-    }
-    # ... 共5个产品
-]
+# 初始化并执行。内部会自动登录妙手ERP并依次完成4个阶段。
+workflow = CompletePublishWorkflow(use_ai_titles=True)
+result = workflow.execute()
 
-# 执行完整工作流
-workflow = CompletePublishWorkflow(page)
-result = await workflow.execute_full_workflow(
-    product_data_list,
-    username="your_username"
-)
+print(result.to_dict())
 ```
 
 ### 方式2：运行测试脚本
@@ -197,13 +185,15 @@ uv run python scripts/test_complete_workflow.py
 ### 核心控制器
 - `src/browser/first_edit_controller.py` - 首次编辑控制器
 - `src/browser/batch_edit_controller_v2.py` - 批量编辑控制器（改进版）
-- `src/workflows/complete_publish_workflow_v2.py` - 完整工作流控制器
+- `src/workflows/complete_publish_workflow.py` - 最新完整工作流控制器（同步入口）
+- `src/workflows/legacy/` - 历史版本归档（v1/v2）
 
 ### 配置文件
 - `config/miaoshou_selectors_v2.json` - 选择器配置
 - 包含公用采集箱和Temu全托管采集箱的选择器
 
-### 测试脚本
+### 测试脚本 / 运行入口
+- `main.py` - 最简执行入口 (`python main.py`)
 - `scripts/test_complete_workflow.py` - 完整工作流测试
 - `scripts/test_batch_edit_v2.py` - 批量编辑18步测试
 - `scripts/verify_batch_edit.py` - 单个产品验证

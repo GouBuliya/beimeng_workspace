@@ -251,10 +251,12 @@ asyncio.run(test_batch_edit_with_excel(
 
 ### 集成到完整工作流
 ```python
-from src.workflows.complete_publish_workflow_v2 import CompletePublishWorkflow
+from src.workflows.complete_publish_workflow import CompletePublishWorkflow
 
 workflow = CompletePublishWorkflow()
-await workflow.execute()
+result = workflow.execute()
+
+print(result.total_success)
 ```
 
 ---

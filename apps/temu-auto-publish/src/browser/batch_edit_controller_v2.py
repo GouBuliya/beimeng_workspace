@@ -148,7 +148,7 @@ class BatchEditController:
             except Exception as e:
                 logger.debug(f"对话框关闭检查异常（可忽略）: {e}")
             
-            # 4. 点击批量编辑按钮
+            # 4. 点击批量编辑按钮，打开Popover菜单
             logger.info("点击批量编辑按钮...")
             try:
                 batch_edit_btn = self.page.locator("button:has-text('批量编辑')").first
@@ -164,20 +164,39 @@ class BatchEditController:
                     await batch_edit_btn.click(force=True)
                     logger.success("✓ 强制点击成功")
                 
-                # 等待批量编辑页面关键元素出现
+                # 等待Popover菜单出现
                 try:
-                    await self.page.locator("button:has-text('预览')").first.wait_for(state="visible", timeout=10000)
-                    logger.success("✓ 已进入批量编辑页面")
-                except:
-                    # fallback: 等待1秒
+                    # 批量编辑使用Popover菜单，而不是弹窗
+                    popover_selectors = [
+                        ".batch-editor-group-box",
+                        ".jx-popper:has(.batch-editor-group-field)",
+                        "[id*='jx-id-']:has(.batch-editor-group-field)",
+                    ]
+                    
+                    menu_found = False
+                    for selector in popover_selectors:
+                        try:
+                            menu = self.page.locator(selector).first
+                            await menu.wait_for(state="visible", timeout=3000)
+                            logger.success(f"✓ Popover菜单已显示: {selector}")
+                            menu_found = True
+                            break
+                        except:
+                            continue
+                    
+                    if not menu_found:
+                        logger.warning("⚠️ 未检测到Popover菜单，但继续执行")
+                        await self.page.wait_for_timeout(1000)
+                    
+                except Exception as e:
+                    logger.debug(f"等待Popover菜单异常: {e}")
                     await self.page.wait_for_timeout(1000)
+                    
             except Exception as e:
                 logger.error(f"无法进入批量编辑: {e}")
                 return False
             
-            # 4. 验证是否进入批量编辑页面（已通过步骤3的智能等待验证）
-            # 移除不必要的验证等待，步骤3已经等待预览按钮可见
-            logger.success("✓ 批量编辑页面准备就绪")
+            logger.success("✓ 批量编辑准备就绪")
             return True
             
         except Exception as e:
