@@ -551,7 +551,7 @@ async def _step_11_platform_sku(page: Page) -> None:
 
 
 async def _step_12_sku_category(page: Page) -> None:
-    """步骤 12: SKU 分类 - 选择组合装 500 件。
+    """步骤 12: SKU 分类 - 选择单品,数量填 1。
 
     Args:
         page: Playwright 页面对象。
@@ -560,9 +560,8 @@ async def _step_12_sku_category(page: Page) -> None:
     await page.get_by_text("SKU分类").click()
     await _wait_for_dialog_open(page)
     
-    # 点击下拉框触发器展开选项列表
     try:
-        # 尝试多个可能的下拉触发器选择器
+        # 1. 点击SKU分类下拉框触发器
         trigger_selectors = [
             page.get_by_role("dialog").locator("form").locator(".el-select").locator("input").first,
             page.get_by_role("dialog").locator(".el-select__input").first,
@@ -581,25 +580,47 @@ async def _step_12_sku_category(page: Page) -> None:
                     continue
         
         if not clicked:
-            logger.warning("未能点击下拉触发器,尝试直接查找选项")
+            logger.warning("未能点击下拉触发器")
         
         # 等待下拉选项列表出现
-        await page.wait_for_timeout(800)  # 给更多时间让下拉展开
+        await page.wait_for_timeout(500)
         
-        # 尝试多种方式找到"组合装 500 件"选项
-        dropdown_selectors = [
-            page.locator(".el-select-dropdown__item").filter(has_text="组合装 500 件"),
-            page.locator(".el-select-dropdown").locator("li").filter(has_text="组合装 500 件"),
-            page.get_by_text("组合装 500 件", exact=True),
+        # 2. 选择"单品"
+        single_item_selectors = [
+            page.locator(".el-select-dropdown__item").filter(has_text="单品"),
+            page.locator(".el-select-dropdown").locator("li").filter(has_text="单品"),
+            page.get_by_text("单品", exact=True),
         ]
         
-        for dropdown in dropdown_selectors:
-            if await dropdown.count() > 0:
-                await dropdown.first.click()
-                logger.success("✓ 已选择: 组合装 500 件")
+        for selector in single_item_selectors:
+            if await selector.count() > 0:
+                await selector.first.click()
+                logger.success("✓ 已选择: 单品")
                 break
         else:
-            logger.warning("未找到'组合装 500 件'选项,跳过选择")
+            logger.warning("未找到'单品'选项")
+        
+        # 等待下拉关闭
+        await page.wait_for_timeout(300)
+        
+        # 3. 填写数量为 1
+        quantity_input_selectors = [
+            page.get_by_role("dialog").get_by_placeholder("数量"),
+            page.get_by_role("dialog").locator("input[type='text']").filter(has_text="件"),
+            page.get_by_role("dialog").locator(".el-input__inner"),
+        ]
+        
+        for input_selector in quantity_input_selectors:
+            if await input_selector.count() > 0:
+                try:
+                    await input_selector.first.click()
+                    await input_selector.first.fill("1")
+                    logger.success("✓ 数量已填写: 1")
+                    break
+                except Exception:
+                    continue
+        else:
+            logger.warning("未找到数量输入框")
             
     except Exception as exc:
         logger.warning("SKU分类选择失败: {}", exc)
