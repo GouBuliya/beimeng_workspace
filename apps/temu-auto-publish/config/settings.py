@@ -137,12 +137,17 @@ class BusinessConfig(BaseSettings):
         real_supply_multiplier: 真实供货价倍率
         collect_count: 采集数量
         claim_count: 认领次数
+        collection_owner: 妙手采集箱创建人员显示名(不含账号)
     """
     price_multiplier: float = Field(default=10.0, description="建议售价倍率")
     supply_price_multiplier: float = Field(default=7.5, description="供货价倍率")
     real_supply_multiplier: float = Field(default=2.5, description="真实供货价倍率")
     collect_count: int = Field(default=5, ge=1, le=10, description="采集数量")
     claim_count: int = Field(default=4, ge=1, le=10, description="认领次数")
+    collection_owner: str = Field(
+        default="李英亮",
+        description="妙手采集箱创建人员显示名(不含账号, 会与账号拼接)",
+    )
 
 
 class WorkflowConfig(BaseSettings):

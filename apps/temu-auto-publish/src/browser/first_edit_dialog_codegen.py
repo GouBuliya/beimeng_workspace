@@ -124,23 +124,35 @@ async def _fill_title(page: Page, title: str) -> bool:
         logger.info(f"填写产品标题: {title}")
 
         # 尝试多种选择器策略
-        selectors = [
-            "input[placeholder*='标题']",
-            "input[placeholder*='Title']",
-            ".jx-input__inner[placeholder*='标题']",
+        dialog = page.locator(".collect-box-editor-dialog-V2, .jx-overlay-dialog").first
+        try:
+            await dialog.wait_for(state="visible", timeout=3_000)
+        except Exception:
+            logger.debug("标题填写时未能定位到弹窗容器, 使用全局查找")
+
+        candidate_locators = [
+            dialog.locator("input.jx-input__inner[type='text']").first,
+            dialog.locator("input[placeholder*='标题']").first,
+            dialog.locator("input[placeholder*='Title']").first,
+            page.locator(".collect-box-editor-dialog-V2 input.jx-input__inner[type='text']").first,
+            page.get_by_placeholder("请输入标题", exact=False),
         ]
 
-        for selector in selectors:
+        for locator in candidate_locators:
             try:
-                title_input = page.locator(selector).first
-                if await title_input.is_visible(timeout=2000):
-                    await title_input.click()
-                    await title_input.press("ControlOrMeta+a")
-                    await title_input.fill(title)
-                    logger.success(f"✓ 标题已填写 (选择器: {selector})")
-                    await page.wait_for_timeout(500)
-                    return True
+                await locator.wait_for(state="visible", timeout=2_000)
             except Exception:
+                continue
+
+            try:
+                await locator.click()
+                await locator.press("ControlOrMeta+a")
+                await locator.fill(title)
+                logger.success("✓ 标题已填写")
+                await page.wait_for_timeout(500)
+                return True
+            except Exception as exc:
+                logger.debug("标题输入失败: {}", exc)
                 continue
 
         logger.error("✗ 未能找到标题输入框")

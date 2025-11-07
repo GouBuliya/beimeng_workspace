@@ -34,20 +34,20 @@ except ImportError:
 
 
 class ProductDataReader:
-    """产品数据读取器，从10月品.xlsx读取产品信息."""
-    
-    def __init__(self, excel_path: Optional[str] = None):
+    """产品数据读取器，从 `data/input/10月品 .xlsx` 读取产品信息."""
+
+    def __init__(self, excel_path: Optional[str] = None) -> None:
         """初始化数据读取器.
-        
+
         Args:
-            excel_path: Excel文件路径，默认为项目根目录下的"10月品 .xlsx"
+            excel_path: Excel文件路径，默认定位到应用目录下的 `data/input/10月品 .xlsx`.
         """
         if excel_path:
             self.excel_path = Path(excel_path)
         else:
-            # 默认路径：项目根目录
-            self.excel_path = Path(__file__).parent.parent.parent.parent.parent / "10月品 .xlsx"
-        
+            app_root = Path(__file__).resolve().parents[2]
+            self.excel_path = app_root / "data/input/10月品 .xlsx"
+
         self.data_cache = {}
         self._load_data()
     

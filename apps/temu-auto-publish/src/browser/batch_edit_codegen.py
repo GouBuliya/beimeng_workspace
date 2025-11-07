@@ -32,11 +32,15 @@
   - 类目选择需要按层级逐级点击
 """
 
+import contextlib
 import re
+from pathlib import Path
 from typing import Any
 
 from loguru import logger
 from playwright.async_api import Page
+
+MAX_TITLE_LENGTH = 250
 
 
 async def run_batch_edit(page: Page, payload: dict[str, Any]) -> dict[str, Any]:
@@ -95,21 +99,27 @@ async def run_batch_edit(page: Page, payload: dict[str, Any]) -> dict[str, Any]:
         if target_url not in current_url:
             logger.info(f"导航到 Temu 全托管采集箱: {target_url}")
             await page.goto(target_url, timeout=60000)
-            await page.wait_for_load_state("domcontentloaded", timeout=60000)
-            await page.wait_for_timeout(2000)  # 等待页面完全加载
+            # 智能等待: 等待网络空闲而非固定延迟
+            await page.wait_for_load_state("networkidle", timeout=30000)
 
         # 1. 检测并关闭弹窗
         await _close_popups(page)
 
         # 2. 全选产品
         logger.info("全选产品...")
-        await page.locator(".jx-checkbox").first.click()
-        await page.wait_for_timeout(1000)
+        checkbox = page.locator(".jx-checkbox").first
+        await checkbox.click()
+        # 智能等待: 等待选中状态生效
+        try:
+            await page.locator(".jx-checkbox.is-checked").first.wait_for(state="visible", timeout=3000)
+        except Exception:
+            pass  # 即使超时也继续,可能已经选中
 
         # 3. 打开批量编辑弹窗
         logger.info("打开批量编辑菜单...")
         await page.get_by_text("批量编辑").click()
-        await page.wait_for_timeout(1000)
+        # 智能等待: 等待批量编辑对话框打开
+        await _wait_for_dialog_open(page)
 
         logger.info("批量编辑弹窗已打开")
 
@@ -163,8 +173,13 @@ async def _open_batch_edit_popover(page: Page) -> None:
         page: Playwright 页面对象。
     """
     # 点击第一个复选框(全选)
-    await page.locator(".jx-checkbox").first.click()
-    await page.wait_for_timeout(500)
+    checkbox = page.locator(".jx-checkbox").first
+    await checkbox.click()
+    # 智能等待: 等待选中状态生效
+    try:
+        await page.locator(".jx-checkbox.is-checked").first.wait_for(state="visible", timeout=2000)
+    except Exception:
+        pass
 
 
 async def _close_popups(page: Page) -> None:
@@ -203,7 +218,11 @@ async def _close_popups(page: Page) -> None:
                             await button.click(timeout=2000)
                             closed_count += 1
                             logger.success(f"✓ 已关闭弹窗 {closed_count}")
-                            await page.wait_for_timeout(500)
+                            # 智能等待: 等待弹窗消失
+                            try:
+                                await button.wait_for(state="hidden", timeout=2000)
+                            except Exception:
+                                pass
                     except Exception:
                         continue
         except Exception:
@@ -214,8 +233,6 @@ async def _close_popups(page: Page) -> None:
     else:
         logger.info("未发现需要关闭的弹窗")
 
-    await page.wait_for_timeout(500)
-
 
 async def _step_01_title(page: Page) -> None:
     """步骤 1: 标题 - 保持原样点击预览保存。
@@ -224,10 +241,65 @@ async def _step_01_title(page: Page) -> None:
         page: Playwright 页面对象。
     """
     await page.locator("div").filter(has_text=re.compile(r"^标题$")).click()
+    # 智能等待: 等待标题编辑对话框打开
+    await _wait_for_dialog_open(page)
+    await _ensure_title_length(page)
     await page.get_by_role("button", name="预览").click()
     await page.get_by_role("button", name="保存修改").click()
     await _wait_for_save_toast(page)
     await _close_edit_dialog(page)
+
+
+async def _ensure_title_length(page: Page) -> None:
+    """确保批量编辑弹窗中的标题不超过平台限制."""
+
+    selectors = [
+        "textarea[placeholder*='标题']",
+        "input[placeholder*='标题']",
+        ".jx-dialog textarea",
+        ".jx-dialog input",
+    ]
+
+    for selector in selectors:
+        locator = page.locator(selector).first
+        try:
+            if await locator.count() == 0:
+                continue
+
+            current_title = await locator.input_value()
+            if current_title is None:
+                current_title = ""
+
+            length = len(current_title)
+            if length <= MAX_TITLE_LENGTH:
+                logger.debug("批量编辑标题长度 {} 未超限", length)
+                return
+
+            excess = length - MAX_TITLE_LENGTH
+            mid = length // 2
+            start = max(0, mid - excess // 2)
+            end = start + excess
+            new_title = current_title[:start] + current_title[end:]
+
+            if len(new_title) > MAX_TITLE_LENGTH:
+                new_title = new_title[:MAX_TITLE_LENGTH]
+
+            await locator.fill(new_title)
+            logger.warning(
+                "批量编辑标题超出限制, 已从 {} 字符裁剪至 {} 字符",
+                length,
+                len(new_title),
+            )
+            # 智能等待: 等待输入值生效
+            try:
+                await locator.evaluate("el => el.dispatchEvent(new Event('input', { bubbles: true }))")
+            except Exception:
+                pass
+            return
+        except Exception as exc:
+            logger.debug("标题长度检查选择器 {} 失败: {}", selector, exc)
+
+    logger.error("未能定位标题输入框, 无法执行长度校验")
 
 
 async def _step_02_english_title(page: Page) -> None:
@@ -259,73 +331,6 @@ async def _step_03_category_attrs(page: Page, payload: dict[str, Any]) -> None:
     """
     await page.get_by_text("类目属性").click()
 
-    # 选择类目(按层级点击)
-    category_path = payload.get("category_path", ["收纳用品", "收纳篮、箱子、盒子", "盖式储物箱"])
-
-    await page.get_by_role("textbox", name="请选择类目").click()
-    await page.wait_for_timeout(300)
-
-    # 逐级选择类目
-    for category in category_path:
-        await page.get_by_role("menuitem", name=category).locator("span").first.click()
-        await page.wait_for_timeout(200)
-
-    # 等待类目属性表单加载
-    await page.wait_for_timeout(500)
-
-    # 填充类目属性
-    attrs = payload.get("category_attrs", {})
-
-    # 产品推荐用途
-    product_use = attrs.get("product_use", "多用途")
-    await (
-        page.locator("form")
-        .filter(has_text="方式一:使用新类目:")
-        .get_by_placeholder("请选择", exact=True)
-        .first.click()
-    )
-    await page.get_by_role("listitem").filter(has_text=product_use).click()
-
-    # 形状
-    shape = attrs.get("shape", "其他形状")
-    await (
-        page.locator("form")
-        .filter(has_text="方式一:使用新类目:")
-        .get_by_placeholder("请选择", exact=True)
-        .nth(1)
-        .click()
-    )
-    await page.get_by_role("listitem").filter(has_text=shape).click()
-
-    # 材料
-    material = attrs.get("material", "其他材料")
-    await (
-        page.locator("form")
-        .filter(has_text="方式一:使用新类目:")
-        .get_by_placeholder("请选择", exact=True)
-        .nth(2)
-        .click()
-    )
-    await page.get_by_role("listitem").filter(has_text=material).click()
-
-    # 闭合类型
-    closure_type = attrs.get("closure_type", "其他闭合类型")
-    await (
-        page.locator("form")
-        .filter(has_text="方式一:使用新类目:")
-        .get_by_placeholder("请选择", exact=True)
-        .nth(3)
-        .click()
-    )
-    await page.get_by_role("listitem").filter(has_text=closure_type).click()
-
-    # 风格
-    style = attrs.get("style", "当代")
-    await page.locator(
-        "div:nth-child(5) > div > .category-attr-item-value > .el-form-item > .el-form-item__content > .category-attr-item-value-content > .el-select > .el-input > .el-input__suffix > .el-input__suffix-inner > .el-select__caret"
-    ).click()
-    await page.get_by_role("listitem").filter(has_text=style).click()
-
     await page.get_by_role("button", name="预览").click()
     await page.get_by_role("button", name="保存修改").click()
     await _wait_for_save_toast(page)
@@ -345,7 +350,7 @@ async def _step_04_main_sku(page: Page) -> None:
     await _close_edit_dialog(page)
 
 
-async def _step_05_outer_package(page: Page, image_path: str) -> None:
+async def _step_05_outer_package(page: Page, image_path: str | None) -> None:
     """步骤 5: 外包装 - 固定形状/类型,参数化图片路径。
 
     Args:
@@ -374,27 +379,46 @@ async def _step_05_outer_package(page: Page, image_path: str) -> None:
     )
     await page.get_by_text("硬包装", exact=True).click()
 
-    # 上传图片(如果提供了路径)
-    if image_path:
+    chosen_path = image_path
+    if not chosen_path:
+        chosen_path = str(Path(__file__).resolve().parents[2] / "data/image/packaging.png")
+
+    try:
         await page.get_by_role("radio").filter(has_text="addImages").click()
-        await (
+        option_trigger = (
             page.get_by_role("dialog")
             .locator("span")
             .filter(has_text="本地上传 选择空间图片 使用网络图片")
-            .click()
+            .locator("i")
+            .first
         )
-        await page.locator("#el-popover-4055").get_by_text("选择空间图片").click()
+        if await option_trigger.count():
+            with contextlib.suppress(Exception):
+                await option_trigger.click()
+            popover = page.locator("[id^='el-popover']").filter(has_text="本地上传")
+            if await popover.count():
+                with contextlib.suppress(Exception):
+                    await popover.get_by_text("本地上传").first.click()
 
-        # 这里假设从空间选择图片(录制时的行为)
-        # 如果需要本地上传,可以使用 set_input_files
-        # 由于录制是从空间选择,这里保持原样
-        await (
-            page.locator("div")
-            .filter(has_text=re.compile(r"^微信图片_20250922105854_7_5\.jpg"))
-            .get_by_role("img")
-            .click()
-        )
-        await page.get_by_role("button", name="确定").click()
+        file_input = await page.wait_for_selector("input[type='file']", state="attached", timeout=5000)
+        await file_input.set_input_files(chosen_path)
+        logger.success("✓ 外包装图片已上传: {}", chosen_path)
+        # 智能等待: 等待上传完成(等待文件输入框消失或上传成功提示)
+        try:
+            await page.locator(".el-upload__input").wait_for(state="hidden", timeout=3000)
+        except Exception:
+            pass
+        confirm_btn = page.get_by_role("button", name=re.compile("确定|保存", re.I))
+        if await confirm_btn.count():
+            with contextlib.suppress(Exception):
+                await confirm_btn.first.click()
+                # 智能等待: 等待确认按钮消失
+                try:
+                    await confirm_btn.first.wait_for(state="hidden", timeout=2000)
+                except Exception:
+                    pass
+    except Exception as exc:
+        logger.warning("外包装图片上传失败, 保留已有图片: {}", exc)
 
     await page.get_by_role("button", name="预览").click()
     await page.get_by_role("button", name="保存修改").click()
@@ -535,26 +559,28 @@ async def _step_11_platform_sku(page: Page) -> None:
 
 
 async def _step_12_sku_category(page: Page) -> None:
-    """步骤 12: SKU 分类 - 固定组合装 500。
+    """步骤 12: SKU 分类 - 选择组合装 500 件。
 
     Args:
         page: Playwright 页面对象。
     """
     await page.get_by_text("SKU分类").click()
 
-    # 选择分类:组合装
-    await page.get_by_role("textbox", name="分类").click()
-    await page.get_by_text("组合装").click()
+    dropdown = page.locator(".el-select-dropdown__item").filter(has_text="组合装 500 件")
+    if await dropdown.count() == 0:
+        trigger = (
+            page.get_by_role("dialog")
+            .locator("form")
+            .locator(".el-select")
+            .locator("input")
+            .first
+        )
+        await trigger.click()
+        # 智能等待: 等待下拉选项列表出现
+        await _wait_for_dropdown_options(page)
+        dropdown = page.locator(".el-select-dropdown__item").filter(has_text="组合装 500 件")
 
-    # 填写数量:500
-    await page.get_by_role("textbox", name="数量").first.click()
-    await page.get_by_role("textbox", name="数量").first.fill("500")
-
-    # 选择:不是独立包装
-    await page.locator(
-        "div:nth-child(2) > .el-input > .el-input__suffix > .el-input__suffix-inner > .el-select__caret"
-    ).click()
-    await page.get_by_text("不是独立包装").click()
+    await dropdown.first.click()
 
     await page.get_by_role("button", name="预览").click()
     await page.get_by_role("button", name="保存修改").click()
@@ -569,8 +595,8 @@ async def _step_13_size_chart(page: Page) -> None:
         page: Playwright 页面对象。
     """
     await page.get_by_text("尺码表").click()
-    # 录制中没有实际操作,直接跳过
-    await page.wait_for_timeout(300)
+    # 录制中没有实际操作,等待对话框打开后直接继续
+    await _wait_for_dialog_open(page)
 
 
 async def _step_14_suggested_price(page: Page) -> None:
@@ -614,8 +640,8 @@ async def _step_16_carousel(page: Page) -> None:
         page: Playwright 页面对象。
     """
     await page.get_by_text("轮播图").click()
-    # 录制中没有实际操作
-    await page.wait_for_timeout(300)
+    # 录制中没有实际操作,等待对话框打开后直接继续
+    await _wait_for_dialog_open(page)
 
 
 async def _step_17_color_image(page: Page) -> None:
@@ -625,8 +651,8 @@ async def _step_17_color_image(page: Page) -> None:
         page: Playwright 页面对象。
     """
     await page.get_by_text("颜色图").click()
-    # 录制中没有实际操作
-    await page.wait_for_timeout(300)
+    # 录制中没有实际操作,等待对话框打开后直接继续
+    await _wait_for_dialog_open(page)
 
 
 async def _step_18_manual(page: Page, file_path: str) -> None:
@@ -644,8 +670,18 @@ async def _step_18_manual(page: Page, file_path: str) -> None:
         await page.get_by_role("tooltip", name="本地上传").locator("div").first.click()
 
         # 使用 set_input_files 上传文件
-        await page.locator("#el-popover-5067").get_by_text("本地上传").set_input_files(file_path)
-        await page.wait_for_timeout(1000)  # 等待文件上传
+        file_input = page.locator("#el-popover-5067").get_by_text("本地上传")
+        await file_input.set_input_files(file_path)
+        # 智能等待: 等待文件上传完成(等待上传进度条消失或成功提示)
+        try:
+            # 等待上传成功的文件名出现或上传区域状态变化
+            await page.locator(".el-upload-list__item.is-success").wait_for(state="visible", timeout=5000)
+        except Exception:
+            # 如果没有明确的成功标识,等待一个较短的时间
+            try:
+                await page.wait_for_load_state("networkidle", timeout=3000)
+            except Exception:
+                pass
 
     await page.get_by_role("button", name="预览").click()
     await page.get_by_role("button", name="保存修改").click()
@@ -654,7 +690,7 @@ async def _step_18_manual(page: Page, file_path: str) -> None:
 
 
 async def _wait_for_save_toast(page: Page, timeout: int = 5000) -> None:
-    """等待保存成功提示。
+    """等待保存成功提示并等待其消失(智能等待)。
 
     Args:
         page: Playwright 页面对象。
@@ -664,26 +700,63 @@ async def _wait_for_save_toast(page: Page, timeout: int = 5000) -> None:
         # 尝试等待成功提示
         toast = page.locator("text=保存成功")
         await toast.wait_for(state="visible", timeout=timeout)
-        await page.wait_for_timeout(300)
+        # 智能等待: 等待 toast 消失而非固定延迟
+        await toast.wait_for(state="hidden", timeout=3000)
     except Exception:
         # 如果没有找到提示,继续执行
         logger.warning("未检测到保存成功提示,继续执行")
-        await page.wait_for_timeout(500)
+
+
+async def _wait_for_dropdown_options(page: Page, timeout: int = 3000) -> None:
+    """等待下拉选项列表出现(智能等待)。
+
+    Args:
+        page: Playwright 页面对象。
+        timeout: 超时时间(毫秒),默认 3000。
+    """
+    try:
+        await page.locator(".el-select-dropdown").wait_for(state="visible", timeout=timeout)
+    except Exception:
+        logger.debug("下拉选项列表未在预期时间内出现")
+
+
+async def _wait_for_dialog_open(page: Page, timeout: int = 5000) -> None:
+    """等待编辑对话框完全打开(智能等待)。
+
+    Args:
+        page: Playwright 页面对象。
+        timeout: 超时时间(毫秒),默认 5000。
+    """
+    dialog = page.get_by_role("dialog")
+    await dialog.wait_for(state="visible", timeout=timeout)
+    # 确保对话框内容加载完成
+    try:
+        await dialog.locator(".el-form").wait_for(state="visible", timeout=2000)
+    except Exception:
+        # 有些对话框可能没有 el-form,跳过
+        pass
 
 
 async def _close_edit_dialog(page: Page) -> None:
-    """关闭编辑对话框。
+    """关闭编辑对话框并等待其真正关闭(智能等待)。
 
     Args:
         page: Playwright 页面对象。
     """
     try:
-        await page.get_by_role("button", name="关闭", exact=True).click()
-        await page.wait_for_timeout(300)
+        close_btn = page.get_by_role("button", name="关闭", exact=True)
+        await close_btn.click()
+        # 智能等待: 等待对话框真正关闭(detached)
+        try:
+            await page.locator(".el-dialog__wrapper").wait_for(state="hidden", timeout=3000)
+        except Exception:
+            # 如果对话框选择器不匹配,至少等待按钮消失
+            await close_btn.wait_for(state="hidden", timeout=2000)
     except Exception:
         # 如果没有关闭按钮,尝试其他方式
         try:
-            await page.locator(".edit-box-header-side > .el-icon-close").click()
-            await page.wait_for_timeout(300)
+            close_icon = page.locator(".edit-box-header-side > .el-icon-close")
+            await close_icon.click()
+            await page.locator(".el-dialog__wrapper").wait_for(state="hidden", timeout=3000)
         except Exception:
             logger.warning("未找到关闭按钮,跳过")

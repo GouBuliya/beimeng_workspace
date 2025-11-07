@@ -948,36 +948,43 @@ class MiaoshouController:
                 
                 # 查找创建人员下拉框
                 user_filter_selectors = [
-                    "select:has-text('创建人员')",
-                    ".jx-select:has-text('创建人员')",
-                    "label:has-text('创建人员') + .jx-select",
-                    "xpath=//label[contains(text(), '创建人员')]/following-sibling::*//input"
+                    "input[placeholder*='创建人']",
+                    "input[placeholder*='创建人员']",
+                    "input[placeholder*='请输入创建']",
+                    "label:has-text('创建人员') + .jx-select input",
+                    "xpath=//label[contains(text(), '创建人员')]/following-sibling::*//input",
+                    ".jx-select:has-text('创建人员') input",
                 ]
                 
                 filter_applied = False
                 for selector in user_filter_selectors:
                     try:
-                        count = await page.locator(selector).count()
-                        if count > 0:
-                            # 点击下拉框
-                            await page.locator(selector).first.click()
-                            await page.wait_for_timeout(500)
-                            
-                            # 选择用户
-                            user_option = page.locator(f"text=/{filter_by_user}/")
-                            if await user_option.count() > 0:
-                                await user_option.first.click()
-                                await page.wait_for_timeout(500)
-                                
-                                # 点击搜索按钮
-                                search_btn = page.locator("button:has-text('搜索')")
-                                if await search_btn.count() > 0:
-                                    await search_btn.first.click()
-                                    await page.wait_for_timeout(1000)
-                                
-                                filter_applied = True
-                                logger.success(f"✓ 已筛选用户: {filter_by_user}")
-                                break
+                        element = page.locator(selector).first
+                        if await element.count() == 0:
+                            continue
+
+                        await element.click()
+                        await element.fill("")
+                        await element.type(filter_by_user, delay=80)
+                        await page.wait_for_timeout(300)
+
+                        option_locator = page.locator(
+                            "li.el-select-dropdown__item",
+                            has_text=filter_by_user,
+                        )
+
+                        if await option_locator.count():
+                            await option_locator.first.click()
+                            await page.wait_for_timeout(400)
+
+                            search_btn = page.locator("button:has-text('搜索')").first
+                            if await search_btn.count():
+                                await search_btn.click()
+                                await page.wait_for_timeout(1_000)
+
+                            filter_applied = True
+                            logger.success(f"✓ 已筛选用户: {filter_by_user}")
+                            break
                     except Exception as e:
                         logger.debug(f"尝试筛选器 {selector} 失败: {e}")
                         continue
