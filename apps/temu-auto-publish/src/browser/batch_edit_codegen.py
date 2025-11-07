@@ -392,7 +392,10 @@ async def _step_05_outer_package(page: Page, image_path: str | None) -> None:
         chosen_path = str(Path(__file__).resolve().parents[2] / "data/image/packaging.png")
 
     try:
+        # 点击图片上传区域的单选按钮
         await page.get_by_role("radio").filter(has_text="addImages").click()
+        
+        # 点击展开上传选项的下拉按钮
         option_trigger = (
             page.get_by_role("dialog")
             .locator("span")
@@ -400,31 +403,29 @@ async def _step_05_outer_package(page: Page, image_path: str | None) -> None:
             .locator("i")
             .first
         )
-        if await option_trigger.count():
-            with contextlib.suppress(Exception):
-                await option_trigger.click()
-            popover = page.locator("[id^='el-popover']").filter(has_text="本地上传")
-            if await popover.count():
-                with contextlib.suppress(Exception):
-                    await popover.get_by_text("本地上传").first.click()
-
-        file_input = await page.wait_for_selector("input[type='file']", state="attached", timeout=5000)
+        await option_trigger.click()
+        await page.wait_for_timeout(300)  # 等待下拉菜单展开
+        
+        # 点击"本地上传"选项
+        popover = page.locator("[id^='el-popover']").filter(has_text="本地上传")
+        await popover.get_by_text("本地上传").first.click()
+        await page.wait_for_timeout(300)  # 等待文件选择器准备
+        
+        # 查找文件输入框并上传
+        file_input = page.locator("input[type='file']").last
+        await file_input.wait_for(state="attached", timeout=5000)
         await file_input.set_input_files(chosen_path)
         logger.success("✓ 外包装图片已上传: {}", chosen_path)
-        # 智能等待: 等待上传完成(等待文件输入框消失或上传成功提示)
-        try:
-            await page.locator(".el-upload__input").wait_for(state="hidden", timeout=3000)
-        except Exception:
-            pass
-        confirm_btn = page.get_by_role("button", name=re.compile("确定|保存", re.I))
-        if await confirm_btn.count():
-            with contextlib.suppress(Exception):
-                await confirm_btn.first.click()
-                # 智能等待: 等待确认按钮消失
-                try:
-                    await confirm_btn.first.wait_for(state="hidden", timeout=2000)
-                except Exception:
-                    pass
+        
+        # 等待上传完成
+        await page.wait_for_timeout(1500)  # 给服务器时间处理上传
+        
+        # 点击确定/保存按钮关闭上传弹窗
+        confirm_btn = page.get_by_role("button", name=re.compile("^(确定|保存)$", re.I))
+        if await confirm_btn.count() > 0:
+            await confirm_btn.first.click()
+            await page.wait_for_timeout(500)
+            
     except Exception as exc:
         logger.warning("外包装图片上传失败, 保留已有图片: {}", exc)
 
@@ -572,23 +573,25 @@ async def _step_12_sku_category(page: Page) -> None:
     Args:
         page: Playwright 页面对象。
     """
+    # 点击打开SKU分类编辑对话框
     await page.get_by_text("SKU分类").click()
-
-    dropdown = page.locator(".el-select-dropdown__item").filter(has_text="组合装 500 件")
-    if await dropdown.count() == 0:
-        trigger = (
-            page.get_by_role("dialog")
-            .locator("form")
-            .locator(".el-select")
-            .locator("input")
-            .first
-        )
-        await trigger.click()
-        # 智能等待: 等待下拉选项列表出现
-        await _wait_for_dropdown_options(page)
-        dropdown = page.locator(".el-select-dropdown__item").filter(has_text="组合装 500 件")
-
-    await dropdown.first.click()
+    await _wait_for_dialog_open(page)
+    
+    # 点击下拉框触发器展开选项列表
+    trigger = (
+        page.get_by_role("dialog")
+        .locator("form")
+        .locator(".el-select")
+        .locator("input")
+        .first
+    )
+    await trigger.click()
+    await page.wait_for_timeout(500)  # 等待下拉选项列表展开
+    
+    # 选择"组合装 500 件"
+    dropdown_item = page.locator(".el-select-dropdown__item").filter(has_text="组合装 500 件").first
+    await dropdown_item.wait_for(state="visible", timeout=3000)
+    await dropdown_item.click()
 
     await page.get_by_role("button", name="预览").click()
     await page.get_by_role("button", name="保存修改").click()
