@@ -99,8 +99,8 @@ async def run_batch_edit(page: Page, payload: dict[str, Any]) -> dict[str, Any]:
         if target_url not in current_url:
             logger.info(f"导航到 Temu 全托管采集箱: {target_url}")
             await page.goto(target_url, timeout=60000)
-            # 智能等待: 等待网络空闲而非固定延迟
-            await page.wait_for_load_state("networkidle", timeout=30000)
+            # 激进策略: 等待 domcontentloaded 即可
+            await page.wait_for_load_state("domcontentloaded", timeout=10000)
 
         # 1. 检测并关闭弹窗
         await _close_popups(page)
@@ -109,25 +109,20 @@ async def run_batch_edit(page: Page, payload: dict[str, Any]) -> dict[str, Any]:
         logger.info("全选产品...")
         checkbox = page.locator(".jx-checkbox").first
         await checkbox.click()
-        # 智能等待: 等待选中状态生效
+        # 激进策略: 短暂等待即可
         try:
-            await page.locator(".jx-checkbox.is-checked").first.wait_for(state="visible", timeout=3000)
+            await page.locator(".jx-checkbox.is-checked").first.wait_for(state="visible", timeout=1000)
         except Exception:
-            pass  # 即使超时也继续,可能已经选中
+            pass
 
         # 3. 打开批量编辑弹窗
         logger.info("打开批量编辑菜单...")
         await page.get_by_text("批量编辑").click()
-        # 智能等待: 等待批量编辑对话框或弹窗打开
+        # 激进策略: 短暂等待弹窗打开
         try:
-            # 先尝试等待role=dialog的标准对话框
             await _wait_for_dialog_open(page)
         except Exception:
-            # 如果标准对话框超时,尝试等待其他可能的批量编辑容器
-            try:
-                await page.locator(".batch-edit-popover, .el-popover, .batch-edit-container").first.wait_for(state="visible", timeout=3000)
-            except Exception:
-                logger.warning("批量编辑弹窗未通过标准选择器检测到,继续执行")
+            pass
 
         logger.info("批量编辑弹窗已打开")
 
@@ -226,9 +221,9 @@ async def _close_popups(page: Page) -> None:
                             await button.click(timeout=2000)
                             closed_count += 1
                             logger.success(f"✓ 已关闭弹窗 {closed_count}")
-                            # 智能等待: 等待弹窗消失
+                            # 激进策略: 快速等待弹窗消失
                             try:
-                                await button.wait_for(state="hidden", timeout=2000)
+                                await button.wait_for(state="hidden", timeout=800)
                             except Exception:
                                 pass
                     except Exception:
@@ -445,6 +440,8 @@ async def _step_07_customized(page: Page) -> None:
         page: Playwright 页面对象。
     """
     # 录制中这一步只是点击预览保存,没有修改
+    await page.get_by_text("定制品").click()
+    
     await page.get_by_role("button", name="预览").click()
     await page.get_by_role("button", name="保存修改").click()
     # await _wait_for_save_toast(page)
@@ -475,7 +472,7 @@ async def _step_09_weight(page: Page) -> None:
     await page.get_by_role("spinbutton").nth(2).fill("6000.00")
     await page.get_by_role("button", name="预览").click()
     await page.get_by_role("button", name="保存修改").click()
-    await _wait_for_save_toast(page)
+    # await _wait_for_save_toast(page)
     await _close_edit_dialog(page)
 
 
@@ -531,7 +528,7 @@ async def _step_10_dimensions(page: Page) -> None:
 
     await page.get_by_role("button", name="预览").click()
     await page.get_by_role("button", name="保存修改").click()
-    await _wait_for_save_toast(page)
+    # await _wait_for_save_toast(page)
     await _close_edit_dialog(page)
 
 
@@ -547,7 +544,7 @@ async def _step_11_platform_sku(page: Page) -> None:
     ).first.click()
     await page.get_by_role("button", name="预览").click()
     await page.get_by_role("button", name="保存修改").click()
-    await _wait_for_save_toast(page)
+    # await _wait_for_save_toast(page)
     await _close_edit_dialog(page)
 
 
@@ -559,7 +556,7 @@ async def _step_12_sku_category(page: Page) -> None:
     """
     # 点击打开SKU分类编辑对话框
     await page.get_by_text("SKU分类").click()
-    await _wait_for_dialog_open(page)
+    # await _wait_for_dialog_open(page)
     
     try:
         # 1. 点击SKU分类下拉框触发器
@@ -626,7 +623,7 @@ async def _step_12_sku_category(page: Page) -> None:
 
     await page.get_by_role("button", name="预览").click()
     await page.get_by_role("button", name="保存修改").click()
-    await _wait_for_save_toast(page)
+    # await _wait_for_save_toast(page)
     await _close_edit_dialog(page)
 
 
@@ -638,7 +635,7 @@ async def _step_13_size_chart(page: Page) -> None:
     """
     await page.get_by_text("尺码表").click()
     # 录制中没有实际操作,等待对话框打开后直接继续
-    await _wait_for_dialog_open(page)
+    # await _wait_for_dialog_open(page)
 
 
 async def _step_14_suggested_price(page: Page) -> None:
@@ -658,7 +655,7 @@ async def _step_14_suggested_price(page: Page) -> None:
 
     await page.get_by_role("button", name="预览").click()
     await page.get_by_role("button", name="保存修改").click()
-    await _wait_for_save_toast(page)
+    # await _wait_for_save_toast(page)
     await _close_edit_dialog(page)
 
 
@@ -671,7 +668,7 @@ async def _step_15_packing_list(page: Page) -> None:
     await page.get_by_text("包装清单").click()
     await page.get_by_role("button", name="预览").click()
     await page.get_by_role("button", name="保存修改").click()
-    await _wait_for_save_toast(page)
+    # await _wait_for_save_toast(page)
     await _close_edit_dialog(page)
 
 
@@ -683,7 +680,7 @@ async def _step_16_carousel(page: Page) -> None:
     """
     await page.get_by_text("轮播图").click()
     # 录制中没有实际操作,等待对话框打开后直接继续
-    await _wait_for_dialog_open(page)
+    # await _wait_for_dialog_open(page)
 
 
 async def _step_17_color_image(page: Page) -> None:
@@ -694,7 +691,7 @@ async def _step_17_color_image(page: Page) -> None:
     """
     await page.get_by_text("颜色图").click()
     # 录制中没有实际操作,等待对话框打开后直接继续
-    await _wait_for_dialog_open(page)
+    # await _wait_for_dialog_open(page)
 
 
 async def _step_18_manual(page: Page, file_path: str) -> None:
@@ -705,8 +702,8 @@ async def _step_18_manual(page: Page, file_path: str) -> None:
         file_path: 产品说明书 PDF 文件路径(绝对路径)。
     """
     await page.get_by_text("产品说明书").click()
-    await _wait_for_dialog_open(page)
-
+    # await _wait_for_dialog_open(page)
+    await page.get_by_text("英语").click()
     if file_path:
         try:
             # 点击上传文件按钮
@@ -731,60 +728,57 @@ async def _step_18_manual(page: Page, file_path: str) -> None:
 
     await page.get_by_role("button", name="预览").click()
     await page.get_by_role("button", name="保存修改").click()
-    await _wait_for_save_toast(page)
+    #  await _wait_for_save_toast(page)
     await _close_edit_dialog(page)
 
 
-async def _wait_for_save_toast(page: Page, timeout: int = 5000) -> None:
-    """等待保存成功提示并等待其消失(智能等待)。
+async def _wait_for_save_toast(page: Page, timeout: int = 1500) -> None:
+    """等待保存成功提示并等待其消失(激进策略)。
 
     Args:
         page: Playwright 页面对象。
-        timeout: 超时时间(毫秒),默认 5000。
+        timeout: 超时时间(毫秒),默认 1500。
     """
     try:
-        # 尝试等待成功提示
+        # 快速等待成功提示
         toast = page.locator("text=保存成功")
         await toast.wait_for(state="visible", timeout=timeout)
-        # 智能等待: 等待 toast 消失而非固定延迟
-        await toast.wait_for(state="hidden", timeout=3000)
+        # 激进策略: 快速等待 toast 消失
+        await toast.wait_for(state="hidden", timeout=1000)
     except Exception:
-        # 如果没有找到提示,继续执行
-        logger.warning("未检测到保存成功提示,继续执行")
+        # 静默失败,不记录警告
+        pass
 
 
-async def _wait_for_dropdown_options(page: Page, timeout: int = 3000) -> None:
-    """等待下拉选项列表出现(智能等待)。
+async def _wait_for_dropdown_options(page: Page, timeout: int = 1000) -> None:
+    """等待下拉选项列表出现(激进策略)。
 
     Args:
         page: Playwright 页面对象。
-        timeout: 超时时间(毫秒),默认 3000。
+        timeout: 超时时间(毫秒),默认 1000。
     """
     try:
         await page.locator(".el-select-dropdown").wait_for(state="visible", timeout=timeout)
     except Exception:
-        logger.debug("下拉选项列表未在预期时间内出现")
+        pass
 
 
-async def _wait_for_dialog_open(page: Page, timeout: int = 5000) -> None:
-    """等待编辑对话框完全打开(智能等待)。
+async def _wait_for_dialog_open(page: Page, timeout: int = 2000) -> None:
+    """等待编辑对话框完全打开(激进策略)。
 
     Args:
         page: Playwright 页面对象。
-        timeout: 超时时间(毫秒),默认 5000。
+        timeout: 超时时间(毫秒),默认 2000。
     """
-    dialog = page.get_by_role("dialog")
-    await dialog.wait_for(state="visible", timeout=timeout)
-    # 确保对话框内容加载完成
     try:
-        await dialog.locator(".el-form").wait_for(state="visible", timeout=2000)
+        dialog = page.get_by_role("dialog")
+        await dialog.wait_for(state="visible", timeout=timeout)
     except Exception:
-        # 有些对话框可能没有 el-form,跳过
         pass
 
 
 async def _close_edit_dialog(page: Page) -> None:
-    """关闭编辑对话框并等待其真正关闭(智能等待)。
+    """关闭编辑对话框(激进策略,快速关闭)。
 
     Args:
         page: Playwright 页面对象。
@@ -792,17 +786,16 @@ async def _close_edit_dialog(page: Page) -> None:
     try:
         close_btn = page.get_by_role("button", name="关闭", exact=True)
         await close_btn.click()
-        # 智能等待: 等待对话框真正关闭(detached)
+        # 激进策略: 快速等待对话框关闭
         try:
-            await page.locator(".el-dialog__wrapper").wait_for(state="hidden", timeout=3000)
+            await page.locator(".el-dialog__wrapper").wait_for(state="hidden", timeout=1000)
         except Exception:
-            # 如果对话框选择器不匹配,至少等待按钮消失
-            await close_btn.wait_for(state="hidden", timeout=2000)
+            pass
     except Exception:
         # 如果没有关闭按钮,尝试其他方式
         try:
             close_icon = page.locator(".edit-box-header-side > .el-icon-close")
             await close_icon.click()
-            await page.locator(".el-dialog__wrapper").wait_for(state="hidden", timeout=3000)
+            await page.locator(".el-dialog__wrapper").wait_for(state="hidden", timeout=1000)
         except Exception:
-            logger.warning("未找到关闭按钮,跳过")
+            pass
