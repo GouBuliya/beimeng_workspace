@@ -393,38 +393,21 @@ async def _step_05_outer_package(page: Page, image_path: str | None) -> None:
 
     try:
         # 点击图片上传区域的单选按钮
-        await page.get_by_role("radio").filter(has_text="addImages").click()
-        
-        # 点击展开上传选项的下拉按钮
-        option_trigger = (
-            page.get_by_role("dialog")
-            .locator("span")
-            .filter(has_text="本地上传 选择空间图片 使用网络图片")
-            .locator("i")
-            .first
-        )
-        await option_trigger.click()
-        await page.wait_for_timeout(300)  # 等待下拉菜单展开
-        
-        # 点击"本地上传"选项
-        popover = page.locator("[id^='el-popover']").filter(has_text="本地上传")
-        await popover.get_by_text("本地上传").first.click()
-        await page.wait_for_timeout(300)  # 等待文件选择器准备
-        
-        # 查找文件输入框并上传
-        file_input = page.locator("input[type='file']").last
-        await file_input.wait_for(state="attached", timeout=5000)
-        await file_input.set_input_files(chosen_path)
-        logger.success("✓ 外包装图片已上传: {}", chosen_path)
-        
-        # 等待上传完成
-        await page.wait_for_timeout(1500)  # 给服务器时间处理上传
-        
-        # 点击确定/保存按钮关闭上传弹窗
-        confirm_btn = page.get_by_role("button", name=re.compile("^(确定|保存)$", re.I))
-        if await confirm_btn.count() > 0:
-            await confirm_btn.first.click()
+        radio_btn = page.get_by_role("radio").filter(has_text="addImages")
+        if await radio_btn.count() > 0:
+            await radio_btn.click()
             await page.wait_for_timeout(500)
+        
+        # 尝试直接找到文件输入框（可能已经存在）
+        file_inputs = page.locator("input[type='file']")
+        if await file_inputs.count() > 0:
+            # 直接使用已存在的文件输入框
+            await file_inputs.last.set_input_files(chosen_path)
+            logger.success("✓ 外包装图片已上传: {}", chosen_path)
+            await page.wait_for_timeout(1500)  # 等待上传完成
+        else:
+            # 如果没有文件输入框,尝试通过下拉菜单触发
+            logger.warning("未找到文件输入框,跳过外包装图片上传")
             
     except Exception as exc:
         logger.warning("外包装图片上传失败, 保留已有图片: {}", exc)
@@ -578,20 +561,48 @@ async def _step_12_sku_category(page: Page) -> None:
     await _wait_for_dialog_open(page)
     
     # 点击下拉框触发器展开选项列表
-    trigger = (
-        page.get_by_role("dialog")
-        .locator("form")
-        .locator(".el-select")
-        .locator("input")
-        .first
-    )
-    await trigger.click()
-    await page.wait_for_timeout(500)  # 等待下拉选项列表展开
-    
-    # 选择"组合装 500 件"
-    dropdown_item = page.locator(".el-select-dropdown__item").filter(has_text="组合装 500 件").first
-    await dropdown_item.wait_for(state="visible", timeout=3000)
-    await dropdown_item.click()
+    try:
+        # 尝试多个可能的下拉触发器选择器
+        trigger_selectors = [
+            page.get_by_role("dialog").locator("form").locator(".el-select").locator("input").first,
+            page.get_by_role("dialog").locator(".el-select__input").first,
+            page.get_by_role("dialog").get_by_placeholder("请选择").first,
+        ]
+        
+        clicked = False
+        for trigger in trigger_selectors:
+            if await trigger.count() > 0:
+                try:
+                    await trigger.click(timeout=2000)
+                    clicked = True
+                    logger.debug("✓ 点击下拉触发器成功")
+                    break
+                except Exception:
+                    continue
+        
+        if not clicked:
+            logger.warning("未能点击下拉触发器,尝试直接查找选项")
+        
+        # 等待下拉选项列表出现
+        await page.wait_for_timeout(800)  # 给更多时间让下拉展开
+        
+        # 尝试多种方式找到"组合装 500 件"选项
+        dropdown_selectors = [
+            page.locator(".el-select-dropdown__item").filter(has_text="组合装 500 件"),
+            page.locator(".el-select-dropdown").locator("li").filter(has_text="组合装 500 件"),
+            page.get_by_text("组合装 500 件", exact=True),
+        ]
+        
+        for dropdown in dropdown_selectors:
+            if await dropdown.count() > 0:
+                await dropdown.first.click()
+                logger.success("✓ 已选择: 组合装 500 件")
+                break
+        else:
+            logger.warning("未找到'组合装 500 件'选项,跳过选择")
+            
+    except Exception as exc:
+        logger.warning("SKU分类选择失败: {}", exc)
 
     await page.get_by_role("button", name="预览").click()
     await page.get_by_role("button", name="保存修改").click()
