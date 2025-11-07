@@ -747,7 +747,6 @@ async def _step_18_manual(page: Page, file_path: str) -> None:
     """
     await page.get_by_text("产品说明书").click()
     # await _wait_for_dialog_open(page)
-    await page.get_by_text("英语").click()
     if file_path:
         try:
             # 点击上传文件按钮
