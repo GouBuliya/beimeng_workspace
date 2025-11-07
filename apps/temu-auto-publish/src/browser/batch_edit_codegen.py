@@ -23,24 +23,62 @@
   - async def _step_18_manual(page, file_path): 产品说明书(参数化文件)
   - async def _wait_for_save_toast(page): 等待保存成功提示
   - async def _close_edit_dialog(page): 关闭编辑对话框
+  - def smart_retry(): 智能重试装饰器
 @DEPENDENCIES:
   - 外部: playwright, loguru
   - 内部: 无
 @GOTCHAS:
   - 文件上传需要提供绝对路径
-  - 某些步骤可能因页面加载慢而超时,已添加适当等待
+  - 某些步骤可能因页面加载慢而超时,已添加适当等待和智能重试
   - 类目选择需要按层级逐级点击
 """
 
+import asyncio
 import contextlib
 import re
+from functools import wraps
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, TypeVar
 
 from loguru import logger
 from playwright.async_api import Page
 
 MAX_TITLE_LENGTH = 250
+
+# 定义泛型类型
+T = TypeVar("T")
+
+
+def smart_retry(max_attempts: int = 2, delay: float = 0.5, exceptions: tuple = (Exception,)):
+    """智能重试装饰器,用于关键操作的自动重试。
+    
+    Args:
+        max_attempts: 最大尝试次数(默认2次,即1次重试)。
+        delay: 重试间隔秒数(默认0.5秒)。
+        exceptions: 需要捕获并重试的异常类型元组。
+    
+    Returns:
+        装饰后的函数。
+    """
+    def decorator(func: Callable[..., T]) -> Callable[..., T]:
+        @wraps(func)
+        async def wrapper(*args, **kwargs) -> T:
+            last_exception = None
+            for attempt in range(1, max_attempts + 1):
+                try:
+                    return await func(*args, **kwargs)
+                except exceptions as exc:
+                    last_exception = exc
+                    if attempt < max_attempts:
+                        logger.warning(
+                            f"⚠ {func.__name__} 执行失败(第{attempt}次尝试),{delay}秒后重试: {exc}"
+                        )
+                        await asyncio.sleep(delay)
+                    else:
+                        logger.error(f"✗ {func.__name__} 执行失败(已达最大重试次数{max_attempts})")
+            raise last_exception  # type: ignore
+        return wrapper
+    return decorator
 
 
 async def run_batch_edit(page: Page, payload: dict[str, Any]) -> dict[str, Any]:
@@ -237,6 +275,7 @@ async def _close_popups(page: Page) -> None:
         logger.info("未发现需要关闭的弹窗")
 
 
+@smart_retry(max_attempts=2, delay=0.5)
 async def _step_01_title(page: Page) -> None:
     """步骤 1: 标题 - 保持原样点击预览保存。
 
@@ -325,6 +364,7 @@ async def _step_02_english_title(page: Page) -> None:
     await _close_edit_dialog(page)
 
 
+@smart_retry(max_attempts=2, delay=0.5)
 async def _step_03_category_attrs(page: Page, payload: dict[str, Any]) -> None:
     """步骤 3: 类目属性 - 参数化类目路径和属性值。
 
@@ -354,6 +394,7 @@ async def _step_04_main_sku(page: Page) -> None:
     await _close_edit_dialog(page)
 
 
+@smart_retry(max_attempts=2, delay=0.5)
 async def _step_05_outer_package(page: Page, image_path: str | None) -> None:
     """步骤 5: 外包装 - 固定形状/类型,参数化图片路径。
 
@@ -548,6 +589,7 @@ async def _step_11_platform_sku(page: Page) -> None:
     await _close_edit_dialog(page)
 
 
+@smart_retry(max_attempts=2, delay=0.5)
 async def _step_12_sku_category(page: Page) -> None:
     """步骤 12: SKU 分类 - 选择单品,数量填 1。
 
@@ -638,6 +680,7 @@ async def _step_13_size_chart(page: Page) -> None:
     # await _wait_for_dialog_open(page)
 
 
+@smart_retry(max_attempts=2, delay=0.5)
 async def _step_14_suggested_price(page: Page) -> None:
     """步骤 14: 建议售价 - 固定倍数 10。
 
@@ -694,6 +737,7 @@ async def _step_17_color_image(page: Page) -> None:
     # await _wait_for_dialog_open(page)
 
 
+@smart_retry(max_attempts=2, delay=0.5)
 async def _step_18_manual(page: Page, file_path: str) -> None:
     """步骤 18: 产品说明书 - 参数化文件路径。
 
