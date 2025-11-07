@@ -118,8 +118,16 @@ async def run_batch_edit(page: Page, payload: dict[str, Any]) -> dict[str, Any]:
         # 3. 打开批量编辑弹窗
         logger.info("打开批量编辑菜单...")
         await page.get_by_text("批量编辑").click()
-        # 智能等待: 等待批量编辑对话框打开
-        await _wait_for_dialog_open(page)
+        # 智能等待: 等待批量编辑对话框或弹窗打开
+        try:
+            # 先尝试等待role=dialog的标准对话框
+            await _wait_for_dialog_open(page)
+        except Exception:
+            # 如果标准对话框超时,尝试等待其他可能的批量编辑容器
+            try:
+                await page.locator(".batch-edit-popover, .el-popover, .batch-edit-container").first.wait_for(state="visible", timeout=3000)
+            except Exception:
+                logger.warning("批量编辑弹窗未通过标准选择器检测到,继续执行")
 
         logger.info("批量编辑弹窗已打开")
 
