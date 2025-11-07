@@ -480,7 +480,7 @@ class CompletePublishWorkflow:
                 },
                 "outer_package_image": "",  # 从空间选择,不需要本地路径
                 "manual_file": str(
-                    Path(self.settings.data_input_dir) / "超多小语种版说明书(1).pdf"
+                    Path(self.settings.data_input_dir).parent / "manual" / "超多小语种版说明书.pdf"
                 ),
             }
 

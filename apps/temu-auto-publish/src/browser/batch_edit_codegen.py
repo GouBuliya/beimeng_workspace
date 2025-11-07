@@ -396,7 +396,7 @@ async def _step_05_outer_package(page: Page, image_path: str | None) -> None:
         radio_btn = page.get_by_role("radio").filter(has_text="addImages")
         if await radio_btn.count() > 0:
             await radio_btn.click()
-            await page.wait_for_timeout(500)
+            await page.wait_for_timeout(100)
         
         # 尝试直接找到文件输入框（可能已经存在）
         file_inputs = page.locator("input[type='file']")
@@ -404,7 +404,7 @@ async def _step_05_outer_package(page: Page, image_path: str | None) -> None:
             # 直接使用已存在的文件输入框
             await file_inputs.last.set_input_files(chosen_path)
             logger.success("✓ 外包装图片已上传: {}", chosen_path)
-            await page.wait_for_timeout(1500)  # 等待上传完成
+            await page.wait_for_timeout(500)  # 等待上传完成
         else:
             # 如果没有文件输入框,尝试通过下拉菜单触发
             logger.warning("未找到文件输入框,跳过外包装图片上传")
@@ -583,7 +583,6 @@ async def _step_12_sku_category(page: Page) -> None:
             logger.warning("未能点击下拉触发器")
         
         # 等待下拉选项列表出现
-        await page.wait_for_timeout(500)
         
         # 2. 选择"单品"
         single_item_selectors = [
@@ -601,7 +600,6 @@ async def _step_12_sku_category(page: Page) -> None:
             logger.warning("未找到'单品'选项")
         
         # 等待下拉关闭
-        await page.wait_for_timeout(300)
         
         # 3. 填写数量为 1
         quantity_input_selectors = [
