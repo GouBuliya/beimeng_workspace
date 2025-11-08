@@ -1,27 +1,70 @@
 """
 @PURPOSE: 使用 Codegen 录制逻辑填写首次编辑弹窗中的基础规格字段
 @OUTLINE:
+  - def smart_retry(): 智能重试装饰器,用于关键操作的自动重试
   - async def fill_first_edit_dialog_codegen(): 主函数,填写弹窗内所有字段
   - async def _fill_title(): 填写产品标题
   - async def _fill_basic_specs(): 填写价格/库存/重量/尺寸等基础字段
+  - async def _upload_size_chart_local(): 上传尺寸图(简化版,参考batch_edit实现)
   - async def _click_save(): 点击保存修改按钮
 @GOTCHAS:
   - 避免使用动态 ID 选择器(如 #jx-id-6368-578)
   - 优先使用 get_by_label、get_by_role、get_by_placeholder 等稳定定位器
   - 跳过图片/视频上传部分,由 FirstEditController 的 upload_* 方法处理
+  - 尺寸图上传使用简化逻辑,参考 batch_edit_codegen 的外包装上传方式
 @DEPENDENCIES:
   - 外部: playwright, loguru
-@RELATED: first_edit_controller.py, first_edit_codegen.py
+@RELATED: first_edit_controller.py, first_edit_codegen.py, batch_edit_codegen.py
 """
 
 from __future__ import annotations
 
+import asyncio
 import re
+from functools import wraps
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, TypeVar
 
 from loguru import logger
 from playwright.async_api import Locator, Page
+
+# 定义泛型类型
+T = TypeVar("T")
+
+
+def smart_retry(max_attempts: int = 2, delay: float = 0.5, exceptions: tuple = (Exception,)):
+    """智能重试装饰器,用于关键操作的自动重试。
+
+    Args:
+        max_attempts: 最大尝试次数(默认2次,即1次重试)。
+        delay: 重试间隔秒数(默认0.5秒)。
+        exceptions: 需要捕获并重试的异常类型元组。
+
+    Returns:
+        装饰后的函数。
+    """
+
+    def decorator(func: Callable[..., T]) -> Callable[..., T]:
+        @wraps(func)
+        async def wrapper(*args, **kwargs) -> T:
+            last_exception = None
+            for attempt in range(1, max_attempts + 1):
+                try:
+                    return await func(*args, **kwargs)
+                except exceptions as exc:
+                    last_exception = exc
+                    if attempt < max_attempts:
+                        logger.warning(
+                            f"⚠ {func.__name__} 执行失败(第{attempt}次尝试),{delay}秒后重试: {exc}"
+                        )
+                        await asyncio.sleep(delay)
+                    else:
+                        logger.error(f"✗ {func.__name__} 执行失败(已达最大重试次数{max_attempts})")
+            raise last_exception  # type: ignore
+
+        return wrapper
+
+    return decorator
 
 
 async def fill_first_edit_dialog_codegen(page: Page, payload: dict[str, Any]) -> bool:
@@ -410,11 +453,12 @@ async def _fill_supplier_link(page: Page, supplier_link: str) -> bool:
         return False
 
 
+@smart_retry(max_attempts=2, delay=0.5)
 async def _upload_size_chart_local(page: Page, image_path: str) -> bool:
     """上传尺寸图（本地文件）- 参考 batch_edit 的外包装图片上传逻辑.
     
     流程（参考 _step_05_outer_package）:
-    1. 定位到"尺寸图表"区域
+    1. 滚动弹窗到底部，确保尺寸图区域可见
     2. 点击图片上传区域的 radio 按钮（触发文件输入框）
     3. 上传文件到 input[type='file']
     
@@ -429,86 +473,64 @@ async def _upload_size_chart_local(page: Page, image_path: str) -> bool:
         logger.info("未提供图片路径，跳过尺寸图上传")
         return True
 
+    from pathlib import Path as P
+    if not P(image_path).exists():
+        logger.warning("⚠️ 图片文件不存在: %s", image_path)
+        return False
+
+    logger.info("上传尺寸图: %s", image_path)
+
+    # 调试：上传前截图
+    debug_dir = P(__file__).resolve().parents[2] / "data" / "debug_screenshots"
+    debug_dir.mkdir(parents=True, exist_ok=True)
+
     try:
-        from pathlib import Path as P
-        if not P(image_path).exists():
-            logger.warning("⚠️ 图片文件不存在: %s", image_path)
-            return False
+        await page.screenshot(path=str(debug_dir / "before_size_chart_upload.png"))
+        logger.debug("已保存上传前截图: %s", debug_dir / "before_size_chart_upload.png")
+    except Exception:
+        pass
 
-        logger.info("上传尺寸图: %s", image_path)
+    # 步骤1: 滚动弹窗到底部，确保尺寸图区域渲染
+    try:
+        dialog = page.get_by_role("dialog")
+        if await dialog.count() > 0:
+            await dialog.first.evaluate("el => { el.scrollTop = el.scrollHeight; }")
+            await page.wait_for_timeout(500)
+            logger.debug("✓ 已滚动首次编辑弹窗到底部")
+    except Exception as exc:
+        logger.debug(f"滚动弹窗失败: {exc}")
 
-        # 调试：上传前截图
-        debug_dir = P(__file__).resolve().parents[2] / "data" / "debug_screenshots"
-        debug_dir.mkdir(parents=True, exist_ok=True)
-        
-        try:
-            await page.screenshot(path=str(debug_dir / "before_size_chart_upload.png"))
-            logger.debug(f"已保存上传前截图: {debug_dir / 'before_size_chart_upload.png'}")
-        except Exception:
-            pass
+    try:
+        # 步骤2: 点击图片上传区域的单选按钮
+        radio_btn = page.get_by_role("radio").filter(has_text="addImages")
+        if await radio_btn.count() > 0:
+            await radio_btn.last.click()
+            await page.wait_for_timeout(100)
 
-        # 步骤1: 定位到"尺寸图表"区域并滚动到可见
-        try:
-            size_chart_locators = [
-                page.get_by_text("尺寸图表"),
-                page.locator("text=尺寸图表"),
-                page.get_by_role("group", name="尺寸图表"),
-            ]
-            
-            for locator in size_chart_locators:
-                if await locator.count() > 0:
-                    await locator.first.scroll_into_view_if_needed()
-                    logger.debug("✓ 已定位到尺寸图表区域")
-                    await page.wait_for_timeout(300)
-                    break
-        except Exception as exc:
-            logger.debug(f"定位尺寸图表区域失败: {exc}")
-
-        # 步骤2: 点击图片上传区域的 radio 按钮（参考 batch_edit 逻辑）
-        try:
-            # 尝试查找并点击 radio 按钮（带有 addImages 文本的）
-            radio_btn = page.get_by_role("radio").filter(has_text="addImages")
-            if await radio_btn.count() > 0:
-                # 可能有多个 radio，尝试最后一个（尺寸图区域）
-                await radio_btn.last.click()
-                logger.debug("✓ 已点击图片上传 radio 按钮")
-                await page.wait_for_timeout(100)
-            else:
-                logger.debug("未找到 addImages radio 按钮，尝试其他方式")
-                # 备选方案：直接点击添加按钮
-                add_button = page.locator(".product-picture-item-add")
-                if await add_button.count() > 0:
-                    await add_button.last.scroll_into_view_if_needed()
-                    await add_button.last.click()
-                    logger.debug("✓ 已点击添加按钮")
-                    await page.wait_for_timeout(300)
-        except Exception as exc:
-            logger.debug(f"点击上传触发按钮失败: {exc}")
-
-        # 步骤3: 查找并使用文件输入框（参考 batch_edit 逻辑）
+        # 步骤3: 尝试直接找到文件输入框（可能已经存在）
         file_inputs = page.locator("input[type='file']")
         if await file_inputs.count() > 0:
             # 直接使用已存在的文件输入框
             await file_inputs.last.set_input_files(image_path)
-            logger.success("✓ 尺寸图已上传: %s", image_path)
+            logger.success("✓ 尺寸图已上传: {}", image_path)
             await page.wait_for_timeout(500)  # 等待上传完成
-            
-            # 调试：上传后截图
-            try:
-                await page.screenshot(path=str(debug_dir / "after_size_chart_upload.png"))
-                logger.debug(f"已保存上传后截图: {debug_dir / 'after_size_chart_upload.png'}")
-            except Exception:
-                pass
-            
-            return True
         else:
-            # 如果没有文件输入框（参考 batch_edit 的处理方式）
-            logger.warning("未找到文件输入框，跳过尺寸图上传")
+            # 如果没有文件输入框,尝试通过下拉菜单触发
+            logger.warning("未找到文件输入框,跳过尺寸图上传")
             return False
 
     except Exception as exc:
-        logger.warning("尺寸图上传失败，保留已有图片: %s", exc)
+        logger.warning("尺寸图上传失败, 保留已有图片: {}", exc)
         return False
+
+    # 调试：上传后截图
+    try:
+        await page.screenshot(path=str(debug_dir / "after_size_chart_upload.png"))
+        logger.debug("已保存上传后截图: %s", debug_dir / "after_size_chart_upload.png")
+    except Exception:
+        pass
+
+    return True
 
 
 async def _dismiss_scroll_overlay(page: Page) -> None:
