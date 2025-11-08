@@ -407,12 +407,7 @@ async def _fill_supplier_link(page: Page, supplier_link: str) -> bool:
 
 
 async def _upload_size_chart_local(page: Page, image_path: str) -> bool:
-    """上传尺寸图（本地文件）.
-    
-    根据录制的实际操作流程:
-    1. 点击尺寸图表区域的添加按钮 (.product-picture-item-add)
-    2. 点击"本地上传"选项
-    3. 上传文件
+    """上传尺寸图（本地文件）- 直接通过文件输入框上传.
     
     Args:
         page: Playwright 页面对象.
@@ -432,68 +427,13 @@ async def _upload_size_chart_local(page: Page, image_path: str) -> bool:
 
         logger.info("上传尺寸图: %s", image_path)
 
-        # 步骤1: 查找并点击尺寸图表区域的"添加"按钮
-        add_button_selectors = [
-            ".product-picture-item-add",  # 录制中的选择器
-            "div[class*='picture-item-add']",  # 模糊匹配
-            "div[class*='product-picture'] .add",  # 组合选择器
-        ]
-        
-        clicked_add = False
-        for selector in add_button_selectors:
-            try:
-                add_btn = page.locator(selector)
-                count = await add_btn.count()
-                if count > 0:
-                    # 尝试定位到尺寸图表相关的添加按钮（可能有多个添加按钮）
-                    # 使用最后一个，通常是尺寸图区域
-                    target_btn = add_btn.last
-                    await target_btn.scroll_into_view_if_needed()
-                    await target_btn.click()
-                    logger.debug(f"✓ 点击添加按钮: {selector}")
-                    clicked_add = True
-                    await page.wait_for_timeout(500)
-                    break
-            except Exception as exc:
-                logger.debug(f"尝试点击 {selector} 失败: {exc}")
-                continue
-
-        if not clicked_add:
-            logger.warning("⚠️ 未找到尺寸图添加按钮")
-            return False
-
-        # 步骤2: 点击"本地上传"选项
-        local_upload_selectors = [
-            "text='本地上传'",
-            "button:has-text('本地上传')",
-            "div:has-text('本地上传')",
-            "[class*='upload']:has-text('本地上传')",
-        ]
-        
-        clicked_local = False
-        for selector in local_upload_selectors:
-            try:
-                local_btn = page.locator(selector)
-                if await local_btn.count() > 0:
-                    await local_btn.first.click()
-                    logger.debug(f"✓ 点击本地上传: {selector}")
-                    clicked_local = True
-                    await page.wait_for_timeout(500)
-                    break
-            except Exception as exc:
-                logger.debug(f"尝试点击 {selector} 失败: {exc}")
-                continue
-
-        if not clicked_local:
-            logger.warning("⚠️ 未找到本地上传按钮")
-            return False
-
-        # 步骤3: 查找文件输入框并上传
+        # 直接查找文件输入框并上传
         file_inputs = page.locator("input[type='file']")
         count = await file_inputs.count()
 
         if count > 0:
-            logger.debug(f"找到 {count} 个文件输入框，使用最后一个")
+            logger.debug(f"找到 {count} 个文件输入框")
+            # 上传到所有文件输入框（确保覆盖尺寸图区域）
             await file_inputs.last.set_input_files(image_path)
             logger.success("✓ 尺寸图已上传: %s", image_path)
             
