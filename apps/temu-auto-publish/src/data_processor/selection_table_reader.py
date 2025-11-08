@@ -6,10 +6,12 @@
   - def _read_csv(): CSV读取辅助
   - def validate_row(): 验证行数据完整性
   - def extract_products(): 提取产品列表
+  - def _resolve_size_chart_base_url(): 解析尺寸图URL前缀
+  - def _build_size_chart_url(): 通过文件名拼接尺寸图URL
 @GOTCHAS:
   - Excel格式必须符合SOP规范
   - 型号编号格式为A0001, A0002等
-  - 必填字段：产品名称、型号编号
+  - 必填字段：产品名称、型号编号、尺寸图URL（可通过图片文件名自动拼接）
 @DEPENDENCIES:
   - 外部: pandas, openpyxl
   - 内部: loguru
@@ -19,6 +21,8 @@
 """
 
 import json
+import os
+from urllib.parse import urljoin
 from pathlib import Path
 
 import pandas as pd
@@ -66,7 +70,7 @@ class ProductSelectionRow(BaseModel):
     spec_options: list[str] | None = Field(None, description="规格选项列表")
     variant_costs: list[float] | None = Field(None, description="多规格对应的进货价列表")
     image_files: list[str] | None = Field(None, description="实拍图数组")
-    size_chart_image_url: str | None = Field(None, description="尺寸图网络图片 URL")
+    size_chart_image_url: str = Field(..., description="尺寸图网络图片 URL")
 
     @field_validator("model_number")
     @classmethod
@@ -82,6 +86,11 @@ class SelectionTableReader:
 
     负责读取和解析Excel选品表，提取商品信息用于采集流程。
 
+    Notes:
+        - 如未在表中提供 `size_chart_image_url`，将使用 `SIZE_CHART_BASE_URL`
+          环境变量（默认为 OSS 域名 `https://miaoshou-tuchuang-beimeng.oss-cn-hangzhou.aliyuncs.com/10%E6%9C%88%E6%96%B0%E5%93%81%E5%8F%AF%E6%8E%A8/`）
+          与 `image_files` 的首个文件名拼接生成尺寸图外链。
+
     Examples:
         >>> reader = SelectionTableReader()
         >>> products = reader.read_excel("data/input/selection_table.xlsx")
@@ -94,6 +103,7 @@ class SelectionTableReader:
     def __init__(self):
         """初始化选品表读取器."""
         logger.info("选品表读取器初始化")
+        self.size_chart_base_url = self._resolve_size_chart_base_url()
 
         # Excel列名映射（支持中英文）
         self.column_mapping = {
@@ -283,9 +293,14 @@ class SelectionTableReader:
                 product_data["spec_options"] = self._parse_json_list(row.get("spec_options"))
                 product_data["spec_unit"] = self._parse_scalar(row.get("spec_unit"))
                 product_data["image_files"] = self._parse_json_list(row.get("image_files"))
-                product_data["size_chart_image_url"] = self._parse_scalar(
-                    row.get("size_chart_image_url")
-                )
+                size_chart_url = self._parse_scalar(row.get("size_chart_image_url"))
+                if not size_chart_url:
+                    size_chart_url = self._build_size_chart_url(product_data["image_files"])
+                    if size_chart_url:
+                        logger.debug("使用图片文件名生成尺寸图URL: %s", size_chart_url[:100])
+                if not size_chart_url:
+                    raise ValueError("缺少尺寸图URL(size_chart_image_url)")
+                product_data["size_chart_image_url"] = size_chart_url
 
                 # 验证并创建ProductSelectionRow
                 product = ProductSelectionRow(**product_data)
@@ -402,6 +417,15 @@ class SelectionTableReader:
         if not (model.startswith("A") and len(model) == 5 and model[1:].isdigit()):
             return False, f"型号编号格式错误: {model}，应为A0001-A9999"
 
+        size_chart_url = row.get("size_chart_image_url")
+        if not size_chart_url or not str(size_chart_url).strip():
+            # 如果未提供URL但存在图片文件名且可拼接，也视为有效
+            image_files = self._parse_json_list(row.get("image_files"))
+            generated_url = self._build_size_chart_url(image_files)
+            if generated_url:
+                return True, None
+            return False, "缺少尺寸图URL(size_chart_image_url)"
+
         return True, None
 
     def create_sample_excel(self, output_path: str, num_samples: int = 3) -> None:
@@ -427,6 +451,7 @@ class SelectionTableReader:
                 "标题后缀": "A0049",
                 "产品颜色/规格": "白色/大号",
                 "采集数量": 5,
+                "尺寸图链接": "https://example.com/images/sample-size-chart-1.jpg",
             },
             {
                 "主品负责人": "李四",
@@ -434,6 +459,7 @@ class SelectionTableReader:
                 "标题后缀": "A0050",
                 "产品颜色/规格": "黑色/标准版",
                 "采集数量": 5,
+                "尺寸图链接": "https://example.com/images/sample-size-chart-2.jpg",
             },
             {
                 "主品负责人": "王五",
@@ -441,6 +467,7 @@ class SelectionTableReader:
                 "标题后缀": "A0051",
                 "产品颜色/规格": "蓝色/家用款",
                 "采集数量": 5,
+                "尺寸图链接": "https://example.com/images/sample-size-chart-3.jpg",
             },
         ]
 
@@ -458,3 +485,24 @@ class SelectionTableReader:
 
         logger.success(f"✓ 示例选品表已创建: {output_path}")
         logger.info(f"  包含 {len(data)} 个示例产品")
+
+    def _resolve_size_chart_base_url(self) -> str | None:
+        """解析尺寸图外链的基础 URL 前缀."""
+
+        base_url = os.getenv(
+            "SIZE_CHART_BASE_URL",
+            "https://miaoshou-tuchuang-beimeng.oss-cn-hangzhou.aliyuncs.com/10%E6%9C%88%E6%96%B0%E5%93%81%E5%8F%AF%E6%8E%A8shou/",
+        )
+        text = str(base_url).strip()
+        return text or None
+
+    def _build_size_chart_url(self, image_files: list[str] | None) -> str | None:
+        """根据实拍图文件名拼接尺寸图URL."""
+
+        if not self.size_chart_base_url or not image_files:
+            return None
+        filename = next((item for item in image_files if item), None)
+        if not filename:
+            return None
+        candidate = urljoin(f"{self.size_chart_base_url.rstrip('/')}/", filename.lstrip("/"))
+        return candidate or None

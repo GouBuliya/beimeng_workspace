@@ -492,21 +492,9 @@ class CompletePublishWorkflow:
             "variants": variants_payload,
         }
 
-        # 添加尺寸图路径（如果存在）
-        if selection.image_files and len(selection.image_files) > 0:
-            image_filename = selection.image_files[0]  # 取第一张作为尺寸图
-            image_path = self.image_base_dir / image_filename
-            if image_path.exists():
-                payload["size_chart_image"] = str(image_path.resolve())
-                logger.debug(f"添加尺寸图路径: {payload['size_chart_image']}")
-            else:
-                logger.warning(f"⚠️ 尺寸图文件不存在: {image_path}")
-
         if selection.size_chart_image_url:
             payload["size_chart_image_url"] = selection.size_chart_image_url
-            logger.debug(
-                "添加尺寸图URL: %s", payload["size_chart_image_url"][:100]
-            )
+            logger.debug("添加尺寸图URL: %s", payload["size_chart_image_url"][:100])
 
         return payload
 
@@ -941,12 +929,12 @@ class CompletePublishWorkflow:
 
     def _resolve_image_base_dir(self) -> Path:
         """解析图片基础目录路径.
-        
+
         优先级:
         1. 环境变量 IMAGE_BASE_DIR
         2. 配置文件中的路径
         3. 默认路径: data/input/10月新品可推
-        
+
         Returns:
             图片基础目录的 Path 对象.
         """
@@ -960,7 +948,14 @@ class CompletePublishWorkflow:
             return path
 
         # 使用默认路径
-        default_dir = self._get_project_root() / "apps" / "temu-auto-publish" / "data" / "input" / "10月新品可推"
+        default_dir = (
+            self._get_project_root()
+            / "apps"
+            / "temu-auto-publish"
+            / "data"
+            / "input"
+            / "10月新品可推"
+        )
         return default_dir
 
     def _get_project_root(self) -> Path:

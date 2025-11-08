@@ -6,13 +6,12 @@
   - async def _fill_title(): 填写产品标题
   - async def _fill_basic_specs(): 填写价格/库存/重量/尺寸等基础字段
   - async def _upload_size_chart_via_url(): 使用网络图片URL上传尺寸图
-  - async def _upload_size_chart_local(): 上传尺寸图(简化版,参考batch_edit实现)
   - async def _click_save(): 点击保存修改按钮
 @GOTCHAS:
   - 避免使用动态 ID 选择器(如 #jx-id-6368-578)
   - 优先使用 get_by_label、get_by_role、get_by_placeholder 等稳定定位器
   - 跳过图片/视频上传部分,由 FirstEditController 的 upload_* 方法处理
-  - 尺寸图上传使用简化逻辑,参考 batch_edit_codegen 的外包装上传方式
+  - 尺寸图上传仅支持网络图片URL,需确保外链可直接访问
 @DEPENDENCIES:
   - 外部: playwright, loguru
 @RELATED: first_edit_controller.py, first_edit_codegen.py, batch_edit_codegen.py
@@ -27,7 +26,20 @@ from pathlib import Path
 from typing import Any, Callable, TypeVar
 
 from loguru import logger
-from playwright.async_api import Locator, Page, TimeoutError as PlaywrightTimeoutError
+from playwright.async_api import Locator, Page
+
+DEFAULT_PRIMARY_TIMEOUT_MS = 2_000
+FALLBACK_TIMEOUT_MS = 500
+VARIANT_ROW_SCOPE_SELECTOR = (
+    ".pro-virtual-scroll__row.pro-virtual-table__row, .pro-virtual-table__row"
+)
+
+FIELD_KEYWORDS: dict[str, list[str]] = {
+    "price": ["建议售价", "售价", "price"],
+    "supply_price": ["供货价", "供货价格", "supply price"],
+    "source_price": ["货源价", "来源价格", "采购价", "source price"],
+    "stock": ["库存", "数量", "stock"],
+}
 
 # 定义泛型类型
 T = TypeVar("T")
@@ -133,28 +145,17 @@ async def fill_first_edit_dialog_codegen(page: Page, payload: dict[str, Any]) ->
         if not await _fill_supplier_link(page, payload.get("supplier_link", "")):
             return False
 
-        # 5. 上传尺寸图（优先使用网络图片，其次回退本地上传）
-        size_chart_image_url = payload.get("size_chart_image_url", "")
-        size_chart_image = payload.get("size_chart_image", "")
-        upload_success = False
-
+        # 5. 上传尺寸图（仅支持网络图片URL）
+        size_chart_image_url = (payload.get("size_chart_image_url") or "").strip()
         if size_chart_image_url:
             logger.info("开始通过网络图片上传尺寸图...")
             upload_success = await _upload_size_chart_via_url(page, size_chart_image_url)
             if upload_success:
                 logger.success("✓ 尺寸图上传成功（网络图片）")
-
-        if not upload_success and size_chart_image:
-            logger.info("开始通过本地图片上传尺寸图...")
-            upload_success = await _upload_size_chart_local(page, size_chart_image)
-            if upload_success:
-                logger.success("✓ 尺寸图上传成功（本地图片）")
-
-        if not upload_success:
-            if size_chart_image_url or size_chart_image:
-                logger.warning("⚠️ 尺寸图上传失败，继续后续流程")
             else:
-                logger.info("跳过尺寸图上传（未提供图片路径或URL）")
+                logger.warning("⚠️ 尺寸图网络图片上传失败，继续后续流程")
+        else:
+            logger.warning("⚠️ 未提供尺寸图URL，跳过尺寸图上传")
 
         # 6. 保存修改
         if not await _click_save(page):
@@ -189,32 +190,19 @@ async def _fill_title(page: Page, title: str) -> bool:
             logger.debug("标题填写时未能定位到弹窗容器, 使用全局查找")
 
         candidate_locators = [
-            dialog.locator("input.jx-input__inner[type='text']").first,
-            dialog.locator("input[placeholder*='标题']").first,
-            dialog.locator("input[placeholder*='Title']").first,
-            page.locator(".collect-box-editor-dialog-V2 input.jx-input__inner[type='text']").first,
+            dialog.locator("input.jx-input__inner[type='text']"),
+            dialog.locator("input[placeholder*='标题']"),
             page.get_by_placeholder("请输入标题", exact=False),
         ]
 
-        for locator in candidate_locators:
-            try:
-                await locator.wait_for(state="visible", timeout=2_000)
-            except Exception:
-                continue
+        target_input = await _wait_first_visible(candidate_locators)
+        if target_input is None:
+            logger.error("✗ 未能找到标题输入框")
+            return False
 
-            try:
-                await locator.click()
-                await locator.press("ControlOrMeta+a")
-                await locator.fill(title)
-                logger.success("✓ 标题已填写")
-                # await page.wait_for_timeout(500)
-                return True
-            except Exception as exc:
-                logger.debug("标题输入失败: {}", exc)
-                continue
-
-        logger.error("✗ 未能找到标题输入框")
-        return False
+        await _set_input_value(target_input, title)
+        logger.success("✓ 标题已填写")
+        return True
 
     except Exception as exc:
         logger.error(f"填写标题失败: {exc}")
@@ -246,30 +234,18 @@ async def _fill_basic_specs(page: Page, payload: dict[str, Any]) -> bool:
 async def _fill_single_value_fields(dialog: Locator, payload: dict[str, Any]) -> None:
     """在无多规格时填充统一价格和库存字段."""
 
-    field_map = [
-        ("price", ["input[placeholder*='建议售价']", "input[placeholder*='售价']"]),
-        ("supply_price", ["input[placeholder*='供货价']", "input[placeholder*='供货价格']"]),
-        (
-            "source_price",
-            [
-                "input[placeholder*='货源价']",
-                "input[placeholder*='来源价格']",
-                "input[placeholder*='采购价']",
-            ],
-        ),
-        ("stock", ["input[placeholder*='库存']", "input[placeholder*='数量']"]),
-    ]
+    field_values = {key: payload.get(key) for key in FIELD_KEYWORDS if payload.get(key) is not None}
+    if not field_values:
+        return
 
-    for field, selectors in field_map:
-        value = payload.get(field)
-        if value is None:
-            continue
-        str_value = str(value)
-        success = await _fill_first_match(dialog, selectors, str_value)
-        if success:
-            logger.debug("✓ 字段 %s 已写入 %s", field, str_value)
-        else:
-            logger.debug("字段 %s 未找到任何输入框", field)
+    candidates = await _collect_input_candidates(
+        dialog, exclude_selector=VARIANT_ROW_SCOPE_SELECTOR
+    )
+    if not candidates:
+        logger.debug("未获取到单规格输入候选")
+        return
+
+    await _assign_values_by_keywords(candidates, field_values)
 
 
 async def _fill_variant_rows(
@@ -277,27 +253,12 @@ async def _fill_variant_rows(
 ) -> bool:
     """按行填写多规格价格与库存."""
 
-    row_selector = ".pro-virtual-scroll__row.pro-virtual-table__row, .pro-virtual-table__row"
-    rows = dialog.locator(row_selector)
+    rows = dialog.locator(VARIANT_ROW_SCOPE_SELECTOR)
     row_count = await rows.count()
     if row_count == 0:
         await _dump_dialog_snapshot(page, "variant_rows_missing.html")
         logger.error("✗ 未找到规格行，无法填写多规格数据")
         return False
-
-    field_map = [
-        ("price", ["input[placeholder*='建议售价']", "input[placeholder*='售价']"]),
-        ("supply_price", ["input[placeholder*='供货价']", "input[placeholder*='供货价格']"]),
-        (
-            "source_price",
-            [
-                "input[placeholder*='货源价']",
-                "input[placeholder*='来源价格']",
-                "input[placeholder*='采购价']",
-            ],
-        ),
-        ("stock", ["input[placeholder*='库存']", "input[placeholder*='数量']"]),
-    ]
 
     for index, variant in enumerate(variants):
         if index >= row_count:
@@ -305,88 +266,78 @@ async def _fill_variant_rows(
             break
 
         row = rows.nth(index)
-        for field, selectors in field_map:
+        field_values = {}
+        for field in FIELD_KEYWORDS:
             value = variant.get(field, payload.get(field))
-            if value is None:
-                continue
-            str_value = str(value)
-            filled = await _fill_row_field(row, selectors, str_value)
-            if filled:
-                logger.debug("✓ 规格行%s 字段%s 写入 %s", index + 1, field, str_value)
-            else:
-                logger.debug("规格行%s 字段%s 未找到输入框", index + 1, field)
+            if value is not None:
+                field_values[field] = value
+        if not field_values:
+            continue
+
+        candidates = await _collect_input_candidates(row)
+        if not candidates:
+            logger.debug("规格行%s 未找到可用输入框", index + 1)
+            continue
+
+        await _assign_values_by_keywords(candidates, field_values, log_prefix=f"规格行{index + 1}")
 
     return True
 
 
 async def _fill_dimension_fields(dialog: Locator, payload: dict[str, Any]) -> None:
-    """填写重量与尺寸字段，所有匹配输入统一赋值."""
+    """批量填写重量与三维尺寸字段."""
 
-    field_map = [
-        (
-            "weight_g",
-            [
-                "input[placeholder*='重量'][type='number']",
-                "input[placeholder*='重量'][type='text']",
-            ],
-        ),
-        ("length_cm", ["input[placeholder*='长']", "input[aria-label*='长']"]),
-        ("width_cm", ["input[placeholder*='宽']", "input[aria-label*='宽']"]),
-        ("height_cm", ["input[placeholder*='高']", "input[aria-label*='高']"]),
-    ]
+    field_keywords: dict[str, list[str]] = {
+        "weight_g": ["重量", "重", "weight"],
+        "length_cm": ["长度", "长", "length"],
+        "width_cm": ["宽度", "宽", "width"],
+        "height_cm": ["高度", "高", "height"],
+    }
 
-    for field, selectors in field_map:
+    inputs = dialog.locator("input[type='number'], input[type='text']")
+    input_count = await inputs.count()
+    if input_count == 0:
+        logger.debug("未发现尺寸输入框")
+        return
+
+    cached_inputs: list[tuple[Locator, str]] = []
+    for index in range(input_count):
+        candidate = inputs.nth(index)
+        placeholder = (await candidate.get_attribute("placeholder") or "").lower()
+        aria_label = (await candidate.get_attribute("aria-label") or "").lower()
+        cached_inputs.append((candidate, f"{placeholder} {aria_label}"))
+
+    for field, keywords in field_keywords.items():
         value = payload.get(field)
         if value is None:
             continue
         str_value = str(value)
-        success = await _fill_all_matches(dialog, selectors, str_value)
-        if success:
+        normalized_keywords = [keyword.lower() for keyword in keywords]
+
+        matched_inputs = [
+            candidate
+            for candidate, label in cached_inputs
+            if any(keyword in label for keyword in normalized_keywords)
+        ]
+
+        if not matched_inputs:
+            logger.debug("字段 %s 未能写入任何输入", field)
+            continue
+
+        field_filled = False
+        for index, candidate in enumerate(matched_inputs):
+            timeout = DEFAULT_PRIMARY_TIMEOUT_MS if index == 0 else FALLBACK_TIMEOUT_MS
+            try:
+                await candidate.wait_for(state="visible", timeout=timeout)
+                await _set_input_value(candidate, str_value)
+                field_filled = True
+            except Exception:
+                continue
+
+        if field_filled:
             logger.debug("✓ 字段 %s 已写入所有匹配输入", field)
         else:
             logger.debug("字段 %s 未能写入任何输入", field)
-
-
-async def _fill_row_field(row: Locator, selectors: list[str], value: str) -> bool:
-    for selector in selectors:
-        locator = row.locator(selector).first
-        if await locator.count():
-            try:
-                await locator.wait_for(state="visible", timeout=2_000)
-                await _set_input_value(locator, value)
-                return True
-            except Exception:
-                continue
-    return False
-
-
-async def _fill_first_match(container: Locator, selectors: list[str], value: str) -> bool:
-    for selector in selectors:
-        locator = container.locator(selector).first
-        if await locator.count():
-            try:
-                await locator.wait_for(state="visible", timeout=2_000)
-                await _set_input_value(locator, value)
-                return True
-            except Exception:
-                continue
-    return False
-
-
-async def _fill_all_matches(container: Locator, selectors: list[str], value: str) -> bool:
-    filled = False
-    for selector in selectors:
-        locator = container.locator(selector)
-        count = await locator.count()
-        for index in range(count):
-            input_locator = locator.nth(index)
-            try:
-                await input_locator.wait_for(state="visible", timeout=2_000)
-                await _set_input_value(input_locator, value)
-                filled = True
-            except Exception:
-                continue
-    return filled
 
 
 async def _click_save(page: Page) -> bool:
@@ -422,14 +373,14 @@ async def _click_save(page: Page) -> bool:
                 await save_btn.click()
                 logger.success("✓ 已点击保存按钮")
 
-                # 等待保存成功提示或按钮禁用
-                # await page.wait_for_timeout(800)
+                await _wait_button_completion(save_btn)
+
                 toast = page.locator(".jx-message--success, .el-message--success")
                 try:
-                    await toast.wait_for(state="visible", timeout=1_500)
-                    await toast.wait_for(state="hidden", timeout=2_000)
+                    await toast.wait_for(state="visible", timeout=500)
+                    await toast.wait_for(state="hidden", timeout=1_000)
                 except Exception:
-                    pass
+                    logger.debug("保存成功提示未出现或已快速消失")
                 return True
             except Exception:
                 continue
@@ -476,383 +427,83 @@ async def _upload_size_chart_via_url(page: Page, image_url: str) -> bool:
     logger.debug("使用网络图片上传尺寸图: %s", image_url[:120])
 
     try:
+        normalized_url = _normalize_size_chart_url(image_url)
+        if not normalized_url:
+            logger.warning("提供的尺寸图URL无效，跳过上传: %s", image_url)
+            return False
+
         dialog = page.get_by_role("dialog")
         if await dialog.count() > 0:
             try:
                 await dialog.first.evaluate("el => { el.scrollTop = el.scrollHeight; }")
-                await page.wait_for_timeout(300)
             except Exception:
                 pass
 
-        network_image_selectors = [
-            "button:has-text('使用网络图片')",
-            "button:has-text('网络图片')",
-            ".jx-button:has-text('使用网络图片')",
-            "xpath=//button[contains(text(), '使用网络图片')]",
-        ]
-
-        upload_btn = None
-        for selector in network_image_selectors:
+        size_chart_group = page.get_by_role("group", name=re.compile("尺寸图表")).first
+        if await size_chart_group.count():
+            await size_chart_group.scroll_into_view_if_needed()
             try:
-                locator = page.locator(selector)
-                if await locator.count() > 0:
-                    candidate = locator.first
-                    if await candidate.is_visible(timeout=1000):
-                        upload_btn = candidate
-                        logger.debug("找到「使用网络图片」按钮: %s", selector)
-                        break
+                await size_chart_group.wait_for(state="visible", timeout=DEFAULT_PRIMARY_TIMEOUT_MS)
             except Exception:
-                continue
+                pass
+            try:
+                img_items = size_chart_group.get_by_role("img")
+                img_count = await img_items.count()
+                if img_count > 0:
+                    await img_items.nth(min(4, img_count - 1)).click()
+            except Exception as exc:
+                logger.debug("尝试点击尺寸图缩略图失败: %s", exc)
 
+        upload_btn = await _first_visible(
+            [
+                size_chart_group.get_by_text("使用网络图片", exact=False)
+                if await size_chart_group.count()
+                else None,
+                page.get_by_text("使用网络图片", exact=False),
+                page.get_by_role("button", name=re.compile("使用网络图片|网络图片")),
+            ]
+        )
         if upload_btn is None:
             logger.warning("未找到「使用网络图片」按钮")
             return False
-
         await upload_btn.click()
-        await page.wait_for_timeout(200)
 
-        url_input_selectors = [
-            "input[placeholder*='图片']",
-            "input[placeholder*='URL']",
-            "input[placeholder*='网址']",
-            ".jx-input__inner",
-        ]
-
-        url_input = None
-        for selector in url_input_selectors:
-            try:
-                candidate = page.locator(selector).last
-                if await candidate.count() and await candidate.is_visible(timeout=800):
-                    url_input = candidate
-                    logger.debug("找到尺寸图URL输入框: %s", selector)
-                    break
-            except Exception:
-                continue
-
+        url_input = await _first_visible(
+            [
+                page.get_by_role("textbox", name=re.compile("请输入图片链接")),
+                page.locator("textarea[placeholder*='图片链接']"),
+                page.locator("input[placeholder*='图片链接']"),
+            ]
+        )
         if url_input is None:
             logger.warning("未找到尺寸图URL输入框")
             return False
 
-        await url_input.fill(image_url)
-        await page.wait_for_timeout(200)
+        await url_input.click()
+        await url_input.press("ControlOrMeta+a")
+        await url_input.fill(normalized_url)
 
-        confirm_btn_selectors = [
-            "button:has-text('确定')",
-            "button:has-text('确认')",
-            ".jx-button--primary:has-text('确')",
-        ]
+        confirm_btn = await _first_visible(
+            [
+                page.get_by_role("button", name=re.compile("确定")),
+                page.get_by_role("button", name=re.compile("确认")),
+                page.locator(".jx-button--primary:has-text('确定')"),
+            ]
+        )
+        if confirm_btn is None:
+            logger.warning("未找到网络图片上传确认按钮")
+            return False
 
-        for selector in confirm_btn_selectors:
-            try:
-                candidate = page.locator(selector).last
-                if await candidate.count() and await candidate.is_visible(timeout=800):
-                    await candidate.click()
-                    await page.wait_for_timeout(400)
-                    logger.success("✓ 尺寸图已上传（网络图片）: %s", image_url[:120])
-                    return True
-            except Exception:
-                continue
+        await confirm_btn.click()
+        await page.wait_for_timeout(400)
 
-        logger.warning("未找到网络图片上传确认按钮")
-        return False
+        await _close_prompt_dialog(page)
+        logger.success("✓ 尺寸图已上传（网络图片）: %s", normalized_url[:120])
+        return True
 
     except Exception as exc:
         logger.warning("网络图片上传尺寸图失败: %s", exc)
         return False
-
-
-@smart_retry(max_attempts=2, delay=0.5)
-async def _upload_size_chart_local(page: Page, image_path: str) -> bool:
-    """上传尺寸图（本地文件）- 参考 batch_edit 的外包装图片上传逻辑.
-    
-    流程（参考 _step_05_outer_package）:
-    1. 滚动弹窗到底部，确保尺寸图区域可见
-    2. 点击图片上传区域的 radio 按钮（触发文件输入框）
-    3. 上传文件到 input[type='file']
-    
-    Args:
-        page: Playwright 页面对象.
-        image_path: 本地图片文件的绝对路径.
-    
-    Returns:
-        是否上传成功.
-    """
-    if not image_path:
-        logger.info("未提供图片路径，跳过尺寸图上传")
-        return True
-
-    if not Path(image_path).exists():
-        logger.warning("⚠️ 图片文件不存在: %s", image_path)
-        return False
-
-    logger.info("上传尺寸图: %s", image_path)
-
-    # 调试：上传前截图
-    debug_dir = Path(__file__).resolve().parents[2] / "data" / "debug_screenshots"
-    debug_dir.mkdir(parents=True, exist_ok=True)
-
-    try:
-        await page.screenshot(path=str(debug_dir / "before_size_chart_upload.png"))
-        logger.debug("已保存上传前截图: %s", debug_dir / "before_size_chart_upload.png")
-    except Exception:
-        pass
-
-    async def _click_with_optional_file_chooser(
-        target_page: Page, candidate: Locator, file_path: str
-    ) -> tuple[bool, bool]:
-        """点击特定控件并尝试捕获 file chooser.
-
-        Returns:
-            tuple[bool, bool]: (是否成功点击, 是否已完成文件上传)
-        """
-
-        try:
-            async with target_page.expect_file_chooser(timeout=1500) as fc_info:
-                await candidate.click()
-        except PlaywrightTimeoutError:
-            try:
-                await candidate.click()
-                return True, False
-            except Exception:
-                return False, False
-        except Exception:
-            return False, False
-
-        try:
-            file_chooser = await fc_info.value
-            await file_chooser.set_files(file_path)
-            logger.success("✓ 尺寸图已上传: {}", file_path)
-            await target_page.wait_for_timeout(500)
-            return True, True
-        except Exception as exc:  # pragma: no cover - Playwright runtime
-            logger.debug(f"文件选择器设置文件失败: {exc}")
-            return True, False
-
-    async def _set_file_inputs(
-        locator: Locator,
-        file_path: str,
-        *,
-        prefer_new_only: bool = False,
-        min_index: int = 0,
-    ) -> bool:
-        """遍历 locator 内的 input[type='file'] 并尝试上传."""
-
-        try:
-            count = await locator.count()
-        except Exception:
-            return False
-
-        if count == 0:
-            return False
-
-        for index in reversed(range(count)):
-            if prefer_new_only and index < min_index:
-                break
-            file_input = locator.nth(index)
-            try:
-                if not await file_input.is_enabled():
-                    continue
-                await file_input.set_input_files(file_path)
-                logger.success("✓ 尺寸图已上传: {}", file_path)
-                return True
-            except Exception:
-                continue
-
-        return False
-
-    # 步骤1: 滚动弹窗到底部，确保尺寸图区域渲染
-    dialog_locator = page.get_by_role("dialog")
-    dialog: Locator | None = None
-    try:
-        if await dialog_locator.count() > 0:
-            dialog = dialog_locator.first
-            await dialog.evaluate("el => { el.scrollTop = el.scrollHeight; }")
-            await page.wait_for_timeout(500)
-            logger.debug("✓ 已滚动首次编辑弹窗到底部")
-    except Exception as exc:
-        logger.debug(f"滚动弹窗失败: {exc}")
-
-    # 步骤2: 精确定位尺寸图区域（可选，但尽量缩小范围）
-    size_chart_group: Locator | None = None
-    if dialog is not None:
-        size_chart_locators = [
-            dialog.get_by_role("group", name=re.compile("尺寸图表")),
-            dialog.locator("text=尺寸图表").locator(".."),
-        ]
-    else:
-        size_chart_locators = [
-            page.get_by_role("group", name=re.compile("尺寸图表")),
-            page.locator("text=尺寸图表").locator(".."),
-        ]
-
-    for locator in size_chart_locators:
-        try:
-            if await locator.count() > 0:
-                candidate = locator.first
-                await candidate.scroll_into_view_if_needed()
-                await page.wait_for_timeout(200)
-                size_chart_group = candidate
-                logger.debug("✓ 已定位到尺寸图表区域")
-                break
-        except Exception:
-            continue
-
-    try:
-        global_file_inputs = page.locator("input[type='file']")
-        initial_file_input_count = await global_file_inputs.count()
-    except Exception:
-        global_file_inputs = page.locator("input[type='file']")
-        initial_file_input_count = 0
-
-    trigger_clicked = False
-    upload_completed = False
-
-    try:
-        if size_chart_group is not None:
-            radio_btn = size_chart_group.locator("role=radio").filter(has_text="addImages")
-        else:
-            radio_btn = page.get_by_role("radio").filter(has_text="addImages")
-
-        if await radio_btn.count() > 0:
-            candidate = radio_btn.last
-            if await candidate.is_visible(timeout=500):
-                await candidate.click()
-                await page.wait_for_timeout(150)
-                trigger_clicked = True
-                logger.debug("✓ 已点击尺寸图区域 radio 按钮")
-    except Exception as exc:
-        logger.debug(f"点击尺寸图 radio 按钮失败: {exc}")
-
-    if not upload_completed:
-        upload_trigger_locators: list[Locator] = []
-        if size_chart_group is not None:
-            upload_trigger_locators.extend(
-                [
-                    size_chart_group.get_by_role("button", name=re.compile("上传文件|添加图片")),
-                    size_chart_group.locator(".product-picture-item-add"),
-                ]
-            )
-        if dialog is not None:
-            upload_trigger_locators.append(
-                dialog.locator(".product-picture-item-add, button").filter(has_text=re.compile("上传文件|添加图片"))
-            )
-        upload_trigger_locators.append(
-            page.locator(".product-picture-item-add, button").filter(has_text=re.compile("上传文件|添加图片"))
-        )
-
-        for locator in upload_trigger_locators:
-            try:
-                count = await locator.count()
-                if count == 0:
-                    continue
-                for index in range(count):
-                    candidate = locator.nth(index)
-                    if not await candidate.is_visible(timeout=500):
-                        continue
-                    clicked, completed = await _click_with_optional_file_chooser(page, candidate, image_path)
-                    if clicked and not trigger_clicked:
-                        trigger_clicked = True
-                        logger.debug("✓ 已点击尺寸图区域上传按钮")
-                    if completed:
-                        upload_completed = True
-                        break
-            except Exception:
-                continue
-            if upload_completed:
-                break
-
-    if not upload_completed:
-        menu_locators: list[Locator] = []
-        if size_chart_group is not None:
-            menu_locators.extend(
-                [
-                    size_chart_group.get_by_role("menuitem", name=re.compile("本地上传")),
-                    size_chart_group.locator("button:has-text('本地上传')"),
-                    size_chart_group.locator("li:has-text('本地上传')"),
-                ]
-            )
-        if dialog is not None:
-            menu_locators.extend(
-                [
-                    dialog.get_by_role("menuitem", name=re.compile("本地上传")),
-                    dialog.locator("button:has-text('本地上传')"),
-                    dialog.locator("li:has-text('本地上传')"),
-                ]
-            )
-        menu_locators.extend(
-            [
-                page.get_by_role("menuitem", name=re.compile("本地上传")),
-                page.locator("button:has-text('本地上传')"),
-                page.locator("li:has-text('本地上传')"),
-            ]
-        )
-
-        for locator in menu_locators:
-            try:
-                count = await locator.count()
-                if count == 0:
-                    continue
-                candidate = locator.first
-                if not await candidate.is_visible(timeout=500):
-                    continue
-                clicked, completed = await _click_with_optional_file_chooser(page, candidate, image_path)
-                if clicked and not trigger_clicked:
-                    trigger_clicked = True
-                    logger.debug("✓ 已选择本地上传选项")
-                if completed:
-                    upload_completed = True
-                    logger.debug("✓ 尺寸图已通过本地上传完成")
-                    break
-            except Exception:
-                continue
-
-    if upload_completed:
-        await page.wait_for_timeout(500)
-        try:
-            await page.screenshot(path=str(debug_dir / "after_size_chart_upload.png"))
-            logger.debug("已保存上传后截图: %s", debug_dir / "after_size_chart_upload.png")
-        except Exception:
-            pass
-        return True
-
-    if not trigger_clicked:
-        logger.warning("未能触发尺寸图上传控件，跳过上传")
-        return False
-
-    # 步骤4: 查找文件输入框并上传（优先在当前对话框/区域内）
-    candidate_inputs: list[tuple[Locator, bool]] = []
-    if size_chart_group is not None:
-        candidate_inputs.append((size_chart_group.locator("input[type='file']"), False))
-    if dialog is not None:
-        candidate_inputs.append((dialog.locator("input[type='file']"), False))
-    candidate_inputs.append((global_file_inputs, True))
-
-    upload_success = False
-    for locator, prefer_new in candidate_inputs:
-        success = await _set_file_inputs(
-            locator,
-            image_path,
-            prefer_new_only=prefer_new,
-            min_index=initial_file_input_count if prefer_new else 0,
-        )
-        if success:
-            upload_success = True
-            break
-
-    if not upload_success:
-        logger.warning("未找到可用的文件输入框，尺寸图上传跳过")
-        return False
-
-    await page.wait_for_timeout(500)
-
-    # 调试：上传后截图
-    try:
-        await page.screenshot(path=str(debug_dir / "after_size_chart_upload.png"))
-        logger.debug("已保存上传后截图: %s", debug_dir / "after_size_chart_upload.png")
-    except Exception:
-        pass
-
-    return True
 
 
 async def _dismiss_scroll_overlay(page: Page) -> None:
@@ -903,3 +554,213 @@ async def _dump_dialog_snapshot(page: Page, filename: str) -> None:
         logger.debug("已写入调试快照: %s", target)
     except Exception as exc:
         logger.warning("写入调试快照失败: %s", exc)
+
+
+async def _wait_first_visible(
+    candidates: list[Locator | None],
+    *,
+    primary_timeout: int = DEFAULT_PRIMARY_TIMEOUT_MS,
+    fallback_timeout: int = FALLBACK_TIMEOUT_MS,
+) -> Locator | None:
+    """返回第一个可见元素，首个候选使用较长超时，后续快速失败."""
+
+    for index, candidate in enumerate(candidates):
+        if candidate is None:
+            continue
+        try:
+            if not await candidate.count():
+                continue
+            target = candidate.first
+            timeout = primary_timeout if index == 0 else fallback_timeout
+            await target.wait_for(state="visible", timeout=timeout)
+            return target
+        except Exception:
+            continue
+    return None
+
+
+async def _wait_for_visibility(locator: Locator, timeout: int) -> Locator | None:
+    """等待单个定位器可见，失败时返回 None."""
+
+    try:
+        await locator.wait_for(state="visible", timeout=timeout)
+        return locator
+    except Exception:
+        return None
+
+
+async def _wait_button_completion(button: Locator, timeout_ms: int = 1_000) -> None:
+    """等待按钮被禁用或从页面移除，用于确认操作完成."""
+
+    end_time = asyncio.get_running_loop().time() + timeout_ms / 1_000
+    poll_interval = 0.1
+
+    while asyncio.get_running_loop().time() < end_time:
+        try:
+            if not await button.count():
+                return
+            if await button.is_disabled():
+                return
+        except Exception:
+            return
+        await asyncio.sleep(poll_interval)
+
+
+async def _collect_input_candidates(
+    scope: Locator, *, exclude_selector: str | None = None
+) -> list[dict[str, Any]]:
+    """收集范围内的输入框候选，提取标识文本用于关键字匹配."""
+
+    inputs = scope.locator("input[type='number'], input[type='text']")
+    count = await inputs.count()
+    candidates: list[dict[str, Any]] = []
+
+    for index in range(count):
+        locator = inputs.nth(index)
+        try:
+            if exclude_selector:
+                inside_excluded = await locator.evaluate(
+                    "(el, sel) => !!el.closest(sel)", exclude_selector
+                )
+                if inside_excluded:
+                    continue
+
+            placeholder = (await locator.get_attribute("placeholder") or "").lower()
+            aria_label = (await locator.get_attribute("aria-label") or "").lower()
+            name_attr = (await locator.get_attribute("name") or "").lower()
+            data_label = (await locator.get_attribute("data-label") or "").lower()
+            context_text = await locator.evaluate(
+                "(el) => (el.closest('.pro-form-item')?.textContent || "
+                "el.parentElement?.textContent || '')"
+            )
+            combined = " ".join(
+                filter(
+                    None,
+                    [
+                        placeholder,
+                        aria_label,
+                        name_attr,
+                        data_label,
+                        (context_text or "").lower(),
+                    ],
+                )
+            )
+            candidates.append({"locator": locator, "label": combined, "used": False})
+        except Exception:
+            continue
+
+    return candidates
+
+
+async def _assign_values_by_keywords(
+    candidates: list[dict[str, Any]],
+    field_values: dict[str, Any],
+    log_prefix: str = "",
+) -> None:
+    """根据关键字匹配输入框并填充值."""
+
+    prefix = f"{log_prefix} " if log_prefix else ""
+    for field, raw_value in field_values.items():
+        keywords = [keyword.lower() for keyword in FIELD_KEYWORDS.get(field, [])]
+        if not keywords:
+            continue
+        locator = _match_candidate(candidates, keywords)
+        str_value = str(raw_value)
+        if locator is None:
+            logger.debug("%s字段 %s 未找到匹配输入框", prefix, field)
+            continue
+        try:
+            await locator.wait_for(state="visible", timeout=DEFAULT_PRIMARY_TIMEOUT_MS)
+            await _set_input_value(locator, str_value)
+            logger.debug("✓ %s字段 %s 已写入 %s", prefix, field, str_value)
+        except Exception as exc:
+            logger.debug("%s字段 %s 写入失败: %s", prefix, field, exc)
+
+
+def _match_candidate(candidates: list[dict[str, Any]], keywords: list[str]) -> Locator | None:
+    """在候选列表中按关键字查找未使用的输入框."""
+
+    for candidate in candidates:
+        if candidate.get("used"):
+            continue
+        label: str = candidate.get("label", "")
+        if any(keyword in label for keyword in keywords):
+            candidate["used"] = True
+            return candidate["locator"]
+    return None
+
+
+async def _first_visible(candidates: list[Locator | None], timeout: int = 1_000) -> Locator | None:
+    """返回第一个可见的候选定位器."""
+
+    valid_candidates: list[tuple[Locator, int]] = []
+    fallback_timeout = max(timeout // 4, 200)
+
+    for candidate in candidates:
+        if candidate is None:
+            continue
+        try:
+            if not await candidate.count():
+                continue
+        except Exception:
+            continue
+        locator = candidate.first
+        wait_timeout = timeout if not valid_candidates else fallback_timeout
+        valid_candidates.append((locator, wait_timeout))
+
+    if not valid_candidates:
+        return None
+
+    tasks = [
+        asyncio.create_task(_wait_for_visibility(locator, wait_timeout))
+        for locator, wait_timeout in valid_candidates
+    ]
+
+    try:
+        for task in asyncio.as_completed(tasks):
+            result = await task
+            if result is not None:
+                for pending in tasks:
+                    if not pending.done():
+                        pending.cancel()
+                await asyncio.gather(*tasks, return_exceptions=True)
+                return result
+        await asyncio.gather(*tasks, return_exceptions=True)
+        return None
+    finally:
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+
+
+def _normalize_size_chart_url(image_url: str) -> str:
+    """去除多余的标签和空行，确保为单个有效 URL."""
+
+    if not image_url:
+        return ""
+    parts = [line.strip() for line in image_url.splitlines() if line.strip()]
+    cleaned = ""
+    for part in parts:
+        if part.lower().startswith("url"):
+            continue
+        cleaned = part
+        break
+    cleaned = cleaned or image_url.strip()
+    return cleaned
+
+
+async def _close_prompt_dialog(page: Page) -> None:
+    """如果存在提示弹窗则关闭，以防阻塞后续步骤."""
+
+    prompt = page.get_by_role("dialog", name=re.compile("提示"))
+    try:
+        if await prompt.count():
+            close_btn = prompt.get_by_label("关闭此对话框")
+            if await close_btn.count():
+                await close_btn.first.click()
+                try:
+                    await prompt.wait_for(state="hidden", timeout=DEFAULT_PRIMARY_TIMEOUT_MS)
+                except Exception:
+                    pass
+    except Exception:
+        pass
