@@ -427,17 +427,45 @@ async def _upload_size_chart_local(page: Page, image_path: str) -> bool:
 
         logger.info("上传尺寸图: %s", image_path)
 
-        # 查找文件上传输入框
+        # 尝试多种方式触发文件上传
+        # 方法1: 尝试点击"上传图片"或相关按钮
+        upload_triggers = [
+            "button:has-text('上传图片')",
+            "button:has-text('添加图片')",
+            ".upload-btn",
+            ".image-upload",
+            "button:has-text('本地上传')",
+        ]
+        
+        triggered = False
+        for selector in upload_triggers:
+            try:
+                btn = page.locator(selector)
+                if await btn.count() > 0:
+                    await btn.first.click()
+                    logger.debug(f"点击上传按钮: {selector}")
+                    triggered = True
+                    await page.wait_for_timeout(500)
+                    break
+            except Exception:
+                continue
+
+        # 方法2: 直接查找文件输入框
         file_inputs = page.locator("input[type='file']")
         count = await file_inputs.count()
 
         if count > 0:
             # 使用最后一个文件输入框（通常是最新打开的）
+            logger.debug(f"找到 {count} 个文件输入框，使用最后一个")
             await file_inputs.last.set_input_files(image_path)
             logger.success("✓ 尺寸图已上传: %s", image_path)
+            
+            # 等待上传完成
+            await page.wait_for_timeout(1000)
             return True
         else:
             logger.warning("⚠️ 未找到文件输入框，跳过尺寸图上传")
+            logger.debug("提示: 首次编辑弹窗可能不支持直接本地文件上传，或需要先点击特定区域")
             return False
 
     except Exception as exc:
