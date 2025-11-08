@@ -92,8 +92,12 @@ async def fill_first_edit_dialog_codegen(page: Page, payload: dict[str, Any]) ->
         # 5. 上传尺寸图（如果提供了图片路径）
         size_chart_image = payload.get("size_chart_image", "")
         if size_chart_image:
-            logger.info("上传尺寸图...")
-            await _upload_size_chart_local(page, size_chart_image)
+            logger.info("开始上传尺寸图...")
+            upload_success = await _upload_size_chart_local(page, size_chart_image)
+            if upload_success:
+                logger.success("✓ 尺寸图上传成功")
+            else:
+                logger.warning("⚠️ 尺寸图上传失败，继续后续流程")
         else:
             logger.info("跳过尺寸图上传（未提供图片路径）")
 
@@ -417,6 +421,7 @@ async def _upload_size_chart_local(page: Page, image_path: str) -> bool:
         是否上传成功.
     """
     if not image_path:
+        logger.info("未提供图片路径，跳过尺寸图上传")
         return True
 
     try:
@@ -425,29 +430,59 @@ async def _upload_size_chart_local(page: Page, image_path: str) -> bool:
             logger.warning("⚠️ 图片文件不存在: %s", image_path)
             return False
 
-        logger.info("上传尺寸图: %s", image_path)
+        logger.info("准备上传尺寸图: %s", image_path)
 
-        # 直接查找文件输入框并上传
+        # 调试：上传前截图
+        debug_dir = P(__file__).resolve().parents[2] / "data" / "debug_screenshots"
+        debug_dir.mkdir(parents=True, exist_ok=True)
+        
+        try:
+            await page.screenshot(path=str(debug_dir / "before_image_upload.png"))
+            logger.debug(f"已保存上传前截图: {debug_dir / 'before_image_upload.png'}")
+        except Exception:
+            pass
+
+        # 等待页面稳定
+        await page.wait_for_timeout(500)
+
+        # 查找所有文件输入框
         file_inputs = page.locator("input[type='file']")
         count = await file_inputs.count()
+        
+        logger.debug(f"页面上共找到 {count} 个文件输入框")
 
-        if count > 0:
-            logger.debug(f"找到 {count} 个文件输入框")
-            # 上传到所有文件输入框（确保覆盖尺寸图区域）
-            await file_inputs.last.set_input_files(image_path)
-            logger.success("✓ 尺寸图已上传: %s", image_path)
+        if count == 0:
+            logger.warning("⚠️ 未找到文件输入框，尺寸图上传跳过")
+            logger.debug("提示：可能需要先点击某个区域触发文件选择框显示")
+            return False
+
+        # 上传到最后一个文件输入框（通常是尺寸图区域）
+        try:
+            input_elem = file_inputs.last
+            await input_elem.set_input_files(image_path)
+            logger.success(f"✓ 文件已设置到输入框: {image_path}")
             
-            # 等待上传完成
-            await page.wait_for_timeout(1500)
+            # 等待上传处理
+            logger.debug("等待上传处理...")
+            await page.wait_for_timeout(2000)
+            
+            # 调试：上传后截图
+            try:
+                await page.screenshot(path=str(debug_dir / "after_image_upload.png"))
+                logger.debug(f"已保存上传后截图: {debug_dir / 'after_image_upload.png'}")
+            except Exception:
+                pass
+            
             return True
-        else:
-            logger.warning("⚠️ 未找到文件输入框")
+            
+        except Exception as exc:
+            logger.error(f"文件输入框设置失败: {exc}")
             return False
 
     except Exception as exc:
         logger.error("尺寸图上传失败: %s", exc)
         import traceback
-        logger.debug(f"详细错误: {traceback.format_exc()}")
+        logger.debug(f"详细错误:\n{traceback.format_exc()}")
         return False
 
 
