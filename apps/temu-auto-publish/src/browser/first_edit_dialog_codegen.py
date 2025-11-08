@@ -489,6 +489,112 @@ async def _upload_size_chart_local(page: Page, image_path: str) -> bool:
     except Exception:
         pass
 
+    size_chart_keywords = [
+        "尺",
+        "尺寸",
+        "尺码",
+        "size chart",
+        "尺码图",
+        "尺寸图",
+        "尺码表",
+        "尺寸表",
+    ]
+
+    async def _extract_context_text(target: Locator) -> str:
+        try:
+            return await target.evaluate(
+                """(el) => {
+                    const doc = el.ownerDocument;
+                    const lookupLabel = (node) => {
+                        if (!node) return "";
+                        const ariaLabel = node.getAttribute("aria-label");
+                        if (ariaLabel) return ariaLabel;
+                        const labelledby = node.getAttribute("aria-labelledby");
+                        if (labelledby) {
+                            const labelEl = doc.getElementById(labelledby);
+                            if (labelEl) return labelEl.innerText || labelEl.textContent || "";
+                        }
+                        return "";
+                    };
+
+                    const group = el.closest('[role="group"]');
+                    if (group) {
+                        const label = lookupLabel(group);
+                        if (label) return label;
+                        return group.innerText || group.textContent || "";
+                    }
+
+                    const labelledRegion = el.closest('[aria-label], [aria-labelledby]');
+                    if (labelledRegion) {
+                        const label = lookupLabel(labelledRegion);
+                        if (label) return label;
+                    }
+
+                    const section = el.closest("section, article, .jx-card, .detail-card, .pro-dialog__body, .jx-dialog__body, div");
+                    if (section) {
+                        return section.innerText || section.textContent || "";
+                    }
+                    return "";
+                }"""
+            )
+        except Exception:
+            return ""
+
+    async def _belongs_to_size_chart(target: Locator) -> bool:
+        context_text = ""
+        try:
+            context_text = await _extract_context_text(target)
+        except Exception:
+            return False
+        normalized = context_text.lower()
+        for keyword in size_chart_keywords:
+            if keyword in context_text or keyword in normalized:
+                return True
+        return False
+
+    async def _click_first_size_chart(candidates: list[Locator]) -> bool:
+        for locator in candidates:
+            try:
+                count = await locator.count()
+                if count == 0:
+                    continue
+                for index in range(count):
+                    candidate = locator.nth(index)
+                    try:
+                        if not await candidate.is_visible(timeout=500):
+                            continue
+                        if not await _belongs_to_size_chart(candidate):
+                            continue
+                        await candidate.click()
+                        return True
+                    except Exception:
+                        continue
+            except Exception:
+                continue
+        return False
+
+    async def _set_first_size_chart_input(candidates: list[Locator]) -> bool:
+        for locator in candidates:
+            try:
+                count = await locator.count()
+                if count == 0:
+                    continue
+                for index in reversed(range(count)):
+                    file_input = locator.nth(index)
+                    try:
+                        if not await file_input.is_enabled():
+                            continue
+                        if not await _belongs_to_size_chart(file_input):
+                            continue
+                        await file_input.set_input_files(image_path)
+                        logger.success("✓ 尺寸图已上传: {}", image_path)
+                        return True
+                    except Exception:
+                        continue
+            except Exception:
+                continue
+        return False
+
     # 步骤1: 滚动弹窗到底部，确保尺寸图区域渲染
     dialog_locator = page.get_by_role("dialog")
     dialog: Locator | None = None
@@ -526,7 +632,6 @@ async def _upload_size_chart_local(page: Page, image_path: str) -> bool:
         except Exception:
             continue
 
-    # 步骤3: 尝试点击触发上传的按钮或单选框
     trigger_clicked = False
     try:
         if size_chart_group is not None:
@@ -535,40 +640,36 @@ async def _upload_size_chart_local(page: Page, image_path: str) -> bool:
             radio_btn = page.get_by_role("radio").filter(has_text="addImages")
 
         if await radio_btn.count() > 0:
-            await radio_btn.last.click()
-            await page.wait_for_timeout(150)
-            trigger_clicked = True
-            logger.debug("✓ 已点击尺寸图区域 radio 按钮")
+            candidate = radio_btn.last
+            if await _belongs_to_size_chart(candidate):
+                await candidate.click()
+                await page.wait_for_timeout(150)
+                trigger_clicked = True
+                logger.debug("✓ 已点击尺寸图区域 radio 按钮")
     except Exception as exc:
         logger.debug(f"点击尺寸图 radio 按钮失败: {exc}")
 
-    # 若未触发，则尝试点击“上传文件”或“添加图片”等按钮
-    upload_trigger_locators: list[Locator] = []
-    if size_chart_group is not None:
-        upload_trigger_locators.extend(
-            [
-                size_chart_group.get_by_role("button", name=re.compile("上传文件|添加图片")),
-                size_chart_group.locator(".product-picture-item-add"),
-            ]
+    if not trigger_clicked:
+        upload_trigger_locators: list[Locator] = []
+        if size_chart_group is not None:
+            upload_trigger_locators.extend(
+                [
+                    size_chart_group.get_by_role("button", name=re.compile("上传文件|添加图片")),
+                    size_chart_group.locator(".product-picture-item-add"),
+                ]
+            )
+        if dialog is not None:
+            upload_trigger_locators.append(
+                dialog.locator(".product-picture-item-add, button").filter(has_text=re.compile("上传文件|添加图片"))
+            )
+        upload_trigger_locators.append(
+            page.locator(".product-picture-item-add, button").filter(has_text=re.compile("上传文件|添加图片"))
         )
 
-    if dialog is not None:
-        upload_trigger_locators.append(dialog.get_by_role("button", name=re.compile("上传文件|添加图片")))
-
-    upload_trigger_locators.append(page.get_by_role("button", name=re.compile("上传文件|添加图片")))
-
-    for locator in upload_trigger_locators:
-        try:
-            if await locator.count() > 0:
-                target = locator.first
-                if await target.is_visible():
-                    await target.click()
-                    await page.wait_for_timeout(200)
-                    trigger_clicked = True
-                    logger.debug("✓ 已点击上传触发按钮")
-                    break
-        except Exception:
-            continue
+        if await _click_first_size_chart(upload_trigger_locators):
+            trigger_clicked = True
+            await page.wait_for_timeout(200)
+            logger.debug("✓ 已点击尺寸图区域上传按钮")
 
     # 某些情况下会弹出“本地上传”菜单，需要明确选择
     upload_menu_locators = [
@@ -580,7 +681,7 @@ async def _upload_size_chart_local(page: Page, image_path: str) -> bool:
         try:
             if await locator.count() > 0:
                 target = locator.first
-                if await target.is_visible():
+                if await target.is_visible() and await _belongs_to_size_chart(target):
                     await target.click()
                     await page.wait_for_timeout(150)
                     logger.debug("✓ 已选择本地上传选项")
@@ -593,7 +694,6 @@ async def _upload_size_chart_local(page: Page, image_path: str) -> bool:
         return False
 
     # 步骤4: 查找文件输入框并上传（优先在当前对话框/区域内）
-    upload_success = False
     candidate_inputs: list[Locator] = []
     if size_chart_group is not None:
         candidate_inputs.append(size_chart_group.locator("input[type='file']"))
@@ -601,26 +701,7 @@ async def _upload_size_chart_local(page: Page, image_path: str) -> bool:
         candidate_inputs.append(dialog.locator("input[type='file']"))
     candidate_inputs.append(page.locator("input[type='file']"))
 
-    for locator in candidate_inputs:
-        try:
-            count = await locator.count()
-            if count == 0:
-                continue
-            # 优先使用可见且启用的输入框
-            for index in reversed(range(count)):
-                file_input = locator.nth(index)
-                try:
-                    if await file_input.is_enabled():
-                        await file_input.set_input_files(image_path)
-                        upload_success = True
-                        logger.success("✓ 尺寸图已上传: {}", image_path)
-                        break
-                except Exception:
-                    continue
-            if upload_success:
-                break
-        except Exception:
-            continue
+    upload_success = await _set_first_size_chart_input(candidate_inputs)
 
     if not upload_success:
         logger.warning("未找到可用的文件输入框，尺寸图上传跳过")
