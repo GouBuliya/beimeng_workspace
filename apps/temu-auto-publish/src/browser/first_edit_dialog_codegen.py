@@ -411,7 +411,12 @@ async def _fill_supplier_link(page: Page, supplier_link: str) -> bool:
 
 
 async def _upload_size_chart_local(page: Page, image_path: str) -> bool:
-    """上传尺寸图（本地文件）- 直接通过文件输入框上传.
+    """上传尺寸图（本地文件）- 参考批量编辑的外包装图片上传逻辑.
+    
+    流程:
+    1. 点击尺寸图添加区域 (.product-picture-item-add)
+    2. 等待文件输入框出现
+    3. 直接上传文件到 input[type='file']
     
     Args:
         page: Playwright 页面对象.
@@ -430,7 +435,7 @@ async def _upload_size_chart_local(page: Page, image_path: str) -> bool:
             logger.warning("⚠️ 图片文件不存在: %s", image_path)
             return False
 
-        logger.info("准备上传尺寸图: %s", image_path)
+        logger.info("上传尺寸图: %s", image_path)
 
         # 调试：上传前截图
         debug_dir = P(__file__).resolve().parents[2] / "data" / "debug_screenshots"
@@ -442,29 +447,25 @@ async def _upload_size_chart_local(page: Page, image_path: str) -> bool:
         except Exception:
             pass
 
-        # 等待页面稳定
-        await page.wait_for_timeout(500)
-
-        # 查找所有文件输入框
-        file_inputs = page.locator("input[type='file']")
-        count = await file_inputs.count()
-        
-        logger.debug(f"页面上共找到 {count} 个文件输入框")
-
-        if count == 0:
-            logger.warning("⚠️ 未找到文件输入框，尺寸图上传跳过")
-            logger.debug("提示：可能需要先点击某个区域触发文件选择框显示")
-            return False
-
-        # 上传到最后一个文件输入框（通常是尺寸图区域）
+        # 步骤1: 点击尺寸图添加区域（触发文件上传）
         try:
-            input_elem = file_inputs.last
-            await input_elem.set_input_files(image_path)
-            logger.success(f"✓ 文件已设置到输入框: {image_path}")
-            
-            # 等待上传处理
-            logger.debug("等待上传处理...")
-            await page.wait_for_timeout(2000)
+            add_button = page.locator(".product-picture-item-add")
+            if await add_button.count() > 0:
+                await add_button.last.click()  # 使用最后一个，通常是尺寸图区域
+                logger.debug("✓ 已点击尺寸图添加按钮")
+                await page.wait_for_timeout(300)  # 等待文件输入框出现
+            else:
+                logger.warning("⚠️ 未找到尺寸图添加按钮 (.product-picture-item-add)")
+        except Exception as exc:
+            logger.debug(f"点击添加按钮失败: {exc}")
+
+        # 步骤2: 查找并使用文件输入框
+        file_inputs = page.locator("input[type='file']")
+        if await file_inputs.count() > 0:
+            # 直接使用已存在的文件输入框（参考 batch_edit 逻辑）
+            await file_inputs.last.set_input_files(image_path)
+            logger.success("✓ 尺寸图已上传: %s", image_path)
+            await page.wait_for_timeout(1000)  # 等待上传完成
             
             # 调试：上传后截图
             try:
@@ -474,15 +475,12 @@ async def _upload_size_chart_local(page: Page, image_path: str) -> bool:
                 pass
             
             return True
-            
-        except Exception as exc:
-            logger.error(f"文件输入框设置失败: {exc}")
+        else:
+            logger.warning("⚠️ 未找到文件输入框，跳过尺寸图上传")
             return False
 
     except Exception as exc:
-        logger.error("尺寸图上传失败: %s", exc)
-        import traceback
-        logger.debug(f"详细错误:\n{traceback.format_exc()}")
+        logger.warning("尺寸图上传失败，保留已有图片: %s", exc)
         return False
 
 
