@@ -12,6 +12,7 @@
   - async def set_stock(): 设置库存
   - async def set_dimensions(): 设置重量和尺寸
   - async def save_changes(): 保存修改
+  - async def close_dialog(): 关闭首次编辑弹窗及遮挡弹窗
 @GOTCHAS:
   - 首次编辑是一个弹窗对话框，需要等待加载
   - 使用aria-ref定位元素
@@ -30,10 +31,11 @@
 """
 
 import json
+import re
 from pathlib import Path
 
 from loguru import logger
-from playwright.async_api import Page
+from playwright.async_api import Locator, Page
 
 
 class FirstEditController:
@@ -1268,10 +1270,44 @@ class FirstEditController:
             )
 
             selectors = [selector.strip() for selector in close_btn_selector.split(",")]
+            fallback_selectors = [
+                ".pro-dialog__close",
+                ".pro-dialog__header button",
+                ".dialog-close",
+                "[class*='icon-close']",
+            ]
+            text_button_patterns = [
+                "关闭此对话框",
+                "关闭广告",
+                "关闭",
+                "我知道了",
+                "知道了",
+                "确定",
+                "确认",
+                "立即进入",
+                "关闭弹窗",
+            ]
+            text_button_regex = [re.compile(pattern) for pattern in text_button_patterns]
+
             visible_dialog_selector = ".jx-overlay-dialog:visible, .jx-dialog:visible, .el-dialog:visible, [role='dialog']:visible"
 
             max_attempts = 8
             attempt = 0
+
+            async def _click_first_visible(candidates: list[Locator]) -> bool:
+                for locator in candidates:
+                    try:
+                        count = await locator.count()
+                        if count == 0:
+                            continue
+                        for index in range(count):
+                            candidate = locator.nth(index)
+                            if await candidate.is_visible(timeout=500):
+                                await candidate.click()
+                                return True
+                    except Exception:
+                        continue
+                return False
 
             while attempt < max_attempts:
                 dialogs = page.locator(visible_dialog_selector)
@@ -1283,20 +1319,23 @@ class FirstEditController:
 
                 # 取最后一个（通常是最上层弹窗）
                 target_dialog = dialogs.nth(dialog_count - 1)
-                closed = False
 
-                for selector in selectors:
-                    try:
-                        locator = target_dialog.locator(selector)
-                        if await locator.count() > 0 and await locator.first.is_visible(
-                            timeout=1000
-                        ):
-                            logger.debug(f"点击关闭按钮: {selector}")
-                            await locator.first.click()
-                            closed = True
-                            break
-                    except Exception:
-                        continue
+                candidate_locators: list[Locator] = []
+                candidate_locators.extend(target_dialog.locator(selector) for selector in selectors)
+                candidate_locators.extend(target_dialog.locator(selector) for selector in fallback_selectors)
+
+                button_locators = [
+                    target_dialog.get_by_role("button", name=regex) for regex in text_button_regex
+                ]
+                button_locators.extend(
+                    target_dialog.locator("button").filter(has_text=regex) for regex in text_button_regex
+                )
+                button_locators.extend(
+                    target_dialog.locator("a").filter(has_text=regex) for regex in text_button_regex
+                )
+                candidate_locators.extend(button_locators)
+
+                closed = await _click_first_visible(candidate_locators)
 
                 if not closed:
                     logger.debug("未找到明确的关闭按钮，尝试发送 Esc")
@@ -1305,7 +1344,18 @@ class FirstEditController:
                     except Exception:
                         pass
 
-                # await page.wait_for_timeout(600)
+                overlay = page.locator(".scroll-menu-pane__content")
+                try:
+                    if await overlay.count() and await overlay.first.is_visible(timeout=500):
+                        logger.debug("检测到滚动遮挡浮层，尝试点击背景关闭")
+                        try:
+                            await page.mouse.click(5, 5)
+                        except Exception:
+                            await page.keyboard.press("Escape")
+                except Exception:
+                    pass
+
+                await page.wait_for_timeout(200)
                 attempt += 1
 
             # 超过最大尝试次数仍未关闭
