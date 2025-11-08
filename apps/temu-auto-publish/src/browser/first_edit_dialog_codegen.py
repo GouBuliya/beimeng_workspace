@@ -1,11 +1,9 @@
 """
-@PURPOSE: 使用 Codegen 录制逻辑填写首次编辑弹窗的所有字段
+@PURPOSE: 使用 Codegen 录制逻辑填写首次编辑弹窗中的基础规格字段
 @OUTLINE:
   - async def fill_first_edit_dialog_codegen(): 主函数,填写弹窗内所有字段
   - async def _fill_title(): 填写产品标题
-  - async def _fill_attributes(): 填写产品属性(产地、推荐用途、形状等)
-  - async def _switch_to_multi_spec(): 切换到多规格模式
-  - async def _fill_sku_info(): 填写 SKU 信息(价格、库存、重量、尺寸)
+  - async def _fill_basic_specs(): 填写价格/库存/重量/尺寸等基础字段
   - async def _click_save(): 点击保存修改按钮
 @GOTCHAS:
   - 避免使用动态 ID 选择器(如 #jx-id-6368-578)
@@ -18,10 +16,12 @@
 
 from __future__ import annotations
 
+import re
+from pathlib import Path
 from typing import Any
 
 from loguru import logger
-from playwright.async_api import Page
+from playwright.async_api import Locator, Page
 
 
 async def fill_first_edit_dialog_codegen(page: Page, payload: dict[str, Any]) -> bool:
@@ -31,20 +31,17 @@ async def fill_first_edit_dialog_codegen(page: Page, payload: dict[str, Any]) ->
         page: Playwright 页面对象.
         payload: 包含所有需要填写的字段数据的字典.
             - title: 产品标题
-            - origin: 产地 (如 "Guangdong,China")
-            - product_use: 产品推荐用途 (如 "多用途")
-            - shape: 形状 (如 "矩形")
-            - material: 材料 (如 "塑料")
-            - closure_type: 闭合类型 (如 "磁性")
-            - style: 风格 (如 "现代")
-            - brand_name: 品牌名 (如 "佰森物语")
             - product_number: 商品编号 (如 "RC2808645")
             - price: SKU 价格
+            - supply_price: 供货价
             - stock: SKU 库存
             - weight_g: 重量 (克)
             - length_cm: 长度 (厘米)
             - width_cm: 宽度 (厘米)
             - height_cm: 高度 (厘米)
+            - model_spec_name: 多规格新增维度名称(默认“型号”)
+            - model_spec_option: 规格选项值(默认使用 product_number)
+            - supplier_link: 供货商链接
 
     Returns:
         bool: 如果成功填写并保存则返回 True,否则返回 False.
@@ -76,27 +73,29 @@ async def fill_first_edit_dialog_codegen(page: Page, payload: dict[str, Any]) ->
     try:
         # 等待弹窗加载完成
         await page.wait_for_selector(".jx-overlay-dialog", state="visible", timeout=10000)
-        await page.wait_for_timeout(1000)
+        # await page.wait_for_timeout(1000)
         logger.success("✓ 编辑弹窗已加载")
 
         # 1. 填写标题
         if not await _fill_title(page, payload.get("title", "")):
             return False
 
-        # 2. 填写产品属性
-        if not await _fill_attributes(page, payload):
+        # 2. 填写基础规格字段
+        logger.info("跳过销售属性/多规格, 仅填写价格与库存等基础字段")
+        if not await _fill_basic_specs(page, payload):
             return False
 
-        # 3. 切换到多规格模式并填写 SKU 信息
-        if not await _switch_to_multi_spec(page):
+        # 4. 记录供货商链接
+        if not await _fill_supplier_link(page, payload.get("supplier_link", "")):
             return False
 
-        # 4. 填写 SKU 信息
-        if not await _fill_sku_info(page, payload):
-            return False
-
-        # 5. 跳过图片/视频上传(由 FirstEditController 处理)
-        logger.info("跳过图片/视频上传部分")
+        # 5. 上传尺寸图（如果提供了图片路径）
+        size_chart_image = payload.get("size_chart_image", "")
+        if size_chart_image:
+            logger.info("上传尺寸图...")
+            await _upload_size_chart_local(page, size_chart_image)
+        else:
+            logger.info("跳过尺寸图上传（未提供图片路径）")
 
         # 6. 保存修改
         if not await _click_save(page):
@@ -149,7 +148,7 @@ async def _fill_title(page: Page, title: str) -> bool:
                 await locator.press("ControlOrMeta+a")
                 await locator.fill(title)
                 logger.success("✓ 标题已填写")
-                await page.wait_for_timeout(500)
+                # await page.wait_for_timeout(500)
                 return True
             except Exception as exc:
                 logger.debug("标题输入失败: {}", exc)
@@ -163,192 +162,172 @@ async def _fill_title(page: Page, title: str) -> bool:
         return False
 
 
-async def _fill_attributes(page: Page, payload: dict[str, Any]) -> bool:
-    """填写产品属性(产地、推荐用途、形状、材料、闭合类型、风格、品牌名、商品编号).
+async def _fill_basic_specs(page: Page, payload: dict[str, Any]) -> bool:
+    """填写价格、库存、重量、尺寸等基础字段."""
 
-    Args:
-        page: Playwright 页面对象.
-        payload: 包含属性数据的字典.
-
-    Returns:
-        bool: 是否成功填写所有属性.
-    """
     try:
-        logger.info("填写产品属性...")
-
-        # 定义属性字段映射(按照 Codegen 录制的顺序)
-        attributes = [
-            ("origin", "产地"),
-            ("product_use", "产品推荐用途"),
-            ("shape", "形状"),
-            ("material", "材料"),
-            ("closure_type", "闭合类型"),
-            ("style", "风格"),
-            ("brand_name", "品牌名"),
-            ("product_number", "商品编号"),
-        ]
-
-        # 获取所有属性输入框
-        attribute_inputs = page.locator(".product-attribute-item .jx-input__inner")
-        input_count = await attribute_inputs.count()
-        logger.debug(f"找到 {input_count} 个属性输入框")
-
-        # 逐个填写属性
-        for index, (key, label) in enumerate(attributes):
-            value = payload.get(key, "")
-            if not value:
-                logger.warning(f"⚠️ 属性 {label} 未提供值,跳过")
-                continue
-
-            try:
-                # 使用索引定位输入框
-                if index < input_count:
-                    input_field = attribute_inputs.nth(index)
-                    await input_field.click()
-                    await input_field.press("ControlOrMeta+a")
-                    await input_field.fill(str(value))
-                    logger.success(f"✓ 已填写 {label}: {value}")
-                    await page.wait_for_timeout(300)
-                else:
-                    logger.warning(f"⚠️ 属性 {label} 索引超出范围,跳过")
-            except Exception as exc:
-                logger.warning(f"⚠️ 填写属性 {label} 失败: {exc}")
-                continue
-
-        logger.success("✓ 产品属性填写完成")
-        return True
-
+        logger.info("填写基础规格字段...")
+        dialog = page.locator(".collect-box-editor-dialog-V2, .jx-overlay-dialog").first
+        await dialog.wait_for(state="visible", timeout=3_000)
     except Exception as exc:
-        logger.error(f"填写产品属性失败: {exc}")
+        logger.error("未能定位首次编辑弹窗: %s", exc)
         return False
 
+    variants = payload.get("variants") or []
+    if variants:
+        if not await _fill_variant_rows(dialog, payload, variants, page):
+            return False
+    else:
+        await _fill_single_value_fields(dialog, payload)
 
-async def _switch_to_multi_spec(page: Page) -> bool:
-    """切换到多规格模式.
+    await _fill_dimension_fields(dialog, payload)
+    return True
 
-    Args:
-        page: Playwright 页面对象.
 
-    Returns:
-        bool: 是否成功切换.
-    """
-    try:
-        logger.info("切换到多规格模式...")
+async def _fill_single_value_fields(dialog: Locator, payload: dict[str, Any]) -> None:
+    """在无多规格时填充统一价格和库存字段."""
 
-        # 点击"多规格"标签
-        multi_spec_selectors = [
-            "text='多规格'",
-            "label:has-text('多规格')",
-            ".jx-radio-button:has-text('多规格')",
-        ]
+    field_map = [
+        ("price", ["input[placeholder*='建议售价']", "input[placeholder*='售价']"]),
+        ("supply_price", ["input[placeholder*='供货价']", "input[placeholder*='供货价格']"]),
+        (
+            "source_price",
+            [
+                "input[placeholder*='货源价']",
+                "input[placeholder*='来源价格']",
+                "input[placeholder*='采购价']",
+            ],
+        ),
+        ("stock", ["input[placeholder*='库存']", "input[placeholder*='数量']"]),
+    ]
 
-        for selector in multi_spec_selectors:
+    for field, selectors in field_map:
+        value = payload.get(field)
+        if value is None:
+            continue
+        str_value = str(value)
+        success = await _fill_first_match(dialog, selectors, str_value)
+        if success:
+            logger.debug("✓ 字段 %s 已写入 %s", field, str_value)
+        else:
+            logger.debug("字段 %s 未找到任何输入框", field)
+
+
+async def _fill_variant_rows(
+    dialog: Locator, payload: dict[str, Any], variants: list[dict[str, Any]], page: Page
+) -> bool:
+    """按行填写多规格价格与库存."""
+
+    row_selector = ".pro-virtual-scroll__row.pro-virtual-table__row, .pro-virtual-table__row"
+    rows = dialog.locator(row_selector)
+    row_count = await rows.count()
+    if row_count == 0:
+        await _dump_dialog_snapshot(page, "variant_rows_missing.html")
+        logger.error("✗ 未找到规格行，无法填写多规格数据")
+        return False
+
+    field_map = [
+        ("price", ["input[placeholder*='建议售价']", "input[placeholder*='售价']"]),
+        ("supply_price", ["input[placeholder*='供货价']", "input[placeholder*='供货价格']"]),
+        (
+            "source_price",
+            [
+                "input[placeholder*='货源价']",
+                "input[placeholder*='来源价格']",
+                "input[placeholder*='采购价']",
+            ],
+        ),
+        ("stock", ["input[placeholder*='库存']", "input[placeholder*='数量']"]),
+    ]
+
+    for index, variant in enumerate(variants):
+        if index >= row_count:
+            logger.warning("⚠️ 规格行数量不足，忽略多余的规格数据 (row=%s)", index + 1)
+            break
+
+        row = rows.nth(index)
+        for field, selectors in field_map:
+            value = variant.get(field, payload.get(field))
+            if value is None:
+                continue
+            str_value = str(value)
+            filled = await _fill_row_field(row, selectors, str_value)
+            if filled:
+                logger.debug("✓ 规格行%s 字段%s 写入 %s", index + 1, field, str_value)
+            else:
+                logger.debug("规格行%s 字段%s 未找到输入框", index + 1, field)
+
+    return True
+
+
+async def _fill_dimension_fields(dialog: Locator, payload: dict[str, Any]) -> None:
+    """填写重量与尺寸字段，所有匹配输入统一赋值."""
+
+    field_map = [
+        (
+            "weight_g",
+            [
+                "input[placeholder*='重量'][type='number']",
+                "input[placeholder*='重量'][type='text']",
+            ],
+        ),
+        ("length_cm", ["input[placeholder*='长']", "input[aria-label*='长']"]),
+        ("width_cm", ["input[placeholder*='宽']", "input[aria-label*='宽']"]),
+        ("height_cm", ["input[placeholder*='高']", "input[aria-label*='高']"]),
+    ]
+
+    for field, selectors in field_map:
+        value = payload.get(field)
+        if value is None:
+            continue
+        str_value = str(value)
+        success = await _fill_all_matches(dialog, selectors, str_value)
+        if success:
+            logger.debug("✓ 字段 %s 已写入所有匹配输入", field)
+        else:
+            logger.debug("字段 %s 未能写入任何输入", field)
+
+
+async def _fill_row_field(row: Locator, selectors: list[str], value: str) -> bool:
+    for selector in selectors:
+        locator = row.locator(selector).first
+        if await locator.count():
             try:
-                multi_spec_btn = page.locator(selector).first
-                if await multi_spec_btn.is_visible(timeout=2000):
-                    await multi_spec_btn.click()
-                    logger.success(f"✓ 已切换到多规格模式 (选择器: {selector})")
-                    await page.wait_for_timeout(1000)
-                    return True
+                await locator.wait_for(state="visible", timeout=2_000)
+                await _set_input_value(locator, value)
+                return True
             except Exception:
                 continue
-
-        logger.warning("⚠️ 未能找到多规格切换按钮,可能已处于多规格模式")
-        return True
-
-    except Exception as exc:
-        logger.error(f"切换到多规格模式失败: {exc}")
-        return False
+    return False
 
 
-async def _fill_sku_info(page: Page, payload: dict[str, Any]) -> bool:
-    """填写 SKU 信息(价格、库存、重量、尺寸).
+async def _fill_first_match(container: Locator, selectors: list[str], value: str) -> bool:
+    for selector in selectors:
+        locator = container.locator(selector).first
+        if await locator.count():
+            try:
+                await locator.wait_for(state="visible", timeout=2_000)
+                await _set_input_value(locator, value)
+                return True
+            except Exception:
+                continue
+    return False
 
-    Args:
-        page: Playwright 页面对象.
-        payload: 包含 SKU 数据的字典.
 
-    Returns:
-        bool: 是否成功填写.
-    """
-    try:
-        logger.info("填写 SKU 信息...")
-
-        # 1. 填写价格
-        price = payload.get("price", 0)
-        price_input = page.locator("input[placeholder*='价格']").first
-        if await price_input.is_visible(timeout=2000):
-            await price_input.click()
-            await price_input.press("ControlOrMeta+a")
-            await price_input.fill(str(price))
-            logger.success(f"✓ 已填写价格: {price}")
-            await page.wait_for_timeout(300)
-
-        # 2. 填写库存
-        stock = payload.get("stock", 0)
-        stock_input = page.locator("input[placeholder*='库存']").first
-        if await stock_input.is_visible(timeout=2000):
-            await stock_input.click()
-            await stock_input.fill(str(stock))
-            logger.success(f"✓ 已填写库存: {stock}")
-            await page.wait_for_timeout(300)
-
-        # 3. 切换重量单位到克(g)
-        try:
-            weight_unit_btn = page.get_by_text("KG").first
-            if await weight_unit_btn.is_visible(timeout=1000):
-                await weight_unit_btn.click()
-                await page.wait_for_timeout(500)
-                logger.success("✓ 已切换重量单位到克(g)")
-        except Exception:
-            logger.debug("重量单位切换跳过(可能已是克)")
-
-        # 4. 填写重量
-        weight_g = payload.get("weight_g", 0)
-        weight_input = page.locator("input[placeholder*='重量']").first
-        if await weight_input.is_visible(timeout=2000):
-            await weight_input.click()
-            await weight_input.fill(str(weight_g))
-            logger.success(f"✓ 已填写重量: {weight_g}g")
-            await page.wait_for_timeout(300)
-
-        # 5. 填写尺寸(长、宽、高)
-        length = payload.get("length_cm", 0)
-        width = payload.get("width_cm", 0)
-        height = payload.get("height_cm", 0)
-
-        dimension_inputs = page.locator(
-            "input[placeholder*='长度'], input[placeholder*='宽度'], input[placeholder*='高度']"
-        )
-        dimension_count = await dimension_inputs.count()
-
-        if dimension_count >= 3:
-            # 长度
-            await dimension_inputs.nth(0).click()
-            await dimension_inputs.nth(0).fill(str(length))
-            logger.success(f"✓ 已填写长度: {length}cm")
-            await page.wait_for_timeout(300)
-
-            # 宽度
-            await dimension_inputs.nth(1).click()
-            await dimension_inputs.nth(1).fill(str(width))
-            logger.success(f"✓ 已填写宽度: {width}cm")
-            await page.wait_for_timeout(300)
-
-            # 高度
-            await dimension_inputs.nth(2).click()
-            await dimension_inputs.nth(2).fill(str(height))
-            logger.success(f"✓ 已填写高度: {height}cm")
-            await page.wait_for_timeout(300)
-        else:
-            logger.warning(f"⚠️ 尺寸输入框数量不足(期望3个,实际{dimension_count}个)")
-
-        logger.success("✓ SKU 信息填写完成")
-        return True
-
-    except Exception as exc:
-        logger.error(f"填写 SKU 信息失败: {exc}")
-        return False
+async def _fill_all_matches(container: Locator, selectors: list[str], value: str) -> bool:
+    filled = False
+    for selector in selectors:
+        locator = container.locator(selector)
+        count = await locator.count()
+        for index in range(count):
+            input_locator = locator.nth(index)
+            try:
+                await input_locator.wait_for(state="visible", timeout=2_000)
+                await _set_input_value(input_locator, value)
+                filled = True
+            except Exception:
+                continue
+    return filled
 
 
 async def _click_save(page: Page) -> bool:
@@ -363,27 +342,154 @@ async def _click_save(page: Page) -> bool:
     try:
         logger.info("点击保存修改按钮...")
 
-        # 尝试多种保存按钮选择器
-        save_selectors = [
-            "button:has-text('保存修改')",
-            "button:has-text('保存')",
-            ".jx-button--primary:has-text('保存')",
+        dialog = page.get_by_role("dialog")
+        footer = dialog.locator(".jx-dialog__footer, .pro-dialog__footer").last
+
+        candidate_buttons = [
+            footer.locator("button", has_text=re.compile(r"保存修改")),
+            page.get_by_role("button", name="保存修改"),
         ]
 
-        for selector in save_selectors:
+        for candidate in candidate_buttons:
+            total = await candidate.count()
+            if total == 0:
+                continue
+            save_btn = candidate.nth(total - 1)
             try:
-                save_btn = page.locator(selector).first
-                if await save_btn.is_visible(timeout=2000):
-                    await save_btn.click()
-                    logger.success(f"✓ 已点击保存按钮 (选择器: {selector})")
-                    await page.wait_for_timeout(2000)  # 等待保存完成
-                    return True
+                await save_btn.wait_for(state="visible", timeout=2_000)
+                await _dismiss_scroll_overlay(page)
+                await save_btn.scroll_into_view_if_needed()
+                await save_btn.focus()
+                await save_btn.click()
+                logger.success("✓ 已点击保存按钮")
+
+                # 等待保存成功提示或按钮禁用
+                # await page.wait_for_timeout(800)
+                toast = page.locator(".jx-message--success, .el-message--success")
+                try:
+                    await toast.wait_for(state="visible", timeout=1_500)
+                    await toast.wait_for(state="hidden", timeout=2_000)
+                except Exception:
+                    pass
+                return True
             except Exception:
                 continue
 
+        await _dump_dialog_snapshot(page, "save_button_failure.html")
         logger.error("✗ 未能找到保存按钮")
         return False
 
     except Exception as exc:
         logger.error(f"点击保存按钮失败: {exc}")
         return False
+
+
+async def _fill_supplier_link(page: Page, supplier_link: str) -> bool:
+    """填写供货商链接."""
+
+    if not supplier_link:
+        return True
+
+    try:
+        textbox = page.get_by_role("textbox", name=re.compile("供货商链接"))
+        if await textbox.count():
+            await textbox.first.click()
+            await textbox.first.press("ControlOrMeta+a")
+            await textbox.first.fill(supplier_link)
+            # await page.wait_for_timeout(200)
+            logger.success("✓ 已更新供货商链接")
+            return True
+        logger.warning("⚠️ 未找到供货商链接输入框")
+        return True
+    except Exception as exc:
+        logger.error("填写供货商链接失败: %s", exc)
+        return False
+
+
+async def _upload_size_chart_local(page: Page, image_path: str) -> bool:
+    """上传尺寸图（本地文件）.
+    
+    Args:
+        page: Playwright 页面对象.
+        image_path: 本地图片文件的绝对路径.
+    
+    Returns:
+        是否上传成功.
+    """
+    if not image_path:
+        return True
+
+    try:
+        from pathlib import Path as P
+        if not P(image_path).exists():
+            logger.warning("⚠️ 图片文件不存在: %s", image_path)
+            return False
+
+        logger.info("上传尺寸图: %s", image_path)
+
+        # 查找文件上传输入框
+        file_inputs = page.locator("input[type='file']")
+        count = await file_inputs.count()
+
+        if count > 0:
+            # 使用最后一个文件输入框（通常是最新打开的）
+            await file_inputs.last.set_input_files(image_path)
+            logger.success("✓ 尺寸图已上传: %s", image_path)
+            return True
+        else:
+            logger.warning("⚠️ 未找到文件输入框，跳过尺寸图上传")
+            return False
+
+    except Exception as exc:
+        logger.error("尺寸图上传失败: %s", exc)
+        return False
+
+
+async def _dismiss_scroll_overlay(page: Page) -> None:
+    """尝试关闭可能遮挡输入框的浮层."""
+
+    overlay = page.locator(".scroll-menu-pane__content")
+    if not await overlay.count():
+        return
+
+    try:
+        await page.keyboard.press("Escape")
+        await overlay.first.wait_for(state="hidden", timeout=1000)
+        logger.debug("已通过 Escape 关闭浮层")
+    except Exception:
+        try:
+            await page.mouse.click(5, 5)
+            await overlay.first.wait_for(state="hidden", timeout=1000)
+            logger.debug("已通过点击页面关闭浮层")
+        except Exception:
+            logger.debug("浮层未完全关闭, 将继续尝试填写")
+
+
+async def _set_input_value(locator, value: str) -> None:
+    """使用脚本方式设置输入框的值并触发 input 事件."""
+
+    try:
+        await locator.scroll_into_view_if_needed()
+        await locator.click()
+        await locator.press("ControlOrMeta+a")
+        await locator.fill(value)
+    except Exception:
+        await locator.evaluate("(el) => { el.focus(); el.select && el.select(); }")
+        await locator.evaluate(
+            "(el, v) => { el.value = v; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); }",
+            value,
+        )
+
+
+async def _dump_dialog_snapshot(page: Page, filename: str) -> None:
+    """将当前弹窗 HTML 快照写入调试目录."""
+
+    try:
+        dialog = page.get_by_role("dialog")
+        html = await dialog.inner_html()
+        target = Path(__file__).resolve().parents[2] / "data" / "debug_screenshots" / filename
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(html, encoding="utf-8")
+        logger.debug("已写入调试快照: %s", target)
+    except Exception as exc:
+        logger.warning("写入调试快照失败: %s", exc)

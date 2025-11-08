@@ -41,6 +41,8 @@ from ..browser.batch_edit_codegen import run_batch_edit
 from ..browser.batch_edit_controller_v2 import BatchEditController
 from ..browser.first_edit_codegen import open_edit_dialog_codegen
 from ..browser.first_edit_controller import FirstEditController
+from ..browser.first_edit_dialog_codegen import fill_first_edit_dialog_codegen
+from ..browser.first_edit_executor import FirstEditExecutor, FirstEditPayload
 from ..browser.login_controller import LoginController
 from ..browser.miaoshou_controller import MiaoshouController
 from ..browser.publish_controller import PublishController
@@ -65,6 +67,7 @@ class StageOutcome:
 @dataclass(slots=True)
 class EditedProduct:
     """首次编辑后用于后续阶段的数据载体."""
+
     index: int
     selection: ProductSelectionRow
     title: str
@@ -135,9 +138,10 @@ class CompletePublishWorkflow:
         use_codegen_batch_edit: bool = True,
         use_codegen_first_edit: bool = False,
         skip_first_edit: bool = False,
+        only_claim: bool = False,
     ) -> None:
         """初始化工作流控制器.
-        
+
         Args:
             headless: 浏览器是否使用无头模式; None 时读取配置文件.
             selection_table: 选品表路径, 默认读取 data/input/selection.xlsx.
@@ -154,9 +158,13 @@ class CompletePublishWorkflow:
         self.use_codegen_batch_edit = use_codegen_batch_edit
         self.use_codegen_first_edit = use_codegen_first_edit
         self.skip_first_edit = skip_first_edit
+        self.only_claim = only_claim
         self.collect_count = max(1, min(self.settings.business.collect_count, 5))
         self.claim_times = max(1, self.settings.business.claim_count)
         self.headless = headless if headless is not None else self.settings.browser.headless
+
+        # 图片基础目录（从环境变量或配置读取，默认为 data/input/10月新品可推）
+        self.image_base_dir = self._resolve_image_base_dir()
 
         self.selection_table_path = Path(selection_table) if selection_table else None
 
@@ -203,16 +211,30 @@ class CompletePublishWorkflow:
 
             selection_rows = self._prepare_selection_rows()
 
-            stage1, edited_products = await self._stage_first_edit(
-                page,
-                miaoshou_ctrl,
-                first_edit_ctrl,
-                selection_rows,
-            )
-            stages.append(stage1)
-            if not stage1.success:
-                errors.append(stage1.message)
-                return WorkflowExecutionResult(workflow_id, False, stages, errors)
+            if self.only_claim:
+                logger.info("仅认领模式: 跳过首次编辑阶段")
+                edited_products = self._build_placeholder_edits(selection_rows)
+                stage1 = StageOutcome(
+                    name="stage1_first_edit",
+                    success=True,
+                    message="仅认领模式: 首次编辑已跳过",
+                    details={
+                        "skipped": True,
+                        "edited_products": [prod.to_payload() for prod in edited_products],
+                    },
+                )
+                stages.append(stage1)
+            else:
+                stage1, edited_products = await self._stage_first_edit(
+                    page,
+                    miaoshou_ctrl,
+                    first_edit_ctrl,
+                    selection_rows,
+                )
+                stages.append(stage1)
+                if not stage1.success:
+                    errors.append(stage1.message)
+                    return WorkflowExecutionResult(workflow_id, False, stages, errors)
 
             stage2 = await self._stage_claim_products(
                 page,
@@ -223,6 +245,27 @@ class CompletePublishWorkflow:
             if not stage2.success:
                 errors.append(stage2.message)
                 return WorkflowExecutionResult(workflow_id, False, stages, errors)
+
+            if self.only_claim:
+                logger.info("仅认领模式: 停止后续批量编辑与发布阶段")
+                stages.append(
+                    StageOutcome(
+                        name="stage3_batch_edit",
+                        success=True,
+                        message="仅认领模式: 批量编辑已跳过",
+                        details={"skipped": True},
+                    )
+                )
+                stages.append(
+                    StageOutcome(
+                        name="stage4_publish",
+                        success=True,
+                        message="仅认领模式: 发布阶段已跳过",
+                        details={"skipped": True},
+                    )
+                )
+                total_success = all(stage.success for stage in stages)
+                return WorkflowExecutionResult(workflow_id, total_success, stages, errors)
 
             stage3 = await self._stage_batch_edit(
                 page,
@@ -307,6 +350,10 @@ class CompletePublishWorkflow:
 
         errors: list[str] = []
         opened_any = False
+        processed_products: list[EditedProduct] = []
+        first_edit_executor = (
+            FirstEditExecutor(first_edit_ctrl) if not self.use_codegen_first_edit else None
+        )
 
         for index, selection in enumerate(selections[: self.collect_count]):
             opened = await open_edit_dialog(index)
@@ -320,22 +367,48 @@ class CompletePublishWorkflow:
             try:
                 original_title = await first_edit_ctrl.get_original_title(page)
                 base_title = original_title or selection.product_name
-                new_title = self._append_title_suffix(base_title, selection.model_number or "")
+                payload_dict = self._build_first_edit_payload(selection, base_title)
 
-                updated = await self._update_title_only(page, new_title)
-                if not updated:
-                    errors.append(f"第{index + 1}个商品标题填写失败")
-                    continue
-
-                saved = await first_edit_ctrl.save_changes(page)
-                if not saved:
-                    errors.append(f"第{index + 1}个商品保存失败")
-                    continue
+                if self.use_codegen_first_edit:
+                    success = await fill_first_edit_dialog_codegen(page, payload_dict)
+                    if not success:
+                        errors.append(f"第{index + 1}个商品首次编辑失败")
+                        await first_edit_ctrl.close_dialog(page)
+                        continue
+                    processed_products.append(
+                        self._create_edited_product(selection, index, payload_dict["title"])
+                    )
+                else:
+                    assert first_edit_executor is not None
+                    payload_model = FirstEditPayload(
+                        title=payload_dict["title"],
+                        product_number=payload_dict.get("product_number", ""),
+                        price=float(payload_dict["price"]),
+                        supply_price=float(payload_dict["supply_price"]),
+                        source_price=float(
+                            payload_dict.get("source_price", payload_dict["supply_price"])
+                        ),
+                        stock=int(payload_dict["stock"]),
+                        weight_g=int(payload_dict["weight_g"]),
+                        length_cm=int(payload_dict["length_cm"]),
+                        width_cm=int(payload_dict["width_cm"]),
+                        height_cm=int(payload_dict["height_cm"]),
+                        supplier_link=str(payload_dict.get("supplier_link", "")),
+                        specs=payload_dict.get("specs") or [],
+                        variants=payload_dict.get("variants") or [],
+                    )
+                    success = await first_edit_executor.apply(page, payload_model)
+                    if not success:
+                        errors.append(f"第{index + 1}个商品首次编辑失败")
+                        continue
+                    processed_products.append(
+                        self._create_edited_product(selection, index, payload_model.title)
+                    )
             except Exception as exc:
                 errors.append(f"第{index + 1}个商品标题更新异常: {exc}")
             finally:
                 await first_edit_ctrl.close_dialog(page)
-                await page.wait_for_timeout(500)
+                # await page.wait_for_timeout(500)
 
         if not opened_any:
             message = "采集箱无可编辑商品,首次编辑阶段跳过"
@@ -349,14 +422,87 @@ class CompletePublishWorkflow:
             return StageOutcome("stage1_first_edit", True, message, details), []
 
         success = not errors
-        message = "完成首次编辑标题处理" if success else "首次编辑存在失败"
+        message = "完成首次编辑处理" if success else "首次编辑存在失败"
         details = {
             "owner": staff_name,
-            "edited_products": [],
+            "edited_products": [product.to_payload() for product in processed_products],
             "errors": errors,
         }
 
-        return StageOutcome("stage1_first_edit", success, message, details), []
+        return StageOutcome("stage1_first_edit", success, message, details), processed_products
+
+    def _build_first_edit_payload(
+        self,
+        selection: ProductSelectionRow,
+        base_title: str,
+    ) -> dict[str, Any]:
+        """根据选品和成本信息构造首次编辑 payload."""
+
+        model_number = selection.model_number or ""
+        new_title = self._append_title_suffix(base_title, model_number)
+
+        cost_price = self._resolve_cost_price(selection)
+        price_result = self.price_calculator.calculate_batch([cost_price])[0]
+        weight_g = self._resolve_weight(selection)
+        dimensions = self._resolve_dimensions(selection)
+        stock = max(selection.collect_count * 20, 50)
+
+        specs: list[dict[str, Any]] = []
+        variants_payload: list[dict[str, Any]] = []
+
+        if selection.spec_options:
+            options = [option.strip() for option in selection.spec_options if option.strip()]
+            if options:
+                specs.append(
+                    {
+                        "name": selection.spec_unit or "规格",
+                        "options": options,
+                    }
+                )
+
+                for idx, option in enumerate(options):
+                    variant_cost = cost_price
+                    if selection.variant_costs and idx < len(selection.variant_costs):
+                        variant_cost = float(selection.variant_costs[idx])
+
+                    price_variant = self.price_calculator.calculate_batch([variant_cost])[0]
+                    variants_payload.append(
+                        {
+                            "option": option,
+                            "price": round(price_variant.suggested_price, 2),
+                            "supply_price": round(price_variant.supply_price, 2),
+                            "source_price": round(price_variant.real_supply_price, 2),
+                            "stock": stock,
+                        }
+                    )
+
+        payload: dict[str, Any] = {
+            "title": new_title,
+            "product_number": model_number,
+            "price": round(price_result.suggested_price, 2),
+            "supply_price": round(price_result.supply_price, 2),
+            "source_price": round(price_result.real_supply_price, 2),
+            "stock": stock,
+            "weight_g": weight_g,
+            "length_cm": dimensions[0],
+            "width_cm": dimensions[1],
+            "height_cm": dimensions[2],
+            "supplier_link": "",
+            "specs": specs,
+            "variants": variants_payload,
+        }
+
+        # 添加尺寸图路径（如果存在）
+        if selection.image_files and len(selection.image_files) > 0:
+            image_filename = selection.image_files[0]  # 取第一张作为尺寸图
+            image_path = self.image_base_dir / image_filename
+            if image_path.exists():
+                payload["size_chart_image"] = str(image_path.resolve())
+                logger.debug(f"添加尺寸图路径: {payload['size_chart_image']}")
+            else:
+                logger.warning(f"⚠️ 尺寸图文件不存在: {image_path}")
+
+        return payload
 
     def _build_placeholder_edits(
         self, selections: Sequence[ProductSelectionRow]
@@ -369,9 +515,7 @@ class CompletePublishWorkflow:
             price_result = self.price_calculator.calculate_batch([cost_price])[0]
             weight_g = self._resolve_weight(selection)
             dimensions = self._resolve_dimensions(selection)
-            title = self._append_title_suffix(
-                selection.product_name, selection.model_number or ""
-            )
+            title = self._append_title_suffix(selection.product_name, selection.model_number or "")
 
             placeholders.append(
                 EditedProduct(
@@ -386,6 +530,29 @@ class CompletePublishWorkflow:
             )
 
         return placeholders
+
+    def _create_edited_product(
+        self,
+        selection: ProductSelectionRow,
+        index: int,
+        title: str,
+    ) -> EditedProduct:
+        """构造用于后续阶段的 EditedProduct."""
+
+        cost_price = self._resolve_cost_price(selection)
+        price_result = self.price_calculator.calculate_batch([cost_price])[0]
+        weight_g = self._resolve_weight(selection)
+        dimensions = self._resolve_dimensions(selection)
+
+        return EditedProduct(
+            index=index,
+            selection=selection,
+            title=title,
+            cost_price=cost_price,
+            price=price_result,
+            weight_g=weight_g,
+            dimensions_cm=dimensions,
+        )
 
     async def _stage_claim_products(
         self,
@@ -416,29 +583,38 @@ class CompletePublishWorkflow:
             )
 
         await miaoshou_ctrl.switch_tab(page, "all")
-        claim_results: list[bool] = []
 
-        for product in edited_products:
-            success = await miaoshou_ctrl.claim_product_multiple_times(
-                page,
-                product_index=product.index,
-                times=self.claim_times,
+        selection_count = min(len(edited_products), 5)
+        selection_ok = await miaoshou_ctrl.select_products_for_claim(page, selection_count)
+        if not selection_ok:
+            message = "无法选择待认领商品"
+            logger.error(message)
+            return StageOutcome(
+                name="stage2_claim",
+                success=False,
+                message=message,
+                details={"selected": selection_count, "expected": selection_count},
             )
-            claim_results.append(success)
 
-        expected_total = len(edited_products) * self.claim_times
+        claim_success = await miaoshou_ctrl.claim_selected_products_to_temu(
+            page,
+            repeat=self.claim_times,
+        )
+
+        expected_total = selection_count * self.claim_times
         verify_success = await miaoshou_ctrl.verify_claim_success(
             page,
             expected_count=expected_total,
         )
 
-        overall_success = all(claim_results) and verify_success
+        overall_success = claim_success and verify_success
         message = (
             f"认领成功 {expected_total} 次" if overall_success else "认领结果存在异常, 详见 details"
         )
 
         details = {
-            "claim_results": claim_results,
+            "selected_count": selection_count,
+            "claim_success": claim_success,
             "expected_total": expected_total,
             "verify_success": verify_success,
         }
@@ -613,9 +789,7 @@ class CompletePublishWorkflow:
             raise RuntimeError(f"读取选品表失败: {exc}") from exc
 
         if not rows:
-            raise RuntimeError(
-                f"选品表 {self.selection_table_path} 未包含有效数据, 无法继续执行"
-            )
+            raise RuntimeError(f"选品表 {self.selection_table_path} 未包含有效数据, 无法继续执行")
 
         for idx, row in enumerate(rows[: self.collect_count], start=1):
             cost_value = float(row.cost_price) if row.cost_price else 0.0
@@ -703,7 +877,7 @@ class CompletePublishWorkflow:
             return base
         return f"{base} {normalized_suffix}".strip()
 
-    async def _update_title_only(self, page: "Page", title: str) -> bool:
+    async def _update_title_only(self, page: Page, title: str) -> bool:
         """仅更新编辑弹窗中的标题字段."""
 
         selectors = [
@@ -724,7 +898,7 @@ class CompletePublishWorkflow:
                 await locator.press("ControlOrMeta+a")
                 await locator.fill(title)
                 logger.success("✓ 已更新标题: {}", title)
-                await page.wait_for_timeout(300)
+                # await page.wait_for_timeout(300)
                 return True
             except Exception:
                 continue
@@ -758,6 +932,40 @@ class CompletePublishWorkflow:
         if username:
             return f"{owner}({username})"
         return owner
+
+    def _resolve_image_base_dir(self) -> Path:
+        """解析图片基础目录路径.
+        
+        优先级:
+        1. 环境变量 IMAGE_BASE_DIR
+        2. 配置文件中的路径
+        3. 默认路径: data/input/10月新品可推
+        
+        Returns:
+            图片基础目录的 Path 对象.
+        """
+        # 从环境变量读取
+        env_dir = os.getenv("IMAGE_BASE_DIR")
+        if env_dir:
+            path = Path(env_dir)
+            if not path.is_absolute():
+                # 如果是相对路径，相对于项目根目录
+                path = self._get_project_root() / path
+            return path
+
+        # 使用默认路径
+        default_dir = self._get_project_root() / "apps" / "temu-auto-publish" / "data" / "input" / "10月新品可推"
+        return default_dir
+
+    def _get_project_root(self) -> Path:
+        """获取项目根目录."""
+        # 从当前文件向上查找，找到包含 pyproject.toml 的目录
+        current = Path(__file__).resolve()
+        for parent in current.parents:
+            if (parent / "pyproject.toml").exists():
+                return parent
+        # 如果找不到，返回当前文件所在的上上上级目录（apps/temu-auto-publish/src -> apps/temu-auto-publish -> apps -> workspace）
+        return Path(__file__).resolve().parents[3]
 
     def _resolve_shop_name(self, edited_products: Sequence[EditedProduct]) -> str:
         """解析发布店铺名称."""

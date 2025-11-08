@@ -4,6 +4,14 @@
 
 调试模式（Debug Breakpoint Mode）提供类似调试器的断点功能，允许您逐步执行工作流，在每个关键步骤暂停并查看当前状态。
 
+## 调试工具快速访问
+
+- `src/browser/debug_tools.py` 新增 `capture_debug_artifacts`、`log_payload_preview`、`maybe_pause_for_inspector`，用于快速保存截图/HTML、在终端查看 payload 表格，并通过环境变量 `PLAYWRIGHT_DEBUG=1` 打开 Playwright Inspector。
+- `run_with_optional_syncer()` 支持在安装 `syncer` 时将任意异步调试脚本同步执行，未安装时自动回退 `asyncio.run`。
+- 示例脚本 `examples/first_edit_sync_debug.py` 展示了如何在同步模式下快速验证浏览器环境。
+- 首次编辑弹窗由 `FirstEditExecutor` 管理，内置 `tenacity` 重试与自动调试快照，失败后会在 `data/debug/` 下生成截图和 DOM。
+- 登录成功后 `LoginController` 会自动检测广告/活动弹窗并尝试关闭，导航至采集箱时 `MiaoshouController.close_popup_if_exists()` 也会做额外兜底，减少人工干预。
+
 ## 启用方式
 
 ### 方法1：命令行参数（推荐）

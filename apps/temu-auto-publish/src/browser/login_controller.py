@@ -18,7 +18,6 @@
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 from loguru import logger
 
@@ -74,7 +73,7 @@ class LoginController:
             else:
                 selector_file = self.selector_path
 
-            with open(selector_file, "r", encoding="utf-8") as f:
+            with open(selector_file, encoding="utf-8") as f:
                 return json.load(f)
         except Exception as e:
             logger.warning(f"加载选择器配置失败: {e}")
@@ -116,7 +115,9 @@ class LoginController:
             cookie_file = "data/temp/miaoshou_cookies.json"
             if await self.browser_manager.load_cookies(cookie_file):
                 # 验证登录状态 - 直接访问首页而不是登录页
-                welcome_url = self.selectors.get("homepage", {}).get("url", "https://erp.91miaoshou.com/welcome")
+                welcome_url = self.selectors.get("homepage", {}).get(
+                    "url", "https://erp.91miaoshou.com/welcome"
+                )
                 await self.browser_manager.goto(welcome_url)
                 await self.browser_manager.page.wait_for_timeout(2000)  # 等待页面加载
 
@@ -187,6 +188,8 @@ class LoginController:
                 await self.browser_manager.save_cookies("data/temp/miaoshou_cookies.json")
                 logger.debug("✓ Cookie 已保存")
 
+                await self._dismiss_overlays_if_any()
+
                 return True
             else:
                 logger.error("✗ 登录失败")
@@ -216,6 +219,82 @@ class LoginController:
             if headless:
                 await self.browser_manager.close()
 
+    async def _dismiss_overlays_if_any(self) -> None:
+        """登录后尝试关闭广告或提示弹窗."""
+
+        page = self.browser_manager.page
+        if not page:
+            return
+
+        overlay_selector = ".jx-overlay-dialog, .el-dialog, .pro-dialog, [role='dialog']"
+        close_selectors = [
+            "button:has-text('关闭')",
+            "button:has-text('我知道了')",
+            "button:has-text('知道了')",
+            "button:has-text('确定')",
+            ".jx-dialog__headerbtn",
+            ".el-dialog__headerbtn",
+            "button[aria-label='关闭']",
+            "button[aria-label='Close']",
+            ".pro-dialog__close",
+            ".pro-dialog__header button",
+            ".dialog-close",
+            "[class*='icon-close']",
+            "button:has-text('关闭广告')",
+            "button:has-text('立即进入')",
+        ]
+
+        for attempt in range(5):
+            dialogs = page.locator(overlay_selector)
+            dialog_count = await dialogs.count()
+            if dialog_count == 0:
+                return
+
+            logger.info("检测到登录后弹窗, 尝试关闭 (第%s次)", attempt + 1)
+
+            closed_any = False
+            for index in range(dialog_count - 1, -1, -1):
+                dialog = dialogs.nth(index)
+                closed_this_dialog = False
+                for selector in close_selectors:
+                    locator = dialog.locator(selector)
+                    try:
+                        if await locator.count() and await locator.first.is_visible(timeout=1000):
+                            logger.debug("点击弹窗关闭控件 selector=%s index=%s", selector, index)
+                            await locator.first.click()
+                            closed_any = True
+                            closed_this_dialog = True
+                            await page.wait_for_timeout(500)
+                            break
+                    except Exception as exc:  # pragma: no cover - 调试场景
+                        logger.debug("关闭弹窗时忽略异常: %s", exc)
+                if not closed_this_dialog:
+                    try:
+                        logger.debug("未找到关闭按钮, 尝试发送 Escape")
+                        await page.keyboard.press("Escape")
+                        closed_any = True
+                        closed_this_dialog = True
+                        await page.wait_for_timeout(300)
+                    except Exception:
+                        pass
+
+            if not closed_any:
+                logger.warning("⚠️ 弹窗仍存在, 强制继续后续流程")
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                debug_dir = Path("data/debug/login_overlays")
+                debug_dir.mkdir(parents=True, exist_ok=True)
+                screenshot_path = debug_dir / f"overlay_{timestamp}.png"
+                html_path = debug_dir / f"overlay_{timestamp}.html"
+                try:
+                    await page.screenshot(path=str(screenshot_path))
+                    html_path.write_text(await page.content(), encoding="utf-8")
+                    logger.warning("⚠️ 未能识别弹窗关闭控件, 已保存快照: %s", screenshot_path)
+                except Exception as exc:
+                    logger.debug("保存弹窗快照失败: %s", exc)
+                break
+
+            await page.wait_for_timeout(500)
+
     async def _check_login_status(self) -> bool:
         """检查是否已登录妙手ERP.
 
@@ -239,7 +318,7 @@ class LoginController:
             # 检查是否有产品菜单元素（首页特有）
             homepage_config = self.selectors.get("homepage", {})
             product_menu_selector = homepage_config.get("product_menu", "text='产品'")
-            
+
             menu_count = await page.locator(product_menu_selector).count()
             if menu_count > 0:
                 logger.debug("✓ 检测到产品菜单元素")
@@ -253,8 +332,8 @@ class LoginController:
 
     async def login_if_needed(
         self,
-        username: Optional[str] = None,
-        password: Optional[str] = None,
+        username: str | None = None,
+        password: str | None = None,
     ) -> bool:
         """如果需要则登录（检查登录状态，未登录则执行登录）.
 

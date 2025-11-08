@@ -11,52 +11,69 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 
 import typer
-
 from src.workflows.complete_publish_workflow import CompletePublishWorkflow
 
 app = typer.Typer(help="Temu 完整发布工作流 CLI")
 
+INPUT_OPTION = typer.Option(
+    ...,
+    "--input",
+    "-i",
+    exists=True,
+    file_okay=True,
+    dir_okay=False,
+    resolve_path=True,
+    help="选品表 Excel 文件路径",
+)
+
+HEADLESS_OPTION = typer.Option(
+    None,
+    "--headless",
+    help="手动覆盖配置文件中的 headless 设置",
+)
+
+USE_AI_TITLES_OPTION = typer.Option(
+    False,
+    "--use-ai-titles/--no-use-ai-titles",
+    help="是否启用 AI 标题生成 (默认关闭)",
+)
+
+USE_CODEGEN_FIRST_EDIT_OPTION = typer.Option(
+    True,
+    "--use-codegen-first-edit/--no-use-codegen-first-edit",
+    help="是否使用 Codegen 录制的首次编辑逻辑",
+)
+
+USE_CODEGEN_BATCH_EDIT_OPTION = typer.Option(
+    True,
+    "--use-codegen-batch-edit/--no-use-codegen-batch-edit",
+    help="是否使用 Codegen 录制的批量编辑逻辑",
+)
+
+SKIP_FIRST_EDIT_OPTION = typer.Option(
+    False,
+    "--skip-first-edit",
+    help="直接跳过首次编辑阶段, 仅执行后续流程",
+)
+
+ONLY_CLAIM_OPTION = typer.Option(
+    False,
+    "--only-claim",
+    help="仅测试认领阶段, 自动跳过首次编辑/批量编辑/发布",
+)
+
 
 @app.command()
 def run(
-    input: Path = typer.Option(
-        ...,
-        "--input",
-        "-i",
-        exists=True,
-        file_okay=True,
-        dir_okay=False,
-        resolve_path=True,
-        help="选品表 Excel 文件路径",
-    ),
-    headless: Optional[bool] = typer.Option(
-        None,
-        "--headless",
-        help="手动覆盖配置文件中的 headless 设置",
-    ),
-    use_ai_titles: bool = typer.Option(
-        False,
-        "--use-ai-titles/--no-use-ai-titles",
-        help="是否启用 AI 标题生成 (默认关闭)",
-    ),
-    use_codegen_first_edit: bool = typer.Option(
-        True,
-        "--use-codegen-first-edit/--no-use-codegen-first-edit",
-        help="是否使用 Codegen 录制的首次编辑逻辑",
-    ),
-    use_codegen_batch_edit: bool = typer.Option(
-        True,
-        "--use-codegen-batch-edit/--no-use-codegen-batch-edit",
-        help="是否使用 Codegen 录制的批量编辑逻辑",
-    ),
-    skip_first_edit: bool = typer.Option(
-        False,
-        "--skip-first-edit",
-        help="直接跳过首次编辑阶段, 仅执行后续流程",
-    ),
+    input: Path = INPUT_OPTION,
+    headless: bool | None = HEADLESS_OPTION,
+    use_ai_titles: bool = USE_AI_TITLES_OPTION,
+    use_codegen_first_edit: bool = USE_CODEGEN_FIRST_EDIT_OPTION,
+    use_codegen_batch_edit: bool = USE_CODEGEN_BATCH_EDIT_OPTION,
+    skip_first_edit: bool = SKIP_FIRST_EDIT_OPTION,
+    only_claim: bool = ONLY_CLAIM_OPTION,
 ) -> None:
     """执行 Temu 完整发布工作流."""
 
@@ -67,6 +84,7 @@ def run(
         use_codegen_first_edit=use_codegen_first_edit,
         use_codegen_batch_edit=use_codegen_batch_edit,
         skip_first_edit=skip_first_edit,
+        only_claim=only_claim,
     )
     workflow.execute()
 

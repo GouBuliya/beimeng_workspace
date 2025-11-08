@@ -137,7 +137,7 @@ class FirstEditController:
 
         try:
             # 等待类目信息加载
-            await page.wait_for_timeout(500)
+            # await page.wait_for_timeout(500)
 
             # 尝试多种方式读取类目信息
             category_selectors = [
@@ -201,7 +201,7 @@ class FirstEditController:
 
         try:
             # 等待弹窗完全加载
-            await page.wait_for_timeout(1000)
+            # await page.wait_for_timeout(1000)
 
             # 尝试多个可能的标题输入框选择器
             # 重要: 产品标题是 input[type=text] 而不是 textarea！
@@ -267,7 +267,7 @@ class FirstEditController:
         try:
             # 等待弹窗完全加载
             logger.debug("    等待编辑弹窗加载...")
-            await page.wait_for_timeout(1000)
+            # await page.wait_for_timeout(1000)
 
             # 尝试多个可能的标题输入框选择器
             # 重要: 产品标题是 input[type=text] 而不是 textarea！
@@ -327,11 +327,11 @@ class FirstEditController:
             # 清空并填写新标题
             logger.info("    清空标题字段...")
             await title_input.fill("")
-            await page.wait_for_timeout(300)
+            # await page.wait_for_timeout(300)
 
             logger.info(f"    填写新标题: {new_title}")
             await title_input.fill(new_title)
-            await page.wait_for_timeout(500)
+            # await page.wait_for_timeout(500)
 
             # 验证标题是否成功更新
             logger.debug("    验证标题是否成功更新...")
@@ -440,7 +440,7 @@ class FirstEditController:
             nav_config = first_edit_config.get("navigation", {})
             sales_tab_selector = nav_config.get("sales_attrs", "text='销售属性'")
             await page.locator(sales_tab_selector).click()
-            await page.wait_for_timeout(1000)
+            # await page.wait_for_timeout(1000)
 
             # 填写SKU价格（排除分页器）
             price_selectors = [
@@ -468,9 +468,9 @@ class FirstEditController:
                 return False
 
             await price_input.fill("")
-            await page.wait_for_timeout(300)
+            # await page.wait_for_timeout(300)
             await price_input.fill(str(price))
-            await page.wait_for_timeout(500)
+            # await page.wait_for_timeout(500)
 
             logger.success(f"✓ 价格已设置: {price} CNY")
             return True
@@ -527,9 +527,9 @@ class FirstEditController:
                 return False
 
             await stock_input.fill("")
-            await page.wait_for_timeout(300)
+            # await page.wait_for_timeout(300)
             await stock_input.fill(str(stock))
-            await page.wait_for_timeout(500)
+            # await page.wait_for_timeout(500)
 
             logger.success(f"✓ 库存已设置: {stock}")
             return True
@@ -560,7 +560,7 @@ class FirstEditController:
 
             logger.info("导航到「物流信息」Tab...")
             await page.locator(logistics_tab_selector).click()
-            await page.wait_for_timeout(1000)  # 等待Tab内容加载
+            # await page.wait_for_timeout(1000)  # 等待Tab内容加载
 
             logger.success("✓ 已切换到物流信息Tab")
             return True
@@ -632,9 +632,9 @@ class FirstEditController:
 
             # 填写重量
             await weight_input.fill("")
-            await page.wait_for_timeout(300)
+            # await page.wait_for_timeout(300)
             await weight_input.fill(str(weight))
-            await page.wait_for_timeout(500)
+            # await page.wait_for_timeout(500)
 
             logger.success(f"✓ 包裹重量已设置: {weight}G")
             return True
@@ -754,19 +754,19 @@ class FirstEditController:
 
             # 填写长宽高
             await length_input.fill("")
-            await page.wait_for_timeout(200)
+            # await page.wait_for_timeout(200)
             await length_input.fill(str(length))
-            await page.wait_for_timeout(200)
+            # await page.wait_for_timeout(200)
 
             await width_input.fill("")
-            await page.wait_for_timeout(200)
+            # await page.wait_for_timeout(200)
             await width_input.fill(str(width))
-            await page.wait_for_timeout(200)
+            # await page.wait_for_timeout(200)
 
             await height_input.fill("")
-            await page.wait_for_timeout(200)
+            # await page.wait_for_timeout(200)
             await height_input.fill(str(height))
-            await page.wait_for_timeout(300)
+            # await page.wait_for_timeout(300)
 
             logger.success(f"✓ 包裹尺寸已设置: {length}x{width}x{height} CM")
             return True
@@ -826,9 +826,9 @@ class FirstEditController:
                 return False
 
             await weight_input.fill("")
-            await page.wait_for_timeout(300)
+            # await page.wait_for_timeout(300)
             await weight_input.fill(str(weight))
-            await page.wait_for_timeout(500)
+            # await page.wait_for_timeout(500)
 
             logger.success(f"✓ 重量已设置: {weight} KG")
             return True
@@ -917,19 +917,19 @@ class FirstEditController:
 
             # 填写长宽高
             await length_input.fill("")
-            await page.wait_for_timeout(200)
+            # await page.wait_for_timeout(200)
             await length_input.fill(str(length))
-            await page.wait_for_timeout(200)
+            # await page.wait_for_timeout(200)
 
             await width_input.fill("")
-            await page.wait_for_timeout(200)
+            # await page.wait_for_timeout(200)
             await width_input.fill(str(width))
-            await page.wait_for_timeout(200)
+            # await page.wait_for_timeout(200)
 
             await height_input.fill("")
-            await page.wait_for_timeout(200)
+            # await page.wait_for_timeout(200)
             await height_input.fill(str(height))
-            await page.wait_for_timeout(300)
+            # await page.wait_for_timeout(300)
 
             logger.success(f"✓ 尺寸已设置: {length}x{width}x{height} CM")
             return True
@@ -979,14 +979,14 @@ class FirstEditController:
                 return False
 
             # 等待保存完成
-            await page.wait_for_timeout(2000)
+            # await page.wait_for_timeout(2000)
 
             if wait_for_close:
                 # 等待弹窗关闭（检查弹窗是否还存在）
                 try:
                     logger.debug("等待编辑弹窗关闭...")
                     # 等待更长时间确保保存完成
-                    await page.wait_for_timeout(2000)
+                    # await page.wait_for_timeout(2000)
 
                     # 检查弹窗是否关闭
                     dialog_count = await page.locator(
@@ -997,7 +997,7 @@ class FirstEditController:
                     else:
                         # 弹窗还在，再等一会
                         logger.debug(f"弹窗仍存在（{dialog_count}个），继续等待...")
-                        await page.wait_for_timeout(2000)
+                        # await page.wait_for_timeout(2000)
                         dialog_count = await page.locator(
                             ".jx-dialog, .el-dialog, [role='dialog']"
                         ).count()
@@ -1037,7 +1037,7 @@ class FirstEditController:
 
         try:
             # 等待页面稳定
-            await page.wait_for_timeout(500)
+            # await page.wait_for_timeout(500)
 
             # 尝试找到"使用网络图片"按钮（需要在详情图片区域）
             network_image_selectors = [
@@ -1066,7 +1066,7 @@ class FirstEditController:
 
             # 点击"使用网络图片"
             await upload_btn.click()
-            await page.wait_for_timeout(500)
+            # await page.wait_for_timeout(500)
 
             # 查找URL输入框
             url_input_selectors = [
@@ -1093,7 +1093,7 @@ class FirstEditController:
 
             # 输入图片URL
             await url_input.fill(image_url)
-            await page.wait_for_timeout(300)
+            # await page.wait_for_timeout(300)
 
             # 点击确定/确认按钮
             confirm_btn_selectors = [
@@ -1108,7 +1108,7 @@ class FirstEditController:
                     if await btn.is_visible(timeout=1000):
                         await btn.click()
                         logger.success(f"✓ 尺寸图已上传: {image_url[:50]}...")
-                        await page.wait_for_timeout(500)
+                        # await page.wait_for_timeout(500)
                         return True
                 except Exception:
                     continue
@@ -1140,7 +1140,7 @@ class FirstEditController:
 
         try:
             # 等待页面稳定
-            await page.wait_for_timeout(500)
+            # await page.wait_for_timeout(500)
 
             # 查找视频上传区域（通常在详情描述tab）
             # 可能需要先切换到"产品视频"或"详情"tab
@@ -1155,7 +1155,7 @@ class FirstEditController:
                     tab = page.locator(selector).first
                     if await tab.is_visible(timeout=1000):
                         await tab.click()
-                        await page.wait_for_timeout(500)
+                        # await page.wait_for_timeout(500)
                         logger.debug(f"已切换到视频tab: {selector}")
                         break
                 except Exception:
@@ -1190,7 +1190,7 @@ class FirstEditController:
 
             # 点击上传按钮
             await upload_btn.click()
-            await page.wait_for_timeout(500)
+            # await page.wait_for_timeout(500)
 
             # 查找URL输入框
             url_input_selectors = [
@@ -1217,7 +1217,7 @@ class FirstEditController:
 
             # 输入视频URL
             await url_input.fill(video_url)
-            await page.wait_for_timeout(500)
+            # await page.wait_for_timeout(500)
 
             # 点击确定/确认按钮
             confirm_btn_selectors = [
@@ -1232,7 +1232,7 @@ class FirstEditController:
                     if await btn.is_visible(timeout=1000):
                         await btn.click()
                         logger.success(f"✓ 产品视频已上传: {video_url[:50]}...")
-                        await page.wait_for_timeout(1000)
+                        # await page.wait_for_timeout(1000)
                         return True
                 except Exception:
                     continue
@@ -1305,7 +1305,7 @@ class FirstEditController:
                     except Exception:
                         pass
 
-                await page.wait_for_timeout(600)
+                # await page.wait_for_timeout(600)
                 attempt += 1
 
             # 超过最大尝试次数仍未关闭
@@ -1396,7 +1396,7 @@ class FirstEditController:
             basic_info_selector = nav_config.get("basic_info", "text='基本信息'")
             try:
                 await page.locator(basic_info_selector).click()
-                await page.wait_for_timeout(500)
+                # await page.wait_for_timeout(500)
             except:
                 logger.warning("切换回基本信息Tab失败，但继续执行")
 

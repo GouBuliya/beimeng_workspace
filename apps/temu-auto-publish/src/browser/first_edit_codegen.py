@@ -52,7 +52,7 @@ async def close_known_popups(page: Page, selectors: Iterable[str] | None = None)
                     if await element.is_visible(timeout=500):
                         await element.click(timeout=1_000)
                         logger.debug("已点击弹窗关闭按钮: {}", selector)
-                        await page.wait_for_timeout(300)
+                        # await page.wait_for_timeout(300)
                 except Exception:
                     continue
         except Exception:
@@ -81,7 +81,7 @@ async def open_edit_dialog_codegen(page: Page, index: int = 0) -> bool:
 
         await target.scroll_into_view_if_needed()
         await target.click(timeout=5_000)
-        await page.wait_for_timeout(500)
+        # await page.wait_for_timeout(500)
 
         if not await _wait_for_edit_dialog(page):
             raise TimeoutError("未在预期时间内检测到首次编辑弹窗")

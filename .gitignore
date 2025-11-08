@@ -78,6 +78,7 @@ ai.plan.md
 
 # Temu 自动发布项目数据
 apps/temu-auto-publish/data/input/*.xlsx
+apps/temu-auto-publish/data/input/temu_cookies.json
 apps/temu-auto-publish/data/output/*.json
 apps/temu-auto-publish/data/temp/*
 apps/temu-auto-publish/data/logs/*

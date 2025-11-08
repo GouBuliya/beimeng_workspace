@@ -51,15 +51,16 @@ T = TypeVar("T")
 
 def smart_retry(max_attempts: int = 2, delay: float = 0.5, exceptions: tuple = (Exception,)):
     """智能重试装饰器,用于关键操作的自动重试。
-    
+
     Args:
         max_attempts: 最大尝试次数(默认2次,即1次重试)。
         delay: 重试间隔秒数(默认0.5秒)。
         exceptions: 需要捕获并重试的异常类型元组。
-    
+
     Returns:
         装饰后的函数。
     """
+
     def decorator(func: Callable[..., T]) -> Callable[..., T]:
         @wraps(func)
         async def wrapper(*args, **kwargs) -> T:
@@ -77,7 +78,9 @@ def smart_retry(max_attempts: int = 2, delay: float = 0.5, exceptions: tuple = (
                     else:
                         logger.error(f"✗ {func.__name__} 执行失败(已达最大重试次数{max_attempts})")
             raise last_exception  # type: ignore
+
         return wrapper
+
     return decorator
 
 
@@ -149,7 +152,9 @@ async def run_batch_edit(page: Page, payload: dict[str, Any]) -> dict[str, Any]:
         await checkbox.click()
         # 激进策略: 短暂等待即可
         try:
-            await page.locator(".jx-checkbox.is-checked").first.wait_for(state="visible", timeout=1000)
+            await page.locator(".jx-checkbox.is-checked").first.wait_for(
+                state="visible", timeout=1000
+            )
         except Exception:
             pass
 
@@ -334,7 +339,9 @@ async def _ensure_title_length(page: Page) -> None:
             )
             # 智能等待: 等待输入值生效
             try:
-                await locator.evaluate("el => el.dispatchEvent(new Event('input', { bubbles: true }))")
+                await locator.evaluate(
+                    "el => el.dispatchEvent(new Event('input', { bubbles: true }))"
+                )
             except Exception:
                 pass
             return
@@ -434,7 +441,7 @@ async def _step_05_outer_package(page: Page, image_path: str | None) -> None:
         if await radio_btn.count() > 0:
             await radio_btn.click()
             await page.wait_for_timeout(100)
-        
+
         # 尝试直接找到文件输入框（可能已经存在）
         file_inputs = page.locator("input[type='file']")
         if await file_inputs.count() > 0:
@@ -445,7 +452,7 @@ async def _step_05_outer_package(page: Page, image_path: str | None) -> None:
         else:
             # 如果没有文件输入框,尝试通过下拉菜单触发
             logger.warning("未找到文件输入框,跳过外包装图片上传")
-            
+
     except Exception as exc:
         logger.warning("外包装图片上传失败, 保留已有图片: {}", exc)
 
@@ -482,7 +489,7 @@ async def _step_07_customized(page: Page) -> None:
     """
     # 录制中这一步只是点击预览保存,没有修改
     await page.get_by_text("定制品").click()
-    
+
     await page.get_by_role("button", name="预览").click()
     await page.get_by_role("button", name="保存修改").click()
     # await _wait_for_save_toast(page)
@@ -523,17 +530,18 @@ async def _step_10_dimensions(page: Page) -> None:
     Args:
         page: Playwright 页面对象。
     """
-    await page.get_by_text("尺寸").click()
+    dialog = page.get_by_role("dialog")
+    await dialog.get_by_text("尺寸", exact=True).click()
 
     # 长
     await (
-        page.locator("div")
+        dialog.locator("div")
         .filter(has_text=re.compile(r"^长:CM$"))
         .get_by_role("spinbutton")
         .click()
     )
     await (
-        page.locator("div")
+        dialog.locator("div")
         .filter(has_text=re.compile(r"^长:CM$"))
         .get_by_role("spinbutton")
         .fill("75")
@@ -541,13 +549,13 @@ async def _step_10_dimensions(page: Page) -> None:
 
     # 宽
     await (
-        page.locator("div")
+        dialog.locator("div")
         .filter(has_text=re.compile(r"^宽:CM$"))
         .get_by_role("spinbutton")
         .click()
     )
     await (
-        page.locator("div")
+        dialog.locator("div")
         .filter(has_text=re.compile(r"^宽:CM$"))
         .get_by_role("spinbutton")
         .fill("71")
@@ -555,20 +563,20 @@ async def _step_10_dimensions(page: Page) -> None:
 
     # 高
     await (
-        page.locator("div")
+        dialog.locator("div")
         .filter(has_text=re.compile(r"^高:CM$"))
         .get_by_role("spinbutton")
         .click()
     )
     await (
-        page.locator("div")
+        dialog.locator("div")
         .filter(has_text=re.compile(r"^高:CM$"))
         .get_by_role("spinbutton")
         .fill("65")
     )
 
-    await page.get_by_role("button", name="预览").click()
-    await page.get_by_role("button", name="保存修改").click()
+    await dialog.get_by_role("button", name="预览").click()
+    await dialog.get_by_role("button", name="保存修改").click()
     # await _wait_for_save_toast(page)
     await _close_edit_dialog(page)
 
@@ -599,7 +607,7 @@ async def _step_12_sku_category(page: Page) -> None:
     # 点击打开SKU分类编辑对话框
     await page.get_by_text("SKU分类").click()
     # await _wait_for_dialog_open(page)
-    
+
     try:
         # 1. 点击SKU分类下拉框触发器
         trigger_selectors = [
@@ -607,7 +615,7 @@ async def _step_12_sku_category(page: Page) -> None:
             page.get_by_role("dialog").locator(".el-select__input").first,
             page.get_by_role("dialog").get_by_placeholder("请选择").first,
         ]
-        
+
         clicked = False
         for trigger in trigger_selectors:
             if await trigger.count() > 0:
@@ -618,19 +626,19 @@ async def _step_12_sku_category(page: Page) -> None:
                     break
                 except Exception:
                     continue
-        
+
         if not clicked:
             logger.warning("未能点击下拉触发器")
-        
+
         # 等待下拉选项列表出现
-        
+
         # 2. 选择"单品"
         single_item_selectors = [
             page.locator(".el-select-dropdown__item").filter(has_text="单品"),
             page.locator(".el-select-dropdown").locator("li").filter(has_text="单品"),
             page.get_by_text("单品", exact=True),
         ]
-        
+
         for selector in single_item_selectors:
             if await selector.count() > 0:
                 await selector.first.click()
@@ -638,16 +646,16 @@ async def _step_12_sku_category(page: Page) -> None:
                 break
         else:
             logger.warning("未找到'单品'选项")
-        
+
         # 等待下拉关闭
-        
+
         # 3. 填写数量为 1
         quantity_input_selectors = [
             page.get_by_role("dialog").get_by_placeholder("数量"),
             page.get_by_role("dialog").locator("input[type='text']").filter(has_text="件"),
             page.get_by_role("dialog").locator(".el-input__inner"),
         ]
-        
+
         for input_selector in quantity_input_selectors:
             if await input_selector.count() > 0:
                 try:
@@ -659,7 +667,7 @@ async def _step_12_sku_category(page: Page) -> None:
                     continue
         else:
             logger.warning("未找到数量输入框")
-            
+
     except Exception as exc:
         logger.warning("SKU分类选择失败: {}", exc)
 
@@ -754,7 +762,7 @@ async def _step_18_manual(page: Page, file_path: str) -> None:
             if await upload_btn.count() > 0:
                 await upload_btn.click()
                 await page.wait_for_timeout(100)
-            
+
             # 尝试直接找到文件输入框（可能已经存在）
             file_inputs = page.locator("input[type='file']")
             if await file_inputs.count() > 0:
@@ -765,7 +773,7 @@ async def _step_18_manual(page: Page, file_path: str) -> None:
             else:
                 # 如果没有文件输入框,跳过上传
                 logger.warning("未找到文件输入框,跳过产品说明书上传")
-                
+
         except Exception as exc:
             logger.warning("产品说明书上传失败, 保留已有文件: {}", exc)
 
