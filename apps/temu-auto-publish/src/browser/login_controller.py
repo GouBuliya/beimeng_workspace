@@ -293,7 +293,7 @@ class LoginController:
                     logger.debug("保存弹窗快照失败: %s", exc)
                 break
 
-            await page.wait_for_timeout(500)
+            await page.wait_for_timeout(5)
 
     async def _check_login_status(self) -> bool:
         """检查是否已登录妙手ERP.
