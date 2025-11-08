@@ -95,6 +95,10 @@ OPENAI_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
 TEMU_SHOP_URL=https://agentseller.temu.com/
 TEMU_USERNAME=your_temu_username
 TEMU_PASSWORD=your_temu_password
+
+# 尺寸图外链配置（可选）
+# 若选品表未提供尺寸图 URL，将以该前缀+文件名自动拼接
+SIZE_CHART_BASE_URL=https://miaoshou-tuchuang-beimeng.oss-cn-hangzhou.aliyuncs.com/10月新品可推/
 ```
 
 ### 3. 运行测试
@@ -149,6 +153,12 @@ python run_collection_to_edit_test.py --no-skip-collection
 | 商品名称 | 成本价 | 类目 | 关键词 | 备注 |
 |---------|--------|------|--------|------|
 | 智能手表运动防水 | 150 | 电子产品/智能穿戴 | 智能手表 | 测试 |
+
+> **尺寸图配置说明**
+>
+> - 选品表可新增列 `尺寸图链接`（或 `尺寸图URL/size_chart_url/size_chart_image_url`），填写可直接访问的图片外链。
+> - 若未提供上述列，系统会读取 `实拍图数组` 的首个文件名，并与 `SIZE_CHART_BASE_URL` 拼接生成尺寸图 URL。
+> - 请确保 OSS 对象具备公共读权限或使用签名 URL，否则首次编辑将无法完成图片上传。
 
 ### 4. 运行测试
 

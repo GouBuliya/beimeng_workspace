@@ -51,6 +51,8 @@ vim .env  # 或使用你喜欢的编辑器
 TEMU_USERNAME=your_username
 TEMU_PASSWORD=your_password
 YINGDAO_FLOW_ID=flow_123
+# 若需自动拼接尺寸图 URL，可配置 OSS 前缀
+SIZE_CHART_BASE_URL=https://miaoshou-tuchuang-beimeng.oss-cn-hangzhou.aliyuncs.com/10月新品可推/
 ```
 
 ---
@@ -61,10 +63,12 @@ YINGDAO_FLOW_ID=flow_123
 
 在 `data/input/` 目录创建 `products_sample.xlsx`，包含以下列：
 
-| 商品名称 | 成本价 | 类目 | 关键词 | 备注 |
-|---------|--------|------|--------|------|
-| 智能手表运动防水 | 150 | 电子产品/智能穿戴 | 智能手表 | 测试商品 |
-| 蓝牙耳机无线降噪 | 80 | 电子产品/音频设备 | 蓝牙耳机 | |
+| 商品名称 | 成本价 | 类目 | 关键词 | 实拍图数组 | 尺寸图链接 | 备注 |
+|---------|--------|------|--------|------------|------------|------|
+| 智能手表运动防水 | 150 | 电子产品/智能穿戴 | 智能手表 | ["A045.jpg"] | https://oss.example.com/A045.jpg | 测试商品 |
+| 蓝牙耳机无线降噪 | 80 | 电子产品/音频设备 | 蓝牙耳机 | ["A046.jpg"] | *(留空则使用 SIZE_CHART_BASE_URL 拼接)* | |
+
+> 若省略 `尺寸图链接`，系统会使用 `SIZE_CHART_BASE_URL` 与 `实拍图数组` 的首个文件名拼接生成尺寸图外链。请确保对应 OSS 对象可公开访问或已生成签名 URL。
 
 ---
 
