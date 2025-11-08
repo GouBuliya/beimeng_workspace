@@ -411,12 +411,12 @@ async def _fill_supplier_link(page: Page, supplier_link: str) -> bool:
 
 
 async def _upload_size_chart_local(page: Page, image_path: str) -> bool:
-    """上传尺寸图（本地文件）- 参考批量编辑的外包装图片上传逻辑.
+    """上传尺寸图（本地文件）- 定位到尺寸图表区域后上传.
     
     流程:
-    1. 点击尺寸图添加区域 (.product-picture-item-add)
-    2. 等待文件输入框出现
-    3. 直接上传文件到 input[type='file']
+    1. 定位到"尺寸图表"区域（通过滚动或文本定位）
+    2. 点击尺寸图添加按钮 (.product-picture-item-add)
+    3. 上传文件到 input[type='file']
     
     Args:
         page: Playwright 页面对象.
@@ -442,41 +442,68 @@ async def _upload_size_chart_local(page: Page, image_path: str) -> bool:
         debug_dir.mkdir(parents=True, exist_ok=True)
         
         try:
-            await page.screenshot(path=str(debug_dir / "before_image_upload.png"))
-            logger.debug(f"已保存上传前截图: {debug_dir / 'before_image_upload.png'}")
+            await page.screenshot(path=str(debug_dir / "before_size_chart_upload.png"))
+            logger.debug(f"已保存上传前截图: {debug_dir / 'before_size_chart_upload.png'}")
         except Exception:
             pass
 
-        # 步骤1: 点击尺寸图添加区域（触发文件上传）
+        # 步骤1: 定位到"尺寸图表"区域
         try:
-            add_button = page.locator(".product-picture-item-add")
-            if await add_button.count() > 0:
-                await add_button.last.click()  # 使用最后一个，通常是尺寸图区域
+            # 尝试查找"尺寸图表"文本或相关区域
+            size_chart_locators = [
+                page.get_by_text("尺寸图表"),
+                page.locator("text=尺寸图表"),
+                page.get_by_role("group", name="尺寸图表"),
+            ]
+            
+            for locator in size_chart_locators:
+                if await locator.count() > 0:
+                    await locator.first.scroll_into_view_if_needed()
+                    logger.debug("✓ 已定位到尺寸图表区域")
+                    await page.wait_for_timeout(300)
+                    break
+        except Exception as exc:
+            logger.debug(f"定位尺寸图表区域失败: {exc}")
+
+        # 步骤2: 在尺寸图表区域点击添加按钮
+        try:
+            # 查找所有添加按钮
+            add_buttons = page.locator(".product-picture-item-add")
+            count = await add_buttons.count()
+            logger.debug(f"找到 {count} 个图片添加按钮")
+            
+            if count > 0:
+                # 尝试找到尺寸图区域的添加按钮（通常是最后一个或倒数第二个）
+                # 优先尝试与"尺寸图表"相关的添加按钮
+                target_button = add_buttons.last
+                await target_button.scroll_into_view_if_needed()
+                await target_button.click()
                 logger.debug("✓ 已点击尺寸图添加按钮")
-                await page.wait_for_timeout(300)  # 等待文件输入框出现
+                await page.wait_for_timeout(500)  # 等待文件选择框出现
             else:
-                logger.warning("⚠️ 未找到尺寸图添加按钮 (.product-picture-item-add)")
+                logger.warning("⚠️ 未找到图片添加按钮")
+                return False
         except Exception as exc:
             logger.debug(f"点击添加按钮失败: {exc}")
+            return False
 
-        # 步骤2: 查找并使用文件输入框
+        # 步骤3: 上传文件
         file_inputs = page.locator("input[type='file']")
         if await file_inputs.count() > 0:
-            # 直接使用已存在的文件输入框（参考 batch_edit 逻辑）
             await file_inputs.last.set_input_files(image_path)
             logger.success("✓ 尺寸图已上传: %s", image_path)
-            await page.wait_for_timeout(1000)  # 等待上传完成
+            await page.wait_for_timeout(1500)  # 等待上传完成
             
             # 调试：上传后截图
             try:
-                await page.screenshot(path=str(debug_dir / "after_image_upload.png"))
-                logger.debug(f"已保存上传后截图: {debug_dir / 'after_image_upload.png'}")
+                await page.screenshot(path=str(debug_dir / "after_size_chart_upload.png"))
+                logger.debug(f"已保存上传后截图: {debug_dir / 'after_size_chart_upload.png'}")
             except Exception:
                 pass
             
             return True
         else:
-            logger.warning("⚠️ 未找到文件输入框，跳过尺寸图上传")
+            logger.warning("⚠️ 未找到文件输入框")
             return False
 
     except Exception as exc:
