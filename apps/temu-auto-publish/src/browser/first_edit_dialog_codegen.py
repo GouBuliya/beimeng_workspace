@@ -411,11 +411,11 @@ async def _fill_supplier_link(page: Page, supplier_link: str) -> bool:
 
 
 async def _upload_size_chart_local(page: Page, image_path: str) -> bool:
-    """上传尺寸图（本地文件）- 定位到尺寸图表区域后上传.
+    """上传尺寸图（本地文件）- 参考 batch_edit 的外包装图片上传逻辑.
     
-    流程:
-    1. 定位到"尺寸图表"区域（通过滚动或文本定位）
-    2. 点击尺寸图添加按钮 (.product-picture-item-add)
+    流程（参考 _step_05_outer_package）:
+    1. 定位到"尺寸图表"区域
+    2. 点击图片上传区域的 radio 按钮（触发文件输入框）
     3. 上传文件到 input[type='file']
     
     Args:
@@ -447,9 +447,8 @@ async def _upload_size_chart_local(page: Page, image_path: str) -> bool:
         except Exception:
             pass
 
-        # 步骤1: 定位到"尺寸图表"区域
+        # 步骤1: 定位到"尺寸图表"区域并滚动到可见
         try:
-            # 尝试查找"尺寸图表"文本或相关区域
             size_chart_locators = [
                 page.get_by_text("尺寸图表"),
                 page.locator("text=尺寸图表"),
@@ -465,34 +464,34 @@ async def _upload_size_chart_local(page: Page, image_path: str) -> bool:
         except Exception as exc:
             logger.debug(f"定位尺寸图表区域失败: {exc}")
 
-        # 步骤2: 在尺寸图表区域点击添加按钮
+        # 步骤2: 点击图片上传区域的 radio 按钮（参考 batch_edit 逻辑）
         try:
-            # 查找所有添加按钮
-            add_buttons = page.locator(".product-picture-item-add")
-            count = await add_buttons.count()
-            logger.debug(f"找到 {count} 个图片添加按钮")
-            
-            if count > 0:
-                # 尝试找到尺寸图区域的添加按钮（通常是最后一个或倒数第二个）
-                # 优先尝试与"尺寸图表"相关的添加按钮
-                target_button = add_buttons.last
-                await target_button.scroll_into_view_if_needed()
-                await target_button.click()
-                logger.debug("✓ 已点击尺寸图添加按钮")
-                await page.wait_for_timeout(500)  # 等待文件选择框出现
+            # 尝试查找并点击 radio 按钮（带有 addImages 文本的）
+            radio_btn = page.get_by_role("radio").filter(has_text="addImages")
+            if await radio_btn.count() > 0:
+                # 可能有多个 radio，尝试最后一个（尺寸图区域）
+                await radio_btn.last.click()
+                logger.debug("✓ 已点击图片上传 radio 按钮")
+                await page.wait_for_timeout(100)
             else:
-                logger.warning("⚠️ 未找到图片添加按钮")
-                return False
+                logger.debug("未找到 addImages radio 按钮，尝试其他方式")
+                # 备选方案：直接点击添加按钮
+                add_button = page.locator(".product-picture-item-add")
+                if await add_button.count() > 0:
+                    await add_button.last.scroll_into_view_if_needed()
+                    await add_button.last.click()
+                    logger.debug("✓ 已点击添加按钮")
+                    await page.wait_for_timeout(300)
         except Exception as exc:
-            logger.debug(f"点击添加按钮失败: {exc}")
-            return False
+            logger.debug(f"点击上传触发按钮失败: {exc}")
 
-        # 步骤3: 上传文件
+        # 步骤3: 查找并使用文件输入框（参考 batch_edit 逻辑）
         file_inputs = page.locator("input[type='file']")
         if await file_inputs.count() > 0:
+            # 直接使用已存在的文件输入框
             await file_inputs.last.set_input_files(image_path)
             logger.success("✓ 尺寸图已上传: %s", image_path)
-            await page.wait_for_timeout(1500)  # 等待上传完成
+            await page.wait_for_timeout(500)  # 等待上传完成
             
             # 调试：上传后截图
             try:
@@ -503,7 +502,8 @@ async def _upload_size_chart_local(page: Page, image_path: str) -> bool:
             
             return True
         else:
-            logger.warning("⚠️ 未找到文件输入框")
+            # 如果没有文件输入框（参考 batch_edit 的处理方式）
+            logger.warning("未找到文件输入框，跳过尺寸图上传")
             return False
 
     except Exception as exc:
