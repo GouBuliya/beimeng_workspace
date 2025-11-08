@@ -5,6 +5,7 @@
   - async def fill_first_edit_dialog_codegen(): 主函数,填写弹窗内所有字段
   - async def _fill_title(): 填写产品标题
   - async def _fill_basic_specs(): 填写价格/库存/重量/尺寸等基础字段
+  - async def _upload_size_chart_via_url(): 使用网络图片URL上传尺寸图
   - async def _upload_size_chart_local(): 上传尺寸图(简化版,参考batch_edit实现)
   - async def _click_save(): 点击保存修改按钮
 @GOTCHAS:
@@ -132,17 +133,28 @@ async def fill_first_edit_dialog_codegen(page: Page, payload: dict[str, Any]) ->
         if not await _fill_supplier_link(page, payload.get("supplier_link", "")):
             return False
 
-        # 5. 上传尺寸图（如果提供了图片路径）
+        # 5. 上传尺寸图（优先使用网络图片，其次回退本地上传）
+        size_chart_image_url = payload.get("size_chart_image_url", "")
         size_chart_image = payload.get("size_chart_image", "")
-        if size_chart_image:
-            logger.info("开始上传尺寸图...")
+        upload_success = False
+
+        if size_chart_image_url:
+            logger.info("开始通过网络图片上传尺寸图...")
+            upload_success = await _upload_size_chart_via_url(page, size_chart_image_url)
+            if upload_success:
+                logger.success("✓ 尺寸图上传成功（网络图片）")
+
+        if not upload_success and size_chart_image:
+            logger.info("开始通过本地图片上传尺寸图...")
             upload_success = await _upload_size_chart_local(page, size_chart_image)
             if upload_success:
-                logger.success("✓ 尺寸图上传成功")
-            else:
+                logger.success("✓ 尺寸图上传成功（本地图片）")
+
+        if not upload_success:
+            if size_chart_image_url or size_chart_image:
                 logger.warning("⚠️ 尺寸图上传失败，继续后续流程")
-        else:
-            logger.info("跳过尺寸图上传（未提供图片路径）")
+            else:
+                logger.info("跳过尺寸图上传（未提供图片路径或URL）")
 
         # 6. 保存修改
         if not await _click_save(page):
@@ -450,6 +462,102 @@ async def _fill_supplier_link(page: Page, supplier_link: str) -> bool:
         return True
     except Exception as exc:
         logger.error("填写供货商链接失败: %s", exc)
+        return False
+
+
+@smart_retry(max_attempts=2, delay=0.5)
+async def _upload_size_chart_via_url(page: Page, image_url: str) -> bool:
+    """通过网络图片URL上传尺寸图."""
+
+    if not image_url:
+        logger.info("未提供尺寸图URL，跳过网络图片上传")
+        return False
+
+    logger.debug("使用网络图片上传尺寸图: %s", image_url[:120])
+
+    try:
+        dialog = page.get_by_role("dialog")
+        if await dialog.count() > 0:
+            try:
+                await dialog.first.evaluate("el => { el.scrollTop = el.scrollHeight; }")
+                await page.wait_for_timeout(300)
+            except Exception:
+                pass
+
+        network_image_selectors = [
+            "button:has-text('使用网络图片')",
+            "button:has-text('网络图片')",
+            ".jx-button:has-text('使用网络图片')",
+            "xpath=//button[contains(text(), '使用网络图片')]",
+        ]
+
+        upload_btn = None
+        for selector in network_image_selectors:
+            try:
+                locator = page.locator(selector)
+                if await locator.count() > 0:
+                    candidate = locator.first
+                    if await candidate.is_visible(timeout=1000):
+                        upload_btn = candidate
+                        logger.debug("找到「使用网络图片」按钮: %s", selector)
+                        break
+            except Exception:
+                continue
+
+        if upload_btn is None:
+            logger.warning("未找到「使用网络图片」按钮")
+            return False
+
+        await upload_btn.click()
+        await page.wait_for_timeout(200)
+
+        url_input_selectors = [
+            "input[placeholder*='图片']",
+            "input[placeholder*='URL']",
+            "input[placeholder*='网址']",
+            ".jx-input__inner",
+        ]
+
+        url_input = None
+        for selector in url_input_selectors:
+            try:
+                candidate = page.locator(selector).last
+                if await candidate.count() and await candidate.is_visible(timeout=800):
+                    url_input = candidate
+                    logger.debug("找到尺寸图URL输入框: %s", selector)
+                    break
+            except Exception:
+                continue
+
+        if url_input is None:
+            logger.warning("未找到尺寸图URL输入框")
+            return False
+
+        await url_input.fill(image_url)
+        await page.wait_for_timeout(200)
+
+        confirm_btn_selectors = [
+            "button:has-text('确定')",
+            "button:has-text('确认')",
+            ".jx-button--primary:has-text('确')",
+        ]
+
+        for selector in confirm_btn_selectors:
+            try:
+                candidate = page.locator(selector).last
+                if await candidate.count() and await candidate.is_visible(timeout=800):
+                    await candidate.click()
+                    await page.wait_for_timeout(400)
+                    logger.success("✓ 尺寸图已上传（网络图片）: %s", image_url[:120])
+                    return True
+            except Exception:
+                continue
+
+        logger.warning("未找到网络图片上传确认按钮")
+        return False
+
+    except Exception as exc:
+        logger.warning("网络图片上传尺寸图失败: %s", exc)
         return False
 
 

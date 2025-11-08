@@ -502,6 +502,12 @@ class CompletePublishWorkflow:
             else:
                 logger.warning(f"⚠️ 尺寸图文件不存在: {image_path}")
 
+        if selection.size_chart_image_url:
+            payload["size_chart_image_url"] = selection.size_chart_image_url
+            logger.debug(
+                "添加尺寸图URL: %s", payload["size_chart_image_url"][:100]
+            )
+
         return payload
 
     def _build_placeholder_edits(

@@ -66,6 +66,7 @@ class ProductSelectionRow(BaseModel):
     spec_options: list[str] | None = Field(None, description="规格选项列表")
     variant_costs: list[float] | None = Field(None, description="多规格对应的进货价列表")
     image_files: list[str] | None = Field(None, description="实拍图数组")
+    size_chart_image_url: str | None = Field(None, description="尺寸图网络图片 URL")
 
     @field_validator("model_number")
     @classmethod
@@ -124,6 +125,11 @@ class SelectionTableReader:
             # 新增映射：实拍图数组
             "实拍图数组": "image_files",
             "image_files": "image_files",
+            "尺寸图链接": "size_chart_image_url",
+            "尺寸图URL": "size_chart_image_url",
+            "size_chart_url": "size_chart_image_url",
+            "size_chart_image_url": "size_chart_image_url",
+            "image_url": "size_chart_image_url",
         }
 
     def read_excel(
@@ -277,6 +283,9 @@ class SelectionTableReader:
                 product_data["spec_options"] = self._parse_json_list(row.get("spec_options"))
                 product_data["spec_unit"] = self._parse_scalar(row.get("spec_unit"))
                 product_data["image_files"] = self._parse_json_list(row.get("image_files"))
+                product_data["size_chart_image_url"] = self._parse_scalar(
+                    row.get("size_chart_image_url")
+                )
 
                 # 验证并创建ProductSelectionRow
                 product = ProductSelectionRow(**product_data)
