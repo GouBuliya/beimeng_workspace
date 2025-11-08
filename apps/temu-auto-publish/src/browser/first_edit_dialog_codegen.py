@@ -473,15 +473,14 @@ async def _upload_size_chart_local(page: Page, image_path: str) -> bool:
         logger.info("未提供图片路径，跳过尺寸图上传")
         return True
 
-    from pathlib import Path as P
-    if not P(image_path).exists():
+    if not Path(image_path).exists():
         logger.warning("⚠️ 图片文件不存在: %s", image_path)
         return False
 
     logger.info("上传尺寸图: %s", image_path)
 
     # 调试：上传前截图
-    debug_dir = P(__file__).resolve().parents[2] / "data" / "debug_screenshots"
+    debug_dir = Path(__file__).resolve().parents[2] / "data" / "debug_screenshots"
     debug_dir.mkdir(parents=True, exist_ok=True)
 
     try:
@@ -491,37 +490,143 @@ async def _upload_size_chart_local(page: Page, image_path: str) -> bool:
         pass
 
     # 步骤1: 滚动弹窗到底部，确保尺寸图区域渲染
+    dialog_locator = page.get_by_role("dialog")
+    dialog: Locator | None = None
     try:
-        dialog = page.get_by_role("dialog")
-        if await dialog.count() > 0:
-            await dialog.first.evaluate("el => { el.scrollTop = el.scrollHeight; }")
+        if await dialog_locator.count() > 0:
+            dialog = dialog_locator.first
+            await dialog.evaluate("el => { el.scrollTop = el.scrollHeight; }")
             await page.wait_for_timeout(500)
             logger.debug("✓ 已滚动首次编辑弹窗到底部")
     except Exception as exc:
         logger.debug(f"滚动弹窗失败: {exc}")
 
+    # 步骤2: 精确定位尺寸图区域（可选，但尽量缩小范围）
+    size_chart_group: Locator | None = None
+    if dialog is not None:
+        size_chart_locators = [
+            dialog.get_by_role("group", name=re.compile("尺寸图表")),
+            dialog.locator("text=尺寸图表").locator(".."),
+        ]
+    else:
+        size_chart_locators = [
+            page.get_by_role("group", name=re.compile("尺寸图表")),
+            page.locator("text=尺寸图表").locator(".."),
+        ]
+
+    for locator in size_chart_locators:
+        try:
+            if await locator.count() > 0:
+                candidate = locator.first
+                await candidate.scroll_into_view_if_needed()
+                await page.wait_for_timeout(200)
+                size_chart_group = candidate
+                logger.debug("✓ 已定位到尺寸图表区域")
+                break
+        except Exception:
+            continue
+
+    # 步骤3: 尝试点击触发上传的按钮或单选框
+    trigger_clicked = False
     try:
-        # 步骤2: 点击图片上传区域的单选按钮
-        radio_btn = page.get_by_role("radio").filter(has_text="addImages")
+        if size_chart_group is not None:
+            radio_btn = size_chart_group.locator("role=radio").filter(has_text="addImages")
+        else:
+            radio_btn = page.get_by_role("radio").filter(has_text="addImages")
+
         if await radio_btn.count() > 0:
             await radio_btn.last.click()
-            await page.wait_for_timeout(100)
-
-        # 步骤3: 尝试直接找到文件输入框（可能已经存在）
-        file_inputs = page.locator("input[type='file']")
-        if await file_inputs.count() > 0:
-            # 直接使用已存在的文件输入框
-            await file_inputs.last.set_input_files(image_path)
-            logger.success("✓ 尺寸图已上传: {}", image_path)
-            await page.wait_for_timeout(500)  # 等待上传完成
-        else:
-            # 如果没有文件输入框,尝试通过下拉菜单触发
-            logger.warning("未找到文件输入框,跳过尺寸图上传")
-            return False
-
+            await page.wait_for_timeout(150)
+            trigger_clicked = True
+            logger.debug("✓ 已点击尺寸图区域 radio 按钮")
     except Exception as exc:
-        logger.warning("尺寸图上传失败, 保留已有图片: {}", exc)
+        logger.debug(f"点击尺寸图 radio 按钮失败: {exc}")
+
+    # 若未触发，则尝试点击“上传文件”或“添加图片”等按钮
+    upload_trigger_locators: list[Locator] = []
+    if size_chart_group is not None:
+        upload_trigger_locators.extend(
+            [
+                size_chart_group.get_by_role("button", name=re.compile("上传文件|添加图片")),
+                size_chart_group.locator(".product-picture-item-add"),
+            ]
+        )
+
+    if dialog is not None:
+        upload_trigger_locators.append(dialog.get_by_role("button", name=re.compile("上传文件|添加图片")))
+
+    upload_trigger_locators.append(page.get_by_role("button", name=re.compile("上传文件|添加图片")))
+
+    for locator in upload_trigger_locators:
+        try:
+            if await locator.count() > 0:
+                target = locator.first
+                if await target.is_visible():
+                    await target.click()
+                    await page.wait_for_timeout(200)
+                    trigger_clicked = True
+                    logger.debug("✓ 已点击上传触发按钮")
+                    break
+        except Exception:
+            continue
+
+    # 某些情况下会弹出“本地上传”菜单，需要明确选择
+    upload_menu_locators = [
+        page.get_by_role("menuitem", name=re.compile("本地上传")),
+        page.locator("button:has-text('本地上传')"),
+        page.locator("li:has-text('本地上传')"),
+    ]
+    for locator in upload_menu_locators:
+        try:
+            if await locator.count() > 0:
+                target = locator.first
+                if await target.is_visible():
+                    await target.click()
+                    await page.wait_for_timeout(150)
+                    logger.debug("✓ 已选择本地上传选项")
+                    break
+        except Exception:
+            continue
+
+    if not trigger_clicked:
+        logger.warning("未能触发尺寸图上传控件，跳过上传")
         return False
+
+    # 步骤4: 查找文件输入框并上传（优先在当前对话框/区域内）
+    upload_success = False
+    candidate_inputs: list[Locator] = []
+    if size_chart_group is not None:
+        candidate_inputs.append(size_chart_group.locator("input[type='file']"))
+    if dialog is not None:
+        candidate_inputs.append(dialog.locator("input[type='file']"))
+    candidate_inputs.append(page.locator("input[type='file']"))
+
+    for locator in candidate_inputs:
+        try:
+            count = await locator.count()
+            if count == 0:
+                continue
+            # 优先使用可见且启用的输入框
+            for index in reversed(range(count)):
+                file_input = locator.nth(index)
+                try:
+                    if await file_input.is_enabled():
+                        await file_input.set_input_files(image_path)
+                        upload_success = True
+                        logger.success("✓ 尺寸图已上传: {}", image_path)
+                        break
+                except Exception:
+                    continue
+            if upload_success:
+                break
+        except Exception:
+            continue
+
+    if not upload_success:
+        logger.warning("未找到可用的文件输入框，尺寸图上传跳过")
+        return False
+
+    await page.wait_for_timeout(500)
 
     # 调试：上传后截图
     try:
