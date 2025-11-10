@@ -7,6 +7,7 @@
   - async def save_cookies(): 保存Cookie
   - async def load_cookies(): 加载Cookie
   - async def screenshot(): 截图
+  - async def _launch_chromium(): 优先使用具备编解码器的Chromium渠道
 @GOTCHAS:
   - 必须使用async/await异步操作
   - 关闭浏览器前应保存Cookie
@@ -17,7 +18,9 @@
 """
 
 import json
+import random
 from pathlib import Path
+from typing import Any
 
 from loguru import logger
 from playwright.async_api import (
@@ -108,9 +111,29 @@ class BrowserManager:
             "slow_mo": 300 if not headless else 0,  # 有头模式减速300ms便于观察
         }
 
+        stealth_config = self.config.get("stealth", {})
+        extra_args = stealth_config.get(
+            "extra_args",
+            [
+                "--disable-blink-features",
+                "--disable-features=TranslateUI",
+                "--disable-extensions",
+                "--disable-infobars",
+                "--disable-popup-blocking",
+                "--no-first-run",
+                "--no-default-browser-check",
+                "--password-store=basic",
+                "--use-gl=desktop",
+                "--mute-audio",
+            ],
+        )
+        locale_arg = f"--lang={browser_config.get('locale', 'zh-CN')}"
+        extra_args.append(locale_arg)
+        launch_options["args"] = self._merge_launch_args(launch_options["args"], extra_args)
+
         # 启动浏览器
         if browser_type == "chromium":
-            self.browser = await self.playwright.chromium.launch(**launch_options)
+            self.browser = await self._launch_chromium(launch_options, browser_config)
         elif browser_type == "firefox":
             self.browser = await self.playwright.firefox.launch(**launch_options)
         elif browser_type == "webkit":
@@ -129,15 +152,17 @@ class BrowserManager:
         }
 
         # 设置 User-Agent
-        if "user_agent" in browser_config:
-            context_options["user_agent"] = browser_config["user_agent"]
+        picked_user_agent = self._pick_user_agent(browser_config)
+        if picked_user_agent:
+            context_options["user_agent"] = picked_user_agent
 
         self.context = await self.browser.new_context(**context_options)
 
         # 应用反检测补丁
-        if self.config.get("stealth", {}).get("enabled", True):
+        if stealth_config.get("enabled", True):
             await self._apply_stealth()
-        
+            await self._apply_additional_stealth(browser_config.get("locale", "zh-CN"))
+
         # 添加禁用动画的初始化脚本（性能优化）
         await self.context.add_init_script("""
             // 禁用CSS动画和过渡效果，加速页面交互
@@ -174,6 +199,32 @@ class BrowserManager:
         except Exception as e:
             logger.warning(f"应用反检测补丁失败: {e}")
 
+    async def _apply_additional_stealth(self, locale: str) -> None:
+        """额外注入反检测脚本."""
+
+        if not self.context:
+            return
+
+        try:
+            await self.context.add_init_script(
+                """
+                Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+                window.chrome = window.chrome || { runtime: {} };
+                Object.defineProperty(navigator, 'platform', { get: () => 'MacIntel' });
+                Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => 8 });
+                Object.defineProperty(navigator, 'deviceMemory', { get: () => 8 });
+                Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3] });
+                Object.defineProperty(navigator, 'languages', { get: () => ['zh-CN', 'zh', 'en-US'] });
+                """
+            )
+            await self.context.add_init_script(
+                f"""
+                Object.defineProperty(navigator, 'language', {{ get: () => '{locale}' }});
+                """
+            )
+        except Exception as exc:
+            logger.warning(f"注入额外反检测脚本失败: {exc}")
+
     async def goto(self, url: str, wait_until: str = "networkidle") -> None:
         """导航到URL.
 
@@ -186,6 +237,99 @@ class BrowserManager:
 
         logger.info(f"导航到: {url}")
         await self.page.goto(url, wait_until=wait_until)
+
+    async def _launch_chromium(
+        self,
+        launch_options: dict[str, Any],
+        browser_config: dict[str, Any],
+    ) -> Browser:
+        """启动Chromium浏览器并优先尝试具备专有编解码器的渠道.
+
+        Args:
+            launch_options: Playwright launch 参数
+            browser_config: 浏览器配置
+
+        Returns:
+            Browser 实例
+        """
+        if not self.playwright:
+            raise RuntimeError("Playwright 未初始化")
+
+        if not browser_config.get("enable_codec_workaround", True):
+            logger.debug("已禁用 Chromium 编解码器渠道兼容方案，使用默认浏览器。")
+            return await self.playwright.chromium.launch(**launch_options)
+
+        channel_candidates = self._collect_channel_candidates(browser_config)
+        last_error: Exception | None = None
+
+        for candidate in channel_candidates:
+            candidate_name = candidate.strip()
+            if not candidate_name:
+                continue
+
+            try:
+                logger.info(f"尝试使用 Chromium 渠道: {candidate_name}")
+                browser = await self.playwright.chromium.launch(
+                    **(launch_options | {"channel": candidate_name})
+                )
+                logger.success(f"✓ 已启用 Chromium 渠道: {candidate_name}")
+                return browser
+            except Exception as exc:
+                logger.warning(f"使用渠道 {candidate_name} 启动 Chromium 失败: {exc}")
+                last_error = exc
+
+        if last_error:
+            logger.warning(
+                "所有指定的 Chromium 渠道均启动失败，回退到默认 Chromium。"
+                " 这可能导致视频上传校验继续失败，请确认已安装带专有编解码器的 Chrome/Edge。"
+            )
+
+        return await self.playwright.chromium.launch(**launch_options)
+
+    @staticmethod
+    def _merge_launch_args(base: list[str], extra: list[str]) -> list[str]:
+        """合并启动参数并去重."""
+
+        seen = set(base)
+        merged = base.copy()
+        for arg in extra:
+            if arg and arg not in seen:
+                merged.append(arg)
+                seen.add(arg)
+        return merged
+
+    @staticmethod
+    def _collect_channel_candidates(browser_config: dict[str, Any]) -> list[str]:
+        """收集可用的Chromium渠道候选列表."""
+
+        candidates: list[str] = []
+        configured_channel = browser_config.get("channel")
+        if configured_channel:
+            candidates.append(configured_channel)
+
+        raw_fallbacks: Any = browser_config.get("channel_fallbacks", [])
+        if isinstance(raw_fallbacks, str):
+            raw_fallbacks = [raw_fallbacks]
+        if isinstance(raw_fallbacks, list):
+            for fallback in raw_fallbacks:
+                if fallback and fallback not in candidates:
+                    candidates.append(fallback)
+
+        for default_candidate in ("msedge", "chrome"):
+            if default_candidate not in candidates:
+                candidates.append(default_candidate)
+
+        return candidates
+
+    @staticmethod
+    def _pick_user_agent(browser_config: dict) -> str | None:
+        """选择User-Agent，支持配置列表随机挑选."""
+
+        explicit = browser_config.get("user_agent")
+        candidates = browser_config.get("user_agents", [])
+        if candidates:
+            return random.choice(candidates)
+        return explicit
 
     async def save_cookies(self, file_path: str) -> None:
         """保存 Cookie.
