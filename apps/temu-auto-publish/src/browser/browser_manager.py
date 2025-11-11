@@ -8,6 +8,9 @@
   - async def load_cookies(): 加载Cookie
   - async def screenshot(): 截图
   - async def _launch_chromium(): 优先使用具备编解码器的Chromium渠道
+  - def _build_wait_strategy(): 构建统一等待策略
+  - def _patch_page_wait(): 注入智能等待逻辑
+  - def prepare_page(): 对外暴露的页面初始化
 @GOTCHAS:
   - 必须使用async/await异步操作
   - 关闭浏览器前应保存Cookie
@@ -19,6 +22,7 @@
 
 import json
 import random
+import time
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +34,8 @@ from playwright.async_api import (
     Playwright,
     async_playwright,
 )
+
+from ..utils.page_waiter import PageWaiter, WaitStrategy
 
 
 class BrowserManager:
@@ -63,6 +69,17 @@ class BrowserManager:
         self.browser: Browser | None = None
         self.context: BrowserContext | None = None
         self.page: Page | None = None
+        self.timing_config: dict[str, Any] = self.config.get("timing", {})
+        self.network_idle_trigger_ms = getattr(
+            self,
+            "network_idle_trigger_ms",
+            int(self.timing_config.get("network_idle_trigger_ms", 1200)),
+        )
+        self.wait_strategy = getattr(
+            self,
+            "wait_strategy",
+            self._build_wait_strategy(self.timing_config),
+        )
 
     def load_config(self) -> None:
         """加载配置."""
@@ -71,12 +88,33 @@ class BrowserManager:
             self.config = {
                 "browser": {"type": "chromium", "headless": False},
                 "timeouts": {"default": 30000},
+                "timing": {
+                    "slow_mo_ms": 0,
+                    "wait_after_action_ms": 30,
+                    "wait_for_stability_timeout_ms": 375,
+                    "wait_for_network_idle_timeout_ms": 750,
+                    "retry_initial_delay_ms": 30,
+                    "retry_backoff_factor": 1.6,
+                    "retry_max_delay_ms": 375,
+                    "validation_timeout_ms": 500,
+                    "dom_stable_checks": 3,
+                    "dom_stable_interval_ms": 30,
+                    "network_idle_trigger_ms": 300,
+                },
             }
+            self.timing_config = self.config["timing"]
+            self.network_idle_trigger_ms = int(
+                self.timing_config.get("network_idle_trigger_ms", 1200)
+            )
+            self.wait_strategy = self._build_wait_strategy(self.timing_config)
             return
 
         with open(self.config_path, encoding="utf-8") as f:
             self.config = json.load(f)
         logger.info("浏览器配置已加载")
+        self.timing_config = self.config.get("timing", {})
+        self.network_idle_trigger_ms = int(self.timing_config.get("network_idle_trigger_ms", 1200))
+        self.wait_strategy = self._build_wait_strategy(self.timing_config)
 
     async def start(self, headless: bool | None = None) -> None:
         """启动浏览器.
@@ -96,6 +134,12 @@ class BrowserManager:
         if headless is None:
             headless = browser_config.get("headless", False)
 
+        timing_config = self.timing_config or self.config.get("timing", {})
+        slow_mo_ms = timing_config.get("slow_mo_ms")
+        if slow_mo_ms is None:
+            # 兼容历史行为：有头模式默认 300ms，其他情况 0ms
+            slow_mo_ms = 0 if headless else 300
+
         # 启动参数（添加性能优化选项）
         launch_options = {
             "headless": headless,
@@ -108,7 +152,7 @@ class BrowserManager:
                 "--disable-web-security",  # 跨域问题
                 "--disable-features=IsolateOrigins,site-per-process",
             ],
-            "slow_mo": 300 if not headless else 0,  # 有头模式减速300ms便于观察
+            "slow_mo": max(int(slow_mo_ms), 0),
         }
 
         stealth_config = self.config.get("stealth", {})
@@ -180,6 +224,7 @@ class BrowserManager:
 
         # 创建页面
         self.page = await self.context.new_page()
+        self._patch_page_wait(self.page)
 
         # 设置默认超时
         default_timeout = self.config.get("timeouts", {}).get("default", 30000)
@@ -237,6 +282,73 @@ class BrowserManager:
 
         logger.info(f"导航到: {url}")
         await self.page.goto(url, wait_until=wait_until)
+
+    def _build_wait_strategy(self, config: dict[str, Any] | None = None) -> WaitStrategy:
+        """根据配置构建等待策略."""
+
+        cfg = config or self.timing_config or {}
+        return WaitStrategy(
+            wait_after_action_ms=int(cfg.get("wait_after_action_ms", 120)),
+            wait_for_stability_timeout_ms=int(cfg.get("wait_for_stability_timeout_ms", 1500)),
+            wait_for_network_idle_timeout_ms=int(cfg.get("wait_for_network_idle_timeout_ms", 3000)),
+            retry_initial_delay_ms=int(cfg.get("retry_initial_delay_ms", 120)),
+            retry_backoff_factor=float(cfg.get("retry_backoff_factor", 1.6)),
+            retry_max_delay_ms=int(cfg.get("retry_max_delay_ms", 1500)),
+            validation_timeout_ms=int(cfg.get("validation_timeout_ms", 2000)),
+            dom_stable_checks=int(cfg.get("dom_stable_checks", 3)),
+            dom_stable_interval_ms=int(cfg.get("dom_stable_interval_ms", 120)),
+        )
+
+    def _patch_page_wait(self, page: Page) -> None:
+        """为页面注入智能等待逻辑，减少硬编码延迟."""
+
+        if getattr(page, "_bemg_smart_wait_patched", False):
+            return
+
+        waiter = PageWaiter(page, self.wait_strategy)
+        original_wait_for_timeout = page.wait_for_timeout
+        minimal_wait_ms = max(self.wait_strategy.wait_after_action_ms, 60)
+
+        async def smart_wait_for_timeout(timeout: float) -> None:
+            if timeout <= 0:
+                return
+
+            if timeout <= minimal_wait_ms:
+                await original_wait_for_timeout(timeout)
+                return
+
+            wait_for_network = timeout >= self.network_idle_trigger_ms
+            start = time.perf_counter()
+
+            try:
+                await waiter.post_action_wait(
+                    wait_for_network_idle=wait_for_network,
+                    wait_for_dom_stable=True,
+                )
+            except Exception as exc:
+                logger.debug(f"智能等待失败，回退原始等待 ({timeout}ms): {exc}")
+                await original_wait_for_timeout(timeout)
+                return
+
+            elapsed_ms = (time.perf_counter() - start) * 1000
+            if elapsed_ms < minimal_wait_ms:
+                remaining = max(minimal_wait_ms - elapsed_ms, 0)
+                await original_wait_for_timeout(remaining)
+
+        page.wait_for_timeout = smart_wait_for_timeout  # type: ignore[assignment]
+        setattr(page, "_bemg_smart_wait_patched", True)
+        setattr(page, "_bemg_original_wait_for_timeout", original_wait_for_timeout)
+
+    def get_timing_config(self) -> dict[str, Any]:
+        """获取时序配置."""
+
+        return self.timing_config or {}
+
+    def prepare_page(self, page: Page) -> Page:
+        """对外暴露的页面初始化入口，注入智能等待."""
+
+        self._patch_page_wait(page)
+        return page
 
     async def _launch_chromium(
         self,

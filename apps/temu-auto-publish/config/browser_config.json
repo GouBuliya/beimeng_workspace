@@ -8,6 +8,19 @@
     "timezone": "Asia/Shanghai",
     "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
   },
+  "timing": {
+    "slow_mo_ms": 0,
+    "wait_after_action_ms": 30,
+    "wait_for_stability_timeout_ms": 375,
+    "wait_for_network_idle_timeout_ms": 750,
+    "retry_initial_delay_ms": 30,
+    "retry_backoff_factor": 1.6,
+    "retry_max_delay_ms": 375,
+    "validation_timeout_ms": 500,
+    "dom_stable_checks": 3,
+    "dom_stable_interval_ms": 30,
+    "network_idle_trigger_ms": 300
+  },
   "stealth": {
     "enabled": true,
     "webdriver": true,

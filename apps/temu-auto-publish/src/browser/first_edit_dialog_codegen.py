@@ -6,6 +6,8 @@
   - async def _fill_title(): 填写产品标题
   - async def _fill_basic_specs(): 填写价格/库存/重量/尺寸等基础字段
   - async def _upload_size_chart_via_url(): 使用网络图片URL上传尺寸图
+  - async def _upload_product_video_via_url(): 使用网络视频URL上传产品视频
+  - async def _handle_existing_video_prompt(): 处理已有视频的删除确认提示
   - async def _click_save(): 点击保存修改按钮
 @GOTCHAS:
   - 避免使用动态 ID 选择器(如 #jx-id-6368-578)
@@ -20,10 +22,12 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import re
 from functools import wraps
 from pathlib import Path
-from typing import Any, Callable, TypeVar
+from typing import Any, Callable, Optional, Sequence, TypeVar
+from urllib.parse import urljoin
 
 from loguru import logger
 from playwright.async_api import Locator, Page
@@ -33,6 +37,10 @@ FALLBACK_TIMEOUT_MS = 500
 VARIANT_ROW_SCOPE_SELECTOR = (
     ".pro-virtual-scroll__row.pro-virtual-table__row, .pro-virtual-table__row"
 )
+DEFAULT_VIDEO_BASE_URL = os.getenv(
+    "VIDEO_BASE_URL", "https://miaoshou-tuchuang-beimeng.oss-cn-hangzhou.aliyuncs.com/video/"
+).strip()
+VIDEO_UPLOAD_TIMEOUT_MS = 1_000
 
 FIELD_KEYWORDS: dict[str, list[str]] = {
     "price": ["建议售价", "售价", "price"],
@@ -78,6 +86,27 @@ def smart_retry(max_attempts: int = 2, delay: float = 0.5, exceptions: tuple = (
         return wrapper
 
     return decorator
+
+
+def _fallback_video_url_from_payload(payload: dict[str, Any]) -> str | None:
+    """尝试根据型号编号拼接默认视频 OSS URL."""
+
+    if not DEFAULT_VIDEO_BASE_URL:
+        return None
+
+    model_candidates = (
+        payload.get("model_number"),
+        payload.get("model_spec_option"),
+    )
+    for candidate in model_candidates:
+        if candidate:
+            safe_name = _sanitize_media_identifier(str(candidate))
+            if safe_name:
+                return urljoin(
+                    f"{DEFAULT_VIDEO_BASE_URL.rstrip('/')}/",
+                    f"{safe_name}.mp4",
+                )
+    return None
 
 
 async def fill_first_edit_dialog_codegen(page: Page, payload: dict[str, Any]) -> bool:
@@ -157,7 +186,29 @@ async def fill_first_edit_dialog_codegen(page: Page, payload: dict[str, Any]) ->
         else:
             logger.warning("⚠️ 未提供尺寸图URL，跳过尺寸图上传")
 
-        # 6. 保存修改
+        # 6. 上传产品视频（仅支持网络视频URL）
+        product_video_url = (payload.get("product_video_url") or "").strip()
+        if not product_video_url:
+            fallback_video_url = _fallback_video_url_from_payload(payload)
+            if fallback_video_url:
+                product_video_url = fallback_video_url
+                logger.info("未提供视频URL，使用 OSS 默认视频: %s", product_video_url)
+            else:
+                logger.warning("⚠️ 未提供有效视频URL，跳过视频上传")
+
+        if product_video_url:
+            logger.info("开始通过网络视频上传产品视频...")
+            video_result = await _upload_product_video_via_url(page, product_video_url)
+            if video_result is True:
+                logger.success("✓ 产品视频上传成功（网络视频）")
+            elif video_result is None:
+                logger.info("已存在产品视频，跳过上传步骤。")
+            else:
+                logger.warning("⚠️ 产品视频网络上传失败，继续后续流程")
+        else:
+            logger.warning("⚠️ 未提供视频URL，跳过视频上传")
+
+        # 7. 保存修改
         if not await _click_save(page):
             return False
 
@@ -427,83 +478,277 @@ async def _upload_size_chart_via_url(page: Page, image_url: str) -> bool:
     logger.debug("使用网络图片上传尺寸图: %s", image_url[:120])
 
     try:
-        normalized_url = _normalize_size_chart_url(image_url)
+        normalized_url = _normalize_input_url(image_url)
         if not normalized_url:
             logger.warning("提供的尺寸图URL无效，跳过上传: %s", image_url)
             return False
 
-        dialog = page.get_by_role("dialog")
-        if await dialog.count() > 0:
-            try:
-                await dialog.first.evaluate("el => { el.scrollTop = el.scrollHeight; }")
-            except Exception:
-                pass
-
-        size_chart_group = page.get_by_role("group", name=re.compile("尺寸图表")).first
-        if await size_chart_group.count():
-            await size_chart_group.scroll_into_view_if_needed()
-            try:
-                await size_chart_group.wait_for(state="visible", timeout=DEFAULT_PRIMARY_TIMEOUT_MS)
-            except Exception:
-                pass
-            try:
-                img_items = size_chart_group.get_by_role("img")
-                img_count = await img_items.count()
-                if img_count > 0:
-                    await img_items.nth(min(4, img_count - 1)).click()
-            except Exception as exc:
-                logger.debug("尝试点击尺寸图缩略图失败: %s", exc)
-
-        upload_btn = await _first_visible(
-            [
-                size_chart_group.get_by_text("使用网络图片", exact=False)
-                if await size_chart_group.count()
-                else None,
-                page.get_by_text("使用网络图片", exact=False),
-                page.get_by_role("button", name=re.compile("使用网络图片|网络图片")),
-            ]
-        )
-        if upload_btn is None:
-            logger.warning("未找到「使用网络图片」按钮")
+        size_group = page.get_by_role("group", name="尺寸图表 :", exact=True)
+        if not await size_group.count():
+            logger.warning("未找到尺寸图 group")
+            await _capture_html(page, "data/debug/html/size_chart_missing_group.html")
             return False
+
+        await size_group.scroll_into_view_if_needed()
+
+        try:
+            thumbnails = size_group.get_by_role("img")
+            thumb_count = await thumbnails.count()
+            if thumb_count:
+                target_index = min(4, max(thumb_count - 1, 0))
+                await thumbnails.nth(target_index).click()
+        except Exception as exc:
+            logger.debug("点击尺寸图缩略图失败: %s", exc)
+
+        upload_btn = page.get_by_text("使用网络图片", exact=True)
+        await upload_btn.wait_for(state="visible", timeout=1_500)
         await upload_btn.click()
 
-        url_input = await _first_visible(
-            [
-                page.get_by_role("textbox", name=re.compile("请输入图片链接")),
-                page.locator("textarea[placeholder*='图片链接']"),
-                page.locator("input[placeholder*='图片链接']"),
-            ]
+        url_input = page.get_by_role(
+            "textbox", name="请输入图片链接，若要输入多个链接，请以回车换行", exact=True
         )
-        if url_input is None:
-            logger.warning("未找到尺寸图URL输入框")
-            return False
-
+        await url_input.wait_for(state="visible", timeout=1_500)
         await url_input.click()
         await url_input.press("ControlOrMeta+a")
         await url_input.fill(normalized_url)
 
-        confirm_btn = await _first_visible(
-            [
-                page.get_by_role("button", name=re.compile("确定")),
-                page.get_by_role("button", name=re.compile("确认")),
-                page.locator(".jx-button--primary:has-text('确定')"),
-            ]
-        )
-        if confirm_btn is None:
-            logger.warning("未找到网络图片上传确认按钮")
-            return False
-
+        confirm_btn = page.get_by_role("button", name="确定")
+        await confirm_btn.wait_for(state="visible", timeout=1_500)
         await confirm_btn.click()
-        await page.wait_for_timeout(400)
 
-        await _close_prompt_dialog(page)
+        await _ensure_dialog_closed(page, name_pattern="上传图片")
+        await _close_prompt_dialog(page, timeout_ms=VIDEO_UPLOAD_TIMEOUT_MS)
         logger.success("✓ 尺寸图已上传（网络图片）: %s", normalized_url[:120])
         return True
 
     except Exception as exc:
         logger.warning("网络图片上传尺寸图失败: %s", exc)
+        await _capture_html(page, "data/debug/html/size_chart_exception.html")
         return False
+
+
+@smart_retry(max_attempts=2, delay=0.5)
+async def _upload_product_video_via_url(page: Page, video_url: str) -> bool | None:
+    """通过网络视频URL上传产品视频.
+
+    Returns:
+        bool | None: 上传成功返回 True，出现错误返回 False，若检测到已有视频并跳过返回 None。
+    """
+
+    if not video_url:
+        logger.info("未提供视频URL，跳过网络视频上传")
+        return False
+
+    normalized_url = _normalize_input_url(video_url)
+    if not normalized_url:
+        logger.warning("提供的视频URL无效，跳过上传: %s", video_url)
+        return False
+
+    logger.debug("使用网络视频上传产品视频: %s", normalized_url[:120])
+
+    try:
+        dialog = page.get_by_role("dialog")
+        if await dialog.count():
+            try:
+                await dialog.first.evaluate("el => { el.scrollTop = 0; }")
+            except Exception:
+                pass
+
+        # existing_dialog = page.get_by_role("dialog", name="上传视频")
+        # if await existing_dialog.count():
+        #     try:
+        #         cancel_btn = existing_dialog.get_by_role("button", name="取消")
+        #         if await cancel_btn.count():
+        #             await cancel_btn.first.click()
+        #             await existing_dialog.wait_for(state="hidden", timeout=VIDEO_UPLOAD_TIMEOUT_MS)
+        #     except Exception as exc:
+        #         logger.debug("关闭已有上传视频弹窗失败: %s", exc)
+
+        video_group = page.get_by_role("group", name="产品视频 :", exact=True)
+        if not await video_group.count():
+            logger.warning("未找到产品视频分组，跳过视频上传")
+            await _capture_html(page, "data/debug/html/video_missing_group.html")
+            return False
+
+        await video_group.scroll_into_view_if_needed()
+
+        video_wrapper = video_group.locator(".video-wrap").first
+        if await video_wrapper.count():
+            try:
+                has_existing_video = await video_wrapper.evaluate(
+                    """
+                    (node) => {
+                        if (!node) return false;
+                        const classList = Array.from(node.classList || []);
+                        if (classList.some(cls => /has|exist|uploaded|filled|active/.test(cls))) {
+                            return true;
+                        }
+                        const dataset = node.dataset || {};
+                        if (dataset.url || dataset.src || dataset.value) {
+                            return true;
+                        }
+                        const iframe = node.querySelector('iframe');
+                        if (iframe) {
+                            const attrSrc = iframe.getAttribute('src') || '';
+                            const propSrc = iframe.src || '';
+                            const src = attrSrc || propSrc;
+                            if (src && !src.startsWith('about:blank') && !/\/\/.*\/empty/i.test(src)) {
+                                return true;
+                            }
+                        }
+                        const videoEl = node.querySelector('video');
+                        if (videoEl) {
+                            const src = videoEl.currentSrc || videoEl.src || videoEl.getAttribute('src') || '';
+                            if (src && !/placeholder|demo|sample|^\s*$/.test(src)) {
+                                return true;
+                            }
+                        }
+                        const img = node.querySelector('img');
+                        if (img) {
+                            const src = (img.currentSrc || img.src || img.getAttribute('src') || '').toLowerCase();
+                            if (src && !/add|placeholder|empty|default|plus/.test(src)) {
+                                return true;
+                            }
+                        }
+                        const style = window.getComputedStyle(node);
+                        const bg = style.backgroundImage || '';
+                        if (bg && bg !== 'none' && !/placeholder|empty|add|plus/.test(bg)) {
+                            return true;
+                        }
+                        const text = (node.innerText || '').trim();
+                        if (text && !/上传|添加|点击|暂无|空|选择|使用网络视频/.test(text)) {
+                            return true;
+                        }
+                        return false;
+                    }
+                    """
+                )
+                if has_existing_video:
+                    logger.info("检测到已有产品视频，跳过上传步骤。")
+                    return None
+            except Exception as exc:
+                logger.debug("检测现有视频状态失败: %s", exc)
+
+        try:
+            await page.locator(".video-wrap").click()
+        except Exception:
+            try:
+                await video_group.get_by_role("img").first.click()
+            except Exception as exc:
+                logger.debug("点击产品视频区域失败: %s", exc)
+
+        explicit_network_option = page.get_by_text("网络上传", exact=True)
+        try:
+            await explicit_network_option.wait_for(state="visible", timeout=1_200)
+            await explicit_network_option.click()
+            logger.debug("已通过显式文本点击『网络上传』")
+        except Exception:
+            # legacy fallback 保留参考，不再执行
+            # trigger_candidates = [
+            #     page.get_by_role("menuitem", name="网络上传"),
+            #     page.locator(".jx-dropdown__menu li").filter(has_text="网络上传"),
+            #     explicit_network_option,
+            # ]
+            # trigger_button = await _first_visible(trigger_candidates, timeout=1_500)
+            # if trigger_button is None:
+            #     logger.warning("未找到『网络上传』菜单项")
+            #     await _capture_html(page, "data/debug/html/video_missing_network_option.html")
+            #     return False
+            # await trigger_button.click()
+            raise
+
+        # await page.wait_for_timeout(120)
+
+        # prompt_dialog = page.locator(".jx-message-box:visible")
+        # if await prompt_dialog.count():
+        #     logger.info("检测到删除视频确认提示，执行确认删除")
+        #     confirm_btn = prompt_dialog.locator(".jx-message-box__btns .jx-button--primary").first
+        #     if await confirm_btn.count():
+        #         await confirm_btn.click()
+        #     else:
+        #         await page.keyboard.press("Enter")
+        #     try:
+        #         await prompt_dialog.wait_for(state="hidden", timeout=VIDEO_UPLOAD_TIMEOUT_MS)
+        #     except Exception:
+        #         pass
+
+        # if await _handle_existing_video_prompt(page):
+        #     logger.info("检测到已有产品视频，已删除旧视频。")
+
+        video_dialog = await _wait_for_dialog(page, name_pattern="上传视频")
+
+        video_input_candidates: list[Locator | None] = []
+        name_patterns = [
+            re.compile("输入视频URL地址", re.IGNORECASE),
+            re.compile("视频URL", re.IGNORECASE),
+            re.compile("视频链接", re.IGNORECASE),
+        ]
+
+        for pattern in name_patterns:
+            video_input_candidates.append(page.get_by_role("textbox", name=pattern))
+        if video_dialog is not None:
+            for pattern in name_patterns:
+                video_input_candidates.append(video_dialog.get_by_role("textbox", name=pattern))
+
+        video_input_candidates.extend(
+            [
+                page.locator("input[placeholder*='视频']"),
+                page.locator("textarea[placeholder*='视频']"),
+                video_dialog.locator("input[placeholder*='视频']") if video_dialog else None,
+                video_dialog.locator("textarea[placeholder*='视频']") if video_dialog else None,
+            ]
+        )
+
+        target_input = await _first_visible(video_input_candidates, timeout=1_500)
+        if target_input is None:
+            logger.warning("未找到视频URL输入框")
+            await _capture_html(page, "data/debug/html/video_missing_input.html")
+            return False
+
+        await target_input.click()
+        await target_input.press("ControlOrMeta+a")
+        await target_input.fill(normalized_url)
+
+        confirm_btn = (
+            video_dialog.get_by_role("button", name="确定")
+            if video_dialog is not None
+            else page.get_by_role("button", name="确定")
+        )
+        # legacy fallback: 使用「确认」按钮定位
+        # if not await confirm_btn.count():
+        #     confirm_btn = video_dialog.get_by_role("button", name="确认")
+
+        if not await confirm_btn.count():
+            logger.warning("未找到视频上传确认按钮")
+            await _capture_html(page, "data/debug/html/video_missing_confirm.html")
+            return False
+
+        await confirm_btn.last.click()
+
+        await _ensure_dialog_closed(page, name_pattern="上传视频", dialog=video_dialog)
+        # await _acknowledge_prompt(page)
+        await _close_prompt_dialog(page, timeout_ms=VIDEO_UPLOAD_TIMEOUT_MS)
+        logger.success("✓ 产品视频已上传（网络视频）: %s", normalized_url[:120])
+        return True
+
+    except Exception as exc:
+        logger.warning("网络视频上传产品视频失败: %s", exc)
+        await _capture_html(page, "data/debug/html/video_upload_exception.html")
+        return False
+
+
+async def _handle_existing_video_prompt(page: Page) -> bool:
+    """处理已有产品视频时出现的删除确认提示 (已注释)."""
+
+    dialog_locator = page.get_by_role("dialog").filter(
+        has_text=re.compile("删除.*视频|确认要删除.*视频")
+    )
+
+    if not await dialog_locator.count():
+        return False
+
+    # 已注释逻辑，不再自动确认删除
+    return False
 
 
 async def _dismiss_scroll_overlay(page: Page) -> None:
@@ -733,23 +978,30 @@ async def _first_visible(candidates: list[Locator | None], timeout: int = 1_000)
                 task.cancel()
 
 
-def _normalize_size_chart_url(image_url: str) -> str:
+def _normalize_input_url(raw_text: str) -> str:
     """去除多余的标签和空行，确保为单个有效 URL."""
 
-    if not image_url:
+    if not raw_text:
         return ""
-    parts = [line.strip() for line in image_url.splitlines() if line.strip()]
+    parts = [line.strip() for line in raw_text.splitlines() if line.strip()]
     cleaned = ""
     for part in parts:
         if part.lower().startswith("url"):
             continue
         cleaned = part
         break
-    cleaned = cleaned or image_url.strip()
+    cleaned = cleaned or raw_text.strip()
     return cleaned
 
 
-async def _close_prompt_dialog(page: Page) -> None:
+def _sanitize_media_identifier(raw: str) -> str:
+    """将型号编号转为可用于媒体文件名的安全字符串."""
+
+    safe = re.sub(r"[^A-Za-z0-9._-]+", "_", raw.strip())
+    return safe.strip("_")
+
+
+async def _close_prompt_dialog(page: Page, *, timeout_ms: Optional[int] = None) -> None:
     """如果存在提示弹窗则关闭，以防阻塞后续步骤."""
 
     prompt = page.get_by_role("dialog", name=re.compile("提示"))
@@ -759,8 +1011,101 @@ async def _close_prompt_dialog(page: Page) -> None:
             if await close_btn.count():
                 await close_btn.first.click()
                 try:
-                    await prompt.wait_for(state="hidden", timeout=DEFAULT_PRIMARY_TIMEOUT_MS)
+                    await prompt.wait_for(
+                        state="hidden",
+                        timeout=timeout_ms or DEFAULT_PRIMARY_TIMEOUT_MS,
+                    )
                 except Exception:
                     pass
     except Exception:
         pass
+
+
+async def _acknowledge_prompt(
+    page: Page,
+    *,
+    name_pattern: str = "提示",
+    button_names: Sequence[str] = ("确定", "确认"),
+    timeout_ms: int = VIDEO_UPLOAD_TIMEOUT_MS,
+) -> None:
+    """点击提示弹窗中的确认按钮."""
+
+    # 已注释，不再主动确认提示弹窗
+    return
+
+
+async def _ensure_dialog_closed(
+    page: Page,
+    *,
+    name_pattern: str,
+    dialog: Optional[Locator] = None,
+    timeout_ms: int = 1_500,
+) -> None:
+    """确保指定名称的对话框关闭."""
+
+    target_dialog = dialog or page.get_by_role("dialog", name=re.compile(name_pattern))
+    if not await target_dialog.count():
+        return
+    if not await dialog.count():
+        return
+    try:
+        await target_dialog.wait_for(state="hidden", timeout=timeout_ms)
+        return
+    except Exception:
+        pass
+
+    close_btn = target_dialog.get_by_label("关闭此对话框")
+    if await close_btn.count():
+        try:
+            await close_btn.first.click()
+        except Exception:
+            pass
+    else:
+        try:
+            await page.keyboard.press("Escape")
+        except Exception:
+            pass
+
+    try:
+        await target_dialog.wait_for(state="hidden", timeout=timeout_ms)
+    except Exception:
+        await _capture_html(page, "data/debug/html/dialog_not_closed.html")
+
+
+async def _capture_html(page: Page, path: str) -> None:
+    """写出当前页面 HTML，便于调试。"""
+
+    try:
+        html = await page.content()
+        target = Path(__file__).resolve().parents[2] / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(html, encoding="utf-8")
+        logger.debug("已写出调试 HTML: %s", target)
+    except Exception as exc:
+        logger.warning("写出调试 HTML 失败: %s", exc)
+
+
+async def upload_size_chart_via_url(page: Page, image_url: str) -> bool:
+    """公开的尺寸图上传入口，供其他模块复用。"""
+
+    return await _upload_size_chart_via_url(page, image_url)
+
+
+async def upload_product_video_via_url(page: Page, video_url: str) -> bool | None:
+    """公开的产品视频上传入口，供其他模块复用。"""
+
+    return await _upload_product_video_via_url(page, video_url)
+
+
+async def _wait_for_dialog(
+    page: Page, *, name_pattern: str, timeout_ms: int = VIDEO_UPLOAD_TIMEOUT_MS
+) -> Optional[Locator]:
+    """等待并返回匹配名称的 dialog."""
+
+    dialog = page.get_by_role("dialog", name=re.compile(name_pattern))
+    try:
+        await dialog.wait_for(state="visible", timeout=timeout_ms)
+        return dialog
+    except Exception:
+        await _capture_html(page, "data/debug/html/dialog_missing_{}.html".format(name_pattern))
+        return None

@@ -599,81 +599,106 @@ async def _step_11_platform_sku(page: Page) -> None:
 
 @smart_retry(max_attempts=2, delay=0.5)
 async def _step_12_sku_category(page: Page) -> None:
-    """步骤 12: SKU 分类 - 选择单品,数量填 1。
-
-    Args:
-        page: Playwright 页面对象。
-    """
-    # 点击打开SKU分类编辑对话框
+    """步骤 12: SKU 分类 - 选择单品,数量填 1。"""
     await page.get_by_text("SKU分类").click()
-    # await _wait_for_dialog_open(page)
+    dialog = page.get_by_role("dialog")
 
-    try:
-        # 1. 点击SKU分类下拉框触发器
-        trigger_selectors = [
-            page.get_by_role("dialog").locator("form").locator(".el-select").locator("input").first,
-            page.get_by_role("dialog").locator(".el-select__input").first,
-            page.get_by_role("dialog").get_by_placeholder("请选择").first,
-        ]
+    nav_selectors = [
+        page.locator("#jx-id-3611-54").get_by_text("SKU分类").first,
+        dialog.locator(".el-menu-item").filter(has_text="SKU分类").first,
+        dialog.locator(".batch-editor-left").get_by_text("SKU分类").first,
+        dialog.get_by_text("SKU分类", exact=True).first,
+    ]
 
-        clicked = False
-        for trigger in trigger_selectors:
-            if await trigger.count() > 0:
-                try:
-                    await trigger.click(timeout=2000)
-                    clicked = True
-                    logger.debug("✓ 点击下拉触发器成功")
-                    break
-                except Exception:
-                    continue
-
-        if not clicked:
-            logger.warning("未能点击下拉触发器")
-
-        # 等待下拉选项列表出现
-
-        # 2. 选择"单品"
-        single_item_selectors = [
-            page.locator(".el-select-dropdown__item").filter(has_text="单品"),
-            page.locator(".el-select-dropdown").locator("li").filter(has_text="单品"),
-            page.get_by_text("单品", exact=True),
-        ]
-
-        for selector in single_item_selectors:
-            if await selector.count() > 0:
-                await selector.first.click()
-                logger.success("✓ 已选择: 单品")
+    for nav in nav_selectors:
+        if await nav.count() > 0:
+            try:
+                await nav.click(timeout=2000)
+                await page.wait_for_timeout(100)
                 break
-        else:
-            logger.warning("未找到'单品'选项")
+            except Exception:
+                continue
 
-        # 等待下拉关闭
+    dropdown_selector = (
+        ".el-select-dropdown:not([style*='display: none']):not([aria-hidden='true'])"
+    )
+    target_values = ["单品", "组合装500件", "组合装"]
 
-        # 3. 填写数量为 1
-        quantity_input_selectors = [
-            page.get_by_role("dialog").get_by_placeholder("数量"),
-            page.get_by_role("dialog").locator("input[type='text']").filter(has_text="件"),
-            page.get_by_role("dialog").locator(".el-input__inner"),
+    async def select_value(value: str) -> bool:
+        dropdown = page.locator(dropdown_selector)
+        if await dropdown.count() == 0:
+            return False
+        dropdown = dropdown.last
+        await dropdown.wait_for(state="visible", timeout=1500)
+        option = dropdown.locator(".el-select-dropdown__item").filter(has_text=value).first
+        if await option.count() > 0:
+            await option.scroll_into_view_if_needed()
+            await option.click(timeout=1000)
+            return True
+        option = page.get_by_role("option", name=value)
+        if await option.count() > 0:
+            await option.first.scroll_into_view_if_needed()
+            await option.first.click(timeout=1000)
+            return True
+        return False
+
+    async def fill_quantity() -> None:
+        quantity_inputs = [
+            dialog.get_by_role("textbox", name="数量").first,
+            dialog.get_by_placeholder("数量").first,
+            dialog.locator(".el-input__inner").first,
         ]
-
-        for input_selector in quantity_input_selectors:
-            if await input_selector.count() > 0:
+        for locator in quantity_inputs:
+            if await locator.count() > 0:
                 try:
-                    await input_selector.first.click()
-                    await input_selector.first.fill("1")
+                    await locator.click()
+                    await locator.fill("1")
                     logger.success("✓ 数量已填写: 1")
-                    break
+                    return
                 except Exception:
                     continue
-        else:
-            logger.warning("未找到数量输入框")
+        logger.warning("未找到数量输入框")
 
-    except Exception as exc:
-        logger.warning("SKU分类选择失败: {}", exc)
+    trigger_selectors = [
+        dialog.locator("form").locator(".el-select").locator("input").first,
+        dialog.locator(".el-select__input").first,
+        dialog.get_by_placeholder("请选择").first,
+        dialog.get_by_role("textbox", name="分类").first,
+    ]
+
+    opened = False
+    for trigger in trigger_selectors:
+        if await trigger.count() > 0:
+            try:
+                await trigger.click(timeout=2000)
+                opened = True
+                logger.debug("✓ 点击下拉触发器成功")
+                break
+            except Exception:
+                continue
+
+    if not opened:
+        logger.warning("未能点击下拉触发器")
+
+    selected = False
+    last_error: Exception | None = None
+    for value in target_values:
+        try:
+            if await select_value(value):
+                logger.success(f"✓ 已选择: {value}")
+                selected = True
+                break
+        except Exception as select_err:
+            last_error = select_err
+            logger.debug(f"选择 {value} 失败: {select_err}")
+
+    if not selected:
+        raise RuntimeError("未找到或无法选择『单品』") from last_error
+
+    await fill_quantity()
 
     await page.get_by_role("button", name="预览").click()
     await page.get_by_role("button", name="保存修改").click()
-    # await _wait_for_save_toast(page)
     await _close_edit_dialog(page)
 
 

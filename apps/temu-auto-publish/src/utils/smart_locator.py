@@ -6,6 +6,8 @@
   - async def find_with_fallback(): 使用后备选择器查找
   - async def find_by_text(): 根据文本内容查找
   - async def wait_and_find(): 等待并查找元素
+  - class WaitStrategy: 等待策略配置
+  - class PageWaiter: 页面等待工具（从page_waiter导入）
 @GOTCHAS:
   - 避免使用动态的aria-ref属性
   - 优先使用文本定位器（稳定）
@@ -16,9 +18,10 @@
 @RELATED: batch_edit_controller.py, first_edit_controller.py
 """
 
-
 from loguru import logger
-from playwright.async_api import Locator, Page
+from playwright.async_api import Locator, Page, TimeoutError as PlaywrightTimeoutError
+
+from .page_waiter import PageWaiter, WaitStrategy
 
 
 class SmartLocator:
@@ -48,7 +51,8 @@ class SmartLocator:
         page: Page,
         default_timeout: int = 5000,
         retry_count: int = 3,
-        wait_after_action: int = 500,
+        wait_after_action: int = 120,
+        wait_strategy: WaitStrategy | None = None,
     ):
         """初始化智能定位器.
 
@@ -56,14 +60,24 @@ class SmartLocator:
             page: Playwright页面对象
             default_timeout: 默认超时时间（毫秒）
             retry_count: 重试次数
-            wait_after_action: 操作后等待时间（毫秒）
+            wait_after_action: 操作后等待时间（毫秒，兼容旧配置）
+            wait_strategy: 自定义等待策略
         """
         self.page = page
         self.default_timeout = default_timeout
         self.retry_count = retry_count
-        self.wait_after_action = wait_after_action
+        if wait_strategy:
+            self.wait_strategy = wait_strategy
+        else:
+            self.wait_strategy = WaitStrategy(
+                wait_after_action_ms=wait_after_action,
+                validation_timeout_ms=default_timeout,
+            )
+        self.waiter = PageWaiter(page, self.wait_strategy)
         logger.debug(
-            f"SmartLocator初始化 (timeout={default_timeout}ms, retry={retry_count})"
+            "SmartLocator初始化"
+            f" (timeout={default_timeout}ms, retry={retry_count}, "
+            f"wait_after_action={self.wait_strategy.wait_after_action_ms}ms)"
         )
 
     async def find_element(
@@ -97,23 +111,18 @@ class SmartLocator:
         # 依次尝试每个选择器
         for i, selector in enumerate(selectors):
             try:
-                logger.debug(f"尝试选择器 [{i+1}/{len(selectors)}]: {selector}")
+                logger.debug(f"尝试选择器 [{i + 1}/{len(selectors)}]: {selector}")
 
                 locator = self.page.locator(selector).first
 
-                # 检查元素是否存在且可见
-                if must_be_visible:
-                    is_visible = await locator.is_visible(timeout=timeout)
-                    if is_visible:
-                        logger.success(f"✓ 找到元素: {selector}")
-                        return locator
-                else:
-                    # 只检查存在性
-                    count = await locator.count()
-                    if count > 0:
-                        logger.success(f"✓ 找到元素: {selector}")
-                        return locator
+                state = "visible" if must_be_visible else "attached"
+                await locator.wait_for(state=state, timeout=timeout)
+                logger.success(f"✓ 找到元素: {selector}")
+                return locator
 
+            except PlaywrightTimeoutError as exc:
+                logger.debug(f"等待元素超时: {selector}, 错误: {exc}")
+                continue
             except Exception as e:
                 logger.debug(f"选择器失败: {selector}, 错误: {e}")
                 continue
@@ -224,18 +233,41 @@ class SmartLocator:
         for attempt in range(max_retries):
             try:
                 element = await self.find_element(selectors)
-                if element:
-                    await element.click()
-                    await self.page.wait_for_timeout(self.wait_after_action)
-                    logger.debug(f"✓ 点击成功 (尝试 {attempt + 1}/{max_retries})")
-                    return True
+                if not element:
+                    raise ValueError("未找到可点击的元素")
+
+                await element.click()
+                await self.waiter.post_action_wait()
+                logger.debug(f"✓ 点击成功 (尝试 {attempt + 1}/{max_retries})")
+                return True
             except Exception as e:
                 logger.warning(f"点击失败 (尝试 {attempt + 1}/{max_retries}): {e}")
                 if attempt < max_retries - 1:
-                    await self.page.wait_for_timeout(1000)
+                    await self.waiter.apply_retry_backoff(attempt)
                     continue
 
         logger.error(f"点击失败，已重试 {max_retries} 次")
+        return False
+
+    async def _is_select_value(self, element: Locator, target: str) -> bool:
+        """判断下拉框是否已选中目标值或标签."""
+
+        try:
+            selected = await element.evaluate(
+                """
+                (el) => Array.from(el.selectedOptions || []).map(opt => ({
+                    value: opt.value,
+                    label: opt.label
+                }))
+                """
+            )
+        except Exception as exc:
+            logger.debug(f"读取下拉框选项失败: {exc}")
+            return False
+
+        for option in selected or []:
+            if option.get("value") == target or option.get("label") == target:
+                return True
         return False
 
     async def fill_with_retry(
@@ -265,19 +297,34 @@ class SmartLocator:
         for attempt in range(max_retries):
             try:
                 element = await self.find_element(selectors)
-                if element:
-                    await element.fill("")
-                    await self.page.wait_for_timeout(200)
-                    await element.fill(str(value))
-                    await self.page.wait_for_timeout(self.wait_after_action)
-                    logger.debug(
-                        f"✓ 填写成功: {value} (尝试 {attempt + 1}/{max_retries})"
-                    )
+                if not element:
+                    raise ValueError("未找到输入框")
+
+                target_value = str(value)
+                current_value = ""
+                try:
+                    current_value = await element.input_value()
+                except PlaywrightTimeoutError:
+                    current_value = ""
+
+                if current_value == target_value:
+                    logger.debug("输入框已包含目标值，跳过填写。")
                     return True
+
+                await element.fill("")
+                await element.fill(target_value)
+                actual_value = await element.input_value()
+
+                if actual_value != target_value:
+                    raise ValueError(f"填写后值不匹配，期望 {target_value}，实际 {actual_value}")
+
+                await self.waiter.post_action_wait()
+                logger.debug(f"✓ 填写成功: {value} (尝试 {attempt + 1}/{max_retries})")
+                return True
             except Exception as e:
                 logger.warning(f"填写失败 (尝试 {attempt + 1}/{max_retries}): {e}")
                 if attempt < max_retries - 1:
-                    await self.page.wait_for_timeout(1000)
+                    await self.waiter.apply_retry_backoff(attempt)
                     continue
 
         logger.error(f"填写失败，已重试 {max_retries} 次")
@@ -310,18 +357,28 @@ class SmartLocator:
         for attempt in range(max_retries):
             try:
                 element = await self.find_element(selectors)
-                if element:
-                    # 尝试按文本选择
-                    await element.select_option(label=value)
-                    await self.page.wait_for_timeout(self.wait_after_action)
-                    logger.debug(
-                        f"✓ 选择成功: {value} (尝试 {attempt + 1}/{max_retries})"
-                    )
+                if not element:
+                    raise ValueError("未找到下拉框")
+
+                if await self._is_select_value(element, value):
+                    logger.debug("下拉框已选择目标值，跳过选择。")
                     return True
+
+                await element.select_option(label=value)
+
+                if not await self._is_select_value(element, value):
+                    await element.select_option(value=value)
+
+                if not await self._is_select_value(element, value):
+                    raise ValueError("选择后值未生效")
+
+                await self.waiter.post_action_wait()
+                logger.debug(f"✓ 选择成功: {value} (尝试 {attempt + 1}/{max_retries})")
+                return True
             except Exception as e:
                 logger.warning(f"选择失败 (尝试 {attempt + 1}/{max_retries}): {e}")
                 if attempt < max_retries - 1:
-                    await self.page.wait_for_timeout(1000)
+                    await self.waiter.apply_retry_backoff(attempt)
                     continue
 
         logger.error(f"选择失败，已重试 {max_retries} 次")
@@ -363,4 +420,3 @@ if __name__ == "__main__":
     await locator.fill_with_retry("input[placeholder*='重量']", "7500")
     """)
     print("=" * 60)
-

@@ -37,6 +37,11 @@ from pathlib import Path
 from loguru import logger
 from playwright.async_api import Locator, Page
 
+from .first_edit_dialog_codegen import (
+    upload_product_video_via_url,
+    upload_size_chart_via_url,
+)
+
 
 class FirstEditController:
     """首次编辑控制器（SOP步骤4的7个子步骤）.
@@ -1020,230 +1025,36 @@ class FirstEditController:
             return False
 
     async def upload_size_chart(self, page: Page, image_url: str) -> bool:
-        """上传尺寸图（SOP步骤4.5 - 补充尺寸图）.
-
-        使用网络图片URL上传尺寸图到产品详情。
-
-        Args:
-            page: Playwright页面对象
-            image_url: 网络图片URL
-
-        Returns:
-            是否上传成功
-
-        Examples:
-            >>> await ctrl.upload_size_chart(page, "https://example.com/size.jpg")
-            True
-        """
+        """上传尺寸图（SOP步骤4.5 - 补充尺寸图）。"""
         logger.info(f"SOP 4.5: 上传尺寸图 -> {image_url[:50]}...")
 
         try:
-            # 等待页面稳定
-            # await page.wait_for_timeout(500)
-
-            # 尝试找到"使用网络图片"按钮（需要在详情图片区域）
-            network_image_selectors = [
-                "button:has-text('使用网络图片')",
-                "button:has-text('网络图片')",
-                ".jx-button:has-text('使用网络图片')",
-                "xpath=//button[contains(text(), '使用网络图片')]",
-            ]
-
-            upload_btn = None
-            for selector in network_image_selectors:
-                try:
-                    count = await page.locator(selector).count()
-                    if count > 0:
-                        upload_btn = page.locator(selector).first
-                        if await upload_btn.is_visible(timeout=1000):
-                            logger.debug(f"找到「使用网络图片」按钮: {selector}")
-                            break
-                except Exception as e:
-                    logger.debug(f"尝试选择器 {selector} 失败: {e}")
-                    continue
-
-            if not upload_btn:
-                logger.warning("⚠️  未找到「使用网络图片」按钮，尺寸图上传跳过")
-                return False
-
-            # 点击"使用网络图片"
-            await upload_btn.click()
-            # await page.wait_for_timeout(500)
-
-            # 查找URL输入框
-            url_input_selectors = [
-                "input[placeholder*='图片']",
-                "input[placeholder*='URL']",
-                "input[placeholder*='网址']",
-                ".jx-input__inner",
-            ]
-
-            url_input = None
-            for selector in url_input_selectors:
-                try:
-                    elem = page.locator(selector).last  # 通常是最后一个弹出的输入框
-                    if await elem.is_visible(timeout=1000):
-                        url_input = elem
-                        logger.debug(f"找到URL输入框: {selector}")
-                        break
-                except Exception:
-                    continue
-
-            if not url_input:
-                logger.error("未找到URL输入框")
-                return False
-
-            # 输入图片URL
-            await url_input.fill(image_url)
-            # await page.wait_for_timeout(300)
-
-            # 点击确定/确认按钮
-            confirm_btn_selectors = [
-                "button:has-text('确定')",
-                "button:has-text('确认')",
-                ".jx-button--primary:has-text('确')",
-            ]
-
-            for selector in confirm_btn_selectors:
-                try:
-                    btn = page.locator(selector).last
-                    if await btn.is_visible(timeout=1000):
-                        await btn.click()
-                        logger.success(f"✓ 尺寸图已上传: {image_url[:50]}...")
-                        # await page.wait_for_timeout(500)
-                        return True
-                except Exception:
-                    continue
-
-            logger.warning("⚠️  未找到确认按钮，尺寸图可能未保存")
-            return False
-
-        except Exception as e:
-            logger.error(f"上传尺寸图失败: {e}")
+            success = await upload_size_chart_via_url(page, image_url)
+            if success:
+                logger.success("✓ 尺寸图已上传（复用 codegen 实现）")
+            else:
+                logger.warning("⚠️ 尺寸图上传失败或被跳过")
+            return success
+        except Exception as exc:
+            logger.error(f"上传尺寸图失败: {exc}")
             return False
 
     async def upload_product_video(self, page: Page, video_url: str) -> bool:
-        """上传产品视频（SOP步骤4.5 - 补充产品视频）.
-
-        使用网络视频URL上传产品演示视频。
-
-        Args:
-            page: Playwright页面对象
-            video_url: 网络视频URL（支持MP4等格式）
-
-        Returns:
-            是否上传成功
-
-        Examples:
-            >>> await ctrl.upload_product_video(page, "https://example.com/video.mp4")
-            True
-        """
+        """上传产品视频（SOP步骤4.5 - 补充产品视频）。"""
         logger.info(f"SOP 4.5: 上传产品视频 -> {video_url[:50]}...")
 
         try:
-            # 等待页面稳定
-            # await page.wait_for_timeout(500)
-
-            # 查找视频上传区域（通常在详情描述tab）
-            # 可能需要先切换到"产品视频"或"详情"tab
-            video_tab_selectors = [
-                "text=产品视频",
-                "text=视频",
-                ".jx-tabs__item:has-text('视频')",
-            ]
-
-            for selector in video_tab_selectors:
-                try:
-                    tab = page.locator(selector).first
-                    if await tab.is_visible(timeout=1000):
-                        await tab.click()
-                        # await page.wait_for_timeout(500)
-                        logger.debug(f"已切换到视频tab: {selector}")
-                        break
-                except Exception:
-                    continue
-
-            # 查找"使用网络视频"或类似按钮
-            network_video_selectors = [
-                "button:has-text('使用网络视频')",
-                "button:has-text('网络视频')",
-                "button:has-text('添加视频')",
-                ".jx-button:has-text('视频')",
-                "xpath=//button[contains(text(), '网络') and contains(text(), '视频')]",
-            ]
-
-            upload_btn = None
-            for selector in network_video_selectors:
-                try:
-                    count = await page.locator(selector).count()
-                    if count > 0:
-                        upload_btn = page.locator(selector).first
-                        if await upload_btn.is_visible(timeout=1000):
-                            logger.debug(f"找到视频上传按钮: {selector}")
-                            break
-                except Exception as e:
-                    logger.debug(f"尝试选择器 {selector} 失败: {e}")
-                    continue
-
-            if not upload_btn:
-                logger.warning("⚠️  未找到视频上传按钮，视频上传跳过")
-                logger.info("💡 提示：视频上传功能可能需要在实际环境中调试选择器")
-                return False
-
-            # 点击上传按钮
-            await upload_btn.click()
-            # await page.wait_for_timeout(500)
-
-            # 查找URL输入框
-            url_input_selectors = [
-                "input[placeholder*='视频']",
-                "input[placeholder*='URL']",
-                "input[placeholder*='网址']",
-                ".jx-input__inner",
-            ]
-
-            url_input = None
-            for selector in url_input_selectors:
-                try:
-                    elem = page.locator(selector).last
-                    if await elem.is_visible(timeout=1000):
-                        url_input = elem
-                        logger.debug(f"找到视频URL输入框: {selector}")
-                        break
-                except Exception:
-                    continue
-
-            if not url_input:
-                logger.error("未找到视频URL输入框")
-                return False
-
-            # 输入视频URL
-            await url_input.fill(video_url)
-            # await page.wait_for_timeout(500)
-
-            # 点击确定/确认按钮
-            confirm_btn_selectors = [
-                "button:has-text('确定')",
-                "button:has-text('确认')",
-                ".jx-button--primary:has-text('确')",
-            ]
-
-            for selector in confirm_btn_selectors:
-                try:
-                    btn = page.locator(selector).last
-                    if await btn.is_visible(timeout=1000):
-                        await btn.click()
-                        logger.success(f"✓ 产品视频已上传: {video_url[:50]}...")
-                        # await page.wait_for_timeout(1000)
-                        return True
-                except Exception:
-                    continue
-
-            logger.warning("⚠️  未找到确认按钮，视频可能未保存")
+            result = await upload_product_video_via_url(page, video_url)
+            if result is True:
+                logger.success("✓ 产品视频已上传（复用 codegen 实现）")
+                return True
+            if result is None:
+                logger.info("检测到已有视频并已处理，跳过上传")
+                return True
+            logger.warning("⚠️ 产品视频上传失败或被跳过")
             return False
-
-        except Exception as e:
-            logger.error(f"上传产品视频失败: {e}")
+        except Exception as exc:
+            logger.error(f"上传产品视频失败: {exc}")
             logger.info("💡 提示：视频上传功能可能需要在实际环境中调试")
             return False
 
@@ -1322,13 +1133,16 @@ class FirstEditController:
 
                 candidate_locators: list[Locator] = []
                 candidate_locators.extend(target_dialog.locator(selector) for selector in selectors)
-                candidate_locators.extend(target_dialog.locator(selector) for selector in fallback_selectors)
+                candidate_locators.extend(
+                    target_dialog.locator(selector) for selector in fallback_selectors
+                )
 
                 button_locators = [
                     target_dialog.get_by_role("button", name=regex) for regex in text_button_regex
                 ]
                 button_locators.extend(
-                    target_dialog.locator("button").filter(has_text=regex) for regex in text_button_regex
+                    target_dialog.locator("button").filter(has_text=regex)
+                    for regex in text_button_regex
                 )
                 button_locators.extend(
                     target_dialog.locator("a").filter(has_text=regex) for regex in text_button_regex

@@ -38,7 +38,7 @@
 import asyncio
 import json
 from pathlib import Path
-from typing import List
+from typing import Any, List
 
 from loguru import logger
 from playwright.async_api import Page
@@ -46,6 +46,7 @@ from playwright.async_api import Page
 from ..data_processor.price_calculator import PriceCalculator
 from ..data_processor.random_generator import RandomDataGenerator
 from ..utils.smart_locator import SmartLocator
+from ..utils.page_waiter import WaitStrategy
 from ..utils.batch_edit_helpers import (
     retry_on_failure,
     performance_monitor,
@@ -86,7 +87,12 @@ class BatchEditController:
         """
         self.selector_path = Path(selector_path)
         self.selectors = self._load_selectors()
-        
+        self.smart_locator_config = self.selectors.get("smart_locator_config", {})
+        self.smart_locator_timeout = int(
+            self.smart_locator_config.get("timeout_per_selector", 5000)
+        )
+        self.smart_locator_retry = int(self.smart_locator_config.get("retry_count", 3))
+
         # 初始化工具类
         self.price_calculator = PriceCalculator()
         self.random_generator = RandomDataGenerator()
@@ -115,9 +121,7 @@ class BatchEditController:
             logger.warning(f"加载选择器配置失败: {e}，使用默认值")
             return {}
 
-    async def batch_edit(
-        self, page: Page, products_data: List[dict]
-    ) -> bool:
+    async def batch_edit(self, page: Page, products_data: List[dict]) -> bool:
         """执行批量编辑（完整流程）.
 
         Args:
@@ -136,9 +140,7 @@ class BatchEditController:
 
         # 验证数量
         if len(products_data) != self.BATCH_SIZE:
-            logger.warning(
-                f"商品数量不符合预期（预期{self.BATCH_SIZE}，实际{len(products_data)}）"
-            )
+            logger.warning(f"商品数量不符合预期（预期{self.BATCH_SIZE}，实际{len(products_data)}）")
 
         try:
             # 8.0 全选商品
@@ -164,6 +166,32 @@ class BatchEditController:
             logger.error(f"批量编辑失败: {e}")
             await page.screenshot(path="data/temp/batch_edit_error.png")
             return False
+
+    def _build_wait_strategy(self, config: dict[str, Any] | None = None) -> WaitStrategy:
+        """根据配置构建等待策略."""
+
+        cfg = config or {}
+        return WaitStrategy(
+            wait_after_action_ms=int(cfg.get("wait_after_action_ms", 120)),
+            wait_for_stability_timeout_ms=int(cfg.get("wait_for_stability_timeout_ms", 1500)),
+            wait_for_network_idle_timeout_ms=int(cfg.get("wait_for_network_idle_timeout_ms", 3000)),
+            retry_initial_delay_ms=int(cfg.get("retry_initial_delay_ms", 120)),
+            retry_backoff_factor=float(cfg.get("retry_backoff_factor", 1.6)),
+            retry_max_delay_ms=int(cfg.get("retry_max_delay_ms", 1500)),
+            validation_timeout_ms=int(cfg.get("validation_timeout_ms", 2000)),
+            dom_stable_checks=int(cfg.get("dom_stable_checks", 3)),
+            dom_stable_interval_ms=int(cfg.get("dom_stable_interval_ms", 120)),
+        )
+
+    def _create_locator(self, page: Page) -> SmartLocator:
+        """创建带统一等待策略的智能定位器."""
+
+        return SmartLocator(
+            page,
+            default_timeout=self.smart_locator_timeout,
+            retry_count=self.smart_locator_retry,
+            wait_strategy=self._build_wait_strategy(self.smart_locator_config),
+        )
 
     async def select_all_products(self, page: Page) -> bool:
         """全选商品.
@@ -219,9 +247,7 @@ class BatchEditController:
             logger.error(f"进入批量编辑失败: {e}")
             return False
 
-    async def execute_batch_edit_steps(
-        self, page: Page, products_data: List[dict]
-    ) -> bool:
+    async def execute_batch_edit_steps(self, page: Page, products_data: List[dict]) -> bool:
         """执行18步批量编辑流程.
 
         Args:
@@ -302,9 +328,7 @@ class BatchEditController:
         await asyncio.sleep(0.5)
         return True
 
-    async def step_02_english_title(
-        self, page: Page, products_data: List[dict]
-    ) -> bool:
+    async def step_02_english_title(self, page: Page, products_data: List[dict]) -> bool:
         """步骤2：填写英文标题（按空格键，SOP特殊要求）.
 
         SOP说明：在输入框中按一下空格键即可
@@ -320,22 +344,22 @@ class BatchEditController:
 
         try:
             step_config = self.selectors.get("batch_edit", {}).get("step_02_english_title", {})
-            
+
             if not step_config.get("enabled", True):
                 logger.info("  跳过步骤2（未启用）")
                 return True
-            
+
             # 查找英文标题输入框
             input_selector = step_config.get("input")
             if not input_selector:
                 logger.warning("未找到英文标题输入框选择器")
                 return False
-            
+
             input_element = page.locator(input_selector).first
             if not await input_element.is_visible(timeout=5000):
                 logger.warning("英文标题输入框不可见")
                 return False
-            
+
             # 按空格键（SOP要求）
             await input_element.click()
             await page.wait_for_timeout(300)
@@ -343,7 +367,7 @@ class BatchEditController:
             await page.wait_for_timeout(500)
 
             logger.success("✓ 英文标题已填写（空格键）")
-            
+
             # 预览和保存
             await self._preview_and_save(page)
             return True
@@ -377,18 +401,18 @@ class BatchEditController:
 
     async def step_04_main_sku(self, page: Page) -> bool:
         """步骤4：主货号（SOP步骤7.4）.
-        
+
         SOP说明：不改动，但需要执行预览+保存操作。
-        
+
         Returns:
             是否执行成功
-            
+
         Examples:
             >>> await ctrl.step_04_main_sku(page)
             True
         """
         logger.info("步骤7.4：主货号（不改动但需预览+保存）")
-        
+
         try:
             # 1. 点击预览按钮
             preview_selector = "button:has-text('预览'), button:contains('预览')"
@@ -398,23 +422,21 @@ class BatchEditController:
                 logger.info("  已点击预览")
             except Exception as e:
                 logger.warning(f"  预览按钮点击失败: {e}")
-            
+
             # 2. 点击保存修改按钮
-            save_selector = "button:has-text('保存修改'), button:has-text('保存'), button:contains('保存')"
+            save_selector = (
+                "button:has-text('保存修改'), button:has-text('保存'), button:contains('保存')"
+            )
             try:
                 await page.locator(save_selector).first.click(timeout=3000)
                 await page.wait_for_timeout(1000)  # 等待保存完成
                 logger.success("  ✓ 已保存修改")
             except Exception as e:
                 logger.warning(f"  保存按钮点击失败: {e}")
-            
+
             # 3. 检查保存成功提示
-            success_indicators = [
-                "text='保存成功'",
-                "text='修改成功'",
-                "text='已保存'"
-            ]
-            
+            success_indicators = ["text='保存成功'", "text='修改成功'", "text='已保存'"]
+
             for indicator in success_indicators:
                 try:
                     if await page.locator(indicator).count() > 0:
@@ -422,11 +444,11 @@ class BatchEditController:
                         return True
                 except:
                     continue
-            
+
             logger.success("✓ 主货号步骤完成（预览+保存）")
             logger.info("提示：虽然不修改内容，但SOP要求执行预览+保存操作")
             return True
-            
+
         except Exception as e:
             logger.error(f"主货号步骤失败: {e}")
             return False
@@ -486,18 +508,18 @@ class BatchEditController:
 
     async def step_07_customization(self, page: Page) -> bool:
         """步骤7：定制品（SOP步骤7.7）.
-        
+
         SOP说明：不改动，但需要执行预览+保存操作。
-        
+
         Returns:
             是否执行成功
-            
+
         Examples:
             >>> await ctrl.step_07_customization(page)
             True
         """
         logger.info("步骤7.7：定制品（不改动但需预览+保存）")
-        
+
         try:
             # 1. 点击预览按钮
             preview_selector = "button:has-text('预览'), button:contains('预览')"
@@ -507,23 +529,21 @@ class BatchEditController:
                 logger.info("  已点击预览")
             except Exception as e:
                 logger.warning(f"  预览按钮点击失败: {e}")
-            
+
             # 2. 点击保存修改按钮
-            save_selector = "button:has-text('保存修改'), button:has-text('保存'), button:contains('保存')"
+            save_selector = (
+                "button:has-text('保存修改'), button:has-text('保存'), button:contains('保存')"
+            )
             try:
                 await page.locator(save_selector).first.click(timeout=3000)
                 await page.wait_for_timeout(1000)  # 等待保存完成
                 logger.success("  ✓ 已保存修改")
             except Exception as e:
                 logger.warning(f"  保存按钮点击失败: {e}")
-            
+
             # 3. 检查保存成功提示
-            success_indicators = [
-                "text='保存成功'",
-                "text='修改成功'",
-                "text='已保存'"
-            ]
-            
+            success_indicators = ["text='保存成功'", "text='修改成功'", "text='已保存'"]
+
             for indicator in success_indicators:
                 try:
                     if await page.locator(indicator).count() > 0:
@@ -531,29 +551,29 @@ class BatchEditController:
                         return True
                 except:
                     continue
-            
+
             logger.success("✓ 定制品步骤完成（预览+保存）")
             logger.info("提示：虽然不修改内容，但SOP要求执行预览+保存操作")
             return True
-            
+
         except Exception as e:
             logger.error(f"定制品步骤失败: {e}")
             return False
 
     async def step_08_sensitive_attrs(self, page: Page) -> bool:
         """步骤8：敏感属性（SOP步骤7.8）.
-        
+
         SOP说明：不改动，但需要执行预览+保存操作。
-        
+
         Returns:
             是否执行成功
-            
+
         Examples:
             >>> await ctrl.step_08_sensitive_attrs(page)
             True
         """
         logger.info("步骤7.8：敏感属性（不改动但需预览+保存）")
-        
+
         try:
             # 1. 点击预览按钮
             preview_selector = "button:has-text('预览'), button:contains('预览')"
@@ -563,23 +583,21 @@ class BatchEditController:
                 logger.info("  已点击预览")
             except Exception as e:
                 logger.warning(f"  预览按钮点击失败: {e}")
-            
+
             # 2. 点击保存修改按钮
-            save_selector = "button:has-text('保存修改'), button:has-text('保存'), button:contains('保存')"
+            save_selector = (
+                "button:has-text('保存修改'), button:has-text('保存'), button:contains('保存')"
+            )
             try:
                 await page.locator(save_selector).first.click(timeout=3000)
                 await page.wait_for_timeout(1000)  # 等待保存完成
                 logger.success("  ✓ 已保存修改")
             except Exception as e:
                 logger.warning(f"  保存按钮点击失败: {e}")
-            
+
             # 3. 检查保存成功提示
-            success_indicators = [
-                "text='保存成功'",
-                "text='修改成功'",
-                "text='已保存'"
-            ]
-            
+            success_indicators = ["text='保存成功'", "text='修改成功'", "text='已保存'"]
+
             for indicator in success_indicators:
                 try:
                     if await page.locator(indicator).count() > 0:
@@ -587,11 +605,11 @@ class BatchEditController:
                         return True
                 except:
                     continue
-            
+
             logger.success("✓ 敏感属性步骤完成（预览+保存）")
             logger.info("提示：虽然不修改内容，但SOP要求执行预览+保存操作")
             return True
-            
+
         except Exception as e:
             logger.error(f"敏感属性步骤失败: {e}")
             return False
@@ -608,26 +626,26 @@ class BatchEditController:
 
         try:
             step_config = self.selectors.get("batch_edit", {}).get("step_09_weight", {})
-            
+
             if not step_config.get("enabled", True):
                 logger.info("  跳过步骤9（未启用）")
                 return True
-            
+
             # 生成随机重量
             weight = self.random_generator.generate_weight()
             logger.info(f"  生成重量: {weight}G")
 
             # 使用SmartLocator查找输入框
-            locator = SmartLocator(page)
+            locator = self._create_locator(page)
             input_selectors = step_config.get("input", [])
-            
+
             if not input_selectors:
                 logger.warning("未配置重量输入框选择器")
                 return False
-            
+
             # 使用智能定位器填写
             success = await locator.fill_with_retry(input_selectors, str(weight))
-            
+
             if success:
                 logger.success(f"✓ 重量已设置: {weight}G")
                 # 预览和保存
@@ -653,11 +671,11 @@ class BatchEditController:
 
         try:
             step_config = self.selectors.get("batch_edit", {}).get("step_10_dimensions", {})
-            
+
             if not step_config.get("enabled", True):
                 logger.info("  跳过步骤10（未启用）")
                 return True
-            
+
             # 生成随机尺寸
             length, width, height = self.random_generator.generate_dimensions()
             logger.info(f"  生成尺寸: {length}×{width}×{height}cm")
@@ -666,31 +684,23 @@ class BatchEditController:
             length_selector = step_config.get("length_input")
             width_selector = step_config.get("width_input")
             height_selector = step_config.get("height_input")
-            
+
             if not all([length_selector, width_selector, height_selector]):
                 logger.warning("未找到尺寸输入框选择器")
                 return False
-            
-            # 填写长度
-            length_input = page.locator(length_selector).first
-            if await length_input.is_visible(timeout=5000):
-                await length_input.fill(str(length))
-                await page.wait_for_timeout(300)
-            
-            # 填写宽度
-            width_input = page.locator(width_selector).first
-            if await width_input.is_visible(timeout=5000):
-                await width_input.fill(str(width))
-                await page.wait_for_timeout(300)
-            
-            # 填写高度
-            height_input = page.locator(height_selector).first
-            if await height_input.is_visible(timeout=5000):
-                await height_input.fill(str(height))
-                await page.wait_for_timeout(300)
+
+            locator = self._create_locator(page)
+
+            length_success = await locator.fill_with_retry(length_selector, str(length))
+            width_success = await locator.fill_with_retry(width_selector, str(width))
+            height_success = await locator.fill_with_retry(height_selector, str(height))
+
+            if not all([length_success, width_success, height_success]):
+                logger.error("填写尺寸失败")
+                return False
 
             logger.success(f"✓ 尺寸已设置: {length}×{width}×{height}cm")
-            
+
             # 预览和保存
             await self._preview_and_save(page)
             return True
@@ -745,9 +755,7 @@ class BatchEditController:
             logger.error(f"选择SKU类目失败: {e}")
             return False
 
-    async def step_14_suggested_price(
-        self, page: Page, products_data: List[dict]
-    ) -> bool:
+    async def step_14_suggested_price(self, page: Page, products_data: List[dict]) -> bool:
         """步骤14：建议售价（成本×10，SOP步骤7.14）.
 
         SOP规则：建议售价 = 成本 × 10
@@ -763,11 +771,11 @@ class BatchEditController:
 
         try:
             step_config = self.selectors.get("batch_edit", {}).get("step_14_suggested_price", {})
-            
+
             if not step_config.get("enabled", True):
                 logger.info("  跳过步骤14（未启用）")
                 return True
-            
+
             # 计算第一个商品的价格（批量编辑使用统一价格）
             cost = products_data[0].get("cost", 0) if products_data else 150.0
             price_result = self.price_calculator.calculate(cost)
@@ -780,12 +788,12 @@ class BatchEditController:
             if not input_selector:
                 logger.warning("未找到建议售价输入框选择器")
                 return False
-            
+
             input_element = page.locator(input_selector).first
             if not await input_element.is_visible(timeout=5000):
                 logger.warning("建议售价输入框不可见")
                 return False
-            
+
             # 填写建议售价
             await input_element.fill("")
             await page.wait_for_timeout(300)
@@ -793,7 +801,7 @@ class BatchEditController:
             await page.wait_for_timeout(500)
 
             logger.success(f"✓ 建议售价已设置: ¥{suggested_price}")
-            
+
             # 预览和保存
             await self._preview_and_save(page)
             return True
@@ -804,18 +812,18 @@ class BatchEditController:
 
     async def step_15_package_list(self, page: Page) -> bool:
         """步骤15：包装清单（SOP步骤7.15）.
-        
+
         SOP说明：不改动，但需要执行预览+保存操作。
-        
+
         Returns:
             是否执行成功
-            
+
         Examples:
             >>> await ctrl.step_15_package_list(page)
             True
         """
         logger.info("步骤7.15：包装清单（不改动但需预览+保存）")
-        
+
         try:
             # 1. 点击预览按钮
             preview_selector = "button:has-text('预览'), button:contains('预览')"
@@ -825,23 +833,21 @@ class BatchEditController:
                 logger.info("  已点击预览")
             except Exception as e:
                 logger.warning(f"  预览按钮点击失败: {e}")
-            
+
             # 2. 点击保存修改按钮
-            save_selector = "button:has-text('保存修改'), button:has-text('保存'), button:contains('保存')"
+            save_selector = (
+                "button:has-text('保存修改'), button:has-text('保存'), button:contains('保存')"
+            )
             try:
                 await page.locator(save_selector).first.click(timeout=3000)
                 await page.wait_for_timeout(1000)  # 等待保存完成
                 logger.success("  ✓ 已保存修改")
             except Exception as e:
                 logger.warning(f"  保存按钮点击失败: {e}")
-            
+
             # 3. 检查保存成功提示
-            success_indicators = [
-                "text='保存成功'",
-                "text='修改成功'",
-                "text='已保存'"
-            ]
-            
+            success_indicators = ["text='保存成功'", "text='修改成功'", "text='已保存'"]
+
             for indicator in success_indicators:
                 try:
                     if await page.locator(indicator).count() > 0:
@@ -849,11 +855,11 @@ class BatchEditController:
                         return True
                 except:
                     continue
-            
+
             logger.success("✓ 包装清单步骤完成（预览+保存）")
             logger.info("提示：虽然不修改内容，但SOP要求执行预览+保存操作")
             return True
-            
+
         except Exception as e:
             logger.error(f"包装清单步骤失败: {e}")
             return False
@@ -895,7 +901,7 @@ class BatchEditController:
 
         try:
             await self._preview_and_save(page)
-            
+
             # 等待保存完成
             logger.info("  等待保存完成...")
             await page.wait_for_timeout(5000)
@@ -906,18 +912,18 @@ class BatchEditController:
         except Exception as e:
             logger.error(f"保存批量编辑失败: {e}")
             return False
-    
+
     async def _preview_and_save(self, page: Page) -> bool:
         """预览并保存（内部辅助方法）.
-        
+
         每个步骤完成后都需要预览和保存
-        
+
         Returns:
             是否成功
         """
         try:
             nav_config = self.selectors.get("batch_edit", {}).get("navigation", {})
-            
+
             # 1. 预览
             preview_btn = nav_config.get("preview_button", "button:has-text('预览')")
             try:
@@ -926,7 +932,7 @@ class BatchEditController:
                 logger.debug("  已预览")
             except Exception:
                 logger.debug("  未找到预览按钮，跳过")
-            
+
             # 2. 保存
             save_btn = nav_config.get("save_button", "button:has-text('保存')")
             try:
@@ -936,9 +942,9 @@ class BatchEditController:
             except Exception:
                 logger.warning("  未找到保存按钮")
                 return False
-            
+
             return True
-            
+
         except Exception as e:
             logger.warning(f"预览保存失败: {e}")
             return False
@@ -1002,4 +1008,3 @@ if __name__ == "__main__":
     asyncio.run(main())
     """)
     print("=" * 60)
-
