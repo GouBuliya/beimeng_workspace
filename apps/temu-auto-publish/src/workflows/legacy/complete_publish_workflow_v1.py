@@ -23,7 +23,9 @@ from loguru import logger
 from playwright.async_api import Page
 
 from ..five_to_twenty_workflow import FiveToTwentyWorkflow
-from ...browser.batch_edit_controller import BatchEditController
+from ...browser.legacy.batch_edit_controller_v1 import (
+    BatchEditController as BatchEditControllerV1,
+)
 from ...browser.miaoshou_controller import MiaoshouController
 from ...browser.publish_controller import PublishController
 
@@ -33,7 +35,7 @@ class CompletePublishWorkflow:
 
     def __init__(self, use_ai_titles: bool = True) -> None:
         self.five_to_twenty = FiveToTwentyWorkflow(use_ai_titles=use_ai_titles)
-        self.batch_edit_ctrl = BatchEditController()
+        self.batch_edit_ctrl = BatchEditControllerV1()
         self.publish_ctrl = PublishController()
         self.miaoshou_ctrl = MiaoshouController()
         self.use_ai_titles = use_ai_titles

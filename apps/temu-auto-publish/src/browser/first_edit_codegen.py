@@ -97,6 +97,7 @@ def _collect_edit_button_candidates(page: Page) -> list[Locator]:
     """收集所有可能的编辑按钮定位器集合."""
 
     selector_pool = [
+        ".jx-button.jx-button--primary.jx-button--small.is-text.pro-button.J_collectBoxEdit",
         ".jx-button.jx-button--primary.jx-button--small.is-text.pro-button.J_commonCollectBoxEdit",
         "button:has-text('首次编辑')",
         "button:has-text('编辑')",

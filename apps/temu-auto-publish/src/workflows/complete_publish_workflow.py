@@ -12,6 +12,7 @@
       - _stage_batch_edit(): 阶段 3 批量编辑 18 步
       - _stage_publish(): 阶段 4 选择店铺/供货价/发布
       - 若干辅助方法: 数据准备、标题生成、凭证/店铺解析
+  - async def execute_complete_workflow(): 遗留兼容入口, 代理到 v1 工作流
 @DEPENDENCIES:
   - 内部: browser.*, data_processor.*
   - 外部: playwright (runtime), loguru
@@ -38,7 +39,7 @@ except ImportError:  # pragma: no cover
 from config.settings import settings
 
 from ..browser.batch_edit_codegen import run_batch_edit
-from ..browser.batch_edit_controller_v2 import BatchEditController
+from ..browser.batch_edit_controller import BatchEditController
 from ..browser.first_edit_codegen import open_edit_dialog_codegen
 from ..browser.first_edit_controller import FirstEditController
 from ..browser.first_edit_dialog_codegen import fill_first_edit_dialog_codegen
@@ -49,6 +50,9 @@ from ..browser.publish_controller import PublishController
 from ..data_processor.price_calculator import PriceCalculator, PriceResult
 from ..data_processor.product_data_reader import ProductDataReader
 from ..data_processor.selection_table_reader import ProductSelectionRow, SelectionTableReader
+from .legacy.complete_publish_workflow_v1 import (
+    execute_complete_workflow as legacy_execute_complete_workflow,
+)
 
 if TYPE_CHECKING:
     from playwright.async_api import Page
@@ -126,6 +130,26 @@ class WorkflowExecutionResult:
         }
 
 
+async def _capture_html_snapshot(page: Page, filename: str) -> None:
+    """写出当前页面 HTML 方便排查复杂 UI 结构."""
+
+    try:
+        html = await page.content()
+    except Exception as exc:  # pragma: no cover - 调试辅助
+        logger.warning("获取页面 HTML 失败: %s", exc)
+        return
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    target_root = Path(__file__).resolve().parents[2] / "data" / "debug" / "html"
+    target_root.mkdir(parents=True, exist_ok=True)
+    target_file = target_root / f"{timestamp}_{filename}"
+    try:
+        target_file.write_text(html, encoding="utf-8")
+        logger.debug("已写出调试 HTML: %s", target_file)
+    except Exception as exc:  # pragma: no cover - IO 失败
+        logger.warning("写出调试 HTML 失败: %s", exc)
+
+
 class CompletePublishWorkflow:
     """Temu 商品发布完整工作流 (SOP 步骤 1-11)."""
 
@@ -163,7 +187,7 @@ class CompletePublishWorkflow:
         self.claim_times = max(1, self.settings.business.claim_count)
         self.headless = headless if headless is not None else self.settings.browser.headless
 
-        # 图片基础目录（从环境变量或配置读取，默认为 data/input/10月新品可推）
+        # 图片基础目录(从环境变量或配置读取, 默认为 data/input/10月新品可推)
         self.image_base_dir = self._resolve_image_base_dir()
 
         self.selection_table_path = Path(selection_table) if selection_table else None
@@ -232,6 +256,15 @@ class CompletePublishWorkflow:
                     selection_rows,
                 )
                 stages.append(stage1)
+                stage1_errors = (
+                    stage1.details.get("errors") if isinstance(stage1.details, dict) else None
+                )
+                logger.info(
+                    "阶段1完成: success={success}, edited_products={count}, errors={errors}",
+                    success=stage1.success,
+                    count=len(edited_products),
+                    errors=stage1_errors,
+                )
                 if not stage1.success:
                     errors.append(stage1.message)
                     return WorkflowExecutionResult(workflow_id, False, stages, errors)
@@ -291,7 +324,11 @@ class CompletePublishWorkflow:
 
         finally:
             if login_ctrl.browser_manager and login_ctrl.browser_manager.browser:
-                await login_ctrl.browser_manager.close()
+                workflow_failed = errors or any(not stage.success for stage in stages)
+                if workflow_failed:
+                    logger.warning("检测到阶段失败，保留浏览器以便继续排查，未执行自动关闭。")
+                else:
+                    await login_ctrl.browser_manager.close()
 
     async def _stage_first_edit(
         self,
@@ -421,8 +458,8 @@ class CompletePublishWorkflow:
             }
             return StageOutcome("stage1_first_edit", True, message, details), []
 
-        success = not errors
-        message = "完成首次编辑处理" if success else "首次编辑存在失败"
+        success = bool(processed_products)
+        message = "完成首次编辑处理" if not errors else "首次编辑存在部分失败"
         details = {
             "owner": staff_name,
             "edited_products": [product.to_payload() for product in processed_products],
@@ -495,6 +532,10 @@ class CompletePublishWorkflow:
         if selection.size_chart_image_url:
             payload["size_chart_image_url"] = selection.size_chart_image_url
             logger.debug("添加尺寸图URL: %s", payload["size_chart_image_url"][:100])
+
+        if getattr(selection, "product_video_url", None):
+            payload["product_video_url"] = selection.product_video_url
+            logger.debug("添加产品视频URL: %s", payload["product_video_url"][:100])
 
         return payload
 
@@ -576,10 +617,32 @@ class CompletePublishWorkflow:
                 details={"skipped": True, "expected_total": 0},
             )
 
-        await miaoshou_ctrl.switch_tab(page, "all")
+        filter_owner: str | None = None
+        if edited_products:
+            owner_candidate = getattr(edited_products[0].selection, "owner", "") or ""
+            try:
+                filter_owner = self._resolve_collection_owner(owner_candidate)
+            except RuntimeError as exc:
+                logger.warning("Unable to resolve collection owner for claim stage: %s", exc)
+                filter_owner = None
+
+        await miaoshou_ctrl.refresh_collection_box(page)
 
         selection_count = min(len(edited_products), 5)
-        selection_ok = await miaoshou_ctrl.select_products_for_claim(page, selection_count)
+        target_indexes = [
+            product.index for product in edited_products[:selection_count] if product.index >= 0
+        ]
+        if len(target_indexes) < selection_count:
+            logger.warning(
+                "Incomplete product index mapping detected, fallback to sequential selection",
+            )
+            target_indexes = list(range(selection_count))
+
+        selection_ok = await miaoshou_ctrl.select_products_for_claim(
+            page,
+            selection_count,
+            indexes=target_indexes,
+        )
         if not selection_ok:
             message = "无法选择待认领商品"
             logger.error(message)
@@ -594,11 +657,27 @@ class CompletePublishWorkflow:
             page,
             repeat=self.claim_times,
         )
+        if not claim_success:
+            message = "认领脚本执行失败"
+            logger.error(message)
+            return StageOutcome(
+                name="stage2_claim",
+                success=False,
+                message=message,
+                details={"selected": selection_count, "expected": selection_count},
+        )
 
         expected_total = selection_count * self.claim_times
         verify_success = await miaoshou_ctrl.verify_claim_success(
             page,
             expected_count=expected_total,
+        )
+        if not verify_success and claim_success:
+            verify_success = await self._retry_claim_verification(
+                page,
+                miaoshou_ctrl,
+                filter_owner,
+                expected_total,
         )
 
         overall_success = claim_success and verify_success
@@ -614,6 +693,51 @@ class CompletePublishWorkflow:
         }
 
         return StageOutcome("stage2_claim", overall_success, message, details)
+
+    async def _retry_claim_verification(
+        self,
+        page,
+        miaoshou_ctrl: MiaoshouController,
+        filter_owner: str | None,
+        expected_count: int,
+    ) -> bool:
+        """Retry claim verification by re-navigating to the claimed tab.
+
+        Args:
+            page: Active Playwright page instance.
+            miaoshou_ctrl: Active Miaoshou controller.
+            filter_owner: Owner filter applied during the initial navigation.
+            expected_count: Expected claimed item count.
+
+        Returns:
+            True when the claimed count meets the expected threshold after re-navigation.
+        """
+        logger.info("Fallback: re-open claimed tab to verify claim results")
+
+        try:
+            await miaoshou_ctrl.navigate_and_filter_collection_box(
+                page,
+                filter_by_user=filter_owner,
+                switch_to_tab="claimed",
+            )
+            counts = await miaoshou_ctrl.get_product_count(page)
+            claimed_count = counts.get("claimed", 0)
+            if claimed_count >= expected_count:
+                logger.success(
+                    "Fallback verification succeeded via re-navigation: claimed=%s expected>=%s",
+                    claimed_count,
+                    expected_count,
+                )
+                return True
+            logger.warning(
+                "Fallback verification mismatch after re-navigation: claimed=%s expected>=%s",
+                claimed_count,
+                expected_count,
+            )
+            return False
+        except Exception as exc:
+            logger.warning("Fallback claim verification failed: %s", exc)
+            return False
 
     async def _stage_batch_edit(
         self,
@@ -943,7 +1067,7 @@ class CompletePublishWorkflow:
         if env_dir:
             path = Path(env_dir)
             if not path.is_absolute():
-                # 如果是相对路径，相对于项目根目录
+                # 如果是相对路径, 相对于项目根目录
                 path = self._get_project_root() / path
             return path
 
@@ -960,12 +1084,12 @@ class CompletePublishWorkflow:
 
     def _get_project_root(self) -> Path:
         """获取项目根目录."""
-        # 从当前文件向上查找，找到包含 pyproject.toml 的目录
+        # 从当前文件向上查找, 找到包含 pyproject.toml 的目录
         current = Path(__file__).resolve()
         for parent in current.parents:
             if (parent / "pyproject.toml").exists():
                 return parent
-        # 如果找不到，返回当前文件所在的上上上级目录（apps/temu-auto-publish/src -> apps/temu-auto-publish -> apps -> workspace）
+        # 如果找不到, 返回当前文件所在的上上上级目录(apps/temu-auto-publish/src -> apps/temu-auto-publish -> apps -> workspace)
         return Path(__file__).resolve().parents[3]
 
     def _resolve_shop_name(self, edited_products: Sequence[EditedProduct]) -> str:
@@ -985,9 +1109,39 @@ class CompletePublishWorkflow:
         return "自动化店铺"
 
 
+async def execute_complete_workflow(
+    page: Page,
+    products_data: Sequence[dict[str, Any]],
+    shop_name: str | None = None,
+    enable_batch_edit: bool = True,
+    enable_publish: bool = True,
+) -> dict[str, Any]:
+    """兼容旧接口的便捷函数, 代理到遗留工作流实现.
+
+    Args:
+        page: Playwright Page 对象(已登录并定位到采集箱)。
+        products_data: 产品数据列表(至少 5 个产品字典)。
+        shop_name: 发布店铺名称, 可选。
+        enable_batch_edit: 是否执行批量编辑阶段。
+        enable_publish: 是否执行发布阶段。
+
+    Returns:
+        遗留工作流返回的执行结果字典。
+    """
+
+    return await legacy_execute_complete_workflow(
+        page=page,
+        products_data=list(products_data),
+        shop_name=shop_name,
+        enable_batch_edit=enable_batch_edit,
+        enable_publish=enable_publish,
+    )
+
+
 __all__ = [
     "CompletePublishWorkflow",
     "EditedProduct",
     "StageOutcome",
     "WorkflowExecutionResult",
+    "execute_complete_workflow",
 ]

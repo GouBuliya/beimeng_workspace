@@ -264,7 +264,7 @@ class LoginController:
                             await locator.first.click()
                             closed_any = True
                             closed_this_dialog = True
-                            await page.wait_for_timeout(5)
+                            await page.wait_for_timeout(1)
                             break
                     except Exception as exc:  # pragma: no cover - 调试场景
                         logger.debug("关闭弹窗时忽略异常: %s", exc)

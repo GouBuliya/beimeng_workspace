@@ -1,26 +1,27 @@
 """
-@PURPOSE: 浏览器管理器，使用Playwright管理浏览器实例，支持反检测和Cookie管理
+@PURPOSE: 浏览器管理器, 使用 Playwright 管理浏览器实例, 支持反检测和 Cookie 管理
 @OUTLINE:
   - class BrowserManager: 浏览器管理器主类
   - async def start(): 启动浏览器
   - async def close(): 关闭浏览器
-  - async def save_cookies(): 保存Cookie
-  - async def load_cookies(): 加载Cookie
+  - async def save_cookies(): 保存 Cookie
+  - async def load_cookies(): 加载 Cookie
   - async def screenshot(): 截图
-  - async def _launch_chromium(): 优先使用具备编解码器的Chromium渠道
+  - async def _launch_chromium(): 优先使用具备编解码器的 Chromium 渠道
   - def _build_wait_strategy(): 构建统一等待策略
   - def _patch_page_wait(): 注入智能等待逻辑
   - def prepare_page(): 对外暴露的页面初始化
 @GOTCHAS:
-  - 必须使用async/await异步操作
-  - 关闭浏览器前应保存Cookie
-  - 反检测配置在browser_config.json中
+  - 必须使用 async/await 异步操作
+  - 关闭浏览器前应保存 Cookie
+  - 反检测配置在 browser_config.json 中
 @DEPENDENCIES:
   - 外部: playwright
 @RELATED: login_controller.py, cookie_manager.py
 """
 
 import json
+import os
 import random
 import time
 from pathlib import Path
@@ -84,7 +85,7 @@ class BrowserManager:
     def load_config(self) -> None:
         """加载配置."""
         if not self.config_path.exists():
-            logger.warning(f"配置文件不存在: {self.config_path}，使用默认配置")
+            logger.warning(f"配置文件不存在: {self.config_path}, 使用默认配置")
             self.config = {
                 "browser": {"type": "chromium", "headless": False},
                 "timeouts": {"default": 30000},
@@ -120,7 +121,7 @@ class BrowserManager:
         """启动浏览器.
 
         Args:
-            headless: 是否无头模式，None 则使用配置文件设置
+            headless: 是否无头模式, None 则使用配置文件设置
         """
         logger.info("启动 Playwright 浏览器...")
 
@@ -137,10 +138,15 @@ class BrowserManager:
         timing_config = self.timing_config or self.config.get("timing", {})
         slow_mo_ms = timing_config.get("slow_mo_ms")
         if slow_mo_ms is None:
-            # 兼容历史行为：有头模式默认 300ms，其他情况 0ms
+            # 兼容历史行为: 有头模式默认 300ms, 其他情况 0ms
             slow_mo_ms = 0 if headless else 300
 
-        # 启动参数（添加性能优化选项）
+        window_width = int(browser_config.get("window_width", 2564))
+        window_height = int(browser_config.get("window_height", 1600))
+        device_scale_factor = float(browser_config.get("device_scale_factor", 1.0))
+        os.environ["TEMU_PIXEL_REFERENCE_DPR"] = f"{device_scale_factor:.16g}"
+
+        # 启动参数 (添加性能优化选项)
         launch_options = {
             "headless": headless,
             "args": [
@@ -174,6 +180,23 @@ class BrowserManager:
         locale_arg = f"--lang={browser_config.get('locale', 'zh-CN')}"
         extra_args.append(locale_arg)
         launch_options["args"] = self._merge_launch_args(launch_options["args"], extra_args)
+        window_size_arg = f"--window-size={window_width},{window_height}"
+        launch_options["args"] = self._merge_launch_args(
+            launch_options["args"],
+            [window_size_arg],
+        )
+
+        if browser_type == "chromium":
+            scale_args: list[str] = [
+                f"--force-device-scale-factor={device_scale_factor}",
+            ]
+            if device_scale_factor == 1.0:
+                scale_args.append("--high-dpi-support=1")
+
+            launch_options["args"] = self._merge_launch_args(
+                launch_options["args"],
+                scale_args,
+            )
 
         # 启动浏览器
         if browser_type == "chromium":
@@ -188,9 +211,14 @@ class BrowserManager:
         # 创建上下文
         context_options = {
             "viewport": {
-                "width": browser_config.get("window_width", 1920),
-                "height": browser_config.get("window_height", 1080),
+                "width": window_width,
+                "height": window_height,
             },
+            "screen": {
+                "width": window_width,
+                "height": window_height,
+            },
+            "device_scale_factor": device_scale_factor,
             "locale": browser_config.get("locale", "zh-CN"),
             "timezone_id": browser_config.get("timezone", "Asia/Shanghai"),
         }
@@ -207,9 +235,9 @@ class BrowserManager:
             await self._apply_stealth()
             await self._apply_additional_stealth(browser_config.get("locale", "zh-CN"))
 
-        # 添加禁用动画的初始化脚本（性能优化）
+        # 添加禁用动画的初始化脚本 (性能优化)
         await self.context.add_init_script("""
-            // 禁用CSS动画和过渡效果，加速页面交互
+            // 禁用CSS动画和过渡效果, 加速页面交互
             const style = document.createElement('style');
             style.innerHTML = `
                 *, ::before, ::after {
@@ -240,7 +268,7 @@ class BrowserManager:
             await stealth_async(self.context)
             logger.debug("✓ 已应用反检测补丁")
         except ImportError:
-            logger.warning("playwright-stealth 未安装，跳过反检测")
+            logger.warning("playwright-stealth 未安装, 跳过反检测")
         except Exception as e:
             logger.warning(f"应用反检测补丁失败: {e}")
 
@@ -300,7 +328,7 @@ class BrowserManager:
         )
 
     def _patch_page_wait(self, page: Page) -> None:
-        """为页面注入智能等待逻辑，减少硬编码延迟."""
+        """为页面注入智能等待逻辑, 减少硬编码延迟."""
 
         if getattr(page, "_bemg_smart_wait_patched", False):
             return
@@ -326,7 +354,7 @@ class BrowserManager:
                     wait_for_dom_stable=True,
                 )
             except Exception as exc:
-                logger.debug(f"智能等待失败，回退原始等待 ({timeout}ms): {exc}")
+                logger.debug(f"智能等待失败, 回退原始等待 ({timeout}ms): {exc}")
                 await original_wait_for_timeout(timeout)
                 return
 
@@ -336,8 +364,8 @@ class BrowserManager:
                 await original_wait_for_timeout(remaining)
 
         page.wait_for_timeout = smart_wait_for_timeout  # type: ignore[assignment]
-        setattr(page, "_bemg_smart_wait_patched", True)
-        setattr(page, "_bemg_original_wait_for_timeout", original_wait_for_timeout)
+        page._bemg_smart_wait_patched = True  # type: ignore[attr-defined]
+        page._bemg_original_wait_for_timeout = original_wait_for_timeout  # type: ignore[attr-defined]
 
     def get_timing_config(self) -> dict[str, Any]:
         """获取时序配置."""
@@ -345,7 +373,7 @@ class BrowserManager:
         return self.timing_config or {}
 
     def prepare_page(self, page: Page) -> Page:
-        """对外暴露的页面初始化入口，注入智能等待."""
+        """对外暴露的页面初始化入口, 注入智能等待."""
 
         self._patch_page_wait(page)
         return page
@@ -368,7 +396,7 @@ class BrowserManager:
             raise RuntimeError("Playwright 未初始化")
 
         if not browser_config.get("enable_codec_workaround", True):
-            logger.debug("已禁用 Chromium 编解码器渠道兼容方案，使用默认浏览器。")
+            logger.debug("已禁用 Chromium 编解码器渠道兼容方案, 使用默认浏览器.")
             return await self.playwright.chromium.launch(**launch_options)
 
         channel_candidates = self._collect_channel_candidates(browser_config)
@@ -392,8 +420,8 @@ class BrowserManager:
 
         if last_error:
             logger.warning(
-                "所有指定的 Chromium 渠道均启动失败，回退到默认 Chromium。"
-                " 这可能导致视频上传校验继续失败，请确认已安装带专有编解码器的 Chrome/Edge。"
+                "所有指定的 Chromium 渠道均启动失败, 回退到默认 Chromium."
+                " 这可能导致视频上传校验继续失败, 请确认已安装带专有编解码器的 Chrome/Edge."
             )
 
         return await self.playwright.chromium.launch(**launch_options)
@@ -435,7 +463,7 @@ class BrowserManager:
 
     @staticmethod
     def _pick_user_agent(browser_config: dict) -> str | None:
-        """选择User-Agent，支持配置列表随机挑选."""
+        """选择 User-Agent, 支持配置列表随机挑选."""
 
         explicit = browser_config.get("user_agent")
         candidates = browser_config.get("user_agents", [])

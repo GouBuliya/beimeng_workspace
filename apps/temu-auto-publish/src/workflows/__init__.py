@@ -21,15 +21,8 @@ from .five_to_twenty_workflow import (
     FiveToTwentyWorkflow,
     execute_five_to_twenty_workflow,
 )
-from .legacy import (
-    CompletePublishWorkflowV1,
-    CompletePublishWorkflowV2,
-)
-
 __all__ = [
     "CompletePublishWorkflow",
-    "CompletePublishWorkflowV1",
-    "CompletePublishWorkflowV2",
     "EditedProduct",
     "FiveToTwentyWorkflow",
     "StageOutcome",

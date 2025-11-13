@@ -54,6 +54,12 @@
 - **易于调试**: 完整的日志和截图功能
 - **可维护性强**: 清晰的代码结构和类型提示
 
+## 📚 模块文档
+
+- `src/browser/README.md`：浏览器控制器、Codegen 与调试指南
+- `src/workflows/README.md`：工作流阶段划分与 orchestrator 说明
+- `src/data_processor/README.md`：选品表、价格、AI 标题处理逻辑
+
 ## 🚀 快速开始
 
 ### 1. 安装依赖
@@ -96,9 +102,10 @@ TEMU_SHOP_URL=https://agentseller.temu.com/
 TEMU_USERNAME=your_temu_username
 TEMU_PASSWORD=your_temu_password
 
-# 尺寸图外链配置（可选）
-# 若选品表未提供尺寸图 URL，将以该前缀+文件名自动拼接
+# 媒体外链配置（可选）
+# 若选品表未提供尺寸图/视频 URL，将以该前缀 + 文件名自动拼接
 SIZE_CHART_BASE_URL=https://miaoshou-tuchuang-beimeng.oss-cn-hangzhou.aliyuncs.com/10月新品可推/
+VIDEO_BASE_URL=https://miaoshou-tuchuang-beimeng.oss-cn-hangzhou.aliyuncs.com/video/
 ```
 
 ### 3. 运行测试
@@ -154,11 +161,13 @@ python run_collection_to_edit_test.py --no-skip-collection
 |---------|--------|------|--------|------|
 | 智能手表运动防水 | 150 | 电子产品/智能穿戴 | 智能手表 | 测试 |
 
-> **尺寸图配置说明**
+> **媒体配置说明**
 >
 > - 选品表可新增列 `尺寸图链接`（或 `尺寸图URL/size_chart_url/size_chart_image_url`），填写可直接访问的图片外链。
 > - 若未提供上述列，系统会读取 `实拍图数组` 的首个文件名，并与 `SIZE_CHART_BASE_URL` 拼接生成尺寸图 URL。
-> - 请确保 OSS 对象具备公共读权限或使用签名 URL，否则首次编辑将无法完成图片上传。
+> - 可选新增列 `视频链接`（或 `视频URL/video_url/product_video_url`），用于提供产品视频的网络地址。
+> - 系统始终使用 `VIDEO_BASE_URL` + 型号编号（如 `A026.mp4`）拼接生成 OSS 视频 URL；仅当未配置 `VIDEO_BASE_URL` 时才回退到表格中的链接。
+> - 请确保外链对象具备公共读权限或生成有效签名 URL，否则首次编辑将无法完成上传。
 
 ### 4. 运行测试
 
@@ -180,49 +189,37 @@ python3 run_real_test.py
 ```
 apps/temu-auto-publish/
 ├── src/
-│   ├── browser/                # 浏览器自动化核心
-│   │   ├── browser_manager.py    # Playwright浏览器管理
-│   │   ├── login_controller.py   # 登录控制器
-│   │   ├── miaoshou_controller.py# 妙手ERP控制器
-│   │   ├── first_edit_controller.py # 首次编辑控制器
-│   │   ├── batch_edit_controller.py # 批量编辑控制器
-│   │   ├── publish_controller.py    # 发布控制器
-│   │   ├── collection_controller.py # 采集控制器
-│   │   └── image_manager.py         # 图片管理器
-│   ├── workflows/              # 业务流程
-│   │   ├── five_to_twenty_workflow.py    # 5→20认领流程
-│   │   ├── complete_publish_workflow.py  # 完整发布流程
-│   │   └── full_publish_workflow.py      # 全流程工作流
-│   ├── data_processor/         # 数据处理模块
-│   │   ├── excel_reader.py      # Excel读取器
-│   │   ├── price_calculator.py  # 价格计算器
-│   │   ├── ai_title_generator.py# AI标题生成器
-│   │   └── data_generator.py    # 随机数据生成器
-│   ├── automation_tools/       # 自动化增强工具
-│   │   ├── retry_decorator.py   # 重试装饰器
-│   │   ├── performance_monitor.py # 性能监控
-│   │   ├── error_handler.py     # 错误处理器
-│   │   └── step_validator.py    # 步骤验证器
-│   └── models/                 # 数据模型
-│       ├── task.py              # 任务模型
-│       └── result.py            # 结果模型
-├── config/                     # 配置文件
-│   ├── settings.py             # 应用配置
-│   ├── miaoshou_selectors_v2.json # 妙手选择器配置
-│   └── browser_config.json     # 浏览器配置
-├── docs/                       # 文档
-│   ├── AI_TITLE_GENERATION.md  # AI标题生成文档
-│   ├── COLLECTION.md           # 采集功能文档
-│   ├── DEBUG_GUIDE.md          # 调试指南
-│   └── STATE_DETECTOR_GUIDE.md # 状态检测器指南
-├── tests/                      # 测试
-│   ├── unit/                   # 单元测试
-│   └── integration/            # 集成测试
-├── run_real_test.py           # 真实环境测试脚本
-├── .env.example               # 环境变量模板
-├── .env                       # 环境变量配置（需创建）
-├── QUICKSTART.md              # 快速开始指南
-└── README.md                  # 本文件
+│   ├── browser/                     # 浏览器自动化核心（含 README.md、legacy/）
+│   │   ├── browser_manager.py         # Playwright 生命周期与等待策略注入
+│   │   ├── login_controller.py        # 妙手登录 + Cookie 管理
+│   │   ├── collection_controller.py   # 采集/认领流程
+│   │   ├── miaoshou_controller.py     # 妙手采集箱交互
+│   │   ├── first_edit_controller.py   # 首次编辑弹窗
+│   │   ├── batch_edit_controller.py   # 批量编辑 18 步（改进版主实现）
+│   │   ├── publish_controller.py      # 店铺选择与供货价设置
+│   │   ├── image_manager.py           # 媒体资源校验
+│   │   ├── utils/                     # 智能等待、定位器、批量编辑辅助
+│   │   └── legacy/                    # 旧版控制器（兼容参考）
+│   ├── workflows/                 # 业务编排（含 README.md、legacy/）
+│   │   ├── complete_publish_workflow.py # 最新完整工作流
+│   │   ├── five_to_twenty_workflow.py   # 5→20 首次编辑+认领流程
+│   │   └── legacy/                     # v1/v2 历史实现
+│   ├── data_processor/            # 数据处理与生成（含 README.md）
+│   │   ├── selection_table_reader.py    # 选品表解析与校验
+│   │   ├── product_data_reader.py       # 工作流输入构建
+│   │   ├── price_calculator.py          # 建议售价/供货价计算
+│   │   ├── ai_title_generator.py        # AI 标题生成与回退
+│   │   └── random_generator.py          # 物流信息随机化
+│   ├── core/                      # 重试、健康检查、指标收集等核心能力
+│   ├── models/                    # 数据模型定义（task/result 等）
+│   └── utils/                     # 通用工具模块
+├── config/                        # Pydantic Settings、浏览器与选择器配置
+├── data/                          # 输入 CSV/Excel、媒体样本、调试产物
+├── docs/                          # 对外文档（使用指南、调试说明）
+├── scripts/                       # 辅助脚本（如 update_ai_context、下载媒体）
+├── tests/                         # pytest 用例（待对齐新版接口）
+├── .env.example                   # 环境变量模板
+└── README.md                      # 本文件
 ```
 
 ## 🎯 核心功能说明
@@ -359,8 +356,9 @@ LOG_LEVEL=INFO
   "browser": {
     "type": "chromium",
     "headless": false,
-    "window_width": 1920,
-    "window_height": 1080
+    "window_width": 1280,
+    "window_height": 720,
+    "device_scale_factor": 2.0
   },
   "stealth": {
     "enabled": true
@@ -371,6 +369,8 @@ LOG_LEVEL=INFO
   }
 }
 ```
+
+- `device_scale_factor` 必须与录制像素脚本时浏览器的缩放一致。若录制发生在非 1.0 缩放环境 (例如上例的 `devicePixelRatio=2.0`), 请在 `browser_config.json` 中同步数值, 或通过环境变量 `TEMU_PIXEL_REFERENCE_DPR` 指定录制时的 `devicePixelRatio`。当缩放不匹配时, 像素认领阶段会直接抛出错误以避免误点。
 
 ## 🧪 测试
 

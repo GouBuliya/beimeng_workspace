@@ -59,6 +59,7 @@ temu = [
     "playwright-stealth>=1.0.0",  # 反检测
     "tenacity>=8.2.3",         # 稳定重试
     "syncer>=2.0.0",           # 将异步任务同步执行
+    "selenium>=4.21.0",        # 备用 Selenium 认领流程
 ]
 
 [build-system]

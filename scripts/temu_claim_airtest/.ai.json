@@ -1,0 +1,80 @@
+{
+  "$schema": "../.ai/schemas/component.schema.json",
+  "name": "temu-claim-airtest",
+  "type": "script",
+  "version": "0.1.0",
+  "description": "基于 Airtest 的 Temu 认领子流程，实现工具栏点击、Temu 全托管勾选与确认按钮操作",
+  "purpose": "在 Playwright 无法稳定识别页面控件时提供视觉识别的认领子流程，可独立运行或集成到现有工作流中",
+  "entry_point": "scripts/temu_claim_airtest/launcher.py",
+  "interface": {
+    "api": {
+      "functions": [
+        {
+          "name": "run_airtest_claim",
+          "description": "执行 Temu 认领 Airtest 脚本",
+          "parameters": {
+            "product_count": "int",
+            "iterations": "int",
+            "template_dir": "Optional[str]",
+            "device_uri": "str"
+          },
+          "returns": "None"
+        }
+      ]
+    },
+    "input": {
+      "format": "kwargs",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "product_count": {"type": "integer", "minimum": 1},
+          "iterations": {"type": "integer", "minimum": 1},
+          "template_dir": {"type": "string"},
+          "device_uri": {"type": "string"},
+          "post_click_delay": {"type": "number"},
+          "iteration_interval": {"type": "number"}
+        },
+        "required": ["product_count", "iterations"]
+      }
+    },
+    "output": {
+      "format": "stdout",
+      "schema": {
+        "type": "string",
+        "description": "Airtest 执行日志"
+      }
+    }
+  },
+  "dependencies": {
+    "python": ">=3.12",
+    "packages": [
+      "airtest>=1.3.0",
+      "pocoui>=1.0.83"
+    ]
+  },
+  "examples": [
+    {
+      "description": "通过 Python 调用 5 个商品、4 次认领",
+      "command": "python scripts/temu_claim_airtest/examples/run_via_python.py"
+    },
+    {
+      "description": "命令行直接运行，并指定模板目录",
+      "command": "python scripts/temu_claim_airtest/temu_claim.air/script.py --device OSX:/// --args \"product_count=5 iterations=4 template_dir=scripts/temu_claim_airtest/temu_claim.air/templates\""
+    }
+  ],
+  "ai_hints": {
+    "common_use_cases": [
+      "运行认领流程作为 Playwright 的子步骤",
+      "在页面元素频繁变化时改用视觉识别",
+      "通过固定模板批量执行 Temu 认领操作"
+    ],
+    "gotchas": [
+      "模板图片需与现场分辨率一致，建议在运行环境重新截取",
+      "Airtest 在 macOS 需使用 `OSX:///` 连接方式",
+      "执行前需确保浏览器窗口已置前且界面保持固定"
+    ],
+    "related_components": [
+      "apps/temu-auto-publish/src/browser/miaoshou/claim.py"
+    ]
+  }
+}

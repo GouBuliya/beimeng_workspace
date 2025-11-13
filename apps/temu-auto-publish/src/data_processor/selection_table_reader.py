@@ -22,6 +22,7 @@
 
 import json
 import os
+import re
 from urllib.parse import urljoin
 from pathlib import Path
 
@@ -71,6 +72,7 @@ class ProductSelectionRow(BaseModel):
     variant_costs: list[float] | None = Field(None, description="多规格对应的进货价列表")
     image_files: list[str] | None = Field(None, description="实拍图数组")
     size_chart_image_url: str = Field(..., description="尺寸图网络图片 URL")
+    product_video_url: str | None = Field(None, description="产品视频网络 URL")
 
     @field_validator("model_number")
     @classmethod
@@ -104,6 +106,7 @@ class SelectionTableReader:
         """初始化选品表读取器."""
         logger.info("选品表读取器初始化")
         self.size_chart_base_url = self._resolve_size_chart_base_url()
+        self.video_base_url = self._resolve_video_base_url()
 
         # Excel列名映射（支持中英文）
         self.column_mapping = {
@@ -140,6 +143,10 @@ class SelectionTableReader:
             "size_chart_url": "size_chart_image_url",
             "size_chart_image_url": "size_chart_image_url",
             "image_url": "size_chart_image_url",
+            "视频链接": "product_video_url",
+            "视频URL": "product_video_url",
+            "video_url": "product_video_url",
+            "product_video_url": "product_video_url",
         }
 
     def read_excel(
@@ -301,6 +308,10 @@ class SelectionTableReader:
                 if not size_chart_url:
                     raise ValueError("缺少尺寸图URL(size_chart_image_url)")
                 product_data["size_chart_image_url"] = size_chart_url
+                product_data["product_video_url"] = self._resolve_product_video_url(
+                    raw_url=self._parse_scalar(row.get("product_video_url")),
+                    model_number=product_data["model_number"],
+                )
 
                 # 验证并创建ProductSelectionRow
                 product = ProductSelectionRow(**product_data)
@@ -491,7 +502,17 @@ class SelectionTableReader:
 
         base_url = os.getenv(
             "SIZE_CHART_BASE_URL",
-            "https://miaoshou-tuchuang-beimeng.oss-cn-hangzhou.aliyuncs.com/10%E6%9C%88%E6%96%B0%E5%93%81%E5%8F%AF%E6%8E%A8shou/",
+            "https://miaoshou-tuchuang-beimeng.oss-cn-hangzhou.aliyuncs.com/10%E6%9C%88%E6%96%B0%E5%93%81%E5%8F%AF%E6%8E%A8/",
+        )
+        text = str(base_url).strip()
+        return text or None
+
+    def _resolve_video_base_url(self) -> str | None:
+        """解析产品视频外链基础 URL 前缀."""
+
+        base_url = os.getenv(
+            "VIDEO_BASE_URL",
+            "https://miaoshou-tuchuang-beimeng.oss-cn-hangzhou.aliyuncs.com/video/",
         )
         text = str(base_url).strip()
         return text or None
@@ -506,3 +527,31 @@ class SelectionTableReader:
             return None
         candidate = urljoin(f"{self.size_chart_base_url.rstrip('/')}/", filename.lstrip("/"))
         return candidate or None
+
+    def _resolve_product_video_url(self, raw_url: str | None, model_number: str) -> str | None:
+        """统一使用 OSS 拼接的视频 URL，确保来源一致."""
+
+        safe_name = self._sanitize_filename(model_number)
+        if self.video_base_url and safe_name:
+            candidate = urljoin(
+                f"{self.video_base_url.rstrip('/')}/",
+                f"{safe_name}.mp4",
+            )
+            if raw_url and raw_url.strip() and raw_url.strip() != candidate:
+                logger.debug(
+                    "覆盖自定义视频URL，使用拼接地址: %s -> %s",
+                    raw_url.strip(),
+                    candidate,
+                )
+            return candidate
+
+        if raw_url:
+            return raw_url
+        return None
+
+    @staticmethod
+    def _sanitize_filename(value: str | None) -> str:
+        if not value:
+            return ""
+        safe = re.sub(r"[^A-Za-z0-9._-]+", "_", value.strip())
+        return safe.strip("_")

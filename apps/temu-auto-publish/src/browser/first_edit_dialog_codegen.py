@@ -516,7 +516,11 @@ async def _upload_size_chart_via_url(page: Page, image_url: str) -> bool:
         await confirm_btn.wait_for(state="visible", timeout=1_500)
         await confirm_btn.click()
 
-        await _ensure_dialog_closed(page, name_pattern="上传图片")
+        await _ensure_dialog_closed(
+            page,
+            name_pattern="上传图片",
+            timeout_ms=VIDEO_UPLOAD_TIMEOUT_MS,
+        )
         await _close_prompt_dialog(page, timeout_ms=VIDEO_UPLOAD_TIMEOUT_MS)
         logger.success("✓ 尺寸图已上传（网络图片）: %s", normalized_url[:120])
         return True
@@ -725,7 +729,12 @@ async def _upload_product_video_via_url(page: Page, video_url: str) -> bool | No
 
         await confirm_btn.last.click()
 
-        await _ensure_dialog_closed(page, name_pattern="上传视频", dialog=video_dialog)
+        await _ensure_dialog_closed(
+            page,
+            name_pattern="上传视频",
+            dialog=video_dialog,
+            timeout_ms=VIDEO_UPLOAD_TIMEOUT_MS,
+        )
         # await _acknowledge_prompt(page)
         await _close_prompt_dialog(page, timeout_ms=VIDEO_UPLOAD_TIMEOUT_MS)
         logger.success("✓ 产品视频已上传（网络视频）: %s", normalized_url[:120])
@@ -1034,6 +1043,35 @@ async def _acknowledge_prompt(
     return
 
 
+async def _click_dialog_close_icon(page: Page, dialog: Locator) -> bool:
+    """尝试点击弹窗右上角的关闭按钮."""
+
+    close_candidates = [
+        dialog.get_by_label("关闭此对话框"),
+        dialog.locator("[aria-label='关闭']"),
+        dialog.locator("[aria-label='Close']"),
+        dialog.locator(".el-dialog__headerbtn"),
+        dialog.locator(".jx-dialog__headerbtn"),
+        dialog.locator("button:has-text('×')"),
+        dialog.locator("button:has-text('关闭')"),
+    ]
+
+    for candidate in close_candidates:
+        try:
+            if await candidate.count():
+                await candidate.first.click()
+                return True
+        except Exception as exc:
+            logger.debug("关闭弹窗按钮点击失败: %s", exc)
+
+    try:
+        await page.keyboard.press("Escape")
+        return True
+    except Exception as exc:
+        logger.debug("发送 Escape 关闭弹窗失败: %s", exc)
+        return False
+
+
 async def _ensure_dialog_closed(
     page: Page,
     *,
@@ -1046,25 +1084,14 @@ async def _ensure_dialog_closed(
     target_dialog = dialog or page.get_by_role("dialog", name=re.compile(name_pattern))
     if not await target_dialog.count():
         return
-    if not await dialog.count():
-        return
+
     try:
         await target_dialog.wait_for(state="hidden", timeout=timeout_ms)
         return
     except Exception:
-        pass
+        logger.debug("弹窗在 %sms 内未关闭,尝试点击叉叉", timeout_ms)
 
-    close_btn = target_dialog.get_by_label("关闭此对话框")
-    if await close_btn.count():
-        try:
-            await close_btn.first.click()
-        except Exception:
-            pass
-    else:
-        try:
-            await page.keyboard.press("Escape")
-        except Exception:
-            pass
+    await _click_dialog_close_icon(page, target_dialog)
 
     try:
         await target_dialog.wait_for(state="hidden", timeout=timeout_ms)
