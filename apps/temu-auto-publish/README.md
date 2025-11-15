@@ -184,6 +184,37 @@ python3 run_real_test.py
 # 5. 验证认领成功
 ```
 
+## 🖥️ Web 管理面板 (零指令入口)
+
+面向运营/质检等非技术角色，提供“上传文件 → 点击开始”的完整引导。
+
+- **首次安装**：  
+  - Windows：双击 `apps/temu-auto-publish/install_web_panel.bat`  
+  - macOS：双击 `apps/temu-auto-publish/install_web_panel.command`
+- **日常运行**：  
+  - Windows：双击 `apps/temu-auto-publish/start_web_panel.bat`  
+  - macOS：双击 `apps/temu-auto-publish/start_web_panel.command`
+- **命令行方式**（如需自定义 host/port）：  
+  ```bash
+  uv run python apps/temu-auto-publish/web_panel/cli.py start --host 0.0.0.0 --port 9000
+  ```
+
+启动后浏览器会自动打开 Web UI，界面包含参数提示、进度状态、实时日志、环境自检按钮以及示例选品表下载链接，真正做到电脑小白也能独立操作。
+
+### Windows 下载即用打包
+
+> ⚠️ PyInstaller 需要在 Windows 环境下运行才能生成 `.exe`，以下命令默认在 Windows PowerShell 中执行。
+
+```bash
+# 1. 安装打包工具
+uv pip install pyinstaller
+
+# 2. 运行打包 CLI（会产物输出 dist/TemuWebPanel.exe）
+uv run python apps/temu-auto-publish/build_windows_exe.py build
+```
+
+打包后的 `TemuWebPanel.exe` 支持双击即用：首次运行会自动打开浏览器指向 `http://127.0.0.1:8899`。若需要自定义端口/自动安装 Playwright，可在打包前编辑 `start_web_panel_entry.py`。
+
 ## 📁 项目结构
 
 ```

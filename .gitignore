@@ -82,6 +82,7 @@ apps/temu-auto-publish/data/input/temu_cookies.json
 apps/temu-auto-publish/data/output/*.json
 apps/temu-auto-publish/data/temp/*
 apps/temu-auto-publish/data/logs/*
+apps/temu-auto-publish/playwright-recordings/*.json
 apps/temu-auto-publish/.env
 
 # 保留目录结构

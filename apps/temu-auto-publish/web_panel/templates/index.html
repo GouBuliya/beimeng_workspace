@@ -1,0 +1,395 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, user-scalable=no"
+    />
+    <title>Temu 发布助手 · Web Panel</title>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/@picocss/pico@2.0.6/css/pico.min.css"
+    />
+    <style>
+      body {
+        background: #f5f7fb;
+      }
+      header {
+        margin-top: 2rem;
+        text-align: center;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 1rem;
+      }
+      .log-box {
+        background: #111827;
+        color: #e5e7eb;
+        padding: 1rem;
+        border-radius: 0.75rem;
+        min-height: 260px;
+        max-height: 360px;
+        overflow-y: auto;
+        font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+        font-size: 0.85rem;
+        line-height: 1.4;
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+      }
+      .status-pill {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.25rem 0.75rem;
+        border-radius: 999px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        background: #dbeafe;
+        color: #1d4ed8;
+      }
+      .status-pill.running {
+        background: #fef3c7;
+        color: #b45309;
+      }
+      .status-pill.failed {
+        background: #fee2e2;
+        color: #b91c1c;
+      }
+      .status-pill.success {
+        background: #dcfce7;
+        color: #15803d;
+      }
+      .progress-track {
+        display: flex;
+        gap: 0.5rem;
+        margin-top: 0.5rem;
+      }
+      .progress-step {
+        flex: 1;
+        height: 6px;
+        border-radius: 999px;
+        background: #e5e7eb;
+      }
+      .progress-step.active {
+        background: linear-gradient(90deg, #6366f1, #22d3ee);
+      }
+      .tooltip {
+        font-size: 0.9rem;
+        color: #6b7280;
+      }
+      .form-card {
+        padding: 1.5rem;
+        border-radius: 1rem;
+        background: #fff;
+        box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+      }
+      .helper-card {
+        background: #fef9c3;
+        border-radius: 0.75rem;
+        padding: 1rem;
+        border: 1px solid #fde047;
+      }
+      .step-list {
+        list-style: none;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+      }
+      .step-list li {
+        background: #fff;
+        border-radius: 0.75rem;
+        padding: 0.75rem 1rem;
+        box-shadow: 0 1px 4px rgba(15, 23, 42, 0.08);
+        display: flex;
+        gap: 0.75rem;
+        align-items: center;
+      }
+      .step-number {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: #eef2ff;
+        color: #4338ca;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .danger-note {
+        color: #b91c1c;
+        font-weight: 600;
+      }
+      .file-hint {
+        font-size: 0.85rem;
+        margin-top: 0.25rem;
+        color: #4b5563;
+      }
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        margin-top: 1rem;
+      }
+      .actions a {
+        text-decoration: none;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="container">
+      <header>
+        <p>Temu 自动发布助手 · Web 管理页面</p>
+        <h1>跟着提示走，3 步即可完成整套 SOP</h1>
+        <p>无需命令行，电脑小白也能搞定 Temu 发布流程</p>
+      </header>
+
+      <section class="grid" style="margin-top: 2rem">
+        <article class="form-card">
+          <h3>Step 1 · 准备文件</h3>
+          <ul class="step-list">
+            <li>
+              <span class="step-number">1</span>
+              先点击“选品表文件”上传最新 Excel/CSV
+            </li>
+            <li>
+              <span class="step-number">2</span>
+              或者把已经存在电脑里的完整路径复制到“已有文件路径”
+            </li>
+            <li>
+              <span class="step-number">3</span>
+              完成后直接进入 Step 2, 无需编辑任何配置文件
+            </li>
+          </ul>
+          <div class="helper-card" style="margin-top: 1rem">
+            <p>
+              不知道格式？<br />
+              <a href="/downloads/sample-selection">点击这里下载示例选品表</a>
+            </p>
+          </div>
+        </article>
+
+        <article class="form-card">
+          <h3>Step 2 · 选择运行方式</h3>
+          <form id="control-form" enctype="multipart/form-data">
+            {% for field in fields %}
+            {% if field.kind == "file" %}
+            <label>
+              {{ field.label }}
+              <input type="file" name="{{ field.name }}" accept=".xlsx,.xls,.csv" />
+            </label>
+            <p class="file-hint">{{ field.help_text }}</p>
+            {% elif field.kind == "path" %}
+            <label>
+              {{ field.label }}
+              <input
+                type="text"
+                name="{{ field.name }}"
+                placeholder="{{ field.placeholder }}"
+              />
+            </label>
+            <p class="tooltip">{{ field.help_text }}</p>
+            {% elif field.kind == "choice" %}
+            <label>
+              {{ field.label }}
+              <select name="{{ field.name }}">
+                {% for value, label in field.options %}
+                <option
+                  value="{{ value }}"
+                  {% if field.default == value %}selected{% endif %}
+                >
+                  {{ label }}
+                </option>
+                {% endfor %}
+              </select>
+            </label>
+            <p class="tooltip">{{ field.help_text }}</p>
+            {% else %}
+            <label style="display: flex; justify-content: space-between; gap: 1rem">
+              <span>
+                {{ field.label }}<br />
+                <small class="tooltip">{{ field.help_text }}</small>
+              </span>
+              <input
+                type="checkbox"
+                role="switch"
+                name="{{ field.name }}"
+                {% if field.default %}checked{% endif %}
+              />
+            </label>
+            {% endif %}
+            {% endfor %}
+            <div class="actions">
+              <button type="submit" id="run-btn">一键开始</button>
+              <button type="button" id="health-btn" class="secondary">
+                环境自检
+              </button>
+            </div>
+            <p class="danger-note" id="form-error" hidden></p>
+          </form>
+        </article>
+      </section>
+
+      <section class="grid" style="margin-top: 2rem">
+        <article class="form-card">
+          <h3>Step 3 · 实时进度</h3>
+          <div>
+            <span class="status-pill" id="status-pill">闲置</span>
+            <p id="status-message" style="margin-top: 0.5rem">
+              等待开始 ...
+            </p>
+            <div class="progress-track" aria-label="进度条">
+              <div class="progress-step" id="step-1"></div>
+              <div class="progress-step" id="step-2"></div>
+              <div class="progress-step" id="step-3"></div>
+              <div class="progress-step" id="step-4"></div>
+            </div>
+            <dl style="margin-top: 1rem">
+              <dt>Workflow ID</dt>
+              <dd id="workflow-id">-</dd>
+              <dt>最近提示</dt>
+              <dd id="status-error">-</dd>
+            </dl>
+          </div>
+        </article>
+
+        <article class="form-card">
+          <h3>实时日志</h3>
+          <div class="log-box" id="log-box"></div>
+        </article>
+      </section>
+
+      <section style="margin: 2rem 0">
+        <article class="form-card">
+          <h3>常见问题 · 无需查文档</h3>
+          <ul>
+            <li>“显示窗口”= 能看到浏览器，方便排查；不勾选保持无头模式速度更快。</li>
+            <li>勾选“仅执行认领”可快速验证妙手账号是否正常。</li>
+            <li>日志中若出现红字，复制整段发给研发即可，无需定位问题。</li>
+          </ul>
+        </article>
+      </section>
+    </main>
+
+    <script>
+      const form = document.getElementById("control-form");
+      const runBtn = document.getElementById("run-btn");
+      const healthBtn = document.getElementById("health-btn");
+      const statusPill = document.getElementById("status-pill");
+      const statusMessage = document.getElementById("status-message");
+      const statusError = document.getElementById("status-error");
+      const workflowId = document.getElementById("workflow-id");
+      const logBox = document.getElementById("log-box");
+      const formError = document.getElementById("form-error");
+      const steps = [
+        document.getElementById("step-1"),
+        document.getElementById("step-2"),
+        document.getElementById("step-3"),
+        document.getElementById("step-4"),
+      ];
+
+      let logCursor = -1;
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        formError.hidden = true;
+        const data = new FormData(form);
+        runBtn.setAttribute("aria-busy", "true");
+        runBtn.disabled = true;
+        try {
+          const response = await fetch("/api/run", {
+            method: "POST",
+            body: data,
+          });
+          if (!response.ok) {
+            const payload = await response.json();
+            throw new Error(payload.detail || "提交失败, 请重试");
+          }
+          logCursor = -1;
+          logBox.textContent = "";
+          await refreshStatus();
+          await refreshLogs();
+        } catch (error) {
+          formError.textContent = error.message;
+          formError.hidden = false;
+        } finally {
+          runBtn.removeAttribute("aria-busy");
+          runBtn.disabled = false;
+        }
+      });
+
+      healthBtn.addEventListener("click", async () => {
+        healthBtn.setAttribute("aria-busy", "true");
+        try {
+          const response = await fetch("/health");
+          const payload = await response.json();
+          statusMessage.textContent =
+            payload.ok === false
+              ? "环境异常, 请检查依赖后重试"
+              : `环境正常 · 使用路径 ${payload.selection_dir}`;
+        } catch (error) {
+          statusMessage.textContent = "自检失败, 请稍后再试";
+        } finally {
+          healthBtn.removeAttribute("aria-busy");
+        }
+      });
+
+      function updatePill(state) {
+        statusPill.className = "status-pill";
+        if (state === "running") {
+          statusPill.classList.add("running");
+          statusPill.textContent = "运行中";
+        } else if (state === "success") {
+          statusPill.classList.add("success");
+          statusPill.textContent = "已完成";
+        } else if (state === "failed") {
+          statusPill.classList.add("failed");
+          statusPill.textContent = "失败";
+        } else {
+          statusPill.textContent = "闲置";
+        }
+      }
+
+      function updateProgress(state) {
+        const activeCount = state === "running" ? 2 : state === "success" ? 4 : 0;
+        steps.forEach((step, index) => {
+          if (index < activeCount) {
+            step.classList.add("active");
+          } else {
+            step.classList.remove("active");
+          }
+        });
+      }
+
+      async function refreshStatus() {
+        const response = await fetch("/api/status");
+        const payload = await response.json();
+        updatePill(payload.state);
+        updateProgress(payload.state);
+        statusMessage.textContent = payload.message;
+        workflowId.textContent = payload.workflow_id || "-";
+        statusError.textContent = payload.last_error || "暂无";
+      }
+
+      async function refreshLogs() {
+        const response = await fetch(`/api/logs?after=${logCursor}`);
+        const payload = await response.json();
+        if (Array.isArray(payload) && payload.length > 0) {
+          payload.forEach((log) => {
+            const line = `[${new Date(log.timestamp * 1000).toLocaleTimeString()}][${
+              log.level
+            }] ${log.message}\n`;
+            logBox.textContent += line;
+            logCursor = log.index;
+          });
+          logBox.scrollTop = logBox.scrollHeight;
+        }
+      }
+
+      setInterval(refreshStatus, 2500);
+      setInterval(refreshLogs, 2500);
+      refreshStatus();
+    </script>
+  </body>
+</html>
+
