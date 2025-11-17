@@ -1,0 +1,33 @@
+{
+  "workflow_id": "workflow_20251103_151844",
+  "start_time": "2025-11-03T15:18:44.648523",
+  "end_time": "2025-11-03T15:21:21.213511",
+  "input_path": "data/input/10月品 .xlsx",
+  "input_type": "excel",
+  "staff_name": "柯诗俊(keshijun123)",
+  "enable_batch_edit": true,
+  "enable_publish": false,
+  "use_ai_titles": true,
+  "dry_run": false,
+  "result": {
+    "success": false,
+    "stage1_result": {
+      "success": true,
+      "edited_count": 5,
+      "claimed_count": 5,
+      "final_count": 393,
+      "errors": []
+    },
+    "stage2_result": {
+      "success": false,
+      "error": "全选产品失败"
+    },
+    "stage3_result": {
+      "success": true,
+      "skipped": true
+    },
+    "errors": [
+      "阶段2失败：全选产品失败"
+    ]
+  }
+}

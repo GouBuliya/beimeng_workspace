@@ -1,0 +1,21 @@
+{
+  "workflow_id": "workflow_20251103_151733",
+  "start_time": "2025-11-03T15:17:33.191868",
+  "end_time": "2025-11-03T15:17:57.593011",
+  "input_path": "data/input/10月品 .xlsx",
+  "input_type": "excel",
+  "staff_name": "柯诗俊(keshijun123)",
+  "enable_batch_edit": true,
+  "enable_publish": false,
+  "use_ai_titles": true,
+  "dry_run": false,
+  "result": {
+    "success": false,
+    "stage1_result": {},
+    "stage2_result": {},
+    "stage3_result": {},
+    "errors": [
+      "工作流执行异常: 必须提供5个产品数据，当前提供了35个"
+    ]
+  }
+}

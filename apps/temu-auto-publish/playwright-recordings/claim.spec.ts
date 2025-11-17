@@ -46,4 +46,5 @@ test('test', async ({ page }) => {
   await page.locator('#jx-id-4599-80').click();
   await page.getByRole('button', { name: '确定' }).click();
   await page.getByRole('button', { name: '关闭', exact: true }).click();
+  await page.goto('https://erp.91miaoshou.com/common_collect_box/items?tabPaneName=all');
 });

@@ -1,0 +1,17 @@
+{
+  "workflow_id": "workflow_20251103_151244",
+  "start_time": "2025-11-03T15:12:44.116590",
+  "end_time": "2025-11-03T15:12:44.396210",
+  "input_path": "data/input/test_products.json",
+  "input_type": "json",
+  "staff_name": "柯诗俊(keshijun123)",
+  "enable_batch_edit": true,
+  "enable_publish": true,
+  "use_ai_titles": true,
+  "dry_run": true,
+  "result": {
+    "success": true,
+    "dry_run": true,
+    "message": "DRY-RUN模式,未实际执行"
+  }
+}

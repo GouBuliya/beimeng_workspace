@@ -150,9 +150,9 @@
   <body>
     <main class="container">
       <header>
-        <p>Temu 自动发布助手 · Web 管理页面</p>
-        <h1>跟着提示走，3 步即可完成整套 SOP</h1>
-        <p>无需命令行，电脑小白也能搞定 Temu 发布流程</p>
+        <p>Temu 自动发布助手 · Web 管理控制台</p>
+        <h1>请依照步骤完成文件准备、配置与任务执行</h1>
+        <p>该页面提供文件上传、参数设置、运行监控与问题提示</p>
       </header>
 
       <section class="grid" style="margin-top: 2rem">
@@ -169,13 +169,13 @@
             </li>
             <li>
               <span class="step-number">3</span>
-              完成后直接进入 Step 2, 无需编辑任何配置文件
+              资料准备完成后直接进入 Step 2 并提交运行任务
             </li>
           </ul>
           <div class="helper-card" style="margin-top: 1rem">
             <p>
-              不知道格式？<br />
-              <a href="/downloads/sample-selection">点击这里下载示例选品表</a>
+              如需参考格式，可下载标准选品表模板：<br />
+              <a href="/downloads/sample-selection">下载示例文件</a>
             </p>
           </div>
         </article>
@@ -231,7 +231,7 @@
             {% endif %}
             {% endfor %}
             <div class="actions">
-              <button type="submit" id="run-btn">一键开始</button>
+              <button type="submit" id="run-btn">开始执行</button>
               <button type="button" id="health-btn" class="secondary">
                 环境自检
               </button>
@@ -302,11 +302,11 @@
 
       <section style="margin: 2rem 0">
         <article class="form-card">
-          <h3>常见问题 · 无需查文档</h3>
+          <h3>常见问题</h3>
           <ul>
-            <li>“显示窗口”= 能看到浏览器，方便排查；不勾选保持无头模式速度更快。</li>
-            <li>勾选“仅执行认领”可快速验证妙手账号是否正常。</li>
-            <li>日志中若出现红字，复制整段发给研发即可，无需定位问题。</li>
+            <li>“显示窗口”选项可在需要人工观察时启用，默认无头模式以提升效率。</li>
+            <li>勾选“仅执行认领”可在低风险场景下验证账号有效性。</li>
+            <li>若日志出现异常信息，请复制完整内容交由技术同事处理。</li>
           </ul>
         </article>
       </section>

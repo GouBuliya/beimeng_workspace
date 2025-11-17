@@ -1,0 +1,17 @@
+{
+  "workflow_id": "workflow_20251103_151600",
+  "start_time": "2025-11-03T15:16:00.493166",
+  "end_time": "2025-11-03T15:16:00.891503",
+  "input_path": "data/input/10月品 .xlsx",
+  "input_type": "excel",
+  "staff_name": "柯诗俊(keshijun123)",
+  "enable_batch_edit": true,
+  "enable_publish": true,
+  "use_ai_titles": true,
+  "dry_run": true,
+  "result": {
+    "success": true,
+    "dry_run": true,
+    "message": "DRY-RUN模式,未实际执行"
+  }
+}
