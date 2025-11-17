@@ -91,3 +91,45 @@ async def test_logs_endpoint() -> None:
     payload = response.json()
     assert isinstance(payload, list)
     assert payload[0]["level"] == "INFO"
+
+
+@pytest.mark.asyncio
+async def test_env_settings_update(tmp_path, monkeypatch) -> None:
+    env_file = tmp_path / ".env"
+    monkeypatch.setenv("TEMU_WEB_PANEL_ENV", str(env_file))
+    manager = DummyManager()
+    app = create_app(task_manager=manager)
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        load_resp = await client.get("/api/env-settings")
+        assert load_resp.status_code == 200
+        assert any(field["key"] == "MIAOSHOU_USERNAME" for field in load_resp.json())
+
+        payload = {
+            "entries": {
+                "MIAOSHOU_USERNAME": "tester",
+                "MIAOSHOU_PASSWORD": "secret123",
+            }
+        }
+        save_resp = await client.post("/api/env-settings", json=payload)
+        assert save_resp.status_code == 200
+        content = env_file.read_text(encoding="utf-8")
+        assert "MIAOSHOU_USERNAME='tester'" in content
+        assert "MIAOSHOU_PASSWORD='secret123'" in content
+
+
+@pytest.mark.asyncio
+async def test_env_settings_validation(tmp_path, monkeypatch) -> None:
+    env_file = tmp_path / ".env"
+    monkeypatch.setenv("TEMU_WEB_PANEL_ENV", str(env_file))
+    manager = DummyManager()
+    app = create_app(task_manager=manager)
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post(
+            "/api/env-settings",
+            json={"entries": {"MIAOSHOU_USERNAME": "", "MIAOSHOU_PASSWORD": ""}},
+        )
+        assert resp.status_code == 400

@@ -15,6 +15,17 @@
       body {
         background: #f5f7fb;
       }
+      .required-mark {
+        color: #dc2626;
+        margin-left: 0.25rem;
+      }
+      .env-status {
+        font-size: 0.9rem;
+        color: #059669;
+      }
+      .env-status.error {
+        color: #dc2626;
+      }
       header {
         margin-top: 2rem;
         text-align: center;
@@ -232,6 +243,36 @@
 
       <section class="grid" style="margin-top: 2rem">
         <article class="form-card">
+          <h3>系统设置 (.env)</h3>
+          <p>填写必要的账号与 API Key，保存后立即生效。</p>
+          <form id="env-form">
+            {% for field in env_fields %}
+            <label>
+              <span>
+                {{ field.label }}
+                {% if field.required %}
+                <span class="required-mark">*</span>
+                {% endif %}
+              </span>
+              <input
+                type="{% if field.secret %}password{% else %}text{% endif %}"
+                name="{{ field.key }}"
+                placeholder="{{ field.placeholder or '' }}"
+                {% if field.required %}required{% endif %}
+              />
+            </label>
+            <p class="tooltip">{{ field.help_text }}</p>
+            {% endfor %}
+            <div class="actions">
+              <button type="submit">保存设置</button>
+              <span id="env-save-status" class="env-status"></span>
+            </div>
+          </form>
+        </article>
+      </section>
+
+      <section class="grid" style="margin-top: 2rem">
+        <article class="form-card">
           <h3>Step 3 · 实时进度</h3>
           <div>
             <span class="status-pill" id="status-pill">闲置</span>
@@ -287,6 +328,9 @@
         document.getElementById("step-3"),
         document.getElementById("step-4"),
       ];
+      const envForm = document.getElementById("env-form");
+      const envSaveStatus = document.getElementById("env-save-status");
+      let envSettingsCache = [];
 
       let logCursor = -1;
 
@@ -296,6 +340,12 @@
         const data = new FormData(form);
         runBtn.setAttribute("aria-busy", "true");
         runBtn.disabled = true;
+        if (usesDefaultMiaoshouAccount()) {
+          alert("检测到妙手账号或密码仍为默认值 tester，请在“系统设置”中修改后再运行。");
+          runBtn.removeAttribute("aria-busy");
+          runBtn.disabled = false;
+          return;
+        }
         try {
           const response = await fetch("/api/run", {
             method: "POST",
@@ -389,6 +439,72 @@
       setInterval(refreshStatus, 2500);
       setInterval(refreshLogs, 2500);
       refreshStatus();
+      if (envForm) {
+        loadEnvSettings();
+        envForm.addEventListener("submit", submitEnvForm);
+      }
+
+      async function loadEnvSettings() {
+        try {
+          const response = await fetch("/api/env-settings");
+          if (!response.ok) {
+            throw new Error();
+          }
+          const payload = await response.json();
+          envSettingsCache = payload;
+          payload.forEach((field) => {
+            const input = envForm.querySelector(`[name="${field.key}"]`);
+            if (input) {
+              input.value = field.value ?? "";
+            }
+          });
+        } catch (error) {
+          envSaveStatus.textContent = "无法加载设置";
+          envSaveStatus.classList.add("error");
+        }
+      }
+
+      async function submitEnvForm(event) {
+        event.preventDefault();
+        envSaveStatus.textContent = "";
+        envSaveStatus.classList.remove("error");
+        const formData = new FormData(envForm);
+        const entries = {};
+        formData.forEach((value, key) => {
+          entries[key] = value.toString();
+        });
+        try {
+          const response = await fetch("/api/env-settings", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ entries }),
+          });
+          const payload = await response.json();
+          if (!response.ok) {
+            throw new Error(payload.detail || "保存失败");
+          }
+          envSaveStatus.textContent = "保存成功";
+          await loadEnvSettings();
+        } catch (error) {
+          envSaveStatus.textContent = error.message || "保存失败";
+          envSaveStatus.classList.add("error");
+        }
+      }
+
+      function usesDefaultMiaoshouAccount() {
+        if (!envSettingsCache.length) {
+          return false;
+        }
+        const targetKeys = ["MIAOSHOU_USERNAME", "MIAOSHOU_PASSWORD"];
+        return targetKeys.some((key) => {
+          const entry = envSettingsCache.find((field) => field.key === key);
+          if (!entry) {
+            return false;
+          }
+          const value = (entry.value || "").trim().toLowerCase();
+          return value === "tester";
+        });
+      }
     </script>
   </body>
 </html>
