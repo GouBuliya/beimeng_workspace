@@ -19,18 +19,19 @@ import platform
 from pathlib import Path
 from typing import Any
 
-from fastapi import (
-    FastAPI,
-    File,
-    Form,
-    HTTPException,
-    Query,
-    Request,
-    UploadFile,
-)
+from dotenv import load_dotenv
+from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel
 
+from .env_settings import (
+    ENV_FIELDS,
+    build_env_payload,
+    persist_env_settings,
+    resolve_env_file,
+    validate_required,
+)
 from .fields import FORM_FIELDS
 from .models import HealthStatus, RunStatus, WorkflowOptions
 from .service import SelectionFileStore, WorkflowTaskManager, create_task_manager
@@ -47,6 +48,19 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
     templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
     store = SelectionFileStore()
     manager = task_manager or create_task_manager()
+    env_metadata = [
+        {
+            "key": field.key,
+            "label": field.label,
+            "help_text": field.help_text,
+            "required": field.required,
+            "placeholder": field.placeholder,
+            "secret": field.secret,
+        }
+        for field in ENV_FIELDS
+    ]
+
+    load_dotenv(resolve_env_file(), override=False)
 
     @app.get("/", response_class=HTMLResponse)
     async def index(request: Request) -> HTMLResponse:
@@ -55,6 +69,7 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
             {
                 "request": request,
                 "fields": FORM_FIELDS,
+                "env_fields": env_metadata,
             },
         )
 
@@ -130,7 +145,26 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
             filename="Temu选品表示例.xlsx",
         )
 
+    @app.get("/api/env-settings")
+    async def get_env_settings() -> list[dict[str, Any]]:
+        return build_env_payload()
+
+    @app.post("/api/env-settings")
+    async def update_env_settings(payload: EnvSettingsRequest) -> dict[str, bool]:
+        missing = validate_required(payload.entries)
+        if missing:
+            labels = "、".join(missing)
+            raise HTTPException(status_code=400, detail=f"以下配置不能为空: {labels}")
+        persist_env_settings(payload.entries)
+        return {"ok": True}
+
     return app
+
+
+class EnvSettingsRequest(BaseModel):
+    """env 设置提交载体."""
+
+    entries: dict[str, str | None]
 
 
 async def _resolve_selection_path(

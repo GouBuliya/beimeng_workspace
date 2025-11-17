@@ -1,0 +1,424 @@
+[
+  {
+    "name": "region",
+    "value": "37",
+    "domain": "www.temu.com",
+    "path": "/",
+    "expires": 1778048150.897943,
+    "httpOnly": false,
+    "secure": true,
+    "sameSite": "Lax"
+  },
+  {
+    "name": "language",
+    "value": "zh-Hans",
+    "domain": "www.temu.com",
+    "path": "/",
+    "expires": 1778048150.89868,
+    "httpOnly": false,
+    "secure": true,
+    "sameSite": "Lax"
+  },
+  {
+    "name": "currency",
+    "value": "CAD",
+    "domain": "www.temu.com",
+    "path": "/",
+    "expires": 1778048150.898738,
+    "httpOnly": false,
+    "secure": true,
+    "sameSite": "Lax"
+  },
+  {
+    "name": "api_uid",
+    "value": "CmxYNWkNjpdMCABT4T+LAg==",
+    "domain": ".temu.com",
+    "path": "/",
+    "expires": 1794032150.898783,
+    "httpOnly": false,
+    "secure": true,
+    "sameSite": "Lax"
+  },
+  {
+    "name": "_nano_fp",
+    "value": "GV-q8b-UhIrUWD-qVD-hn#bSfNtgPUFeQZ3xb8_lcxd",
+    "domain": "www.temu.com",
+    "path": "/",
+    "expires": 1794032151,
+    "httpOnly": false,
+    "secure": true,
+    "sameSite": "Lax"
+  },
+  {
+    "name": "timezone",
+    "value": "Asia%2FShanghai",
+    "domain": "www.temu.com",
+    "path": "/",
+    "expires": 1794032182.274312,
+    "httpOnly": false,
+    "secure": true,
+    "sameSite": "Lax"
+  },
+  {
+    "name": "img_sup",
+    "value": "avif%2Cwebp",
+    "domain": "www.temu.com",
+    "path": "/",
+    "expires": 1765088182.287379,
+    "httpOnly": false,
+    "secure": true,
+    "sameSite": "Lax"
+  },
+  {
+    "name": "verifyAuthToken",
+    "value": "vmQZZi-enfE8Je1faMhz3gd83a2a2e1680c981c",
+    "domain": "www.temu.com",
+    "path": "/",
+    "expires": 1762582553.970697,
+    "httpOnly": false,
+    "secure": true,
+    "sameSite": "Lax"
+  },
+  {
+    "name": "_bee",
+    "value": "XrTohKJCluuBocAa5dSVfqj2tCfBEang",
+    "domain": ".temu.com",
+    "path": "/",
+    "expires": 1794032243.24362,
+    "httpOnly": false,
+    "secure": true,
+    "sameSite": "Lax"
+  },
+  {
+    "name": "njrpl",
+    "value": "XrTohKJCluuBocAa5dSVfqj2tCfBEang",
+    "domain": ".temu.com",
+    "path": "/",
+    "expires": 1794032243.243792,
+    "httpOnly": true,
+    "secure": true,
+    "sameSite": "Lax"
+  },
+  {
+    "name": "dilx",
+    "value": "0ZRAoQ76KcUxxIvczRRtV",
+    "domain": ".temu.com",
+    "path": "/",
+    "expires": 1794032243.243837,
+    "httpOnly": true,
+    "secure": true,
+    "sameSite": "Lax"
+  },
+  {
+    "name": "hfsc",
+    "value": "L3yMeo057z/915XPeA==",
+    "domain": ".temu.com",
+    "path": "/",
+    "expires": 1794032243.243877,
+    "httpOnly": true,
+    "secure": true,
+    "sameSite": "Lax"
+  },
+  {
+    "name": "_ttc",
+    "value": "3.cvgsHZqL5rjW.1794032181",
+    "domain": "www.temu.com",
+    "path": "/",
+    "expires": 1794032180.758792,
+    "httpOnly": false,
+    "secure": true,
+    "sameSite": "None"
+  },
+  {
+    "name": "g_state",
+    "value": "{\"i_l\":0,\"i_ll\":1762496181520,\"i_b\":\"pCkTly7IXyJRKueersTGmWHFUf9lDJVqT3MSVB4q7rE\"}",
+    "domain": "www.temu.com",
+    "path": "/",
+    "expires": 1778048181,
+    "httpOnly": false,
+    "secure": false,
+    "sameSite": "Lax"
+  },
+  {
+    "name": "__Host-GAPS",
+    "value": "1:8lkavib79rKJy_lHNpYRM0Wdogbdfw:ZmkKHhhQ0romWYtq",
+    "domain": "accounts.google.com",
+    "path": "/",
+    "expires": 1797056184.914213,
+    "httpOnly": true,
+    "secure": true,
+    "sameSite": "Lax"
+  },
+  {
+    "name": "OTZ",
+    "value": "8336536_24_24__24_",
+    "domain": "accounts.google.com",
+    "path": "/",
+    "expires": 1765088186,
+    "httpOnly": false,
+    "secure": true,
+    "sameSite": "Lax"
+  },
+  {
+    "name": "NID",
+    "value": "526=DSb8ad2Rr4MUiNqS5bfob9goI5VF6VUoV22X1Pb_54g41uYFupc-LB4rl6eP1oYQb9SY0NvV7QiM6i_Gb-AZVJFZPTv0NglQSw1dWLBDtBDpUEj0sx5l5eSueTQZGuNDYIPaU8ftXLQd5vDWuvnXbghiMROjHPLeUzqrIOLx4U4XJiup-_hIfusoZlTILp9a",
+    "domain": ".google.com",
+    "path": "/",
+    "expires": 1778307387.040456,
+    "httpOnly": true,
+    "secure": true,
+    "sameSite": "None"
+  },
+  {
+    "name": "acw_tc",
+    "value": "0b32974617624985383872705e8dab1b61848936f92d3723c1765e2e5a326c",
+    "domain": "erp.91miaoshou.com",
+    "path": "/",
+    "expires": 1762500337.532376,
+    "httpOnly": true,
+    "secure": false,
+    "sameSite": "Lax"
+  },
+  {
+    "name": "_ati",
+    "value": "2229940932127",
+    "domain": ".91miaoshou.com",
+    "path": "/",
+    "expires": 1797058537.724191,
+    "httpOnly": false,
+    "secure": false,
+    "sameSite": "Lax"
+  },
+  {
+    "name": "HMACCOUNT_BFESS",
+    "value": "9497BF6A10C96B99",
+    "domain": ".hm.baidu.com",
+    "path": "/",
+    "expires": 1797058537.998705,
+    "httpOnly": false,
+    "secure": true,
+    "sameSite": "None"
+  },
+  {
+    "name": "Hm_lvt_7974377ca203df6dcf98836f348d0722",
+    "value": "1762498538",
+    "domain": ".erp.91miaoshou.com",
+    "path": "/",
+    "expires": 1794034561,
+    "httpOnly": false,
+    "secure": false,
+    "sameSite": "Lax"
+  },
+  {
+    "name": "HMACCOUNT",
+    "value": "9497BF6A10C96B99",
+    "domain": ".erp.91miaoshou.com",
+    "path": "/",
+    "expires": -1,
+    "httpOnly": false,
+    "secure": false,
+    "sameSite": "Lax"
+  },
+  {
+    "name": "cbc",
+    "value": "T2gA21k2Kipxts5gQLkuy6WfzlEZed2neaAfZFlaC71mkTcdlo-cJfLKZLieX5CZUgE=",
+    "domain": ".ynuf.aliapp.org",
+    "path": "/",
+    "expires": 1794034538.191485,
+    "httpOnly": false,
+    "secure": true,
+    "sameSite": "None",
+    "partitionKey": "https://91miaoshou.com",
+    "_crHasCrossSiteAncestor": true
+  },
+  {
+    "name": "bsClientId",
+    "value": "bs_767acfd1-768a-4fc9-8d86-95b16cddbc9f",
+    "domain": ".erp.91miaoshou.com",
+    "path": "/",
+    "expires": 1797058538.347931,
+    "httpOnly": false,
+    "secure": false,
+    "sameSite": "Lax"
+  },
+  {
+    "name": "_ga",
+    "value": "GA1.1.1445255737.1762498539",
+    "domain": ".91miaoshou.com",
+    "path": "/",
+    "expires": 1797058561.662694,
+    "httpOnly": false,
+    "secure": false,
+    "sameSite": "Lax"
+  },
+  {
+    "name": "CLID",
+    "value": "e7657f41c7844ff0b254446db7bcfb6b.20251107.20261107",
+    "domain": "www.clarity.ms",
+    "path": "/",
+    "expires": 1794034539.24681,
+    "httpOnly": true,
+    "secure": true,
+    "sameSite": "None"
+  },
+  {
+    "name": "mserp",
+    "value": "qd2ifn85ri2d73piefktasjk57",
+    "domain": ".erp.91miaoshou.com",
+    "path": "/",
+    "expires": -1,
+    "httpOnly": true,
+    "secure": false,
+    "sameSite": "Lax"
+  },
+  {
+    "name": "_clck",
+    "value": "1vsliwd%5E2%5Eg0t%5E0%5E2137",
+    "domain": ".91miaoshou.com",
+    "path": "/",
+    "expires": 1794034539,
+    "httpOnly": false,
+    "secure": false,
+    "sameSite": "Lax"
+  },
+  {
+    "name": "MUID",
+    "value": "36AF31B31FBF6C4D31BD272E1EFA6D3E",
+    "domain": ".bing.com",
+    "path": "/",
+    "expires": 1796194541.143208,
+    "httpOnly": false,
+    "secure": true,
+    "sameSite": "None"
+  },
+  {
+    "name": "MR",
+    "value": "0",
+    "domain": ".c.bing.com",
+    "path": "/",
+    "expires": 1763103341.143317,
+    "httpOnly": false,
+    "secure": true,
+    "sameSite": "None"
+  },
+  {
+    "name": "SRM_B",
+    "value": "36AF31B31FBF6C4D31BD272E1EFA6D3E",
+    "domain": ".c.bing.com",
+    "path": "/",
+    "expires": 1796194541.143359,
+    "httpOnly": false,
+    "secure": true,
+    "sameSite": "None"
+  },
+  {
+    "name": "SM",
+    "value": "C",
+    "domain": ".c.clarity.ms",
+    "path": "/",
+    "expires": -1,
+    "httpOnly": false,
+    "secure": true,
+    "sameSite": "None"
+  },
+  {
+    "name": "MUID",
+    "value": "36AF31B31FBF6C4D31BD272E1EFA6D3E",
+    "domain": ".clarity.ms",
+    "path": "/",
+    "expires": 1796194541.287446,
+    "httpOnly": false,
+    "secure": true,
+    "sameSite": "None"
+  },
+  {
+    "name": "MR",
+    "value": "0",
+    "domain": ".c.clarity.ms",
+    "path": "/",
+    "expires": 1763103341.287517,
+    "httpOnly": false,
+    "secure": true,
+    "sameSite": "None"
+  },
+  {
+    "name": "mserp_sst",
+    "value": "qd2ifn85ri2d73piefktasjk57",
+    "domain": ".erp.91miaoshou.com",
+    "path": "/",
+    "expires": -1,
+    "httpOnly": true,
+    "secure": true,
+    "sameSite": "None"
+  },
+  {
+    "name": "firstClientId",
+    "value": "09ced171-6d21-4da8-9971-97471dc6d452",
+    "domain": ".erp.91miaoshou.com",
+    "path": "/",
+    "expires": -1,
+    "httpOnly": false,
+    "secure": false,
+    "sameSite": "Lax"
+  },
+  {
+    "name": "accountId",
+    "value": "11317662",
+    "domain": ".erp.91miaoshou.com",
+    "path": "/",
+    "expires": -1,
+    "httpOnly": false,
+    "secure": true,
+    "sameSite": "None"
+  },
+  {
+    "name": "autoLoginToken",
+    "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhY2NvdW50SWQiOiIxMTMxNzY2MiIsImNsaWVudElkIjpudWxsLCJzdWJBY2NvdW50SWQiOjAsImV4cGlyZVRpbWUiOjE3NjMxMDMzNjIsImdtdENyZWF0ZSI6IjIwMjUtMTEtMDcgMTQ6NTY6MDIiLCJleHAiOjE3NjI0OTg2ODJ9.HbdNns6g5Bhxs6vFWsy6c7gGSCQosjR5HlUD6_rqxag",
+    "domain": ".erp.91miaoshou.com",
+    "path": "/",
+    "expires": -1,
+    "httpOnly": true,
+    "secure": true,
+    "sameSite": "None"
+  },
+  {
+    "name": "Hm_lpvt_7974377ca203df6dcf98836f348d0722",
+    "value": "1762498562",
+    "domain": ".erp.91miaoshou.com",
+    "path": "/",
+    "expires": -1,
+    "httpOnly": false,
+    "secure": false,
+    "sameSite": "Lax"
+  },
+  {
+    "name": "_ga_28Q604ZC7E",
+    "value": "GS2.1.s1762498538$o1$g1$t1762498579$j19$l0$h0",
+    "domain": ".91miaoshou.com",
+    "path": "/",
+    "expires": 1797058579.265205,
+    "httpOnly": false,
+    "secure": false,
+    "sameSite": "Lax"
+  },
+  {
+    "name": "_clsk",
+    "value": "1yfvhv7%5E1762498579360%5E6%5E1%5Ej.clarity.ms%2Fcollect",
+    "domain": ".91miaoshou.com",
+    "path": "/",
+    "expires": 1762584979,
+    "httpOnly": false,
+    "secure": false,
+    "sameSite": "Lax"
+  },
+  {
+    "name": "tfstk",
+    "value": "gIim5w_k171IGOIfodqXo4XmRuLRwoZ_CfIT6lFwz7PSkREtQ3rrwjvbMSntsGPo1SUY0IGijbh7WIObDdvi9fs9GFZAQbcxLqUYMc05jvMsDKZ9hoMbflRp9H3ihxZ13GA_Jcqz4R2DXGra7oZPuLKiiHKKhxl3Vey9vqnfBy2__lz47_SzNR2N3Slazgy_aiyN0R5yERNzbiyNu8yzCJFN0ilZUL2_a5raufryERNz_lrZ1lR4gcox4CiUELIteamznrVE3Skjh05QkZM7ZGSZf4qYTGFlbGouhAPc_7S2x7ux7mEr0Q5Q4vg-g8qHjO2o-Yr4nftCcokEUVzmjFBQ14DrJz05HKwomvmgKrfyn5ixic4jYBI7g4mSjo3JiMF_74nbRmdPmkuIHo3ZadSas4yN4X7P83OUU8Jt4N__u8wuOFW1QPa4JWFMELb31ry73WpkENTTu8wuQLvl8Oa4F-PF.",
+    "domain": ".91miaoshou.com",
+    "path": "/",
+    "expires": 1778050561,
+    "httpOnly": false,
+    "secure": false,
+    "sameSite": "Lax"
+  }
+]
