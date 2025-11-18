@@ -26,7 +26,13 @@ from .steps import BatchEditStepsMixin
 class BatchEditController(BatchEditStepsMixin):
     """批量编辑控制器（改进版）."""
 
-    def __init__(self, page: Page):
+    def __init__(
+        self,
+        page: Page,
+        *,
+        outer_package_image: str | None = None,
+        manual_file_path: str | None = None,
+    ):
         """初始化控制器.
 
         Args:
@@ -34,6 +40,8 @@ class BatchEditController(BatchEditStepsMixin):
         """
         self.page = page
         self.temu_box_url = "https://erp.91miaoshou.com/pddkj/collect_box/items"
+        self.outer_package_image_source = outer_package_image
+        self.manual_file_path_override = manual_file_path
         logger.info("批量编辑控制器已初始化（改进版）")
 
     async def navigate_to_batch_edit(self, select_count: int = 20) -> bool:
@@ -453,7 +461,11 @@ class BatchEditController(BatchEditStepsMixin):
             ("7.2", "英语标题", self.step_02_english_title()),
             ("7.3", "类目属性", self.step_03_category_attrs()),
             ("7.4", "主货号", self.step_04_main_sku()),
-            ("7.5", "外包装", self.step_05_packaging()),
+            (
+                "7.5",
+                "外包装",
+                self.step_05_packaging(self.outer_package_image_source),
+            ),
             ("7.6", "产地", self.step_06_origin()),
             ("7.7", "定制品", self.step_07_customization()),
             ("7.8", "敏感属性", self.step_08_sensitive_attrs()),
@@ -482,7 +494,11 @@ class BatchEditController(BatchEditStepsMixin):
             ("7.15", "包装清单", self.step_15_package_list()),
             ("7.16", "轮播图", self.step_16_carousel_images()),
             ("7.17", "颜色图", self.step_17_color_images()),
-            ("7.18", "产品说明书", self.step_18_manual()),
+            (
+                "7.18",
+                "产品说明书",
+                self.step_18_manual(self.manual_file_path_override),
+            ),
         ]
 
         for step_num, step_name, step_coro in steps:

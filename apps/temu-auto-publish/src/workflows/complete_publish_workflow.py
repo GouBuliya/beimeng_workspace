@@ -163,6 +163,8 @@ class CompletePublishWorkflow:
         use_codegen_first_edit: bool = False,
         skip_first_edit: bool = False,
         only_claim: bool = False,
+        outer_package_image: Path | str | None = None,
+        manual_file: Path | str | None = None,
     ) -> None:
         """初始化工作流控制器.
 
@@ -189,6 +191,14 @@ class CompletePublishWorkflow:
 
         # 图片基础目录(从环境变量或配置读取, 默认为 data/input/10月新品可推)
         self.image_base_dir = self._resolve_image_base_dir()
+
+        self.default_manual_file = (
+            Path(self.settings.data_input_dir).parent / "manual" / "超多小语种版说明书.pdf"
+        )
+        self.manual_file_override = self._resolve_optional_path(manual_file, "说明书文件")
+        self.outer_package_image_override = self._resolve_optional_path(
+            outer_package_image, "外包装图片"
+        )
 
         self.selection_table_path = Path(selection_table) if selection_table else None
 
@@ -230,7 +240,13 @@ class CompletePublishWorkflow:
 
             miaoshou_ctrl = MiaoshouController()
             first_edit_ctrl = FirstEditController()
-            batch_edit_ctrl = BatchEditController(page)
+            batch_edit_ctrl = BatchEditController(
+                page,
+                outer_package_image=str(self.outer_package_image_override)
+                if self.outer_package_image_override
+                else None,
+                manual_file_path=str(self.manual_file_override) if self.manual_file_override else None,
+            )
             publish_ctrl = PublishController()
 
             selection_rows = self._prepare_selection_rows()
@@ -763,6 +779,7 @@ class CompletePublishWorkflow:
             # 使用 codegen 录制的批量编辑模块(自带导航)
             logger.info("使用 Codegen 录制模块执行批量编辑 18 步")
 
+            manual_source = self.manual_file_override or self.default_manual_file
             payload = {
                 "category_path": ["收纳用品", "收纳篮、箱子、盒子", "盖式储物箱"],
                 "category_attrs": {
@@ -772,10 +789,10 @@ class CompletePublishWorkflow:
                     "closure_type": "其他闭合类型",
                     "style": "当代",
                 },
-                "outer_package_image": "",  # 从空间选择,不需要本地路径
-                "manual_file": str(
-                    Path(self.settings.data_input_dir).parent / "manual" / "超多小语种版说明书.pdf"
-                ),
+                "outer_package_image": str(self.outer_package_image_override)
+                if self.outer_package_image_override
+                else "",
+                "manual_file": str(manual_source),
             }
 
             batch_result = await run_batch_edit(page, payload)
@@ -944,6 +961,20 @@ class CompletePublishWorkflow:
             or self.settings.temu_password
         )
         return username or "", password or ""
+
+    def _resolve_optional_path(self, raw: Path | str | None, description: str) -> Path | None:
+        """解析可选的本地文件路径."""
+
+        if not raw:
+            return None
+
+        candidate = Path(raw).expanduser()
+        if candidate.exists():
+            logger.info("使用自定义%s: %s", description, candidate)
+            return candidate
+
+        logger.warning("%s 不存在: %s，将忽略该配置", description, candidate)
+        return None
 
     def _resolve_cost_price(self, selection: ProductSelectionRow) -> float:
         """根据选品或Excel推断成本价."""

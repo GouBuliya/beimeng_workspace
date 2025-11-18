@@ -25,6 +25,7 @@ class FormField:
     required: bool = False
     placeholder: str | None = None
     options: list[tuple[str, str]] | None = None
+    accept: str | None = None
 
 
 FORM_FIELDS: tuple[FormField, ...] = (
@@ -34,6 +35,7 @@ FORM_FIELDS: tuple[FormField, ...] = (
         help_text="点击选择最新的 Excel/CSV 选品表, 系统会自动保存到 data/input。",
         kind="file",
         required=False,
+        accept=".xlsx,.xls,.csv",
     ),
     FormField(
         name="selection_path",
@@ -41,6 +43,36 @@ FORM_FIELDS: tuple[FormField, ...] = (
         help_text="若文件已位于服务器, 可直接粘贴绝对路径 (例如 C:\\选品\\10月新品.xlsx)。",
         kind="path",
         placeholder="例如 C:\\data\\temu\\selection.xlsx 或 /Users/xxx/selection.xlsx",
+    ),
+    FormField(
+        name="outer_package_file",
+        label="外包装图片 (可选)",
+        help_text="上传 .png/.jpg/.jpeg/.webp 等图片，供批量编辑第 7.5 步复用。",
+        kind="file",
+        required=False,
+        accept=".png,.jpg,.jpeg,.webp",
+    ),
+    FormField(
+        name="outer_package_path",
+        label="或外包装图片路径",
+        help_text="若文件已在服务器，可填写绝对路径（示例: C:\\assets\\packaging.png）。",
+        kind="path",
+        placeholder="例如 C:\\assets\\packaging.png 或 /data/packaging.png",
+    ),
+    FormField(
+        name="manual_file",
+        label="说明书 PDF (可选)",
+        help_text="上传产品说明书 PDF，供批量编辑第 7.18 步使用。",
+        kind="file",
+        required=False,
+        accept=".pdf",
+    ),
+    FormField(
+        name="manual_path",
+        label="或说明书文件路径",
+        help_text="已存在的 PDF 绝对路径（示例: C:\\docs\\manual.pdf）。未配置时使用默认模板。",
+        kind="path",
+        placeholder="例如 C:\\docs\\manual.pdf 或 /data/manuals/booklet.pdf",
     ),
     FormField(
         name="headless_mode",

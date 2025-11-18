@@ -136,7 +136,7 @@ class BatchEditStepsMixin:
         """步骤7.5：外包装（长方体+硬包装）.
 
         Args:
-            image_url: 外包装图片URL（可选）
+            image_url: 外包装图片来源（可为 URL 或本地文件路径）
         """
         if not await self.click_step("外包装", "7.5"):
             return False
@@ -253,36 +253,56 @@ class BatchEditStepsMixin:
 
             await self.page.wait_for_timeout(500)
 
-            # 3. 上传图片（如果提供了URL）
-            if image_url:
-                logger.info(f"    - 上传外包装图片: {image_url}")
-                try:
-                    network_img_btn = self.page.locator("button:has-text('使用网络图片')").first
-                    if await network_img_btn.count() > 0 and await network_img_btn.is_visible():
-                        await network_img_btn.click()
-                        await self.page.wait_for_timeout(1000)
+            def _is_url(value: str) -> bool:
+                return value.lower().startswith(("http://", "https://"))
 
-                        url_input = self.page.locator("input[placeholder*='图片'], textarea").first
-                        if await url_input.count() > 0:
-                            await url_input.fill(image_url)
-                            await self.page.wait_for_timeout(500)
+            upload_source = image_url or getattr(self, "outer_package_image_source", None)
+            if upload_source:
+                if _is_url(upload_source):
+                    logger.info(f"    - 上传外包装图片(URL): {upload_source}")
+                    try:
+                        network_img_btn = self.page.locator("button:has-text('使用网络图片')").first
+                        if await network_img_btn.count() > 0 and await network_img_btn.is_visible():
+                            await network_img_btn.click()
+                            await self.page.wait_for_timeout(1000)
 
-                            confirm_btn = self.page.locator(
-                                "button:has-text('确定'), button:has-text('确认')",
-                            ).first
-                            if await confirm_btn.count() > 0:
-                                await confirm_btn.click()
-                                logger.info("      ✓ 图片URL已上传")
+                            url_input = self.page.locator("input[placeholder*='图片'], textarea").first
+                            if await url_input.count() > 0:
+                                await url_input.fill(upload_source)
+                                await self.page.wait_for_timeout(500)
+
+                                confirm_btn = self.page.locator(
+                                    "button:has-text('确定'), button:has-text('确认')",
+                                ).first
+                                if await confirm_btn.count() > 0:
+                                    await confirm_btn.click()
+                                    logger.info("      ✓ 图片URL已上传")
+                                else:
+                                    logger.warning("      ⚠️ 未找到确定按钮")
                             else:
-                                logger.warning("      ⚠️ 未找到确定按钮")
+                                logger.warning("      ⚠️ 未找到图片URL输入框")
                         else:
-                            logger.warning("      ⚠️ 未找到图片URL输入框")
+                            logger.debug("      未找到网络图片按钮")
+                    except Exception as err:  # noqa: BLE001
+                        logger.warning(f"      ⚠️ 图片上传失败: {err}")
+                else:
+                    file_path = Path(upload_source)
+                    if file_path.exists():
+                        logger.info(f"    - 上传外包装本地图片: {file_path}")
+                        try:
+                            file_inputs = self.page.locator("input[type='file']")
+                            if await file_inputs.count() > 0:
+                                await file_inputs.last.set_input_files(str(file_path))
+                                logger.success("      ✓ 本地图片已上传")
+                                await self.page.wait_for_timeout(500)
+                            else:
+                                logger.warning("      ⚠️ 未找到图片文件选择框")
+                        except Exception as err:  # noqa: BLE001
+                            logger.warning(f"      ⚠️ 上传本地图片失败: {err}")
                     else:
-                        logger.debug("      未找到网络图片按钮")
-                except Exception as err:  # noqa: BLE001
-                    logger.warning(f"      ⚠️ 图片上传失败: {err}")
+                        logger.warning(f"      ⚠️ 图片文件不存在: {file_path}")
             else:
-                logger.info("    - 跳过图片上传（未提供URL）")
+                logger.info("    - 跳过图片上传（未提供图片）")
 
             await self.page.wait_for_timeout(500)
             return await self.click_preview_and_save("外包装")

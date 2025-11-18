@@ -187,7 +187,12 @@
             {% if field.kind == "file" %}
             <label>
               {{ field.label }}
-              <input type="file" name="{{ field.name }}" accept=".xlsx,.xls,.csv" />
+              <input
+                type="file"
+                name="{{ field.name }}"
+                {% if field.accept %}accept="{{ field.accept }}"{% endif %}
+                {% if field.required %}required{% endif %}
+              />
             </label>
             <p class="file-hint">{{ field.help_text }}</p>
             {% elif field.kind == "path" %}

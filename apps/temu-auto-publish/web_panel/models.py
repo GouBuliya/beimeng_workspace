@@ -36,6 +36,8 @@ class WorkflowOptions(BaseModel):
     use_codegen_batch_edit: bool = Field(default=True)
     skip_first_edit: bool = Field(default=False)
     only_claim: bool = Field(default=False)
+    outer_package_image: Path | None = Field(default=None, description="外包装图片文件路径")
+    manual_file: Path | None = Field(default=None, description="产品说明书PDF路径")
 
     def as_workflow_kwargs(self) -> dict[str, object]:
         """转换为 CompletePublishWorkflow 所需的关键参数."""
@@ -56,6 +58,8 @@ class WorkflowOptions(BaseModel):
             "use_codegen_batch_edit": self.use_codegen_batch_edit,
             "skip_first_edit": self.skip_first_edit,
             "only_claim": self.only_claim,
+            "outer_package_image": str(self.outer_package_image) if self.outer_package_image else None,
+            "manual_file": str(self.manual_file) if self.manual_file else None,
         }
 
 

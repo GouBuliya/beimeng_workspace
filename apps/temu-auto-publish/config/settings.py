@@ -285,23 +285,45 @@ class Settings(BaseSettings):
 # ========== 配置加载 ==========
 
 def load_environment_config(env: str = "development") -> Dict[str, Any]:
-    """从YAML文件加载环境配置.
-    
-    Args:
-        env: 环境名称
-        
-    Returns:
-        配置字典
-    """
-    config_file = Path(__file__).parent / "environments" / f"{env}.yaml"
-    
-    if not config_file.exists():
-        raise FileNotFoundError(f"环境配置文件不存在: {config_file}")
-    
-    with config_file.open("r", encoding="utf-8") as f:
-        config = yaml.safe_load(f)
-    
-    return config or {}
+    """从YAML文件加载环境配置，支持别名引用."""
+
+    config_dir = Path(__file__).parent / "environments"
+    target_file = config_dir / f"{env}.yaml"
+
+    def _load(file_path: Path, seen: set[Path]) -> Dict[str, Any]:
+        if file_path in seen:
+            raise ValueError(f"检测到环境配置的循环引用: {file_path}")
+        seen.add(file_path)
+
+        if not file_path.exists():
+            raise FileNotFoundError(f"环境配置文件不存在: {file_path}")
+
+        with file_path.open("r", encoding="utf-8") as handle:
+            content = yaml.safe_load(handle)
+
+        if content is None:
+            return {}
+
+        if isinstance(content, str):
+            alias = content.strip()
+            if not alias:
+                raise ValueError(f"环境配置别名不能为空: {file_path}")
+
+            if alias.endswith((".yaml", ".yml")):
+                alias_file = file_path.parent / alias
+            else:
+                alias_file = file_path.parent / f"{alias}.yaml"
+
+            return _load(alias_file, seen)
+
+        if not isinstance(content, dict):
+            raise TypeError(
+                f"环境配置 {file_path} 必须是字典或别名字符串, 当前类型: {type(content).__name__}",
+            )
+
+        return content
+
+    return _load(target_file, set())
 
 
 def create_settings(env: Optional[str] = None) -> Settings:

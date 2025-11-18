@@ -77,6 +77,10 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
     async def run_workflow(
         selection_file: UploadFile | None = File(default=None),
         selection_path: str | None = Form(default=None),
+        outer_package_file: UploadFile | None = File(default=None),
+        outer_package_path: str | None = Form(default=None),
+        manual_file: UploadFile | None = File(default=None),
+        manual_path: str | None = Form(default=None),
         headless_mode: str = Form(default="auto"),
         use_ai_titles: str | None = Form(default="off"),
         use_codegen_first_edit: str | None = Form(default="on"),
@@ -85,6 +89,24 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
         only_claim: str | None = Form(default="off"),
     ) -> RunStatus:
         resolved_path = await _resolve_selection_path(store, selection_file, selection_path)
+        outer_package_image = await _resolve_optional_asset(
+            store,
+            upload=outer_package_file,
+            provided_path=outer_package_path,
+            field_label="外包装图片",
+            subdir="packaging",
+            suffixes=(".png", ".jpg", ".jpeg", ".webp"),
+            default_suffix=".png",
+        )
+        manual_file_path = await _resolve_optional_asset(
+            store,
+            upload=manual_file,
+            provided_path=manual_path,
+            field_label="说明书文件",
+            subdir="manual",
+            suffixes=(".pdf",),
+            default_suffix=".pdf",
+        )
         options = WorkflowOptions(
             selection_path=resolved_path,
             headless_mode=_normalize_choice(headless_mode),
@@ -93,6 +115,8 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
             use_codegen_batch_edit=_to_bool(use_codegen_batch_edit),
             skip_first_edit=_to_bool(skip_first_edit),
             only_claim=_to_bool(only_claim),
+            outer_package_image=outer_package_image,
+            manual_file=manual_file_path,
         )
         try:
             status = manager.start(options)
@@ -173,7 +197,15 @@ async def _resolve_selection_path(
     selection_path: str | None,
 ) -> Path:
     if selection_file is not None and selection_file.filename:
-        return store.store(selection_file.filename, selection_file.file)
+        try:
+            return store.store(
+                selection_file.filename,
+                selection_file.file,
+                suffix_whitelist=(".xlsx", ".xls", ".csv"),
+                default_suffix=".xlsx",
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     if selection_path:
         candidate = Path(selection_path).expanduser()
@@ -182,6 +214,39 @@ async def _resolve_selection_path(
         return candidate
 
     raise HTTPException(status_code=400, detail="请上传选品表或填写路径")
+
+
+async def _resolve_optional_asset(
+    store: SelectionFileStore,
+    *,
+    upload: UploadFile | None,
+    provided_path: str | None,
+    field_label: str,
+    subdir: str,
+    suffixes: tuple[str, ...],
+    default_suffix: str,
+) -> Path | None:
+    """根据上传文件或路径解析可选资产."""
+
+    if upload is not None and upload.filename:
+        try:
+            return store.store(
+                upload.filename,
+                upload.file,
+                suffix_whitelist=suffixes,
+                default_suffix=default_suffix,
+                subdir=subdir,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=f"{field_label}: {exc}") from exc
+
+    if provided_path:
+        candidate = Path(provided_path).expanduser()
+        if not candidate.exists():
+            raise HTTPException(status_code=400, detail=f"{field_label} 路径不存在")
+        return candidate
+
+    return None
 
 
 def _to_bool(value: str | None) -> bool:

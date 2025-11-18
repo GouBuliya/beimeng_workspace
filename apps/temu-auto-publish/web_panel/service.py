@@ -38,25 +38,44 @@ UPLOAD_DIR = _resolve_upload_dir()
 
 
 class SelectionFileStore:
-    """负责管理 Web Panel 上传的选品表文件."""
+    """负责管理 Web Panel 上传的文件资产."""
 
     def __init__(self, base_dir: Path = UPLOAD_DIR) -> None:
         self.base_dir = base_dir
         self.base_dir.mkdir(parents=True, exist_ok=True)
 
-    def store(self, filename: str | None, stream: BinaryIO) -> Path:
+    def store(
+        self,
+        filename: str | None,
+        stream: BinaryIO,
+        suffix_whitelist: tuple[str, ...] | None = None,
+        default_suffix: str = ".xlsx",
+        subdir: str | None = None,
+    ) -> Path:
         """保存上传的文件并返回最终路径."""
 
         safe_stem = self._build_safe_stem(filename)
-        suffix = Path(filename or "").suffix or ".xlsx"
-        target = self.base_dir / f"{safe_stem}{suffix}"
-        stream.seek(0)
+        suffix = Path(filename or "").suffix or default_suffix
+        suffix = suffix.lower()
+        if suffix_whitelist and suffix not in suffix_whitelist:
+            allowed = ", ".join(suffix_whitelist)
+            raise ValueError(f"仅支持以下文件类型: {allowed}")
+
+        target_dir = self.base_dir if subdir is None else self.base_dir / subdir
+        target_dir.mkdir(parents=True, exist_ok=True)
+
+        target = target_dir / f"{safe_stem}{suffix}"
+        try:
+            stream.seek(0)
+        except (AttributeError, OSError):
+            pass
+
         with target.open("wb") as buffer:
             chunk = stream.read(1024 * 1024)
             while chunk:
                 buffer.write(chunk)
                 chunk = stream.read(1024 * 1024)
-        logger.info("已保存上传的选品表: %s", target)
+        logger.info("已保存上传文件: %s", target)
         return target
 
     @staticmethod
