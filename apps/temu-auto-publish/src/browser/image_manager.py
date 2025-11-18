@@ -24,29 +24,32 @@
 
 import asyncio
 import json
+import re
+from collections.abc import Sequence
+from contextlib import suppress
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any
 from urllib.parse import urlparse
 
 from loguru import logger
-from playwright.async_api import Page, TimeoutError as PlaywrightTimeout
+from playwright.async_api import Locator, Page
 
 
 class ImageManager:
     """生产级图片管理器（SOP步骤4.3、4.4）.
-    
+
     负责商品图片和视频的完整管理：
     - 删除不匹配图片（头图/轮播图/SKU图）
     - 上传网络图片URL
     - 上传视频URL
     - 验证图片格式和大小
     - 批量操作支持
-    
+
     Attributes:
         selectors: 选择器配置字典
         max_retries: 最大重试次数（默认3次）
         retry_delay: 重试延迟秒数（默认2秒）
-        
+
     Examples:
         >>> manager = ImageManager()
         >>> await manager.delete_image(page, image_index=0, image_type="main")
@@ -54,32 +57,32 @@ class ImageManager:
         >>> await manager.upload_image_from_url(page, "https://...", "carousel")
         True
     """
-    
+
     # 支持的图片格式
     SUPPORTED_IMAGE_FORMATS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
-    
+
     # 支持的视频格式
     SUPPORTED_VIDEO_FORMATS = {".mp4", ".avi", ".mov", ".webm"}
-    
+
     # 图片大小限制（字节）
     MAX_IMAGE_SIZE = 3 * 1024 * 1024  # 3MB
-    
+
     # 视频大小限制（字节）
     MAX_VIDEO_SIZE = 100 * 1024 * 1024  # 100MB
-    
+
     def __init__(
         self,
         selector_path: str = "config/miaoshou_selectors_v2.json",
         max_retries: int = 3,
-        retry_delay: float = 2.0
+        retry_delay: float = 2.0,
     ):
         """初始化图片管理器.
-        
+
         Args:
             selector_path: 选择器配置文件路径
             max_retries: 最大重试次数
             retry_delay: 重试延迟秒数
-            
+
         Examples:
             >>> manager = ImageManager()
             >>> manager = ImageManager(max_retries=5, retry_delay=3.0)
@@ -88,21 +91,19 @@ class ImageManager:
         self.selectors = self._load_selectors()
         self.max_retries = max_retries
         self.retry_delay = retry_delay
-        
-        logger.info(
-            f"图片管理器初始化完成（重试{max_retries}次，延迟{retry_delay}秒）"
-        )
-    
-    def _load_selectors(self) -> Dict:
+
+        logger.info(f"图片管理器初始化完成（重试{max_retries}次，延迟{retry_delay}秒）")
+
+    def _load_selectors(self) -> dict:
         """加载选择器配置.
-        
+
         Returns:
             选择器配置字典
-            
+
         Raises:
             FileNotFoundError: 配置文件不存在
             json.JSONDecodeError: JSON格式错误
-            
+
         Examples:
             >>> selectors = manager._load_selectors()
             >>> "first_edit_dialog" in selectors
@@ -115,65 +116,64 @@ class ImageManager:
                 selector_file = project_root / self.selector_path
             else:
                 selector_file = self.selector_path
-            
-            with open(selector_file, "r", encoding="utf-8") as f:
+
+            with open(selector_file, encoding="utf-8") as f:
                 config = json.load(f)
                 logger.debug(f"选择器配置已加载: {selector_file}")
                 return config
-        except FileNotFoundError as e:
+        except FileNotFoundError:
             logger.error(f"选择器配置文件不存在: {selector_file}")
             raise
         except json.JSONDecodeError as e:
             logger.error(f"选择器配置JSON格式错误: {e}")
             raise
-    
+
     async def navigate_to_images_tab(self, page: Page) -> bool:
         """导航到产品图片Tab.
-        
+
         Args:
             page: Playwright页面对象
-            
+
         Returns:
             是否成功导航
-            
+
         Examples:
             >>> await manager.navigate_to_images_tab(page)
             True
         """
+        logger.info("导航到「产品图片」Tab...")
+
+        pane = await self._locate_product_images_pane(page)
+        if pane is None:
+            logger.error("导航到产品图片Tab失败: 未找到滚动面板")
+            return False
+
+        label = pane.locator(".scroll-menu-pane__label").first
         try:
-            dialog_config = self.selectors.get("first_edit_dialog", {})
-            nav_config = dialog_config.get("navigation", {})
-            images_tab_selector = nav_config.get(
-                "product_images", "text='产品图片'"
-            )
-            
-            logger.info("导航到「产品图片」Tab...")
-            await page.locator(images_tab_selector).click()
-            await page.wait_for_timeout(1000)  # 等待Tab内容加载
-            
+            with suppress(Exception):
+                await label.scroll_into_view_if_needed()
+            await label.wait_for(state="visible", timeout=3_000)
+            await label.click()
+            await page.wait_for_timeout(1_000)
             logger.success("✓ 已切换到产品图片Tab")
             return True
-            
-        except Exception as e:
-            logger.error(f"导航到产品图片Tab失败: {e}")
+        except Exception as exc:
+            logger.error(f"导航到产品图片Tab失败: {exc}")
             return False
-    
-    async def get_images_info(
-        self,
-        page: Page
-    ) -> Dict[str, List[Dict]]:
+
+    async def get_images_info(self, page: Page) -> dict[str, list[dict]]:
         """获取当前所有图片信息.
-        
+
         Args:
             page: Playwright页面对象
-            
+
         Returns:
             图片信息字典：{
                 "main_images": [{"index": 0, "src": "url", "alt": "text"}],
                 "carousel_images": [...],
                 "sku_images": [...]
             }
-            
+
         Examples:
             >>> info = await manager.get_images_info(page)
             >>> len(info["main_images"])
@@ -181,39 +181,31 @@ class ImageManager:
         """
         try:
             logger.info("正在获取图片信息...")
-            
+
             # 确保在产品图片Tab
             await self.navigate_to_images_tab(page)
-            
-            images_info = {
-                "main_images": [],
-                "carousel_images": [],
-                "sku_images": []
-            }
-            
+
+            images_info = {"main_images": [], "carousel_images": [], "sku_images": []}
+
             # TODO: 需要使用Codegen获取实际的图片元素选择器
             # 这里提供框架代码
             logger.warning("图片信息获取功能需要Codegen验证选择器")
-            
+
             return images_info
-            
+
         except Exception as e:
             logger.error(f"获取图片信息失败: {e}")
-            return {
-                "main_images": [],
-                "carousel_images": [],
-                "sku_images": []
-            }
-    
-    def validate_url(self, url: str) -> Tuple[bool, str]:
+            return {"main_images": [], "carousel_images": [], "sku_images": []}
+
+    def validate_url(self, url: str) -> tuple[bool, str]:
         """验证URL格式.
-        
+
         Args:
             url: 图片或视频URL
-            
+
         Returns:
             (是否有效, 错误信息)
-            
+
         Examples:
             >>> manager.validate_url("https://example.com/image.jpg")
             (True, "")
@@ -224,24 +216,24 @@ class ImageManager:
             result = urlparse(url)
             if not all([result.scheme, result.netloc]):
                 return False, "URL格式无效：缺少协议或域名"
-            
+
             if result.scheme not in ["http", "https"]:
                 return False, f"不支持的协议: {result.scheme}（仅支持http/https）"
-            
+
             return True, ""
-            
+
         except Exception as e:
-            return False, f"URL解析错误: {str(e)}"
-    
-    def validate_image_url(self, url: str) -> Tuple[bool, str]:
+            return False, f"URL解析错误: {e!s}"
+
+    def validate_image_url(self, url: str) -> tuple[bool, str]:
         """验证图片URL.
-        
+
         Args:
             url: 图片URL
-            
+
         Returns:
             (是否有效, 错误信息)
-            
+
         Examples:
             >>> manager.validate_image_url("https://example.com/image.jpg")
             (True, "")
@@ -249,28 +241,27 @@ class ImageManager:
         is_valid, error = self.validate_url(url)
         if not is_valid:
             return False, error
-        
+
         # 检查文件扩展名
         parsed = urlparse(url)
         path = parsed.path.lower()
-        
+
         if not any(path.endswith(ext) for ext in self.SUPPORTED_IMAGE_FORMATS):
             return False, (
-                f"不支持的图片格式。"
-                f"支持的格式: {', '.join(self.SUPPORTED_IMAGE_FORMATS)}"
+                f"不支持的图片格式。支持的格式: {', '.join(self.SUPPORTED_IMAGE_FORMATS)}"
             )
-        
+
         return True, ""
-    
-    def validate_video_url(self, url: str) -> Tuple[bool, str]:
+
+    def validate_video_url(self, url: str) -> tuple[bool, str]:
         """验证视频URL.
-        
+
         Args:
             url: 视频URL
-            
+
         Returns:
             (是否有效, 错误信息)
-            
+
         Examples:
             >>> manager.validate_video_url("https://example.com/video.mp4")
             (True, "")
@@ -278,38 +269,34 @@ class ImageManager:
         is_valid, error = self.validate_url(url)
         if not is_valid:
             return False, error
-        
+
         # 检查文件扩展名
         parsed = urlparse(url)
         path = parsed.path.lower()
-        
+
         if not any(path.endswith(ext) for ext in self.SUPPORTED_VIDEO_FORMATS):
             return False, (
-                f"不支持的视频格式。"
-                f"支持的格式: {', '.join(self.SUPPORTED_VIDEO_FORMATS)}"
+                f"不支持的视频格式。支持的格式: {', '.join(self.SUPPORTED_VIDEO_FORMATS)}"
             )
-        
+
         return True, ""
-    
+
     async def delete_image(
-        self,
-        page: Page,
-        image_index: int,
-        image_type: str = "carousel"
+        self, page: Page, image_index: int, image_type: str = "carousel"
     ) -> bool:
         """删除指定图片.
-        
+
         Args:
             page: Playwright页面对象
             image_index: 图片索引（从0开始）
             image_type: 图片类型（"main"主图/"carousel"轮播图/"sku" SKU图）
-            
+
         Returns:
             是否删除成功
-            
+
         Raises:
             ValueError: image_type不合法
-            
+
         Examples:
             >>> await manager.delete_image(page, 0, "main")
             True
@@ -317,65 +304,55 @@ class ImageManager:
             True
         """
         if image_type not in ["main", "carousel", "sku"]:
-            raise ValueError(
-                f"不支持的图片类型: {image_type}。"
-                f"支持的类型: main, carousel, sku"
-            )
-        
+            raise ValueError(f"不支持的图片类型: {image_type}。支持的类型: main, carousel, sku")
+
         logger.info(f"删除图片: type={image_type}, index={image_index}")
-        
+
         try:
             # 确保在产品图片Tab
             if not await self.navigate_to_images_tab(page):
                 return False
-            
+
             # TODO: 需要使用Codegen获取实际的删除按钮选择器
             # 框架代码：
             # 1. 定位到指定图片
             # 2. 悬停显示删除按钮
             # 3. 点击删除按钮
             # 4. 确认删除（如果有确认弹窗）
-            
-            logger.warning(
-                "删除图片功能需要Codegen验证选择器 - "
-                "需要实际录制操作获取准确的元素定位"
-            )
-            
+
+            logger.warning("删除图片功能需要Codegen验证选择器 - 需要实际录制操作获取准确的元素定位")
+
             # 等待删除操作完成
             await page.wait_for_timeout(500)
-            
+
             logger.success(f"✓ 图片删除成功: {image_type}[{image_index}]")
             return True
-            
+
         except Exception as e:
             logger.error(f"删除图片失败: {e}")
             return False
-    
+
     async def delete_images_batch(
-        self,
-        page: Page,
-        image_indices: List[int],
-        image_type: str = "carousel"
+        self, page: Page, image_indices: list[int], image_type: str = "carousel"
     ) -> bool:
         """批量删除图片.
-        
+
         Args:
             page: Playwright页面对象
             image_indices: 图片索引列表
             image_type: 图片类型
-            
+
         Returns:
             是否全部删除成功
-            
+
         Examples:
             >>> await manager.delete_images_batch(page, [0, 1, 2], "carousel")
             True
         """
         logger.info(
-            f"批量删除图片: type={image_type}, "
-            f"count={len(image_indices)}, indices={image_indices}"
+            f"批量删除图片: type={image_type}, count={len(image_indices)}, indices={image_indices}"
         )
-        
+
         success_count = 0
         for index in image_indices:
             if await self.delete_image(page, index, image_type):
@@ -383,55 +360,92 @@ class ImageManager:
                 logger.info(f"进度: {success_count}/{len(image_indices)}")
             else:
                 logger.warning(f"图片删除失败: {image_type}[{index}]")
-        
+
         all_success = success_count == len(image_indices)
-        
+
         if all_success:
             logger.success(f"✓ 批量删除完成: 全部{len(image_indices)}张图片已删除")
         else:
-            logger.warning(
-                f"批量删除部分失败: "
-                f"成功{success_count}/{len(image_indices)}"
-            )
-        
+            logger.warning(f"批量删除部分失败: 成功{success_count}/{len(image_indices)}")
+
         return all_success
-    
-    async def upload_image_from_url(
+
+    async def replace_sku_images_with_urls(
         self,
         page: Page,
-        image_url: str,
-        image_type: str = "size_chart",
-        retry_count: int = 0
+        image_urls: Sequence[str],
+    ) -> bool:
+        """删除现有 SKU 图片,并通过 URL 列表重新上传.
+
+        Args:
+            page: Playwright 页面对象
+            image_urls: SKU 图片 URL 序列
+
+        Returns:
+            bool: 若全部上传成功返回 True,否则 False
+        """
+
+        logger.info("开始同步 SKU 图片, 输入 {} 条 URL", len(image_urls))
+        sanitized_urls = self._sanitize_image_urls(image_urls)
+        if not sanitized_urls:
+            logger.warning("SKU 图片同步被跳过: 未提供有效 URL")
+            return False
+
+        if not await self.navigate_to_images_tab(page):
+            logger.error("SKU 图片同步失败: 无法切换到产品图片 Tab")
+            return False
+
+        deletion_success = await self._delete_existing_sku_images(page)
+        if not deletion_success:
+            logger.warning("未能清空现有 SKU 图片, 仍尝试上传新图片")
+
+        uploads = 0
+        for index, url in enumerate(sanitized_urls, start=1):
+            logger.info("上传 SKU 图片 [%s/%s]: %s", index, len(sanitized_urls), url[:80])
+            if await self._upload_single_sku_image(page, url):
+                uploads += 1
+            else:
+                logger.warning("SKU 图片上传失败: %s", url)
+
+        all_success = uploads == len(sanitized_urls)
+        if all_success:
+            logger.success("✓ SKU 图片同步完成, 共 {} 张", uploads)
+        else:
+            logger.warning("SKU 图片同步部分失败: 成功 {}/{}", uploads, len(sanitized_urls))
+        return all_success
+
+    async def upload_image_from_url(
+        self, page: Page, image_url: str, image_type: str = "size_chart", retry_count: int = 0
     ) -> bool:
         """通过URL上传图片（SOP步骤4.4）.
-        
+
         Args:
             page: Playwright页面对象
             image_url: 图片URL
             image_type: 图片类型（"main"主图/"carousel"轮播图/"sku"SKU图/"size_chart"尺寸图）
             retry_count: 当前重试次数（内部使用）
-            
+
         Returns:
             是否上传成功
-            
+
         Examples:
             >>> url = "https://example.com/size_chart.jpg"
             >>> await manager.upload_image_from_url(page, url, "size_chart")
             True
         """
         logger.info(f"上传图片: type={image_type}, url={image_url[:50]}...")
-        
+
         # 验证URL
         is_valid, error = self.validate_image_url(image_url)
         if not is_valid:
             logger.error(f"图片URL验证失败: {error}")
             return False
-        
+
         try:
             # 确保在产品图片Tab
             if not await self.navigate_to_images_tab(page):
                 return False
-            
+
             # TODO: 需要使用Codegen获取实际的"使用网络图片"按钮选择器
             # SOP要求：选择「使用网络图片」功能
             # 框架代码：
@@ -440,26 +454,22 @@ class ImageManager:
             # 3. 输入URL
             # 4. 确认上传
             # 5. 等待上传完成
-            
-            logger.warning(
-                "上传图片功能需要Codegen验证选择器 - "
-                "需要实际录制「使用网络图片」操作"
-            )
-            
+
+            logger.warning("上传图片功能需要Codegen验证选择器 - 需要实际录制「使用网络图片」操作")
+
             # 等待上传完成
             await page.wait_for_timeout(2000)
-            
+
             logger.success(f"✓ 图片上传成功: {image_type}")
             return True
-            
+
         except Exception as e:
             logger.error(f"上传图片失败（第{retry_count + 1}次尝试）: {e}")
-            
+
             # 自动重试机制
             if retry_count < self.max_retries - 1:
                 logger.info(
-                    f"等待{self.retry_delay}秒后重试..."
-                    f"({retry_count + 2}/{self.max_retries})"
+                    f"等待{self.retry_delay}秒后重试...({retry_count + 2}/{self.max_retries})"
                 )
                 await asyncio.sleep(self.retry_delay)
                 return await self.upload_image_from_url(
@@ -468,48 +478,41 @@ class ImageManager:
             else:
                 logger.error(f"上传图片最终失败（已重试{self.max_retries}次）")
                 return False
-    
-    async def upload_video_from_url(
-        self,
-        page: Page,
-        video_url: str,
-        retry_count: int = 0
-    ) -> bool:
+
+    async def upload_video_from_url(self, page: Page, video_url: str, retry_count: int = 0) -> bool:
         """通过URL上传视频（SOP步骤4.4）.
-        
+
         Args:
             page: Playwright页面对象
             video_url: 视频URL
             retry_count: 当前重试次数（内部使用）
-            
+
         Returns:
             是否上传成功
-            
+
         Examples:
             >>> url = "https://example.com/product_demo.mp4"
             >>> await manager.upload_video_from_url(page, url)
             True
         """
         logger.info(f"上传视频: url={video_url[:50]}...")
-        
+
         # 验证URL
         is_valid, error = self.validate_video_url(video_url)
         if not is_valid:
             logger.error(f"视频URL验证失败: {error}")
             return False
-        
+
         try:
             # 切换到产品视频Tab
             dialog_config = self.selectors.get("first_edit_dialog", {})
             nav_config = dialog_config.get("navigation", {})
-            video_tab_selector = nav_config.get(
-                "product_video", "text='产品视频'"
-            )
-            
+            video_tab_selector = nav_config.get("product_video", "text='产品视频'")
+
             logger.info("切换到「产品视频」Tab...")
             await page.locator(video_tab_selector).click()
             await page.wait_for_timeout(1000)
-            
+
             # TODO: 需要使用Codegen获取实际的视频上传选择器
             # 框架代码：
             # 1. 点击上传视频按钮
@@ -517,49 +520,41 @@ class ImageManager:
             # 3. 输入视频URL
             # 4. 确认上传
             # 5. 等待上传和处理完成（视频可能需要更长时间）
-            
-            logger.warning(
-                "上传视频功能需要Codegen验证选择器 - "
-                "需要实际录制视频上传操作"
-            )
-            
+
+            logger.warning("上传视频功能需要Codegen验证选择器 - 需要实际录制视频上传操作")
+
             # 视频上传和处理需要更长时间
             await page.wait_for_timeout(5000)
-            
+
             logger.success("✓ 视频上传成功")
             return True
-            
+
         except Exception as e:
             logger.error(f"上传视频失败（第{retry_count + 1}次尝试）: {e}")
-            
+
             # 自动重试机制
             if retry_count < self.max_retries - 1:
                 logger.info(
-                    f"等待{self.retry_delay}秒后重试..."
-                    f"({retry_count + 2}/{self.max_retries})"
+                    f"等待{self.retry_delay}秒后重试...({retry_count + 2}/{self.max_retries})"
                 )
                 await asyncio.sleep(self.retry_delay)
-                return await self.upload_video_from_url(
-                    page, video_url, retry_count + 1
-                )
+                return await self.upload_video_from_url(page, video_url, retry_count + 1)
             else:
                 logger.error(f"上传视频最终失败（已重试{self.max_retries}次）")
                 return False
-    
+
     async def batch_upload_images(
-        self,
-        page: Page,
-        image_urls: List[Dict[str, str]]
-    ) -> Dict[str, int]:
+        self, page: Page, image_urls: list[dict[str, str]]
+    ) -> dict[str, int]:
         """批量上传图片.
-        
+
         Args:
             page: Playwright页面对象
             image_urls: 图片URL列表，格式: [{"url": "...", "type": "carousel"}, ...]
-            
+
         Returns:
             统计结果: {"success": 成功数, "failed": 失败数, "total": 总数}
-            
+
         Examples:
             >>> urls = [
             ...     {"url": "https://example.com/1.jpg", "type": "carousel"},
@@ -571,37 +566,209 @@ class ImageManager:
             3
         """
         logger.info(f"批量上传图片: 共{len(image_urls)}张")
-        
+
         success_count = 0
         failed_count = 0
-        
+
         for i, image_info in enumerate(image_urls, 1):
             url = image_info.get("url", "")
             img_type = image_info.get("type", "carousel")
-            
+
             logger.info(f"[{i}/{len(image_urls)}] 上传: {url[:50]}...")
-            
+
             if await self.upload_image_from_url(page, url, img_type):
                 success_count += 1
             else:
                 failed_count += 1
                 logger.warning(f"图片上传失败: {url}")
-            
+
             # 批量上传时稍作延迟，避免过快
             await asyncio.sleep(0.5)
-        
-        result = {
-            "success": success_count,
-            "failed": failed_count,
-            "total": len(image_urls)
-        }
-        
+
+        result = {"success": success_count, "failed": failed_count, "total": len(image_urls)}
+
         logger.info("=" * 60)
         logger.info("批量上传完成:")
         logger.info(f"  成功: {success_count}")
         logger.info(f"  失败: {failed_count}")
         logger.info(f"  总计: {len(image_urls)}")
         logger.info("=" * 60)
-        
+
         return result
 
+    # --------------------------------------------------------------------- #
+    # 内部辅助方法
+    # --------------------------------------------------------------------- #
+
+    def _product_images_config(self) -> dict[str, Any]:
+        """读取产品图片相关选择器配置."""
+
+        dialog_config = self.selectors.get("first_edit_dialog", {})
+        return dialog_config.get("product_images", {})
+
+    def _as_selector_list(self, selector: Any) -> list[str]:
+        """将单个或列表选择器统一为列表."""
+
+        if not selector:
+            return []
+        if isinstance(selector, str):
+            return [selector]
+        if isinstance(selector, (list, tuple, set)):
+            return [str(item) for item in selector if str(item).strip()]
+        return []
+
+    def _sanitize_image_urls(self, image_urls: Sequence[str]) -> list[str]:
+        """过滤并验证图片 URL."""
+
+        sanitized: list[str] = []
+        seen: set[str] = set()
+        for raw in image_urls:
+            text = str(raw).strip()
+            if not text or text in seen:
+                continue
+            is_valid, error = self.validate_image_url(text)
+            if not is_valid:
+                logger.warning("SKU 图片 URL 无效: %s (%s)", text, error)
+                continue
+            sanitized.append(text)
+            seen.add(text)
+        return sanitized
+
+    async def _delete_existing_sku_images(self, page: Page) -> bool:
+        """通过可视化按钮删除既有 SKU 图片."""
+
+        with suppress(Exception):
+            edit_btn = page.get_by_role("button", name="编辑").first
+            await edit_btn.wait_for(state="visible", timeout=2_000)
+            await edit_btn.click()
+
+        try:
+            sku_section = page.get_by_label("SKU图片:", exact=False)
+            await sku_section.wait_for(state="visible", timeout=3_000)
+        except Exception:
+            logger.warning("未能定位到『SKU图片』区域, 跳过删除")
+            return False
+
+        try:
+            select_all_btn = sku_section.get_by_role("button", name=re.compile("全选")).first
+            await select_all_btn.wait_for(state="visible", timeout=2_000)
+            await select_all_btn.click()
+        except Exception as exc:
+            logger.warning("点击『全选』失败: %s", exc)
+            return False
+
+        try:
+            delete_btn = sku_section.get_by_role("button", name=re.compile("批量删除")).first
+            await delete_btn.wait_for(state="visible", timeout=2_000)
+            await delete_btn.click()
+        except Exception as exc:
+            logger.warning("点击『批量删除』失败: %s", exc)
+            return False
+
+        try:
+            confirm_btn = page.get_by_role("button", name="确定").first
+            await confirm_btn.wait_for(state="visible", timeout=2_000)
+            await confirm_btn.click()
+            await page.wait_for_timeout(800)
+            return True
+        except Exception as exc:
+            logger.warning("删除确认失败: %s", exc)
+            return False
+
+    async def _upload_single_sku_image(self, page: Page, image_url: str) -> bool:
+        """使用网络图片入口上传单张 SKU 图."""
+
+        try:
+            add_slot = page.locator(
+                ".pro-virtual-table__row-cell .picture-draggable-list .add-image-box .add-image-box-content"
+            ).first
+            await add_slot.wait_for(state="visible", timeout=3_000)
+            await add_slot.click()
+        except Exception as exc:
+            logger.error("点击『添加新图片』失败: %s", exc)
+            return False
+
+        try:
+            network_btn = page.get_by_text("使用网络图片", exact=False).first
+            await network_btn.wait_for(state="visible", timeout=2_000)
+            await network_btn.click()
+        except Exception as exc:
+            logger.error("未找到『使用网络图片』入口: %s", exc)
+            return False
+
+        try:
+            textbox = page.get_by_role(
+                "textbox", name=re.compile("请输入图片链接"), exact=False
+            ).first
+            await textbox.wait_for(state="visible", timeout=2_000)
+            await textbox.fill(image_url)
+        except Exception as exc:
+            logger.error("填写图片链接失败: %s", exc)
+            return False
+
+        try:
+            confirm_btn = page.get_by_role("button", name="确定").first
+            await confirm_btn.wait_for(state="visible", timeout=2_000)
+            await confirm_btn.click()
+            await page.wait_for_timeout(1_000)
+            return True
+        except Exception as exc:
+            logger.error("确认上传网络图片失败: %s", exc)
+            return False
+
+    async def _click_first_available(
+        self,
+        page: Page,
+        selectors: Sequence[str],
+        description: str,
+        *,
+        timeout: int = 2_000,
+    ) -> bool:
+        """点击首个可见的选择器."""
+
+        for selector in selectors:
+            locator = page.locator(selector).first
+            try:
+                await locator.wait_for(state="visible", timeout=timeout)
+                await locator.click()
+                return True
+            except Exception as exc:  # pragma: no cover - 依赖页面结构
+                logger.debug(
+                    "选择器 %s 不可用(%s): %s",
+                    selector,
+                    description,
+                    exc,
+                )
+                continue
+        logger.warning("未能定位 %s", description)
+        return False
+
+    async def _fill_first_available(
+        self,
+        page: Page,
+        selectors: Sequence[str],
+        text: str,
+        *,
+        timeout: int = 2_000,
+    ) -> bool:
+        """在首个可见输入框中填入文本."""
+
+        for selector in selectors:
+            locator = page.locator(selector).first
+            try:
+                await locator.wait_for(state="visible", timeout=timeout)
+                await locator.fill("")
+                await locator.type(text, delay=30)
+                return True
+            except Exception:
+                continue
+        logger.warning("未找到可填写的输入框")
+        return False
+
+    async def _locate_product_images_pane(self, page: Page) -> Locator | None:
+        pane_label = page.locator("div.scroll-menu-pane__label:has-text('产品图片')").first
+        try:
+            await pane_label.wait_for(state="visible", timeout=2_000)
+        except Exception:
+            return None
+        return pane_label.locator("xpath=..")
