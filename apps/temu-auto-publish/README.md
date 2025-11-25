@@ -104,6 +104,7 @@ TEMU_PASSWORD=your_temu_password
 
 # 媒体外链配置（可选）
 # 若选品表未提供尺寸图/视频 URL，将以该前缀 + 文件名自动拼接
+PRODUCT_IMAGE_BASE_URL=https://miaoshou-tuchuang-beimeng.oss-cn-hangzhou.aliyuncs.com/10月新品可推/
 SIZE_CHART_BASE_URL=https://miaoshou-tuchuang-beimeng.oss-cn-hangzhou.aliyuncs.com/10月新品可推/
 VIDEO_BASE_URL=https://miaoshou-tuchuang-beimeng.oss-cn-hangzhou.aliyuncs.com/video/
 ```
@@ -389,7 +390,7 @@ LOG_LEVEL=INFO
     "headless": false,
     "window_width": 1280,
     "window_height": 720,
-    "device_scale_factor": 2.0
+    "device_scale_factor": 1.0
   },
   "stealth": {
     "enabled": true
@@ -401,7 +402,7 @@ LOG_LEVEL=INFO
 }
 ```
 
-- `device_scale_factor` 必须与录制像素脚本时浏览器的缩放一致。若录制发生在非 1.0 缩放环境 (例如上例的 `devicePixelRatio=2.0`), 请在 `browser_config.json` 中同步数值, 或通过环境变量 `TEMU_PIXEL_REFERENCE_DPR` 指定录制时的 `devicePixelRatio`。当缩放不匹配时, 像素认领阶段会直接抛出错误以避免误点。
+- `device_scale_factor` 默认强制为 1.0 (标准 100% 缩放)。如果你在高分屏或非 1.0 缩放环境中录制了像素脚本, 可以修改 `browser_config.json`, 或者设置环境变量 `TEMU_BROWSER_DEVICE_SCALE_FACTOR` 来覆盖运行时缩放。`TEMU_PIXEL_REFERENCE_DPR` 依旧会同步为最终使用的缩放, 以便像素识别流程保持一致。
 
 ## 🧪 测试
 

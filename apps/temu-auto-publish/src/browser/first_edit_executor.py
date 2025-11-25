@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Awaitable, Callable
 
 from loguru import logger
 from playwright.async_api import Page
@@ -65,14 +65,20 @@ class FirstEditExecutor:
         debug_dir: Path | None = None,
     ) -> None:
         self._controller = controller
-        project_root = Path(__file__).parent.parent
+        project_root = Path(__file__).resolve().parents[2]
         self._injector_path = (
             injector_path or project_root / "data" / "assets" / "first_edit_inject.js"
         )
         self._injector_loaded = False
         self._debug_dir = debug_dir or project_root / "data" / "debug"
 
-    async def apply(self, page: Page, payload: FirstEditPayload) -> bool:
+    async def apply(
+        self,
+        page: Page,
+        payload: FirstEditPayload,
+        *,
+        post_fill_hook: Callable[[Page], Awaitable[bool]] | None = None,
+    ) -> bool:
         """注入 payload 并保存弹窗."""
 
         await maybe_pause_for_inspector(page)
@@ -86,6 +92,12 @@ class FirstEditExecutor:
             await capture_debug_artifacts(page, step="fill_failed", output_dir=self._debug_dir)
             await self._controller.close_dialog(page)
             return False
+        except Exception as err:
+            # 捕获其他所有异常（如 RuntimeError），避免异常向上传播导致降级未触发
+            logger.error("填写首次编辑弹窗异常: {}", err)
+            await capture_debug_artifacts(page, step="fill_exception", output_dir=self._debug_dir)
+            await self._controller.close_dialog(page)
+            return False
 
         if not injection_result.get("success", False):
             logger.error("填写返回失败: {}", injection_result)
@@ -94,6 +106,16 @@ class FirstEditExecutor:
             )
             await self._controller.close_dialog(page)
             return False
+
+        if post_fill_hook is not None:
+            try:
+                hook_result = await post_fill_hook(page)
+                if hook_result:
+                    logger.success("SKU 图片同步完成")
+                else:
+                    logger.warning("SKU 图片同步未成功")
+            except Exception as exc:
+                logger.error("SKU 图片同步异常: {}", exc)
 
         saved = await self._controller.save_changes(page, wait_for_close=True)
         if not saved:
@@ -126,12 +148,21 @@ class FirstEditExecutor:
             payload.to_dict(),
         )
 
+        # 增强日志输出
         logger.debug("首次编辑注入结果: {}", result)
+        if result and "debug" in result:
+            logger.info("调试信息: {}", result["debug"])
+        if result and "filled" in result:
+            logger.success("已填写字段: {}", ", ".join(result.get("filled", [])))
+        if result and "missing" in result and result["missing"]:
+            logger.warning("缺失字段: {}", ", ".join(result.get("missing", [])))
+        
         if not result:
             raise RuntimeError("注入脚本返回空结果")
         if not result.get("success", False):
             missing = ", ".join(result.get("missing", []))
-            raise RuntimeError(f"字段填写失败, 缺失: {missing}")
+            debug_info = result.get("debug", {})
+            raise RuntimeError(f"字段填写失败, 缺失: {missing}, 调试信息: {debug_info}")
         return result
 
     async def _ensure_injector(self, page: Page) -> None:

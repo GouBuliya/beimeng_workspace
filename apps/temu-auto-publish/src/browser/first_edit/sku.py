@@ -38,7 +38,7 @@ class FirstEditSkuMixin(FirstEditBase):
                     logger.debug("价格选择器 %s 找到 %s 个元素", selector, count)
                     if count > 0:
                         element = page.locator(selector).nth(sku_index)
-                        if await element.is_visible(timeout=1_000):
+                        if await element.is_visible(timeout=300):
                             price_input = element
                             logger.debug("使用价格选择器: %s (第 %s 个)", selector, sku_index + 1)
                             break
@@ -75,7 +75,7 @@ class FirstEditSkuMixin(FirstEditBase):
                     logger.debug("库存选择器 %s 找到 %s 个元素", selector, count)
                     if count > 0:
                         element = page.locator(selector).nth(sku_index)
-                        if await element.is_visible(timeout=1_000):
+                        if await element.is_visible(timeout=300):
                             stock_input = element
                             logger.debug("使用库存选择器: %s (第 %s 个)", selector, sku_index + 1)
                             break
@@ -113,7 +113,7 @@ class FirstEditSkuMixin(FirstEditBase):
                     logger.debug("重量选择器 %s 找到 %s 个元素", selector, count)
                     if count > 0:
                         element = page.locator(selector).nth(sku_index)
-                        if await element.is_visible(timeout=1_000):
+                        if await element.is_visible(timeout=300):
                             weight_input = element
                             logger.debug("使用重量选择器: %s (第 %s 个)", selector, sku_index + 1)
                             break
@@ -156,7 +156,7 @@ class FirstEditSkuMixin(FirstEditBase):
                     logger.debug("长度选择器 %s 找到 %s 个元素", selector, count)
                     if count > 0:
                         element = page.locator(selector).nth(sku_index)
-                        if await element.is_visible(timeout=1_000):
+                        if await element.is_visible(timeout=300):
                             length_input = element
                             break
                 except Exception:
@@ -169,7 +169,7 @@ class FirstEditSkuMixin(FirstEditBase):
                     logger.debug("宽度选择器 %s 找到 %s 个元素", selector, count)
                     if count > 0:
                         element = page.locator(selector).nth(sku_index)
-                        if await element.is_visible(timeout=1_000):
+                        if await element.is_visible(timeout=300):
                             width_input = element
                             break
                 except Exception:
@@ -182,7 +182,7 @@ class FirstEditSkuMixin(FirstEditBase):
                     logger.debug("高度选择器 %s 找到 %s 个元素", selector, count)
                     if count > 0:
                         element = page.locator(selector).nth(sku_index)
-                        if await element.is_visible(timeout=1_000):
+                        if await element.is_visible(timeout=300):
                             height_input = element
                             break
                 except Exception:

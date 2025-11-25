@@ -58,12 +58,14 @@ async def test_run_with_upload(tmp_path) -> None:
         response = await client.post(
             "/api/run",
             files={"selection_file": ("demo.xlsx", b"content", "application/vnd.ms-excel")},
+            data={"collection_owner": "Tester(account)"},
         )
 
     assert response.status_code == 200
     assert manager.started_with is not None
     assert manager.started_with.selection_path.exists()
     assert manager.started_with.use_codegen_batch_edit is True
+    assert manager.started_with.collection_owner == "Tester(account)"
 
 
 @pytest.mark.asyncio
@@ -73,7 +75,10 @@ async def test_run_without_payload() -> None:
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        response = await client.post("/api/run", data={})
+        response = await client.post(
+            "/api/run",
+            data={"collection_owner": "Tester(account)"},
+        )
 
     assert response.status_code == 400
 

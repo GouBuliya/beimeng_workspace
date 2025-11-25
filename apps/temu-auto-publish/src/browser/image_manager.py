@@ -25,14 +25,21 @@
 import asyncio
 import json
 import re
+import time
 from collections.abc import Sequence
 from contextlib import suppress
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 from urllib.parse import urlparse
 
 from loguru import logger
 from playwright.async_api import Locator, Page
+
+
+def _elapsed_ms(start: float) -> int:
+    """返回从 start 到当前的毫秒数."""
+
+    return int((time.perf_counter() - start) * 1000)
 
 
 class ImageManager:
@@ -152,9 +159,9 @@ class ImageManager:
         try:
             with suppress(Exception):
                 await label.scroll_into_view_if_needed()
-            await label.wait_for(state="visible", timeout=3_000)
+            await label.wait_for(state="visible", timeout=2_000)
             await label.click()
-            await page.wait_for_timeout(1_000)
+            # await page.wait_for_timeout(300)  # 已注释：不必要的等待
             logger.success("✓ 已切换到产品图片Tab")
             return True
         except Exception as exc:
@@ -323,7 +330,7 @@ class ImageManager:
             logger.warning("删除图片功能需要Codegen验证选择器 - 需要实际录制操作获取准确的元素定位")
 
             # 等待删除操作完成
-            await page.wait_for_timeout(500)
+            # await page.wait_for_timeout(200)  # 已注释：不必要的等待
 
             logger.success(f"✓ 图片删除成功: {image_type}[{image_index}]")
             return True
@@ -399,19 +406,57 @@ class ImageManager:
         if not deletion_success:
             logger.warning("未能清空现有 SKU 图片, 仍尝试上传新图片")
 
+        sku_section = page.get_by_label("SKU图片:", exact=False)
+        try:
+            await sku_section.wait_for(state="visible", timeout=3_000)
+        except Exception:
+            logger.error("SKU 图片同步失败: 无法定位『SKU图片』区域")
+            return False
+
+        sku_rows = sku_section.locator(".pro-virtual-table__row")
+        row_count = await sku_rows.count()
+        if row_count == 0:
+            logger.error("SKU 图片同步失败: 未检测到任何 SKU 行")
+            return False
+
+        target_count = len(sanitized_urls)
+        if target_count == 0:
+            logger.warning("SKU 图片同步被跳过: 清理后未获得有效 URL")
+            return False
+
+        if target_count > row_count:
+            logger.warning(
+                "SKU 图片 URL 数量(%s) 超过 SKU 行数(%s), 仅处理前 %s 行",
+                target_count,
+                row_count,
+                row_count,
+            )
+            target_count = row_count
+
         uploads = 0
-        for index, url in enumerate(sanitized_urls, start=1):
-            logger.info("上传 SKU 图片 [%s/%s]: %s", index, len(sanitized_urls), url[:80])
-            if await self._upload_single_sku_image(page, url):
+        for index in range(target_count):
+            url = sanitized_urls[index]
+            row = sku_rows.nth(index)
+            row_hint = f"SKU行{index + 1}"
+            logger.info("上传 SKU 图片 [%s/%s]: %s", index + 1, target_count, url[:80])
+            if await self._upload_single_sku_image(page, url, row=row, slot_hint=row_hint):
                 uploads += 1
             else:
-                logger.warning("SKU 图片上传失败: %s", url)
+                logger.warning("SKU 图片上传失败: %s (%s)", url, row_hint)
 
-        all_success = uploads == len(sanitized_urls)
+        expected_total = target_count
+        inventory_ok = await self._wait_for_total_sku_images(sku_section, expected_total)
+
+        all_success = uploads == target_count and inventory_ok
         if all_success:
-            logger.success("✓ SKU 图片同步完成, 共 {} 张", uploads)
+            logger.success("✓ SKU 图片同步完成, 共 %s 张", uploads)
         else:
-            logger.warning("SKU 图片同步部分失败: 成功 {}/{}", uploads, len(sanitized_urls))
+            logger.warning(
+                "SKU 图片同步部分失败: 成功 %s/%s (DOM校验=%s)",
+                uploads,
+                target_count,
+                "通过" if inventory_ok else "未通过",
+            )
         return all_success
 
     async def upload_image_from_url(
@@ -458,7 +503,7 @@ class ImageManager:
             logger.warning("上传图片功能需要Codegen验证选择器 - 需要实际录制「使用网络图片」操作")
 
             # 等待上传完成
-            await page.wait_for_timeout(2000)
+            # await page.wait_for_timeout(500)  # 已注释：不必要的等待
 
             logger.success(f"✓ 图片上传成功: {image_type}")
             return True
@@ -511,7 +556,7 @@ class ImageManager:
 
             logger.info("切换到「产品视频」Tab...")
             await page.locator(video_tab_selector).click()
-            await page.wait_for_timeout(1000)
+            # await page.wait_for_timeout(300)  # 已注释：不必要的等待
 
             # TODO: 需要使用Codegen获取实际的视频上传选择器
             # 框架代码：
@@ -524,7 +569,7 @@ class ImageManager:
             logger.warning("上传视频功能需要Codegen验证选择器 - 需要实际录制视频上传操作")
 
             # 视频上传和处理需要更长时间
-            await page.wait_for_timeout(5000)
+            # await page.wait_for_timeout(1000)  # 已注释：不必要的等待
 
             logger.success("✓ 视频上传成功")
             return True
@@ -637,52 +682,284 @@ class ImageManager:
     async def _delete_existing_sku_images(self, page: Page) -> bool:
         """通过可视化按钮删除既有 SKU 图片."""
 
+        overall_start = time.perf_counter()
+        logger.debug("尝试清空现有 SKU 图片...")
+
         with suppress(Exception):
             edit_btn = page.get_by_role("button", name="编辑").first
-            await edit_btn.wait_for(state="visible", timeout=2_000)
-            await edit_btn.click()
+            if await edit_btn.count():
+                await edit_btn.wait_for(state="visible", timeout=1_500)
+                await edit_btn.click()
+                logger.debug("已点击 SKU 区域『编辑』按钮")
 
         try:
             sku_section = page.get_by_label("SKU图片:", exact=False)
             await sku_section.wait_for(state="visible", timeout=3_000)
+            logger.debug(
+                "SKU 区域定位成功 (耗时 %sms)", _elapsed_ms(overall_start)
+            )
         except Exception:
             logger.warning("未能定位到『SKU图片』区域, 跳过删除")
             return False
 
+        image_items = sku_section.locator(
+            ".picture-draggable-list .image-item, .picture-draggable-list img"
+        )
         try:
-            select_all_btn = sku_section.get_by_role("button", name=re.compile("全选")).first
-            await select_all_btn.wait_for(state="visible", timeout=2_000)
-            await select_all_btn.click()
-        except Exception as exc:
-            logger.warning("点击『全选』失败: %s", exc)
+            if await image_items.count() == 0:
+                logger.debug("SKU 区域没有现有图片，无需清理")
+                return True
+        except Exception:
+            logger.warning("无法统计 SKU 图片数量, 假定需要清理")
+
+        if not await self._click_sku_bulk_button(
+            sku_section, label="全选", log_label="『全选』", overall_start=overall_start
+        ):
             return False
 
-        try:
-            delete_btn = sku_section.get_by_role("button", name=re.compile("批量删除")).first
-            await delete_btn.wait_for(state="visible", timeout=2_000)
-            await delete_btn.click()
-        except Exception as exc:
-            logger.warning("点击『批量删除』失败: %s", exc)
+        if not await self._click_sku_bulk_button(
+            sku_section, label="批量删除", log_label="『批量删除』", overall_start=overall_start
+        ):
             return False
 
+        if not await self._confirm_delete_dialog(page):
+            logger.warning("删除确认失败")
+            return False
+
+        await self._wait_for_sku_cleanup(page, sku_section)
+        logger.success(
+            "✓ SKU 区域旧图片已清空 (总耗时 %sms)",
+            _elapsed_ms(overall_start),
+        )
+        return True
+
+    async def _wait_for_sku_cleanup(self, page: Page, sku_section: Locator, timeout: int = 5_000) -> None:
+        """等待 SKU 图列表清空或成功提示出现."""
+
+        wait_start = time.perf_counter()
+
+        async def _no_images_left() -> bool:
+            try:
+                items = sku_section.locator(".picture-draggable-list .image-item, .picture-draggable-list img")
+                return await items.count() == 0
+            except Exception:
+                return False
+
+        with suppress(Exception):
+            await page.wait_for_function(
+                "(selector) => document.querySelectorAll(selector).length === 0",
+                ".jx-message-box__wrapper:visible, .jx-overlay-message-box:visible",
+                timeout=timeout,
+            )
+
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + (timeout / 1_000)
+        while loop.time() < deadline:
+            if await _no_images_left():
+                logger.debug(
+                    "SKU 图片清理完成 (耗时 %sms)",
+                    _elapsed_ms(wait_start),
+                )
+                return
+            await asyncio.sleep(0.2)
+        logger.debug(
+            "SKU 图片清理等待超时 (耗时 %sms)",
+            _elapsed_ms(wait_start),
+        )
+
+    async def _wait_for_total_sku_images(
+        self, sku_section: Locator, expected: int, timeout: int = 5_000
+    ) -> bool:
+        """等待 SKU 区域图片数量达到预期."""
+
+        if expected <= 0:
+            return True
+
+        start = time.perf_counter()
+        images = sku_section.locator(".picture-draggable-list .image-item img, .picture-draggable-list img")
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + (timeout / 1_000)
+        while loop.time() < deadline:
+            try:
+                count = await images.count()
+            except Exception:
+                count = 0
+            if count >= expected:
+                logger.debug("SKU 图片总数已达到%s (耗时 %sms)", expected, _elapsed_ms(start))
+                return True
+            await asyncio.sleep(0.2)
+        logger.warning(
+            "SKU 图片总数未在 %sms 内达到预期(%s)",
+            timeout,
+            expected,
+        )
+        return False
+
+    async def _wait_for_row_image_increment(
+        self, images_locator: Locator, previous_count: int, slot_hint: str, timeout: int = 5_000
+    ) -> bool:
+        """等待单个 SKU 行的图片数量增加."""
+
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + (timeout / 1_000)
+        while loop.time() < deadline:
+            try:
+                current = await images_locator.count()
+            except Exception:
+                current = previous_count
+            if current > previous_count:
+                logger.debug("%s 图片数: %s -> %s", slot_hint, previous_count, current)
+                return True
+            await asyncio.sleep(0.2)
+        return False
+
+    async def _click_sku_bulk_button(
+        self,
+        sku_section: Locator,
+        *,
+        label: str,
+        log_label: str,
+        overall_start: float,
+        timeout: int = 1_500,
+    ) -> bool:
+        """在 SKU 区域内点击批量操作按钮."""
+
         try:
-            confirm_btn = page.get_by_role("button", name="确定").first
-            await confirm_btn.wait_for(state="visible", timeout=2_000)
-            await confirm_btn.click()
-            await page.wait_for_timeout(800)
+            button = sku_section.get_by_role("button", name=re.compile(label)).first
+            await button.wait_for(state="visible", timeout=timeout)
+            await button.click()
+            logger.debug(
+                "已点击%s按钮 (耗时 %sms)",
+                log_label,
+                _elapsed_ms(overall_start),
+            )
             return True
         except Exception as exc:
-            logger.warning("删除确认失败: %s", exc)
+            logger.warning("点击%s失败: %s", log_label, exc)
             return False
 
-    async def _upload_single_sku_image(self, page: Page, image_url: str) -> bool:
+    async def _confirm_delete_dialog(self, page: Page, timeout: int = 5_000) -> bool:
+        """等待批量删除确认弹窗并点击“确定”."""
+
+        dialog_selectors = [
+            ".jx-overlay-message-box",
+            ".jx-message-box",
+            ".el-message-box",
+        ]
+        button_selectors = [
+            "button:has-text('确定')",
+            ".jx-message-box__btns .jx-button--primary",
+            ".el-message-box__btns button.el-button--primary",
+            "button[aria-label*='确定']",
+        ]
+
+        dialog: Locator | None = None
+        dialog_start = time.perf_counter()
+        end_time = asyncio.get_running_loop().time() + (timeout / 1_000)
+        while asyncio.get_running_loop().time() < end_time:
+            for selector in dialog_selectors:
+                candidate = page.locator(selector)
+                try:
+                    if await candidate.count() and await candidate.first.is_visible(timeout=200):
+                        dialog = candidate.first
+                        logger.debug(
+                            "删除确认弹窗出现: %s (耗时 %sms)",
+                            selector,
+                            _elapsed_ms(dialog_start),
+                        )
+                        break
+                except Exception:
+                    continue
+            if dialog is not None:
+                break
+            await asyncio.sleep(0.1)
+
+        if dialog is None:
+            logger.warning(
+                "未检测到删除确认弹窗 (耗时 %sms)",
+                _elapsed_ms(dialog_start),
+            )
+            return False
+
+        for selector in button_selectors:
+            try:
+                btn = dialog.locator(selector).first
+                if await btn.count() and await btn.is_visible(timeout=300):
+                    await btn.click(timeout=1_000)
+                    logger.debug(
+                        "删除确认弹窗已点击按钮: %s (耗时 %sms)",
+                        selector,
+                        _elapsed_ms(dialog_start),
+                    )
+                    await self._wait_for_message_box_dismissal(page)
+                    return True
+            except Exception:
+                continue
+
+        with suppress(Exception):
+            await page.keyboard.press("Escape")
+            await self._wait_for_message_box_dismissal(page)
+            logger.debug(
+                "删除确认弹窗通过 Escape 关闭 (耗时 %sms)",
+                _elapsed_ms(dialog_start),
+            )
+            return True
+
+        logger.warning("删除确认弹窗未找到可用按钮")
+        return False
+
+    async def _wait_for_message_box_dismissal(self, page: Page, timeout: int = 2_000) -> None:
+        """等待所有 message box 隐藏."""
+
+        locator = page.locator(".jx-overlay-message-box, .jx-message-box, .el-message-box")
+        with suppress(Exception):
+            await locator.first.wait_for(state="hidden", timeout=timeout)
+
+    async def _upload_single_sku_image(
+        self,
+        page: Page,
+        image_url: str,
+        *,
+        row: Locator | None = None,
+        slot_hint: Optional[str] = None,
+    ) -> bool:
         """使用网络图片入口上传单张 SKU 图."""
 
+        # URL编码处理（处理中文路径）
+        from urllib.parse import quote, urlparse, urlunparse
         try:
-            add_slot = page.locator(
-                ".pro-virtual-table__row-cell .picture-draggable-list .add-image-box .add-image-box-content"
-            ).first
-            await add_slot.wait_for(state="visible", timeout=3_000)
+            parsed = urlparse(image_url)
+            encoded_path = quote(parsed.path.encode('utf-8'), safe='/:@!$&\'()*+,;=')
+            encoded_url = urlunparse((
+                parsed.scheme,
+                parsed.netloc,
+                encoded_path,
+                parsed.params,
+                parsed.query,
+                parsed.fragment
+            ))
+            logger.debug(f"SKU图片URL编码: {image_url} -> {encoded_url}")
+            image_url = encoded_url
+        except Exception as e:
+            logger.warning(f"SKU图片URL编码失败，使用原始URL: {e}")
+
+        picture_scope = (row or page).locator(".picture-draggable-list").first
+        if not await picture_scope.count():
+            picture_scope = page.locator(".picture-draggable-list").first
+
+        if not await picture_scope.count():
+            logger.error("未找到 SKU 图片上传区域 (%s)", slot_hint or "全局")
+            return False
+
+        image_items = picture_scope.locator(".image-item img, img.picture-img")
+        try:
+            before_count = await image_items.count()
+        except Exception:
+            before_count = 0
+
+        try:
+            add_slot = picture_scope.locator(".add-image-box .add-image-box-content").first
+            await add_slot.wait_for(state="visible", timeout=2_000)
             await add_slot.click()
         except Exception as exc:
             logger.error("点击『添加新图片』失败: %s", exc)
@@ -710,8 +987,13 @@ class ImageManager:
             confirm_btn = page.get_by_role("button", name="确定").first
             await confirm_btn.wait_for(state="visible", timeout=2_000)
             await confirm_btn.click()
-            await page.wait_for_timeout(1_000)
-            return True
+            slot_name = slot_hint or "SKU图片"
+            if await self._wait_for_row_image_increment(
+                image_items, before_count, slot_name
+            ):
+                return True
+            logger.warning("%s 上传后数量未增加", slot_name)
+            return False
         except Exception as exc:
             logger.error("确认上传网络图片失败: %s", exc)
             return False

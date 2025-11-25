@@ -15,15 +15,17 @@
 
 from __future__ import annotations
 
+import os
 import platform
 from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
+from starlette.middleware.sessions import SessionMiddleware
 
 from .env_settings import (
     ENV_FIELDS,
@@ -39,6 +41,8 @@ from .service import SelectionFileStore, WorkflowTaskManager, create_task_manage
 APP_ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE_DIR = APP_ROOT / "web_panel" / "templates"
 DEFAULT_SELECTION = APP_ROOT / "data" / "input" / "selection.xlsx"
+SESSION_KEY = "web_panel_admin"
+DEFAULT_ADMIN_PASSWORD = "bm123456789"
 
 
 def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
@@ -61,9 +65,37 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
     ]
 
     load_dotenv(resolve_env_file(), override=False)
+    admin_password = os.environ.get("WEB_PANEL_ADMIN_PASSWORD", DEFAULT_ADMIN_PASSWORD)
+    session_secret = os.environ.get("WEB_PANEL_SESSION_SECRET", "temu-web-panel-session")
+    app.add_middleware(
+        SessionMiddleware,
+        secret_key=session_secret,
+        https_only=False,
+        same_site="lax",
+        max_age=60 * 60 * 8,
+    )
+
+    def _is_authenticated(request: Request) -> bool:
+        return bool(request.session.get(SESSION_KEY))
+
+    def admin_guard(request: Request) -> None:
+        if not _is_authenticated(request):
+            raise HTTPException(status_code=401, detail="需要管理员密码")
+
+    def _login_template(request: Request, *, error: str | None = None) -> HTMLResponse:
+        return templates.TemplateResponse(
+            "login.html",
+            {
+                "request": request,
+                "error": error,
+            },
+            status_code=401 if error else 200,
+        )
 
     @app.get("/", response_class=HTMLResponse)
     async def index(request: Request) -> HTMLResponse:
+        if not _is_authenticated(request):
+            return RedirectResponse("/login", status_code=303)
         return templates.TemplateResponse(
             "index.html",
             {
@@ -73,22 +105,43 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
             },
         )
 
+    @app.get("/login", response_class=HTMLResponse)
+    async def login_page(request: Request) -> HTMLResponse:
+        if _is_authenticated(request):
+            return RedirectResponse("/", status_code=303)
+        return templates.TemplateResponse("login.html", {"request": request})
+
+    @app.post("/login", response_class=HTMLResponse)
+    async def login_action(request: Request, password: str = Form(...)) -> HTMLResponse:
+        if password.strip() == admin_password:
+            request.session[SESSION_KEY] = True
+            return RedirectResponse("/", status_code=303)
+        return _login_template(request, error="管理员密码错误")
+
+    @app.post("/logout")
+    async def logout(request: Request) -> RedirectResponse:
+        request.session.pop(SESSION_KEY, None)
+        return RedirectResponse("/login", status_code=303)
+
     @app.post("/api/run", response_model=RunStatus)
     async def run_workflow(
+        admin: None = Depends(admin_guard),
         selection_file: UploadFile | None = File(default=None),
         selection_path: str | None = Form(default=None),
+        collection_owner: str = Form(...),
         outer_package_file: UploadFile | None = File(default=None),
         outer_package_path: str | None = Form(default=None),
         manual_file: UploadFile | None = File(default=None),
         manual_path: str | None = Form(default=None),
         headless_mode: str = Form(default="auto"),
         use_ai_titles: str | None = Form(default="off"),
-        use_codegen_first_edit: str | None = Form(default="on"),
-        use_codegen_batch_edit: str | None = Form(default="on"),
         skip_first_edit: str | None = Form(default="off"),
         only_claim: str | None = Form(default="off"),
     ) -> RunStatus:
         resolved_path = await _resolve_selection_path(store, selection_file, selection_path)
+        owner_value = (collection_owner or "").strip()
+        if not owner_value:
+            raise HTTPException(status_code=400, detail="妙手创建人员不能为空")
         outer_package_image = await _resolve_optional_asset(
             store,
             upload=outer_package_file,
@@ -109,10 +162,9 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
         )
         options = WorkflowOptions(
             selection_path=resolved_path,
+            collection_owner=owner_value,
             headless_mode=_normalize_choice(headless_mode),
             use_ai_titles=_to_bool(use_ai_titles),
-            use_codegen_first_edit=_to_bool(use_codegen_first_edit),
-            use_codegen_batch_edit=_to_bool(use_codegen_batch_edit),
             skip_first_edit=_to_bool(skip_first_edit),
             only_claim=_to_bool(only_claim),
             outer_package_image=outer_package_image,
@@ -125,16 +177,19 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
         return status
 
     @app.get("/api/status", response_model=RunStatus)
-    async def get_status() -> RunStatus:
+    async def get_status(admin: None = Depends(admin_guard)) -> RunStatus:
         return manager.status()
 
     @app.get("/api/logs")
-    async def get_logs(after: int = Query(default=-1, ge=-1)) -> list[dict[str, Any]]:
+    async def get_logs(
+        admin: None = Depends(admin_guard),
+        after: int = Query(default=-1, ge=-1),
+    ) -> list[dict[str, Any]]:
         chunks = manager.logs(after=after)
         return [chunk.model_dump() for chunk in chunks]
 
     @app.get("/api/fields")
-    async def get_fields() -> list[dict[str, Any]]:
+    async def get_fields(admin: None = Depends(admin_guard)) -> list[dict[str, Any]]:
         return [
             {
                 "name": field.name,
@@ -150,7 +205,7 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
         ]
 
     @app.get("/health", response_model=HealthStatus)
-    async def health() -> HealthStatus:
+    async def health(admin: None = Depends(admin_guard)) -> HealthStatus:
         selection_dir = (DEFAULT_SELECTION.parent).resolve()
         return HealthStatus(
             ok=True,
@@ -160,7 +215,7 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
         )
 
     @app.get("/downloads/sample-selection")
-    async def download_sample() -> FileResponse:
+    async def download_sample(admin: None = Depends(admin_guard)) -> FileResponse:
         if not DEFAULT_SELECTION.exists():
             raise HTTPException(status_code=404, detail="示例文件缺失, 请联系开发者")
         return FileResponse(
@@ -170,11 +225,14 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
         )
 
     @app.get("/api/env-settings")
-    async def get_env_settings() -> list[dict[str, Any]]:
+    async def get_env_settings(admin: None = Depends(admin_guard)) -> list[dict[str, Any]]:
         return build_env_payload()
 
     @app.post("/api/env-settings")
-    async def update_env_settings(payload: EnvSettingsRequest) -> dict[str, bool]:
+    async def update_env_settings(
+        payload: EnvSettingsRequest,
+        admin: None = Depends(admin_guard),
+    ) -> dict[str, bool]:
         missing = validate_required(payload.entries)
         if missing:
             labels = "、".join(missing)

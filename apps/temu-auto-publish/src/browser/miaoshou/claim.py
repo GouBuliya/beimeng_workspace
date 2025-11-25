@@ -22,6 +22,7 @@ from playwright.async_api import Frame, Locator, Page
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 from .navigation import MiaoshouNavigationMixin
+from .navigation_codegen import fallback_apply_user_filter, fallback_switch_tab
 
 
 class MiaoshouClaimMixin(MiaoshouNavigationMixin):
@@ -54,6 +55,12 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
         "xpath=//button[contains(normalize-space(), '认领')]",
         "xpath=//*[contains(normalize-space(), '认领') and (@role='button' or contains(@class, 'button'))]",
     )
+    _SELECT_DROPDOWN_LOCATOR: ClassVar[str] = (
+        ".jx-select-dropdown, .jx-popper, [role='listbox'], .el-select-dropdown, .ant-select-dropdown"
+    )
+    _CLAIM_DROPDOWN_LOCATOR: ClassVar[str] = (
+        ".el-dropdown-menu, .jx-dropdown-menu, .pro-dropdown__menu"
+    )
 
     def __init__(
         self,
@@ -65,7 +72,12 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
 
         super().__init__(selector_path=selector_path, **kwargs)
 
-    async def refresh_collection_box(self, page: Page) -> None:
+    async def refresh_collection_box(
+        self,
+        page: Page,
+        *,
+        filter_owner: str | None = None,
+    ) -> None:
         """Refresh the Miaoshou collection box page and ensure rows are visible."""
 
         try:
@@ -74,11 +86,21 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
             )
             await page.goto(self._COLLECTION_BOX_URL, wait_until="domcontentloaded")
             with suppress(Exception):
-                await page.wait_for_load_state("networkidle")
+                await page.wait_for_load_state("networkidle", timeout=5_000)
         except Exception as exc:
             logger.warning(f"Failed to refresh collection box page: {exc}")
 
         await self._wait_for_rows(page)
+
+        if filter_owner:
+            logger.info("尝试按负责人筛选：%s", filter_owner)
+            try:
+                filtered = await self.filter_and_search(page, filter_owner)
+                if not filtered:
+                    logger.warning("负责人筛选逻辑返回 False：%s", filter_owner)
+                await self._wait_for_rows(page)
+            except Exception as exc:
+                logger.warning("负责人筛选失败(%s): %s", filter_owner, exc)
 
     async def _wait_for_rows(self, page: Page, *, timeout: int = 5_000) -> bool:
         """Wait until the collection box table rows are rendered."""
@@ -92,6 +114,42 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                 f"Product rows did not become visible within {timeout}ms"
             )
             return False
+
+    async def _wait_for_dropdown_state(
+        self,
+        page: Page,
+        selectors: str,
+        *,
+        state: str = "visible",
+        timeout: int = 1_500,
+    ) -> None:
+        """Wait for dropdown containers matching ``selectors`` to reach ``state``."""
+
+        dropdown = page.locator(selectors)
+        with suppress(Exception):
+            await dropdown.first.wait_for(state=state, timeout=timeout)
+
+    async def _wait_for_select_dropdown(
+        self,
+        page: Page,
+        *,
+        state: str = "visible",
+        timeout: int = 1_500,
+    ) -> None:
+        await self._wait_for_dropdown_state(
+            page, self._SELECT_DROPDOWN_LOCATOR, state=state, timeout=timeout
+        )
+
+    async def _wait_for_claim_dropdown(
+        self,
+        page: Page,
+        *,
+        state: str = "visible",
+        timeout: int = 1_500,
+    ) -> None:
+        await self._wait_for_dropdown_state(
+            page, self._CLAIM_DROPDOWN_LOCATOR, state=state, timeout=timeout
+        )
 
     @staticmethod
     def _resolve_target_indexes(
@@ -358,8 +416,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
 
         with suppress(Exception):
             await page.keyboard.press("Home")
-
-        await page.wait_for_timeout(80)
+        await self._wait_for_idle(page, timeout_ms=150)
 
     async def _ensure_claim_button_visible(
         self,
@@ -622,7 +679,6 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
 
                     try:
                         await button.click(force=True)
-                        await page.wait_for_timeout(250)
                         logger.debug(
                             "认领确认按钮通过 %s (scope=%s index=%s text=%s) 点击成功",
                             selector,
@@ -677,17 +733,17 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                     raise RuntimeError("未能定位到'认领到'按钮")
 
                 await claim_button.hover()
-                await page.wait_for_timeout(150)
+                await self._wait_for_idle(page, timeout_ms=150)
                 with suppress(Exception):
                     fallback_claim_button = page.locator("#jx-id-1917-80")
                     if await fallback_claim_button.count():
                         await fallback_claim_button.first.hover()
-                        await page.wait_for_timeout(120)
+                        await self._wait_for_idle(page, timeout_ms=150)
                         await fallback_claim_button.first.click(force=True)
-                        await page.wait_for_timeout(150)
+                        await self._wait_for_claim_dropdown(page, state="visible", timeout=1_200)
                 with suppress(Exception):
                     await claim_button.click(force=True)
-                    await page.wait_for_timeout(180)
+                    await self._wait_for_claim_dropdown(page, state="visible", timeout=1_200)
 
                 temu_option: Locator | None = None
                 if not temu_destination_selected:
@@ -729,17 +785,17 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
 
                             logger.debug("未立即找到下拉菜单项，尝试第 %s 次点击按钮展开", attempt + 1)
                             await claim_button.click(force=True)
-                            await page.wait_for_timeout(250)
+                            await self._wait_for_claim_dropdown(page, state="visible", timeout=1_000)
 
                     if temu_option is None:
                         raise RuntimeError("未找到'Temu全托管'菜单项")
 
                     await temu_option.click(force=True)
-                    await page.wait_for_timeout(150)
+                    await self._wait_for_claim_dropdown(page, state="hidden", timeout=1_000)
                     temu_destination_selected = True
                 else:
                     logger.debug("Temu全托管已在首次迭代选定，跳过下拉菜单点击")
-                    await page.wait_for_timeout(120)
+                    await self._wait_for_idle(page, timeout_ms=150)
 
                 if not await self._click_claim_confirmation_button(page):
                     raise RuntimeError("未能在认领弹窗中点击确认按钮")
@@ -752,11 +808,11 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
 
                 logger.debug(f"认领流程第 {iteration + 1} 次执行完成")
                 success_count += 1
-                await page.wait_for_timeout(400)
+                await self._wait_for_table_refresh(page)
             except Exception as exc:
                 last_error = exc
                 logger.error(f"认领流程第 {iteration + 1} 次执行失败: {exc}")
-                await page.wait_for_timeout(400)
+                await self._wait_for_idle(page, timeout_ms=400)
 
         if success_count > 0:
             if success_count < repeat:
@@ -792,15 +848,24 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
             return True
 
         dialog_selectors = [
-            ".el-dialog__wrapper:has-text('批量认领')",
-            ".el-dialog:has-text('批量认领')",
-            "[role='dialog']:has-text('批量认领')",
+            "xpath=//*[contains(@class,'el-dialog__wrapper')][.//text()[contains(., '批量认领')]]",
+            "xpath=//*[contains(@class,'el-dialog')][.//text()[contains(., '批量认领')]]",
+            "xpath=//*[@role='dialog'][.//text()[contains(., '批量认领')]]",
         ]
 
-        progress_selectors = [
-            ".el-dialog__wrapper:has-text('批量认领') .el-progress__text",
-            ".el-dialog__wrapper:has-text('批量认领') .el-progress-bar__outer",
-            ".el-dialog:has-text('批量认领') .el-progress__text",
+        progress_selector_groups = [
+            {
+                "container": ".el-dialog__wrapper",
+                "progress": [".el-progress__text", ".el-progress-bar__outer"],
+            },
+            {
+                "container": ".el-dialog",
+                "progress": [".el-progress__text", ".el-progress-bar__outer"],
+            },
+            {
+                "container": "[role='dialog']",
+                "progress": [".el-progress__text", ".el-progress-bar__outer"],
+            },
         ]
 
         async def _dialog_locator() -> Locator | None:
@@ -848,68 +913,112 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                 logger.debug(f"认领进度弹窗未在预期时间内可见: {exc}")
 
             progress_ready = False
-            for attempt in range(20):
-                if await _progress_completed():
-                    progress_ready = True
-                    break
-                await page.wait_for_timeout(200)
+            try:
+                await page.wait_for_function(
+                    """
+                    ({ groups, keyword }) => {
+                        for (const group of groups) {
+                            const containers = document.querySelectorAll(group.container);
+                            for (const container of containers) {
+                                const text = (container.textContent || '').trim();
+                                if (!text.includes(keyword)) {
+                                    continue;
+                                }
+                                for (const selector of group.progress) {
+                                    const nodes = container.querySelectorAll(selector);
+                                    for (const node of nodes) {
+                                        const raw = (node.innerText || node.textContent || '').trim();
+                                        if (!raw) {
+                                            continue;
+                                        }
+                                        const numeric = Number(raw.replace('%', '').trim());
+                                        if (!Number.isNaN(numeric) && numeric >= 100) {
+                                            return true;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        return false;
+                    }
+                    """,
+                    arg={"groups": progress_selector_groups, "keyword": "批量认领"},
+                    timeout=1_000,
+                )
+                progress_ready = True
+            except PlaywrightTimeoutError:
+                logger.debug("认领进度条未在预期时间显示完成状态")
+
             logger.debug("认领进度条状态: completed=%s", progress_ready)
 
-            close_button: Locator | None = None
-            for attempt in range(15):
-                close_button = await self._locate_progress_close_button(dialog)
-                if close_button is not None:
-                    logger.debug(
-                        "认领进度弹窗关闭按钮定位成功 (dialog scope) attempt=%s",
-                        attempt,
+            # 尝试关闭弹窗，最多重试3次
+            max_retries = 3
+            for attempt in range(max_retries):
+                close_button: Locator | None = await self._locate_progress_close_button(dialog)
+                if close_button is None:
+                    close_button = await self._locate_progress_close_button(page)
+
+                if close_button is None:
+                    button_selector = (
+                        ".el-dialog__headerbtn, .jx-dialog__headerbtn, "
+                        "button:has-text('关闭'), button:has-text('完成'), button[aria-label*='关闭']"
                     )
-                    break
+                    with suppress(Exception):
+                        await page.wait_for_selector(button_selector, state="visible", timeout=3_000)
+                    close_button = await self._locate_progress_close_button(dialog)
+                    if close_button is None:
+                        close_button = await self._locate_progress_close_button(page)
 
-                close_button = await self._locate_progress_close_button(page)
-                if close_button is not None:
+                if close_button is None:
                     logger.debug(
-                        "认领进度弹窗关闭按钮定位成功 (page scope) attempt=%s",
-                        attempt,
+                        "认领进度弹窗无法定位'关闭'按钮 progress_ready=%s attempt=%d/%d",
+                        progress_ready,
+                        attempt + 1,
+                        max_retries,
                     )
-                    break
+                    if attempt < max_retries - 1:
+                        await page.wait_for_timeout(1_000)
+                        continue
+                    return False
 
-                await page.wait_for_timeout(200)
+                try:
+                    await close_button.scroll_into_view_if_needed()
+                except Exception:
+                    pass
+                try:
+                    await close_button.hover()
+                except Exception:
+                    pass
 
-            if close_button is None:
-                logger.debug(
-                    "认领进度弹窗在多次尝试后仍未定位到'关闭'按钮 progress_ready=%s",
-                    progress_ready,
-                )
-                return False
+                try:
+                    await close_button.click(force=True)
+                except Exception as exc:
+                    logger.debug(f"点击认领进度弹窗关闭按钮失败 attempt={attempt + 1}/{max_retries}: {exc}")
+                    if attempt < max_retries - 1:
+                        await page.wait_for_timeout(1_000)
+                        continue
+                    return False
 
-            try:
-                await close_button.scroll_into_view_if_needed()
-            except Exception:
-                pass
-            try:
-                await close_button.hover()
-            except Exception:
-                pass
-
-            try:
-                await close_button.click(force=True)
-            except Exception as exc:
-                logger.debug(f"点击认领进度弹窗关闭按钮失败: {exc}")
-                return False
-
-            dialog_closed = False
-            try:
-                await dialog.wait_for(state="hidden", timeout=4_000)
-                dialog_closed = True
-            except PlaywrightTimeoutError:
-                logger.debug("认领进度弹窗未立即隐藏，尝试等待 DOM 移除")
-                with suppress(PlaywrightTimeoutError):
-                    await dialog.wait_for(state="detached", timeout=3_000)
+                dialog_closed = False
+                try:
+                    await dialog.wait_for(state="hidden", timeout=4_000)
                     dialog_closed = True
-
-            await page.wait_for_timeout(200)
-            logger.debug("认领进度弹窗关闭动作已执行 closed=%s", dialog_closed)
-            return dialog_closed
+                except PlaywrightTimeoutError:
+                    logger.debug("认领进度弹窗未立即隐藏，尝试等待 DOM 移除")
+                    with suppress(PlaywrightTimeoutError):
+                        await dialog.wait_for(state="detached", timeout=3_000)
+                        dialog_closed = True
+                
+                if dialog_closed:
+                    logger.debug("认领进度弹窗关闭成功 attempt=%d/%d", attempt + 1, max_retries)
+                    return True
+                
+                logger.debug("认领进度弹窗关闭失败，准备重试 attempt=%d/%d", attempt + 1, max_retries)
+                if attempt < max_retries - 1:
+                    await page.wait_for_timeout(1_000)
+            
+            logger.debug("认领进度弹窗关闭失败，已达最大重试次数")
+            return False
         except PlaywrightTimeoutError as exc:
             logger.debug(f"等待认领进度弹窗关闭时超时: {exc}")
         except Exception as exc:
@@ -924,35 +1033,39 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
         """Wait until the batch claim dialog is dismissed."""
 
         dialog_selectors = [
-            ".el-dialog__wrapper:has-text('批量认领')",
-            ".el-dialog:has-text('批量认领')",
-            "[role='dialog']:has-text('批量认领')",
+            ".el-dialog__wrapper",
+            ".el-dialog",
+            "[role='dialog']",
         ]
 
-        async def _any_dialog_visible() -> bool:
-            for selector in dialog_selectors:
-                with suppress(Exception):
-                    locator = page.locator(selector)
-                    count = await locator.count()
-                if not count:
-                    continue
-                for idx in range(count):
-                    target = locator.nth(idx)
-                    try:
-                        if await target.is_visible():
-                            return True
-                    except Exception:
-                        continue
-            return False
-
-        deadline = time.monotonic() + (timeout / 1_000)
-        while time.monotonic() < deadline:
-            if not await _any_dialog_visible():
-                return True
-
-            await page.wait_for_timeout(200)
-
-        logger.debug("批量认领弹窗未能在预期时间内消失")
+        try:
+            await page.wait_for_function(
+                """
+                ({ selectors, keyword }) => {
+                    let found = false;
+                    for (const selector of selectors) {
+                        const nodes = document.querySelectorAll(selector);
+                        for (const node of nodes) {
+                            const text = (node.textContent || '').trim();
+                            if (!text.includes(keyword)) {
+                                continue;
+                            }
+                            found = true;
+                            const visible = !!(node.offsetParent);
+                            if (visible) {
+                                return false;
+                            }
+                        }
+                    }
+                    return true;
+                }
+                """,
+                arg={"selectors": dialog_selectors, "keyword": "批量认领"},
+                timeout=timeout,
+            )
+            return True
+        except PlaywrightTimeoutError:
+            logger.debug("批量认领弹窗未能在预期时间内消失")
         return False
 
     async def _is_progress_dialog_descendant(self, element: Locator) -> bool:
@@ -1082,7 +1195,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
         popup_button = page.get_by_role("button", name="我知道了")
         try:
             await popup_button.click(timeout=500)
-            await page.wait_for_timeout(100)
+            await self._wait_for_message_box_dismissal(page)
             logger.debug("已关闭'我知道了'弹窗")
         except PlaywrightTimeoutError:
             return
@@ -1105,7 +1218,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
 
         try:
             await self.switch_tab(page, "claimed")
-            await page.wait_for_timeout(1_000)
+            await self._wait_for_table_refresh(page)
 
             counts = await self.get_product_count(page)
             claimed_count = counts.get("claimed", 0)
@@ -1150,7 +1263,8 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                 logger.error("Navigation to collection box failed")
                 return False
             logger.success("Navigation step completed")
-            await page.wait_for_timeout(1_000)
+            await self._wait_for_table_refresh(page)
+            await self._ensure_popups_closed(page)
 
             if filter_by_user:
                 logger.info(f"Step 2: apply user filter {filter_by_user}")
@@ -1173,7 +1287,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         await element.click()
                         await element.fill("")
                         await element.type(filter_by_user, delay=80)
-                        await page.wait_for_timeout(300)
+                        await self._wait_for_select_dropdown(page, state="visible")
 
                         option_locator = page.locator(
                             "li.el-select-dropdown__item",
@@ -1182,12 +1296,12 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
 
                         if await option_locator.count():
                             await option_locator.first.click()
-                            await page.wait_for_timeout(400)
+                            await self._wait_for_select_dropdown(page, state="hidden")
 
                             search_btn = page.locator("button:has-text('搜索')").first
                             if await search_btn.count():
                                 await search_btn.click()
-                                await page.wait_for_timeout(1_000)
+                                await self._wait_for_table_refresh(page)
 
                             filter_applied = True
                             logger.success(f"User filter applied: {filter_by_user}")
@@ -1197,16 +1311,34 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         continue
 
                 if not filter_applied:
-                    logger.warning("User filter could not be applied, continuing without filter")
+                    logger.warning("User filter could not be applied via selectors, trying fallback")
+                    filter_applied = await fallback_apply_user_filter(page, filter_by_user)
+                    if not filter_applied:
+                        logger.warning("Fallback user filter also failed, continuing without filter")
             else:
                 logger.info("Step 2: skip user filter")
 
             logger.info(f"Step 3: switch to tab {switch_to_tab}")
+            await self._wait_for_table_refresh(page)
+            
+            # 等待可能的tab容器出现
+            try:
+                await page.wait_for_selector(
+                    "button, [role='tab'], .jx-radio-button, .jx-tabs__item",
+                    state="visible",
+                    timeout=5_000
+                )
+                logger.debug("Tab elements detected on page")
+            except Exception as e:
+                logger.warning(f"Tab element wait timed out: {e}, continuing anyway...")
+            
             if not await self.switch_tab(page, switch_to_tab):
-                logger.error("Tab switch failed")
-                return False
+                logger.error("Tab switch failed, attempting fallback")
+                if not await fallback_switch_tab(page, switch_to_tab):
+                    logger.error("Fallback tab switch failed")
+                    return False
             logger.success("Tab switch complete")
-            await page.wait_for_timeout(1_000)
+            await self._wait_for_table_refresh(page)
 
             logger.info("Step 4: check product list")
             counts = await self.get_product_count(page)
@@ -1387,7 +1519,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                     except Exception:
                         continue
 
-            await page.wait_for_timeout(200)
+            await self._wait_for_idle(page, timeout_ms=200)
 
         try:
             snapshot = await page.locator(".el-dropdown-menu__item").all_inner_texts()

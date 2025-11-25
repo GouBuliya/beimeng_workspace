@@ -48,37 +48,170 @@
   };
 
   window.__FIRST_EDIT_APPLY__ = async (payload) => {
-    const result = { success: true, filled: [], missing: [] };
+    const result = { success: true, filled: [], missing: [], debug: {} };
+    
+    // === 1. 验证当前打开的是否为产品编辑弹窗 ===
+    // 由于页面可能有多个对话框叠加，改用更宽松的文本检测
+    const bodyText = document.body.textContent || '';
+    
+    // 必须同时包含至少2个产品编辑特征关键词
+    const markers = [
+      bodyText.includes('产品标题') || bodyText.includes('标题'),
+      bodyText.includes('商品编号') || bodyText.includes('型号'),
+      bodyText.includes('SKU') || bodyText.includes('规格'),
+      bodyText.includes('重量') || bodyText.includes('包裹重量'),
+      bodyText.includes('尺寸') || bodyText.includes('长宽高'),
+    ];
+    
+    const matchCount = markers.filter(Boolean).length;
+    const isProductDialog = matchCount >= 3; // 至少匹配3个特征
+    
+    result.debug.isProductDialog = isProductDialog;
+    result.debug.markerMatchCount = matchCount;
+    
+    // 收集对话框信息帮助调试
+    const dialogs = Array.from(document.querySelectorAll('[role="dialog"], .jx-dialog, .jx-overlay-dialog'));
+    result.debug.dialogCount = dialogs.length;
+    
+    // 尝试找到包含"产品标题"的对话框
+    const productDialog = dialogs.find(d => d.textContent && (
+      d.textContent.includes('产品标题') || 
+      d.textContent.includes('商品编号') ||
+      d.textContent.includes('SKU设置')
+    ));
+    
+    if (!isProductDialog || !productDialog) {
+      result.success = false;
+      result.debug.error = '未检测到产品编辑弹窗或弹窗未完全加载';
+      result.debug.hasProductDialog = !!productDialog;
+      return result;
+    }
+    
+    result.debug.productDialogFound = true;
+    
+    // 调试：记录当前页面状态
+    result.debug.dialogFound = !!document.querySelector('[role="dialog"], .jx-dialog, .jx-overlay-dialog');
+    result.debug.totalInputs = document.querySelectorAll('input').length;
+    result.debug.hasVariants = Array.isArray(payload.variants) && payload.variants.length > 0;
+    result.debug.hasSpecs = Array.isArray(payload.specs) && payload.specs.length > 0;
 
     const hasVariants = Array.isArray(payload.variants) && payload.variants.length > 0;
 
+    // 如果有 specs，尝试填写（但不强制要求成功）
     if (Array.isArray(payload.specs) && payload.specs.length > 0) {
+      try {
       await applySpecs(payload.specs, result);
+      } catch (err) {
+        console.warn('Specs填写失败:', err);
+        result.debug.specsError = String(err);
+      }
     }
 
-    // 标题
-    fillField(
-      [
-        ".collect-box-editor-dialog-V2 input[placeholder*='标题']",
+    // === 调试：收集所有输入框信息 ===
+    const allInputs = Array.from(document.querySelectorAll('input'));
+    result.debug.totalInputsFound = allInputs.length;
+    result.debug.inputDetails = allInputs.slice(0, 20).map((inp, idx) => ({
+      index: idx,
+      placeholder: inp.placeholder || '',
+      ariaLabel: inp.getAttribute('aria-label') || '',
+      type: inp.type,
+      name: inp.name || '',
+      className: inp.className.slice(0, 50), // 限制长度
+      inTable: !!(inp.closest('.pro-virtual-table__row') || inp.closest('.vue-recycle-scroller__item-view')),
+      visible: inp.offsetParent !== null,
+      disabled: inp.disabled,
+    }));
+
+    // 标题 - 使用纯JavaScript查找，排除表格内的输入框
+    const titleSelectors = [
+      "input[aria-label*='标题']",
+      "input[aria-label*='产品标题']",
+      "input[placeholder*='产品标题']",
         "input[placeholder*='标题']",
         "input[placeholder*='Title']",
-      ],
-      payload.title,
-      result,
-      "title",
-    );
+    ];
+    
+    let titleFilled = false;
+    for (const selector of titleSelectors) {
+      try {
+        const elements = Array.from(document.querySelectorAll(selector));
+        // 过滤掉在规格表格内的输入框
+        const validElements = elements.filter(el => {
+          return !el.closest('.pro-virtual-table__row') && 
+                 !el.closest('.pro-virtual-scroll__row') &&
+                 !el.closest('.vue-recycle-scroller__item-view');
+        });
+        
+        if (validElements.length > 0) {
+          result.debug.titleCandidates = validElements.length;
+          for (const element of validElements) {
+            // 优先选择可见且不是disabled的
+            if (element.offsetParent !== null && !element.disabled) {
+              dispatchInput(element, payload.title);
+              titleFilled = true;
+              result.debug.titleSelector = selector;
+              break;
+            }
+          }
+          if (titleFilled) {
+            result.filled.push("title");
+            break;
+          }
+        }
+      } catch (e) {
+        result.debug.titleError = String(e);
+        continue;
+      }
+    }
+    if (!titleFilled) {
+      result.missing.push("title");
+      result.debug.titleNotFound = true;
+    }
 
-    // 商品编号 / 型号
-    fillField(
-      [
-        ".collect-box-editor-dialog-V2 input[placeholder*='型号']",
+    // 商品编号 / 型号 - 使用纯JavaScript
+    const productNumberSelectors = [
+      "input[aria-label*='型号']",
+      "input[aria-label*='商品编号']",
+      "input[aria-label*='产品编号']",
+      "input[placeholder*='型号']",
         "input[placeholder*='商品编号']",
         "input[placeholder*='产品编号']",
-      ],
-      payload.product_number,
-      result,
-      "product_number",
-    );
+      "input[name*='productNumber']",
+      "input[name*='modelNumber']",
+    ];
+    
+    let productNumberFilled = false;
+    for (const selector of productNumberSelectors) {
+      try {
+        const elements = Array.from(document.querySelectorAll(selector));
+        const validElements = elements.filter(el => {
+          return !el.closest('.pro-virtual-table__row') && 
+                 !el.closest('.pro-virtual-scroll__row') &&
+                 !el.closest('.vue-recycle-scroller__item-view');
+        });
+        
+        if (validElements.length > 0) {
+          for (const element of validElements) {
+            if (element.offsetParent !== null && !element.disabled) {
+              dispatchInput(element, payload.product_number);
+              productNumberFilled = true;
+              result.debug.productNumberSelector = selector;
+              break;
+            }
+          }
+          if (productNumberFilled) {
+            result.filled.push("product_number");
+            break;
+          }
+        }
+      } catch (e) {
+        continue;
+      }
+    }
+    if (!productNumberFilled) {
+      result.missing.push("product_number");
+      result.debug.productNumberNotFound = true;
+    }
 
     if (!hasVariants) {
       // 价格字段
@@ -123,16 +256,48 @@
       );
     }
 
-    // 重量
-    fillField(
-      [
+    // 重量 - 使用纯JavaScript，排除表格内的输入框
+    const weightSelectors = [
+      "input[aria-label*='重量'][type='number']",
+      "input[aria-label*='包裹重量']",
         "input[placeholder*='重量'][type='number']",
+      "input[placeholder*='包裹重量']",
         "input[placeholder*='重量'][type='text']",
-      ],
-      payload.weight_g,
-      result,
-      "weight_g",
-    );
+      "input[name*='weight']",
+    ];
+    
+    let weightFilled = false;
+    for (const selector of weightSelectors) {
+      try {
+        const elements = Array.from(document.querySelectorAll(selector));
+        const validElements = elements.filter(el => {
+          return !el.closest('.pro-virtual-table__row') && 
+                 !el.closest('.pro-virtual-scroll__row') &&
+                 !el.closest('.vue-recycle-scroller__item-view');
+        });
+        
+        if (validElements.length > 0) {
+          for (const element of validElements) {
+            if (element.offsetParent !== null && !element.disabled) {
+              dispatchInput(element, payload.weight_g);
+              weightFilled = true;
+              result.debug.weightSelector = selector;
+              break;
+            }
+          }
+          if (weightFilled) {
+            result.filled.push("weight_g");
+            break;
+          }
+        }
+      } catch (e) {
+        continue;
+      }
+    }
+    if (!weightFilled) {
+      result.missing.push("weight_g");
+      result.debug.weightNotFound = true;
+    }
 
     // 尺寸
     const dimensionSelectors = [
@@ -215,13 +380,31 @@
     const spec = specs[0];
     if (!spec) return;
 
-    const container = document.querySelector(".sku-setting");
+    // 尝试多个容器选择器
+    const containerSelectors = [
+      ".sku-setting",
+      ".pro-sku-setting", 
+      "[class*='sku']",
+      ".jx-form-item:has(input[placeholder*='规格'])",
+    ];
+    
+    let container = null;
+    for (const selector of containerSelectors) {
+      container = document.querySelector(selector);
+      if (container) {
+        result.debug.specContainerSelector = selector;
+        break;
+      }
+    }
+    
     if (!container) {
-      result.missing.push("spec_container");
+      // 不再标记为 missing，只记录调试信息
+      result.debug.specContainerNotFound = true;
+      console.warn('未找到规格容器，跳过规格填写');
       return;
     }
 
-    const nameInput = container.querySelector("input[placeholder*='规格名称']");
+    const nameInput = container.querySelector("input[placeholder*='规格名称'], input[placeholder*='规格名']");
     if (nameInput && spec.name) {
       dispatchInput(nameInput, spec.name);
       result.filled.push("spec_name");
@@ -232,21 +415,22 @@
       return;
     }
 
-    let optionInputs = Array.from(container.querySelectorAll("input[placeholder*='选项']"));
+    let optionInputs = Array.from(container.querySelectorAll("input[placeholder*='选项'], input[placeholder*='规格值']"));
     const addButton = Array.from(container.querySelectorAll("button")).find(
-      (btn) => btn.textContent && btn.textContent.includes("添加选项")
+      (btn) => btn.textContent && (btn.textContent.includes("添加选项") || btn.textContent.includes("添加"))
     );
 
     while (optionInputs.length < options.length && addButton) {
       addButton.click();
       await wait(150);
-      optionInputs = Array.from(container.querySelectorAll("input[placeholder*='选项']"));
+      optionInputs = Array.from(container.querySelectorAll("input[placeholder*='选项'], input[placeholder*='规格值']"));
     }
 
     options.forEach((opt, idx) => {
       const input = optionInputs[idx];
       if (!input) {
-        result.missing.push(`spec_option_${idx + 1}`);
+        // 不再标记为 missing，只记录调试信息
+        result.debug[`spec_option_${idx + 1}_missing`] = true;
         return;
       }
       dispatchInput(input, opt);

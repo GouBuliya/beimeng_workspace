@@ -31,12 +31,15 @@ class FirstEditWorkflowMixin(FirstEditBase):
 
         try:
             if not await self.edit_title(page, title):
+                logger.error("标题设置失败")
                 return False
 
             if not await self.set_sku_price(page, price):
+                logger.error("价格设置失败")
                 return False
 
             if not await self.set_sku_stock(page, stock):
+                logger.error("库存设置失败")
                 return False
 
             logger.info("尝试设置包裹重量(物流信息 Tab)...")
@@ -68,6 +71,7 @@ class FirstEditWorkflowMixin(FirstEditBase):
                 logger.warning("切换回基本信息 Tab 失败,但继续执行")
 
             if not await self.save_changes(page, wait_for_close=False):
+                logger.error("保存修改失败")
                 return False
 
             logger.debug("点击关闭按钮(x)...")

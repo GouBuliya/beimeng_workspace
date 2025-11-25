@@ -63,7 +63,8 @@ class BrowserManager:
         Args:
             config_path: 配置文件路径
         """
-        self.config_path = Path(config_path)
+        self._raw_config_path = Path(config_path)
+        self.config_path = self._resolve_config_path(self._raw_config_path)
         self.load_config()
 
         self.playwright: Playwright | None = None
@@ -82,10 +83,27 @@ class BrowserManager:
             self._build_wait_strategy(self.timing_config),
         )
 
+    def _resolve_config_path(self, config_path: Path) -> Path:
+        """根据当前文件位置解析配置文件的实际路径."""
+        if config_path.is_absolute():
+            return config_path
+
+        current_file = Path(__file__).resolve()
+        for parent in current_file.parents:
+            candidate = parent / config_path
+            if candidate.exists():
+                return candidate
+
+        # Fallback: 退回到项目根目录的推断路径，便于日志定位
+        return current_file.parent.parent.parent / config_path
+
     def load_config(self) -> None:
         """加载配置."""
         if not self.config_path.exists():
-            logger.warning(f"配置文件不存在: {self.config_path}, 使用默认配置")
+            logger.warning(
+                f"配置文件不存在: {self.config_path} "
+                f"(原始路径: {self._raw_config_path}), 使用默认配置"
+            )
             self.config = {
                 "browser": {"type": "chromium", "headless": False},
                 "timeouts": {"default": 30000},
@@ -257,6 +275,7 @@ class BrowserManager:
         # 设置默认超时
         default_timeout = self.config.get("timeouts", {}).get("default", 30000)
         self.page.set_default_timeout(default_timeout)
+        setattr(self.page, "_bemg_default_timeout_ms", default_timeout)
 
         logger.success(f"✓ 浏览器已启动 (headless={headless})")
 

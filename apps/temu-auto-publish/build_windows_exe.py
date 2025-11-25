@@ -15,7 +15,8 @@ import typer
 from PyInstaller.__main__ import run as pyinstaller_run
 
 REPO_ROOT: Final[Path] = Path(__file__).resolve().parents[2]
-ENTRY_FILE: Final[Path] = REPO_ROOT / "apps" / "temu-auto-publish" / "start_web_panel_entry.py"
+APP_ROOT: Final[Path] = REPO_ROOT / "apps" / "temu-auto-publish"
+ENTRY_FILE: Final[Path] = APP_ROOT / "start_web_panel_entry.py"
 DEFAULT_NAME: Final[str] = "TemuWebPanel"
 
 
@@ -25,26 +26,29 @@ def _data_arg(source: Path, target: str) -> str:
 
 def _build_args(name: str, clean: bool, onefile: bool) -> list[str]:
     assets = [
-        _data_arg(
-            REPO_ROOT / "apps" / "temu-auto-publish" / "web_panel" / "templates",
-            "web_panel/templates",
-        ),
-        _data_arg(
-            REPO_ROOT / "apps" / "temu-auto-publish" / "web_panel" / "fields.py",
-            "web_panel",
-        ),
-        _data_arg(
-            REPO_ROOT / "apps" / "temu-auto-publish" / "data" / "input" / "selection.xlsx",
-            "data/input",
-        ),
+        _data_arg(APP_ROOT / "web_panel" / "templates", "web_panel/templates"),
+        _data_arg(APP_ROOT / "config", "config"),
+        _data_arg(APP_ROOT / "web_panel" / "fields.py", "web_panel"),
+        _data_arg(APP_ROOT / "data" / "input" / "selection.xlsx", "data/input"),
     ]
+    hidden_imports = [
+        "web_panel.api",
+        "web_panel.service",
+        "web_panel.cli",
+        "src.workflows.complete_publish_workflow",
+    ]
+
     args = [
         str(ENTRY_FILE),
         f"--name={name}",
-        "--hidden-import=web_panel.api",
-        "--hidden-import=web_panel.service",
-        "--hidden-import=web_panel.cli",
+        f"--paths={REPO_ROOT}",
+        f"--paths={APP_ROOT}",
+        f"--paths={APP_ROOT / 'src'}",
+        "--collect-all=playwright_stealth",
+        "--collect-submodules=src",
     ]
+    for hidden in hidden_imports:
+        args.append(f"--hidden-import={hidden}")
     if clean:
         args.append("--clean")
     if onefile:

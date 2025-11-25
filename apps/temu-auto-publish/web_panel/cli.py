@@ -62,13 +62,24 @@ def start(
     host: str = typer.Option("127.0.0.1", help="监听地址, 默认仅本机可访问"),
     port: int = typer.Option(DEFAULT_PORT, help="监听端口"),
     auto_open: bool = typer.Option(True, help="启动后自动打开浏览器"),
+    access_log: bool = typer.Option(
+        False,
+        "--access-log/--no-access-log",
+        help="是否输出每个 HTTP 请求日志 (默认关闭, 以保持控制台简洁)",
+    ),
 ) -> None:
     """启动 Web Panel, 提供图形化发布体验."""
 
     url = f"http://{host}:{port}"
     typer.secho(f"🌐 即将启动 Temu Web Panel -> {url}", fg=typer.colors.CYAN)
     app_instance = create_app()
-    config = uvicorn.Config(app_instance, host=host, port=port, reload=False)
+    config = uvicorn.Config(
+        app_instance,
+        host=host,
+        port=port,
+        reload=False,
+        access_log=access_log,
+    )
     server = uvicorn.Server(config)
 
     if auto_open:

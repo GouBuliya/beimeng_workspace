@@ -1,0 +1,235 @@
+{
+  "comment": "首次编辑弹窗字段配置 - 配置驱动方案示例",
+  "version": "3.0.0",
+  "last_updated": "2025-11-22",
+  "strategy": "selector_resolver",
+  
+  "first_edit_dialog": {
+    "comment": "首次编辑弹窗所有字段的定位器配置",
+    
+    "navigation": {
+      "comment": "弹窗内的 Tab 导航",
+      "basic_info": {
+        "locators": [
+          {"type": "get_by_text", "value": "基本信息"},
+          {"type": "css", "value": "text='基本信息'"}
+        ]
+      },
+      "product_attrs": {
+        "locators": [
+          {"type": "get_by_text", "value": "产品属性"},
+          {"type": "css", "value": "text='产品属性'"}
+        ]
+      },
+      "sales_attrs": {
+        "locators": [
+          {"type": "get_by_text", "value": "销售属性"},
+          {"type": "css", "value": "text='销售属性'"}
+        ]
+      },
+      "logistics_info": {
+        "locators": [
+          {"type": "get_by_text", "value": "物流信息"},
+          {"type": "css", "value": "text='物流信息'"}
+        ]
+      }
+    },
+    
+    "fields": {
+      "comment": "各个输入字段的定位器配置",
+      
+      "title": {
+        "comment": "产品标题输入框",
+        "locators": [
+          {"type": "get_by_label", "value": "产品标题", "exact": false},
+          {"type": "get_by_placeholder", "value": "请输入产品标题", "exact": false},
+          {"type": "get_by_placeholder", "value": "标题", "exact": false},
+          {"type": "xpath", "value": "//label[contains(text(), '产品标题')]/following::input[@type='text'][1]"},
+          {"type": "css", "value": "input[placeholder*='标题']"}
+        ]
+      },
+      
+      "product_number": {
+        "comment": "商品编号",
+        "locators": [
+          {"type": "get_by_label", "value": "商品编号", "exact": false},
+          {"type": "get_by_label", "value": "产品编号", "exact": false},
+          {"type": "get_by_placeholder", "value": "商品编号", "exact": false},
+          {"type": "css", "value": "input[placeholder*='编号']"}
+        ]
+      },
+      
+      "price": {
+        "comment": "建议售价",
+        "locators": [
+          {"type": "get_by_label", "value": "建议售价", "exact": false},
+          {"type": "get_by_label", "value": "售价", "exact": false},
+          {"type": "get_by_placeholder", "value": "建议售价", "exact": false},
+          {"type": "css", "value": "input[placeholder*='售价']"},
+          {"type": "css", "value": "input[placeholder*='价格']"}
+        ]
+      },
+      
+      "supply_price": {
+        "comment": "供货价",
+        "locators": [
+          {"type": "get_by_label", "value": "供货价", "exact": false},
+          {"type": "get_by_placeholder", "value": "供货价", "exact": false},
+          {"type": "css", "value": "input[placeholder*='供货价']"}
+        ]
+      },
+      
+      "stock": {
+        "comment": "库存数量",
+        "locators": [
+          {"type": "get_by_label", "value": "库存", "exact": false},
+          {"type": "get_by_placeholder", "value": "库存", "exact": false},
+          {"type": "css", "value": "input[placeholder*='库存']"}
+        ]
+      },
+      
+      "weight": {
+        "comment": "包裹重量（克）",
+        "locators": [
+          {"type": "get_by_label", "value": "包裹重量", "exact": false},
+          {"type": "get_by_label", "value": "重量", "exact": false},
+          {"type": "get_by_placeholder", "value": "包裹重量", "exact": false},
+          {"type": "get_by_placeholder", "value": "重量", "exact": false},
+          {"type": "css", "value": "input[placeholder*='重量']"}
+        ]
+      },
+      
+      "length": {
+        "comment": "包裹长度（厘米）",
+        "locators": [
+          {"type": "get_by_label", "value": "包裹长度", "exact": false},
+          {"type": "get_by_label", "value": "长度", "exact": false},
+          {"type": "get_by_label", "value": "长", "exact": false},
+          {"type": "get_by_placeholder", "value": "长度", "exact": false},
+          {"type": "css", "value": "input[placeholder*='长度']"},
+          {"type": "css", "value": "input[placeholder*='长']"}
+        ]
+      },
+      
+      "width": {
+        "comment": "包裹宽度（厘米）",
+        "locators": [
+          {"type": "get_by_label", "value": "包裹宽度", "exact": false},
+          {"type": "get_by_label", "value": "宽度", "exact": false},
+          {"type": "get_by_label", "value": "宽", "exact": false},
+          {"type": "get_by_placeholder", "value": "宽度", "exact": false},
+          {"type": "css", "value": "input[placeholder*='宽度']"},
+          {"type": "css", "value": "input[placeholder*='宽']"}
+        ]
+      },
+      
+      "height": {
+        "comment": "包裹高度（厘米）",
+        "locators": [
+          {"type": "get_by_label", "value": "包裹高度", "exact": false},
+          {"type": "get_by_label", "value": "高度", "exact": false},
+          {"type": "get_by_label", "value": "高", "exact": false},
+          {"type": "get_by_placeholder", "value": "高度", "exact": false},
+          {"type": "css", "value": "input[placeholder*='高度']"},
+          {"type": "css", "value": "input[placeholder*='高']"}
+        ]
+      },
+      
+      "model_spec_name": {
+        "comment": "多规格维度名称（如：型号、颜色等）",
+        "locators": [
+          {"type": "get_by_placeholder", "value": "请输入规格名", "exact": false},
+          {"type": "get_by_placeholder", "value": "规格名称", "exact": false},
+          {"type": "css", "value": "input[placeholder*='规格名']"}
+        ]
+      },
+      
+      "model_spec_option": {
+        "comment": "规格选项值（如：A001、红色等）",
+        "locators": [
+          {"type": "get_by_placeholder", "value": "请输入规格值", "exact": false},
+          {"type": "get_by_placeholder", "value": "规格选项", "exact": false},
+          {"type": "css", "value": "input[placeholder*='规格值']"}
+        ]
+      },
+      
+      "supplier_link": {
+        "comment": "供货商链接",
+        "locators": [
+          {"type": "get_by_label", "value": "货源链接", "exact": false},
+          {"type": "get_by_placeholder", "value": "货源链接", "exact": false},
+          {"type": "get_by_placeholder", "value": "供货商链接", "exact": false},
+          {"type": "css", "value": "input[placeholder*='链接']"}
+        ]
+      },
+      
+      "size_chart_url": {
+        "comment": "尺寸图 URL",
+        "locators": [
+          {"type": "get_by_placeholder", "value": "请输入图片链接", "exact": false},
+          {"type": "get_by_placeholder", "value": "尺寸图链接", "exact": false},
+          {"type": "css", "value": "input[placeholder*='图片链接']"}
+        ]
+      },
+      
+      "video_url": {
+        "comment": "产品视频 URL",
+        "locators": [
+          {"type": "get_by_placeholder", "value": "请输入视频链接", "exact": false},
+          {"type": "get_by_placeholder", "value": "视频链接", "exact": false},
+          {"type": "css", "value": "input[placeholder*='视频链接']"}
+        ]
+      }
+    },
+    
+    "buttons": {
+      "comment": "各种操作按钮",
+      
+      "save": {
+        "locators": [
+          {"type": "get_by_role", "value": "button", "name": "保存"},
+          {"type": "get_by_role", "value": "button", "name": "保存修改"},
+          {"type": "get_by_text", "value": "保存", "exact": false},
+          {"type": "css", "value": "button:has-text('保存')"}
+        ]
+      },
+      
+      "cancel": {
+        "locators": [
+          {"type": "get_by_role", "value": "button", "name": "取消"},
+          {"type": "get_by_text", "value": "取消", "exact": false},
+          {"type": "css", "value": "button:has-text('取消')"}
+        ]
+      },
+      
+      "close": {
+        "locators": [
+          {"type": "get_by_label", "value": "关闭"},
+          {"type": "css", "value": "button[aria-label='关闭']"},
+          {"type": "css", "value": ".jx-dialog__headerbtn"},
+          {"type": "css", "value": ".el-dialog__close"}
+        ]
+      },
+      
+      "add_spec": {
+        "comment": "添加规格维度按钮",
+        "locators": [
+          {"type": "get_by_role", "value": "button", "name": "添加规格"},
+          {"type": "get_by_text", "value": "添加规格", "exact": false},
+          {"type": "css", "value": "button:has-text('添加规格')"}
+        ]
+      },
+      
+      "upload_image": {
+        "comment": "上传图片按钮",
+        "locators": [
+          {"type": "get_by_role", "value": "button", "name": "上传图片"},
+          {"type": "get_by_text", "value": "上传", "exact": false},
+          {"type": "css", "value": "button:has-text('上传')"}
+        ]
+      }
+    }
+  }
+}
+
+

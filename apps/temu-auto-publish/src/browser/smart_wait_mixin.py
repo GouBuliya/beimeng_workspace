@@ -53,14 +53,17 @@ class WaitMetrics:
 
 @dataclass(slots=True)
 class AdaptiveWaitConfig:
-    """自适应等待配置"""
+    """自适应等待配置
     
-    min_wait_ms: int = 30
-    max_wait_ms: int = 2000
-    network_idle_timeout_ms: int = 500
-    dom_stable_timeout_ms: int = 500
-    dom_stable_checks: int = 3
-    dom_stable_interval_ms: int = 30
+    注意: 已优化为快速模式，减少等待时间以提升性能
+    """
+    
+    min_wait_ms: int = 10           # 优化: 30 -> 10
+    max_wait_ms: int = 800          # 优化: 2000 -> 800
+    network_idle_timeout_ms: int = 150   # 优化: 500 -> 150
+    dom_stable_timeout_ms: int = 150     # 优化: 500 -> 150
+    dom_stable_checks: int = 2           # 优化: 3 -> 2
+    dom_stable_interval_ms: int = 20     # 优化: 30 -> 20
     # 学习因子：根据历史数据调整等待时间
     learning_factor: float = 0.3
 

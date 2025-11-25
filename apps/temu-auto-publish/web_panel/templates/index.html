@@ -149,6 +149,11 @@
   </head>
   <body>
     <main class="container">
+      <div class="logout-bar" style="display: flex; justify-content: flex-end">
+        <form method="post" action="/logout">
+          <button type="submit" class="secondary">退出登录</button>
+        </form>
+      </div>
       <header>
         <p>Temu 自动发布助手 · Web 管理控制台</p>
         <h1>请依照步骤完成文件准备、配置与任务执行</h1>
@@ -197,11 +202,17 @@
             <p class="file-hint">{{ field.help_text }}</p>
             {% elif field.kind == "path" %}
             <label>
-              {{ field.label }}
+              <span>
+                {{ field.label }}
+                {% if field.required %}
+                <span class="required-mark">*</span>
+                {% endif %}
+              </span>
               <input
                 type="text"
                 name="{{ field.name }}"
                 placeholder="{{ field.placeholder }}"
+                {% if field.required %}required{% endif %}
               />
             </label>
             <p class="tooltip">{{ field.help_text }}</p>

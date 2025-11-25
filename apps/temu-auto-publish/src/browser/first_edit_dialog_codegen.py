@@ -32,15 +32,16 @@ from urllib.parse import urljoin
 from loguru import logger
 from playwright.async_api import Locator, Page
 
-DEFAULT_PRIMARY_TIMEOUT_MS = 2_000
-FALLBACK_TIMEOUT_MS = 500
+# 性能优化: 减少超时时间
+DEFAULT_PRIMARY_TIMEOUT_MS = 800     # 优化: 2000 -> 800
+FALLBACK_TIMEOUT_MS = 200            # 优化: 500 -> 200
 VARIANT_ROW_SCOPE_SELECTOR = (
     ".pro-virtual-scroll__row.pro-virtual-table__row, .pro-virtual-table__row"
 )
 DEFAULT_VIDEO_BASE_URL = os.getenv(
     "VIDEO_BASE_URL", "https://miaoshou-tuchuang-beimeng.oss-cn-hangzhou.aliyuncs.com/video/"
 ).strip()
-VIDEO_UPLOAD_TIMEOUT_MS = 1_000
+VIDEO_UPLOAD_TIMEOUT_MS = 500        # 优化: 1000 -> 500
 
 FIELD_KEYWORDS: dict[str, list[str]] = {
     "price": ["建议售价", "售价", "price"],
@@ -156,8 +157,8 @@ async def fill_first_edit_dialog_codegen(page: Page, payload: dict[str, Any]) ->
     logger.info("=" * 60)
 
     try:
-        # 等待弹窗加载完成
-        await page.wait_for_selector(".jx-overlay-dialog", state="visible", timeout=10_000)
+        # 等待弹窗加载完成（优化: 10000 -> 3000）
+        await page.wait_for_selector(".jx-overlay-dialog", state="visible", timeout=3_000)
         logger.success("✓ 编辑弹窗已加载")
 
         # 1. 填写标题
@@ -236,7 +237,7 @@ async def _fill_title(page: Page, title: str) -> bool:
 
         dialog = page.locator(".collect-box-editor-dialog-V2, .jx-overlay-dialog").first
         try:
-            await dialog.wait_for(state="visible", timeout=3_000)
+            await dialog.wait_for(state="visible", timeout=1_000)  # 优化: 3000 -> 1000
         except Exception:
             logger.debug("标题填写时未能定位到弹窗容器, 使用全局查找")
 
@@ -266,7 +267,7 @@ async def _fill_basic_specs(page: Page, payload: dict[str, Any]) -> bool:
     try:
         logger.info("填写基础规格字段...")
         dialog = page.locator(".collect-box-editor-dialog-V2, .jx-overlay-dialog").first
-        await dialog.wait_for(state="visible", timeout=3_000)
+        await dialog.wait_for(state="visible", timeout=1_000)  # 优化: 3000 -> 1000
     except Exception as exc:
         logger.error("未能定位首次编辑弹窗: %s", exc)
         return False
@@ -417,7 +418,7 @@ async def _click_save(page: Page) -> bool:
                 continue
             save_btn = candidate.nth(total - 1)
             try:
-                await save_btn.wait_for(state="visible", timeout=2_000)
+                await save_btn.wait_for(state="visible", timeout=800)  # 优化: 2000 -> 800
                 await _dismiss_scroll_overlay(page)
                 await save_btn.scroll_into_view_if_needed()
                 await save_btn.focus()
@@ -428,8 +429,8 @@ async def _click_save(page: Page) -> bool:
 
                 toast = page.locator(".jx-message--success, .el-message--success")
                 try:
-                    await toast.wait_for(state="visible", timeout=500)
-                    await toast.wait_for(state="hidden", timeout=1_000)
+                    await toast.wait_for(state="visible", timeout=300)   # 优化: 500 -> 300
+                    await toast.wait_for(state="hidden", timeout=500)    # 优化: 1000 -> 500
                 except Exception:
                     logger.debug("保存成功提示未出现或已快速消失")
                 return True
@@ -501,19 +502,19 @@ async def _upload_size_chart_via_url(page: Page, image_url: str) -> bool:
             logger.debug("点击尺寸图缩略图失败: %s", exc)
 
         upload_btn = page.get_by_text("使用网络图片", exact=True)
-        await upload_btn.wait_for(state="visible", timeout=1_500)
+        await upload_btn.wait_for(state="visible", timeout=600)  # 优化: 1500 -> 600
         await upload_btn.click()
 
         url_input = page.get_by_role(
             "textbox", name="请输入图片链接，若要输入多个链接，请以回车换行", exact=True
         )
-        await url_input.wait_for(state="visible", timeout=1_500)
+        await url_input.wait_for(state="visible", timeout=600)  # 优化: 1500 -> 600
         await url_input.click()
         await url_input.press("ControlOrMeta+a")
         await url_input.fill(normalized_url)
 
         confirm_btn = page.get_by_role("button", name="确定")
-        await confirm_btn.wait_for(state="visible", timeout=1_500)
+        await confirm_btn.wait_for(state="visible", timeout=600)  # 优化: 1500 -> 600
         await confirm_btn.click()
 
         await _ensure_dialog_closed(
@@ -633,7 +634,7 @@ async def _upload_product_video_via_url(page: Page, video_url: str) -> bool | No
 
         explicit_network_option = page.get_by_text("网络上传", exact=True)
         try:
-            await explicit_network_option.wait_for(state="visible", timeout=1_200)
+            await explicit_network_option.wait_for(state="visible", timeout=500)  # 优化: 1200 -> 500
             await explicit_network_option.click()
             logger.debug("已通过显式文本点击『网络上传』")
         except Exception:
@@ -663,7 +664,7 @@ async def _upload_product_video_via_url(page: Page, video_url: str) -> bool | No
             ]
         )
 
-        target_input = await _first_visible(video_input_candidates, timeout=1_500)
+        target_input = await _first_visible(video_input_candidates, timeout=600)  # 优化: 1500 -> 600
         if target_input is None:
             logger.warning("未找到视频URL输入框")
             await _capture_html(page, "data/debug/html/video_missing_input.html")
@@ -725,12 +726,12 @@ async def _dismiss_scroll_overlay(page: Page) -> None:
 
     try:
         await page.keyboard.press("Escape")
-        await overlay.first.wait_for(state="hidden", timeout=1000)
+        await overlay.first.wait_for(state="hidden", timeout=400)  # 优化: 1000 -> 400
         logger.debug("已通过 Escape 关闭浮层")
     except Exception:
         try:
             await page.mouse.click(5, 5)
-            await overlay.first.wait_for(state="hidden", timeout=500)
+            await overlay.first.wait_for(state="hidden", timeout=200)  # 优化: 500 -> 200
             logger.debug("已通过点击页面关闭浮层")
         except Exception:
             logger.debug("浮层未完全关闭, 将继续尝试填写")

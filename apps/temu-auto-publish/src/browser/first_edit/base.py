@@ -11,6 +11,9 @@ from pathlib import Path
 from typing import Any
 
 from loguru import logger
+from playwright.async_api import Page
+
+from ..selector_resolver import SelectorResolver
 
 
 class FirstEditBase:
@@ -24,7 +27,21 @@ class FirstEditBase:
         """
         self.selector_path = Path(selector_path)
         self.selectors = self._load_selectors()
-        logger.info("首次编辑基础配置加载完成(文本定位器版本)")
+        self._resolver: SelectorResolver | None = None
+        logger.info("首次编辑基础配置加载完成(选择器解析器版本)")
+
+    def _get_resolver(self, page: Page) -> SelectorResolver:
+        """获取或创建选择器解析器实例.
+
+        Args:
+            page: Playwright 页面对象.
+
+        Returns:
+            SelectorResolver 实例.
+        """
+        if self._resolver is None or self._resolver.page != page:
+            self._resolver = SelectorResolver(page)
+        return self._resolver
 
     def _load_selectors(self) -> dict[str, Any]:
         """加载首次编辑相关的选择器配置.

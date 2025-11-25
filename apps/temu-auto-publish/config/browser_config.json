@@ -4,7 +4,7 @@
     "headless": false,
     "window_width": 1280,
     "window_height": 720,
-    "device_scale_factor": 2.0,
+    "device_scale_factor": 1.0,
     "locale": "zh-CN",
     "timezone": "Asia/Shanghai",
     "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"

@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import random
+from contextlib import suppress
 from pathlib import Path
 from typing import Optional
 
@@ -622,121 +623,70 @@ class BatchEditStepsMixin:
                 except Exception:  # noqa: BLE001
                     logger.warning("  ⚠️ 未找到自定义SKU编码按钮")
 
-            await self.page.wait_for_timeout(500)
             return await self.click_preview_and_save("平台SKU")
 
         except Exception as exc:  # noqa: BLE001
             logger.error(f"  ✗ 操作失败: {exc}")
             return False
 
-    @retry_on_failure(max_retries=3, delay=0.3, backoff=1.8)
     async def step_12_sku_category(self) -> bool:
-        """步骤7.12：SKU分类（默认选择单品）。"""
+        """步骤7.12：SKU分类（默认选择单品）."""
         if not await self.click_step("SKU分类", "7.12"):
-            raise RuntimeError("未能定位到『SKU分类』步骤")
-
-        dropdown_selector = (
-            ".el-select-dropdown:not([style*='display: none']):not([aria-hidden='true'])"
-        )
-        target_values = ["单品", "组合装500件", "组合装"]
-
-        async def select_value(value: str) -> bool:
-            dropdown = self.page.locator(dropdown_selector)
-            if await dropdown.count() == 0:
-                return False
-            dropdown = dropdown.last
-            await dropdown.wait_for(state="visible", timeout=1500)
-            option = dropdown.locator(".el-select-dropdown__item").filter(has_text=value).first
-            if await option.count() > 0:
-                await option.scroll_into_view_if_needed()
-                await option.click(timeout=1000)
-                return True
-            option = self.page.get_by_role("option", name=value)
-            if await option.count() > 0:
-                await option.first.scroll_into_view_if_needed()
-                await option.first.click(timeout=1000)
-                return True
             return False
 
-        async def fill_quantity() -> bool:
-            inputs = [
-                self.page.get_by_role("dialog").get_by_role("textbox", name="数量").first,
-                self.page.get_by_role("dialog").get_by_placeholder("数量").first,
-                self.page.get_by_role("dialog").locator(".el-input__inner").first,
-            ]
-            for locator in inputs:
-                if await locator.count() > 0:
-                    try:
-                        await locator.click()
-                        await locator.fill("1")
-                        logger.success("  ✓ 数量已填写: 1")
-                        return True
-                    except Exception:  # noqa: BLE001
-                        continue
-            logger.warning("  ⚠️ 未找到数量输入框")
-            return False
-
-        primary_form = self.page.locator("form").filter(
-            has_text="SKU分类 单品 组合装 混合套装 件 双 包 共计内含 件",
-        )
         try:
-            if await primary_form.count() > 0:
-                await primary_form.locator("i").nth(1).click(timeout=2000)
-                await self.page.wait_for_timeout(100)
-                if not await select_value("单品"):
-                    raise RuntimeError("显式路径未定位到单品选项")
-                await fill_quantity()
-                if await self.click_preview_and_save("SKU分类"):
-                    logger.info("  ✓ SKU分类显式路径完成")
-                    return True
-                raise RuntimeError("显式路径预览/保存失败")
-        except Exception as explicit_err:  # noqa: BLE001
-            logger.debug(f"  SKU分类显式路径失败: {explicit_err}")
+            logger.info("  选择SKU分类：单品...")
 
-        trigger_selectors = [
-            self.page.get_by_role("dialog").locator("form").locator(".el-select").locator("input").first,
-            self.page.get_by_role("dialog").locator(".el-select__input").first,
-            self.page.get_by_role("dialog").get_by_placeholder("请选择").first,
-        ]
+            # 1. 点击分类下拉框
+            select_selectors = [
+                ".el-select",
+                "input.el-input__inner",
+                ".el-select__input",
+            ]
 
-        opened = False
-        for trigger in trigger_selectors:
-            if await trigger.count() > 0:
+            clicked = False
+            for selector in select_selectors:
                 try:
-                    await trigger.click(timeout=2000)
-                    opened = True
-                    logger.debug("  ✓ 已点击通用下拉触发器")
+                    select_box = self.page.locator(selector).first
+                    if await select_box.count() > 0 and await select_box.is_visible():
+                        await select_box.click()
+                        logger.debug("  ✓ 已点击分类下拉框")
+                        clicked = True
                     break
                 except Exception:  # noqa: BLE001
                     continue
 
-        if not opened:
-            logger.warning("  ⚠️ 未能点击SKU分类下拉触发器")
+            if not clicked:
+                logger.warning("  ⚠️ 未找到分类下拉框")
 
-        selected = False
-        last_error: Exception | None = None
+            # 2. 点击"单品"选项
+            option_selectors = [
+                ".el-select-dropdown__item:has-text('单品')",
+                "li:has-text('单品')",
+                "text='单品'",
+            ]
 
-        for value in target_values:
+            selected = False
+            for selector in option_selectors:
             try:
-                if await select_value(value):
-                    logger.info(f"  ✓ 已选择：{value}")
+                    option = self.page.locator(selector).first
+                    if await option.count() > 0 and await option.is_visible():
+                        await option.click()
+                        logger.success("  ✓ 已选择：单品")
                     selected = True
                     break
-            except Exception as select_err:  # noqa: BLE001
-                last_error = select_err
-                logger.debug(f"  选择 {value} 失败: {select_err}")
+                except Exception:  # noqa: BLE001
                 continue
 
         if not selected:
-            raise RuntimeError("未找到或无法选择『单品』") from last_error
+                logger.warning("  ⚠️ 未找到'单品'选项")
 
-        await fill_quantity()
+            await self.page.wait_for_timeout(300)
+            return await self.click_preview_and_save("SKU分类")
 
-        await self.page.wait_for_timeout(200)
-        if await self.click_preview_and_save("SKU分类"):
-            return True
-
-        raise RuntimeError("SKU分类预览/保存失败")
+        except Exception as exc:  # noqa: BLE001
+            logger.error(f"  ✗ 操作失败: {exc}")
+            return False
 
     @retry_on_failure(max_retries=3, delay=0.3, backoff=1.8)
     async def step_13_size_chart(self) -> bool:
@@ -826,45 +776,177 @@ class BatchEditStepsMixin:
         """步骤7.18：产品说明书（上传PDF文件）."""
         if not await self.click_step("产品说明书", "7.18"):
             return False
-
+        #等待1s
+        await self.page.wait_for_timeout(1000)
         try:
             if manual_file_path:
                 file_path = Path(manual_file_path)
-
                 if not file_path.exists():
                     logger.warning(f"  ⚠️ 文件不存在: {manual_file_path}")
-                    logger.info("  ℹ️ 跳过文件上传，直接预览+保存")
                 else:
+                    success_upload = False
+                    last_error: Exception | None = None
+
+                    for attempt in range(1, 4):
+                        logger.info(f"  ↻ 产品说明书上传尝试 {attempt}/3")
+                        uploaded = False
+                        file_chooser = None
+                        try:
                     logger.info(f"  上传产品说明书: {file_path.name}...")
 
-                    file_input_selectors = [
-                        "input[type='file']",
-                        "input[accept*='pdf']",
-                        "input[accept*='.pdf']",
+                    upload_btn_selectors = [
+                        "button:has-text('上传文件')",
+                        "text='上传文件'",
+                        ".el-button:has-text('上传文件')",
+                        "span:has-text('上传文件')",
+                        "xpath=/html/body/div[12]/div/div[2]/div[1]/div[2]/form/div/div[1]/div/div/button",
                     ]
-
-                    uploaded = False
-                    for selector in file_input_selectors:
+                    section_candidates = [
+                        "text='批量编辑方式'",
+                        "text='使用网络的说明书'",
+                        "text='使用网络说明书'",
+                        "text='使用网络说明书 '",
+                    ]
+                    upload_section = None
+                    for section in section_candidates:
                         try:
-                            file_input = self.page.locator(selector).first
-                            if await file_input.count() > 0:
-                                await file_input.set_input_files(str(file_path))
-                                logger.info(f"  ✓ 文件已上传: {file_path.name}")
+                            label = self.page.locator(section).first
+                            if await label.count() > 0 and await label.is_visible():
+                                upload_section = label.locator("..").locator("..")
+                                break
+                        except Exception:
+                            continue
+                    upload_btn_scope = upload_section or self.page
+
+                            hovered = False
+                            for selector in upload_btn_selectors:
+                                try:
+                            upload_btn = upload_btn_scope.locator(selector).first
+                                    if await upload_btn.count() > 0 and await upload_btn.is_visible():
+                                        await upload_btn.hover()
+                                        logger.debug("  ✓ 已悬停在'上传文件'按钮")
+                                        await self.page.wait_for_timeout(100)
+                                        with suppress(Exception):
+                                            await upload_btn.click()
+                                        with suppress(Exception):
+                                            await upload_btn.click(button="right")
+                                        await self.page.wait_for_timeout(150)
+                                        hovered = True
+                                        break
+                                except Exception as err:  # noqa: BLE001
+                                    logger.debug(f"  悬停选择器 {selector} 失败: {err}")
+                                    continue
+
+                            if not hovered:
+                                logger.warning("  ⚠️ 未找到'上传文件'按钮")
+                                continue
+
+                            local_upload_selectors = [
+                                "text='本地上传'",
+                                "li:has-text('本地上传')",
+                                ".el-dropdown-menu__item:has-text('本地上传')",
+                                "div:has-text('本地上传')",
+                            ]
+
+                            clicked = False
+                            for selector in local_upload_selectors:
+                                try:
+                                    local_upload_option = self.page.locator(selector).first
+                                    if await local_upload_option.count() > 0 and await local_upload_option.is_visible():
+                                        dropdown_wrapper = self.page.locator(
+                                            ".el-dropdown-menu:visible, .el-popover:visible"
+                                        )
+                                        with suppress(Exception):
+                                            await dropdown_wrapper.first.wait_for(state="visible", timeout=1500)
+                                        try:
+                                            with self.page.expect_file_chooser(timeout=2000) as fc_info:
+                                                await local_upload_option.click()
+                                            file_chooser = await fc_info.value
+                                            logger.debug("  ✓ 已点击'本地上传'并捕获文件选择器")
+                                            clicked = True
+                                            break
+                                        except TimeoutError:
+                                            logger.debug("  ⚠️ '本地上传' 未触发文件选择器, 尝试下一候选")
+                                            continue
+                                except Exception as err:  # noqa: BLE001
+                                    logger.debug(f"  点击选择器 {selector} 失败: {err}")
+                                    continue
+
+                            if not clicked or file_chooser is None:
+                                logger.warning("  ⚠️ 未找到'本地上传'选项")
+                                continue
+
+                            try:
+                                await file_chooser.set_files(str(file_path))
+                                await self.page.wait_for_timeout(1500)
+                                logger.success(f"  ✅ 已上传产品说明书: {file_path.name}")
+                                await self.page.wait_for_timeout(500)
                                 uploaded = True
-                                await self.page.wait_for_timeout(2000)
+                            except Exception as err:  # noqa: BLE001
+                                logger.error(f"  ❌ 文件选择器上传失败: {err}")
+
+                            if not uploaded:
+                                fallback_inputs = [
+                                    ":text('批量编辑方式') >> .. >> .. >> input[type='file'][accept*='pdf']",
+                                    ":text('使用网络的说明书') >> .. >> .. >> input[type='file'][accept*='pdf']",
+                                    ":text('使用网络说明书') >> .. >> .. >> input[type='file'][accept*='pdf']",
+                                    ":text('上传文件') >> .. >> input[type='file'][accept*='pdf']",
+                                    "xpath=//div[contains(normalize-space(),'批量编辑方式')]/ancestor::div[1]//input[@type='file']",
+                                    "xpath=//div[contains(normalize-space(),'使用网络的说明书')]/ancestor::div[1]//input[@type='file']",
+                                    "input[type='file'][accept*='pdf']",
+                                    "input[accept*='.pdf']",
+                                    ":text('产品说明书') >> .. >> input[type='file']",
+                                    "input[type='file']",
+                                ]
+                                seen = set()
+                                for selector in fallback_inputs:
+                                    if selector in seen:
+                                        continue
+                                    seen.add(selector)
+                        try:
+                                        file_input = self.page.locator(selector).last
+                                        if await file_input.count() == 0:
+                                            continue
+                                        accept_attr = ""
+                                        with suppress(Exception):
+                                            accept_attr = await file_input.get_attribute("accept") or ""
+                                        if accept_attr and "pdf" not in accept_attr.lower():
+                                            logger.debug(
+                                                "  ⚠️ 选择器 %s 的 accept=%s, 跳过非 PDF 输入框",
+                                                selector,
+                                                accept_attr,
+                                            )
+                                            continue
+                                await file_input.set_input_files(str(file_path))
+                                        await self.page.wait_for_timeout(1500)
+                                        logger.success(f"  ✅ 已上传产品说明书: {file_path.name}")
+                                        await self.page.wait_for_timeout(500)
+                                uploaded = True
                                 break
                         except Exception as err:  # noqa: BLE001
                             logger.debug(f"  上传选择器 {selector} 失败: {err}")
                             continue
 
-                    if not uploaded:
-                        logger.warning("  ⚠️ 未找到文件上传输入框")
+                            if uploaded:
+                                success_upload = True
+                                break
+                            else:
+                                logger.warning("  ⚠️ 第 %s 次尝试仍未上传成功，重试中...", attempt)
+                                await self.page.wait_for_timeout(400)
+                        except Exception as err:  # noqa: BLE001
+                            last_error = err
+                            logger.warning("  ⚠️ 上传尝试 %s 失败: %s", attempt, err)
+                            await self.page.wait_for_timeout(400)
+
+                    if not success_upload:
+                        if last_error:
+                            raise last_error
+                        raise RuntimeError("说明书上传重试仍未成功")
             else:
                 logger.info("  ℹ️ 未提供说明书文件，跳过上传")
 
             return await self.click_preview_and_save("产品说明书")
 
-        except Exception as exc:  # noqa: BLE001
-            logger.error(f"  ✗ 操作失败: {exc}")
+        except Exception as e:
+            logger.error(f"  ❌ 产品说明书上传失败: {e}")
             return await self.click_preview_and_save("产品说明书")
-

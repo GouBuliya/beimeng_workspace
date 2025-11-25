@@ -30,10 +30,9 @@ class WorkflowOptions(BaseModel):
     """工作流参数配置."""
 
     selection_path: Path = Field(description="选品表的绝对路径")
+    collection_owner: str = Field(min_length=1, description="妙手采集箱创建人员显示名")
     headless_mode: Literal["auto", "on", "off"] = Field(default="auto")
     use_ai_titles: bool = Field(default=False)
-    use_codegen_first_edit: bool = Field(default=True)
-    use_codegen_batch_edit: bool = Field(default=True)
     skip_first_edit: bool = Field(default=False)
     only_claim: bool = Field(default=False)
     outer_package_image: Path | None = Field(default=None, description="外包装图片文件路径")
@@ -46,16 +45,15 @@ class WorkflowOptions(BaseModel):
         if self.headless_mode == "auto":
             headless_value = None
         elif self.headless_mode == "on":
-            headless_value = False  # “显示窗口”意味着 headless False
+            headless_value = False  # "显示窗口"意味着 headless False
         else:
             headless_value = True
 
         return {
             "selection_table": self.selection_path,
             "headless": headless_value,
+            "collection_owner": self.collection_owner.strip(),
             "use_ai_titles": self.use_ai_titles,
-            "use_codegen_first_edit": self.use_codegen_first_edit,
-            "use_codegen_batch_edit": self.use_codegen_batch_edit,
             "skip_first_edit": self.skip_first_edit,
             "only_claim": self.only_claim,
             "outer_package_image": str(self.outer_package_image) if self.outer_package_image else None,

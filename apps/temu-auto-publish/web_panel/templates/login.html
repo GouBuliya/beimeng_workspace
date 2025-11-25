@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, user-scalable=no"
+    />
+    <title>Temu 发布助手 · 管理员登录</title>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/@picocss/pico@2.0.6/css/pico.min.css"
+    />
+    <style>
+      body {
+        background: #f5f7fb;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .login-card {
+        width: min(420px, 90vw);
+        margin: auto;
+        background: #fff;
+        border-radius: 1rem;
+        padding: 2rem;
+        box-shadow: 0 20px 40px rgba(15, 23, 42, 0.15);
+      }
+      .login-card h1 {
+        margin-bottom: 1rem;
+        text-align: center;
+      }
+      .error {
+        color: #dc2626;
+        margin-bottom: 1rem;
+        text-align: center;
+      }
+      .hint {
+        font-size: 0.9rem;
+        color: #6b7280;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <section class="login-card">
+      <h1>管理员登录</h1>
+      <p class="hint">请输入管控密码后才能使用 Web Panel</p>
+      {% if error %}
+      <p class="error">{{ error }}</p>
+      {% endif %}
+      <form method="post" action="/login">
+        <label>
+          管理员密码
+          <input
+            type="password"
+            name="password"
+            placeholder="请输入管理员密码"
+            required
+            autofocus
+          />
+        </label>
+        <button type="submit" style="width: 100%; margin-top: 1rem">
+          进入控制台
+        </button>
+      </form>
+    </section>
+  </body>
+</html>
+
+
+

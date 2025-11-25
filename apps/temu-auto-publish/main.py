@@ -40,12 +40,6 @@ USE_AI_TITLES_OPTION = typer.Option(
     help="是否启用 AI 标题生成 (默认关闭)",
 )
 
-USE_CODEGEN_FIRST_EDIT_OPTION = typer.Option(
-    True,
-    "--use-codegen-first-edit/--no-use-codegen-first-edit",
-    help="是否使用 Codegen 录制的首次编辑逻辑",
-)
-
 USE_CODEGEN_BATCH_EDIT_OPTION = typer.Option(
     True,
     "--use-codegen-batch-edit/--no-use-codegen-batch-edit",
@@ -70,7 +64,6 @@ def run(
     input: Path = INPUT_OPTION,
     headless: bool | None = HEADLESS_OPTION,
     use_ai_titles: bool = USE_AI_TITLES_OPTION,
-    use_codegen_first_edit: bool = USE_CODEGEN_FIRST_EDIT_OPTION,
     use_codegen_batch_edit: bool = USE_CODEGEN_BATCH_EDIT_OPTION,
     skip_first_edit: bool = SKIP_FIRST_EDIT_OPTION,
     only_claim: bool = ONLY_CLAIM_OPTION,
@@ -81,7 +74,6 @@ def run(
         selection_table=input,
         headless=headless,
         use_ai_titles=use_ai_titles,
-        use_codegen_first_edit=use_codegen_first_edit,
         use_codegen_batch_edit=use_codegen_batch_edit,
         skip_first_edit=skip_first_edit,
         only_claim=only_claim,

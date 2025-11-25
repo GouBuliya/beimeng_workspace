@@ -15,52 +15,67 @@ from .base import FirstEditBase
 class FirstEditTitleMixin(FirstEditBase):
     """提供首次编辑中的标题获取与编辑能力."""
 
-    async def get_original_title(self, page: Page) -> str:
+    async def get_original_title(self, page: Page, max_retries: int = 3) -> str:
         """获取产品的原始标题(SOP 步骤 4.2 准备).
 
         Args:
             page: Playwright 页面对象.
+            max_retries: 最大重试次数,默认 3 次.
 
         Returns:
             原始标题文本;若获取失败返回空字符串.
         """
         logger.debug("获取产品原始标题...")
 
-        try:
-            title_selectors = [
-                "xpath=//label[contains(text(), '产品标题')]/following-sibling::*/descendant::input[@type='text'][1]",
-                "xpath=//label[contains(text(), '产品标题')]/following::input[@type='text'][1]",
-                "xpath=//div[contains(@class, 'jx-form-item')]//label[contains(text(), '产品标题:')]//following-sibling::*/descendant::input[@type='text']",
-                "xpath=//label[contains(text(), '产品标题')]/ancestor::div[contains(@class, 'jx-form-item')]//input[contains(@class, 'jx-input__inner') and @type='text']",
-                ".jx-overlay-dialog input.jx-input__inner[type='text']:visible",
-            ]
+        for attempt in range(1, max_retries + 1):
+            try:
+                if attempt > 1:
+                    logger.info("第 %s/%s 次尝试获取原始标题...", attempt, max_retries)
 
-            title_input = None
-            for selector in title_selectors:
-                try:
-                    count = await page.locator(selector).count()
-                    if count > 0:
-                        for index in range(count):
-                            element = page.locator(selector).nth(index)
-                            if await element.is_visible(timeout=1_000):
-                                title_input = element
-                                logger.debug("使用选择器: %s (第 %s 个)", selector, index + 1)
+                title_selectors = [
+                    "xpath=//label[contains(text(), '产品标题')]/following-sibling::*/descendant::input[@type='text'][1]",
+                    "xpath=//label[contains(text(), '产品标题')]/following::input[@type='text'][1]",
+                    "xpath=//div[contains(@class, 'jx-form-item')]//label[contains(text(), '产品标题:')]//following-sibling::*/descendant::input[@type='text']",
+                    "xpath=//label[contains(text(), '产品标题')]/ancestor::div[contains(@class, 'jx-form-item')]//input[contains(@class, 'jx-input__inner') and @type='text']",
+                    ".jx-overlay-dialog input.jx-input__inner[type='text']:visible",
+                ]
+
+                title_input = None
+                for selector in title_selectors:
+                    try:
+                        count = await page.locator(selector).count()
+                        if count > 0:
+                            for index in range(count):
+                                element = page.locator(selector).nth(index)
+                                if await element.is_visible(timeout=1_000):
+                                    title_input = element
+                                    logger.debug("使用选择器: %s (第 %s 个)", selector, index + 1)
+                                    break
+                            if title_input:
                                 break
-                        if title_input:
-                            break
-                except Exception:
-                    continue
+                    except Exception:
+                        continue
 
-            if not title_input:
-                logger.error("未找到标题输入框")
+                if not title_input:
+                    if attempt < max_retries:
+                        logger.warning("第 %s 次尝试未找到标题输入框,准备重试...", attempt)
+                        await page.wait_for_timeout(1_000)
+                        continue
+                    logger.error("未找到标题输入框(已重试 %s 次)", max_retries)
+                    return ""
+
+                title = await title_input.input_value()
+                logger.success("获取到原始标题: %s...", title[:50])
+                return title
+            except Exception as exc:
+                if attempt < max_retries:
+                    logger.warning(f"第 {attempt} 次获取原始标题失败: {exc},准备重试...")
+                    await page.wait_for_timeout(1_000)
+                    continue
+                logger.error(f"获取原始标题失败(已重试 {max_retries} 次): {exc}")
                 return ""
 
-            title = await title_input.input_value()
-            logger.success("获取到原始标题: %s...", title[:50])
-            return title
-        except Exception as exc:
-            logger.error(f"获取原始标题失败: {exc}")
-            return ""
+        return ""
 
     async def edit_title(self, page: Page, new_title: str) -> bool:
         """编辑产品标题(SOP 步骤 4.1).

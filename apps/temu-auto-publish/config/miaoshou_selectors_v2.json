@@ -74,10 +74,38 @@
       "import_product": "button:has-text('导入产品')"
     },
     "tabs": {
-      "all": ".jx-radio-button:has-text('全部')",
-      "unclaimed": ".jx-radio-button:has-text('未认领')",
-      "claimed": ".jx-radio-button:has-text('已认领')",
-      "failed": ".jx-radio-button:has-text('失败')"
+      "all": [
+        ".jx-radio-button:has-text('全部')",
+        ".pro-radio-button:has-text('全部')",
+        ".pro-tabs__item:has-text('全部')",
+        "[role='tab']:has-text('全部')",
+        "button:has-text('全部')",
+        "span:has-text('全部')"
+      ],
+      "unclaimed": [
+        ".jx-radio-button:has-text('未认领')",
+        ".pro-radio-button:has-text('未认领')",
+        ".pro-tabs__item:has-text('未认领')",
+        "[role='tab']:has-text('未认领')",
+        "button:has-text('未认领')",
+        "span:has-text('未认领')"
+      ],
+      "claimed": [
+        ".jx-radio-button:has-text('已认领')",
+        ".pro-radio-button:has-text('已认领')",
+        ".pro-tabs__item:has-text('已认领')",
+        "[role='tab']:has-text('已认领')",
+        "button:has-text('已认领')",
+        "span:has-text('已认领')"
+      ],
+      "failed": [
+        ".jx-radio-button:has-text('失败')",
+        ".pro-radio-button:has-text('失败')",
+        ".pro-tabs__item:has-text('失败')",
+        "[role='tab']:has-text('失败')",
+        "button:has-text('失败')",
+        "span:has-text('失败')"
+      ]
     },
     "product_list": {
       "checkbox_template": "input[type='checkbox']",

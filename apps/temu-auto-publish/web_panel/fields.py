@@ -45,6 +45,14 @@ FORM_FIELDS: tuple[FormField, ...] = (
         placeholder="例如 C:\\data\\temu\\selection.xlsx 或 /Users/xxx/selection.xlsx",
     ),
     FormField(
+        name="collection_owner",
+        label="妙手创建人员",
+        help_text="用于妙手公用采集箱筛选, 请填写“姓名(账号)”或包含账号的唯一标识。",
+        kind="path",
+        required=True,
+        placeholder="示例: 李英亮(liyinglyiang001)",
+    ),
+    FormField(
         name="outer_package_file",
         label="外包装图片 (可选)",
         help_text="上传 .png/.jpg/.jpeg/.webp 等图片，供批量编辑第 7.5 步复用。",
@@ -92,20 +100,6 @@ FORM_FIELDS: tuple[FormField, ...] = (
         help_text="自动尝试生成更优标题, 失败时会回退为手动标题。",
         kind="toggle",
         default=False,
-    ),
-    FormField(
-        name="use_codegen_first_edit",
-        label="使用录制的首次编辑流程",
-        help_text="勾选后将使用稳定录制脚本, 关闭后使用实时操作 (便于排查)。",
-        kind="toggle",
-        default=True,
-    ),
-    FormField(
-        name="use_codegen_batch_edit",
-        label="使用录制的批量编辑流程",
-        help_text="默认使用 18 步录制流程, 如遇异常可关闭改为手动流程。",
-        kind="toggle",
-        default=True,
     ),
     FormField(
         name="skip_first_edit",
