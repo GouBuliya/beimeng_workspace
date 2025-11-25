@@ -517,6 +517,7 @@ async def _step_06_origin(page: Page) -> None:
     """
     await page.get_by_text("产地").click()
     await page.get_by_role("dialog", name="dialog").get_by_placeholder("请选择或输入搜索").click()
+    await page.wait_for_timeout(500)  # 等待下拉栏展开
     await (
         page.get_by_role("dialog", name="dialog")
         .get_by_placeholder("请选择或输入搜索")
