@@ -32,16 +32,18 @@ from urllib.parse import urljoin
 from loguru import logger
 from playwright.async_api import Locator, Page
 
-# 极速模式: 最小化超时时间
-DEFAULT_PRIMARY_TIMEOUT_MS = 300     # 极速: 800 -> 300
-FALLBACK_TIMEOUT_MS = 100            # 极速: 200 -> 100
+from ..core.detailed_profiler import get_detailed_profiler
+
+# 激进优化: 进一步最小化超时时间
+DEFAULT_PRIMARY_TIMEOUT_MS = 200     # 激进: 300 -> 200
+FALLBACK_TIMEOUT_MS = 80             # 激进: 100 -> 80
 VARIANT_ROW_SCOPE_SELECTOR = (
     ".pro-virtual-scroll__row.pro-virtual-table__row, .pro-virtual-table__row"
 )
 DEFAULT_VIDEO_BASE_URL = os.getenv(
     "VIDEO_BASE_URL", "https://miaoshou-tuchuang-beimeng.oss-cn-hangzhou.aliyuncs.com/video/"
 ).strip()
-VIDEO_UPLOAD_TIMEOUT_MS = 300        # 极速: 500 -> 300
+VIDEO_UPLOAD_TIMEOUT_MS = 200        # 激进: 300 -> 200
 
 FIELD_KEYWORDS: dict[str, list[str]] = {
     "price": ["建议售价", "售价", "price"],
@@ -156,29 +158,43 @@ async def fill_first_edit_dialog_codegen(page: Page, payload: dict[str, Any]) ->
     logger.info("使用 Codegen 录制逻辑填写首次编辑弹窗")
     logger.info("=" * 60)
 
+    # 获取详细分析器
+    profiler = get_detailed_profiler("first_edit_dialog")
+
     try:
-        # 极速模式（3000 -> 500）
-        await page.wait_for_selector(".jx-overlay-dialog", state="visible", timeout=500)
+        # 激进优化: 500 -> 300
+        import time
+        step_start = time.perf_counter()
+        await page.wait_for_selector(".jx-overlay-dialog", state="visible", timeout=300)
+        profiler.action("wait", "弹窗加载", (time.perf_counter() - step_start) * 1000)
         logger.success("✓ 编辑弹窗已加载")
 
         # 1. 填写标题
+        step_start = time.perf_counter()
         if not await _fill_title(page, payload.get("title", "")):
             return False
+        profiler.action("fill", "标题", (time.perf_counter() - step_start) * 1000)
 
         # 2. 填写基础规格字段
         logger.info("跳过销售属性/多规格, 仅填写价格与库存等基础字段")
+        step_start = time.perf_counter()
         if not await _fill_basic_specs(page, payload):
             return False
+        profiler.action("fill", "基础规格", (time.perf_counter() - step_start) * 1000)
 
         # 4. 记录供货商链接
+        step_start = time.perf_counter()
         if not await _fill_supplier_link(page, payload.get("supplier_link", "")):
             return False
+        profiler.action("fill", "供货商链接", (time.perf_counter() - step_start) * 1000)
 
         # 5. 上传尺寸图（仅支持网络图片URL）
         size_chart_image_url = (payload.get("size_chart_image_url") or "").strip()
         if size_chart_image_url:
             logger.info("开始通过网络图片上传尺寸图...")
+            step_start = time.perf_counter()
             upload_success = await _upload_size_chart_via_url(page, size_chart_image_url)
+            profiler.action("upload", "尺寸图", (time.perf_counter() - step_start) * 1000, success=upload_success)
             if upload_success:
                 logger.success("✓ 尺寸图上传成功（网络图片）")
             else:
@@ -198,7 +214,9 @@ async def fill_first_edit_dialog_codegen(page: Page, payload: dict[str, Any]) ->
 
         if product_video_url:
             logger.info("开始通过网络视频上传产品视频...")
+            step_start = time.perf_counter()
             video_result = await _upload_product_video_via_url(page, product_video_url)
+            profiler.action("upload", "产品视频", (time.perf_counter() - step_start) * 1000, success=video_result is True)
             if video_result is True:
                 logger.success("✓ 产品视频上传成功（网络视频）")
             elif video_result is None:
@@ -211,8 +229,10 @@ async def fill_first_edit_dialog_codegen(page: Page, payload: dict[str, Any]) ->
         # 注意：SKU 图片同步已移至 workflow 层的 post_fill_hook 统一处理，避免重复上传
 
         # 7. 保存修改
+        step_start = time.perf_counter()
         if not await _click_save(page):
             return False
+        profiler.action("click", "保存修改", (time.perf_counter() - step_start) * 1000)
 
         logger.success("✓ 首次编辑弹窗填写完成")
         return True
@@ -237,7 +257,7 @@ async def _fill_title(page: Page, title: str) -> bool:
 
         dialog = page.locator(".collect-box-editor-dialog-V2, .jx-overlay-dialog").first
         try:
-            await dialog.wait_for(state="visible", timeout=300)  # 极速: 1000 -> 300
+            await dialog.wait_for(state="visible", timeout=200)  # 激进: 300 -> 200
         except Exception:
             logger.debug("标题填写时未能定位到弹窗容器, 使用全局查找")
 
@@ -267,7 +287,7 @@ async def _fill_basic_specs(page: Page, payload: dict[str, Any]) -> bool:
     try:
         logger.info("填写基础规格字段...")
         dialog = page.locator(".collect-box-editor-dialog-V2, .jx-overlay-dialog").first
-        await dialog.wait_for(state="visible", timeout=300)  # 极速: 1000 -> 300
+        await dialog.wait_for(state="visible", timeout=200)  # 激进: 300 -> 200
     except Exception as exc:
         logger.error("未能定位首次编辑弹窗: %s", exc)
         return False
@@ -418,7 +438,7 @@ async def _click_save(page: Page) -> bool:
                 continue
             save_btn = candidate.nth(total - 1)
             try:
-                await save_btn.wait_for(state="visible", timeout=300)  # 极速: 800 -> 300
+                await save_btn.wait_for(state="visible", timeout=200)  # 激进: 300 -> 200
                 await _dismiss_scroll_overlay(page)
                 await save_btn.scroll_into_view_if_needed()
                 await save_btn.focus()
@@ -502,19 +522,19 @@ async def _upload_size_chart_via_url(page: Page, image_url: str) -> bool:
             logger.debug("点击尺寸图缩略图失败: %s", exc)
 
         upload_btn = page.get_by_text("使用网络图片", exact=True)
-        await upload_btn.wait_for(state="visible", timeout=250)  # 极速: 600 -> 250
+        await upload_btn.wait_for(state="visible", timeout=150)  # 激进: 250 -> 150
         await upload_btn.click()
 
         url_input = page.get_by_role(
             "textbox", name="请输入图片链接，若要输入多个链接，请以回车换行", exact=True
         )
-        await url_input.wait_for(state="visible", timeout=250)  # 极速: 600 -> 250
+        await url_input.wait_for(state="visible", timeout=150)  # 激进: 250 -> 150
         await url_input.click()
         await url_input.press("ControlOrMeta+a")
         await url_input.fill(normalized_url)
 
         confirm_btn = page.get_by_role("button", name="确定")
-        await confirm_btn.wait_for(state="visible", timeout=250)  # 极速: 600 -> 250
+        await confirm_btn.wait_for(state="visible", timeout=150)  # 激进: 250 -> 150
         await confirm_btn.click()
 
         await _ensure_dialog_closed(

@@ -66,47 +66,41 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
 
                 logger.debug("Clicking sidebar entry for shared collection box...")
                 await page.locator(collection_box_selector).click()
-                await page.wait_for_load_state("domcontentloaded", timeout=5_000)
+                # 激进优化: 5s -> 2s
+                await page.wait_for_load_state("domcontentloaded", timeout=2_000)
                 with suppress(Exception):
-                    await page.wait_for_url(re.compile("common_collect_box"), timeout=15_000)
+                    # 激进优化: 15s -> 5s
+                    await page.wait_for_url(re.compile("common_collect_box"), timeout=5_000)
             else:
                 logger.debug(f"Direct navigation to: {target_url}")
                 try:
-                    await page.goto(target_url, timeout=30_000)
+                    # 激进优化: 30s -> 15s
+                    await page.goto(target_url, timeout=15_000)
                 except Exception as exc:
                     logger.warning(
                         "Direct navigation failed (%s), retrying via sidebar", exc
                     )
                     return await self.navigate_to_collection_box(page, use_sidebar=True)
 
-            await page.wait_for_load_state("domcontentloaded", timeout=5_000)
+            # 激进优化: 5s -> 2s
+            await page.wait_for_load_state("domcontentloaded", timeout=2_000)
 
             if "common_collect_box/items" in page.url:
                 logger.success("Navigation to shared collection box succeeded")
                 logger.debug("Waiting for page to settle...")
                 
-                # 等待主要内容容器加载完成，而不是固定等待时间
+                # 激进优化: 合并两个等待，总超时 3s
                 try:
-                    logger.debug("Waiting for main content container...")
+                    logger.debug("Waiting for main content and interactive elements...")
                     await page.wait_for_selector(
-                        ".jx-main, .pro-layout-content, .main-content, [class*='content']",
+                        ".jx-main, .pro-layout-content, button, [role='tab'], .jx-button",
                         state="visible",
-                        timeout=10_000
+                        timeout=3_000
                     )
-                    logger.debug("Main content container loaded")
-                    
-                    # 等待tab或按钮元素出现
-                    logger.debug("Waiting for interactive elements...")
-                    await page.wait_for_selector(
-                        "button, [role='tab'], .jx-radio-button, .jx-tabs__item, .jx-button",
-                        state="visible",
-                        timeout=10_000
-                    )
-                    logger.debug("Interactive elements loaded")
+                    logger.debug("Page elements loaded")
                 except Exception as e:
-                    logger.warning(f"Content wait timed out: {e}, waiting for network idle")
-                    with suppress(Exception):
-                        await page.wait_for_load_state("networkidle", timeout=5_000)
+                    logger.warning(f"Content wait timed out: {e}")
+                    # 激进优化: 移除 networkidle 等待，直接继续
                 
                 await self._ensure_popups_closed(page)
 
@@ -335,8 +329,8 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
         except Exception:
             pass
 
-    async def _wait_for_bulk_selection(self, page: Page, timeout: int = 2_000) -> None:
-        """Wait for any checkbox to reflect the 'selected' state."""
+    async def _wait_for_bulk_selection(self, page: Page, timeout: int = 800) -> None:
+        """Wait for any checkbox to reflect the 'selected' state. 激进优化: 2000 -> 800"""
         selection_locator = page.locator(
             ".jx-checkbox.is-checked, .el-checkbox.is-checked, .ant-checkbox-checked"
         )
@@ -345,18 +339,17 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
         except Exception:
             pass
 
-    async def _wait_for_table_refresh(self, page: Page, timeout: int = 5_000) -> None:
-        """Wait for the product table to update after actions such as search or tab switch."""
+    async def _wait_for_table_refresh(self, page: Page, timeout: int = 2_000) -> None:
+        """Wait for the product table to update. 激进优化: 5000 -> 2000, 移除 networkidle"""
         table_locator = page.locator(
             ".pro-virtual-table, .vue-recycle-scroller, .jx-table, .pro-table"
         )
         with suppress(Exception):
             await table_locator.first.wait_for(state="visible", timeout=timeout)
-        with suppress(Exception):
-            await page.wait_for_load_state("networkidle", timeout=timeout)
+        # 激进优化: 移除 networkidle 等待
 
-    async def _wait_for_idle(self, page: Page, timeout_ms: int = 300) -> None:
-        """Best-effort wait for the page to reach a steady (network idle) state."""
+    async def _wait_for_idle(self, page: Page, timeout_ms: int = 100) -> None:
+        """Best-effort wait for the page to reach a steady state. 激进优化: 300 -> 100"""
         with suppress(Exception):
             await page.wait_for_load_state("networkidle", timeout=timeout_ms)
 

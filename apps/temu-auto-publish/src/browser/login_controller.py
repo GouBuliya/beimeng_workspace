@@ -119,7 +119,15 @@ class LoginController:
                     "url", "https://erp.91miaoshou.com/welcome"
                 )
                 await self.browser_manager.goto(welcome_url)
-                await self.browser_manager.page.wait_for_timeout(2000)  # 等待页面加载
+                # 激进优化: 条件等待替代固定2秒等待
+                try:
+                    await self.browser_manager.page.wait_for_selector(
+                        ".jx-main, .pro-layout, [class*='welcome'], [class*='dashboard']",
+                        state="visible",
+                        timeout=3000
+                    )
+                except Exception:
+                    pass  # 即使超时也继续检查登录状态
 
                 # 检查是否已登录
                 if await self._check_login_status():
@@ -154,15 +162,13 @@ class LoginController:
             # 等待登录表单加载
             await page.wait_for_selector(username_selector, timeout=10000)
 
-            # 输入用户名
+            # 输入用户名 (激进优化: 移除固定等待，输入即时生效)
             logger.debug("输入用户名...")
             await page.locator(username_selector).fill(username)
-            await page.wait_for_timeout(500)  # 等待输入生效
 
-            # 输入密码
+            # 输入密码 (激进优化: 移除固定等待)
             logger.debug("输入密码...")
             await page.locator(password_selector).fill(password)
-            await page.wait_for_timeout(500)
 
             # 点击登录按钮
             logger.debug("点击登录按钮...")
@@ -172,13 +178,20 @@ class LoginController:
             logger.info("等待登录结果...")
 
             try:
-                # 等待跳转到首页或弹窗消失
-                await page.wait_for_url("**/erp.91miaoshou.com/welcome**", timeout=15000)
+                # 等待跳转到首页或弹窗消失 (激进优化: 15s -> 8s)
+                await page.wait_for_url("**/erp.91miaoshou.com/welcome**", timeout=8000)
                 logger.success("✓ 已跳转到首页")
             except Exception as e:
                 logger.debug(f"未能等待到URL变化: {e}")
-                # 可能登录失败或需要额外操作
-                await page.wait_for_timeout(2000)
+                # 激进优化: 条件等待替代固定2秒等待
+                try:
+                    await page.wait_for_selector(
+                        ".jx-main, .pro-layout, .el-message--error, [class*='error']",
+                        state="visible",
+                        timeout=2000
+                    )
+                except Exception:
+                    pass
 
             # 验证登录状态
             if await self._check_login_status():

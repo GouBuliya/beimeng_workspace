@@ -277,43 +277,50 @@ class CompletePublishWorkflow:
         login_ctrl = LoginController()
 
         try:
-            username, password = self._resolve_credentials()
-            if not username or not password:
-                raise RuntimeError("缺少登录凭证 (MIAOSHOU_USERNAME/MIAOSHOU_PASSWORD)")
+            # ===== 阶段 0: 预处理（登录+初始化） =====
+            with self._profiler.stage("stage0_preparation"):
+                with self._profiler.step("解析凭证"):
+                    username, password = self._resolve_credentials()
+                    if not username or not password:
+                        raise RuntimeError("缺少登录凭证 (MIAOSHOU_USERNAME/MIAOSHOU_PASSWORD)")
 
-            login_success = await login_ctrl.login(
-                username=username,
-                password=password,
-                headless=self.headless,
-            )
-            if not login_success:
-                raise RuntimeError("登录妙手ERP失败, 请检查账号密码或 Cookie")
+                with self._profiler.step("登录妙手ERP"):
+                    login_success = await login_ctrl.login(
+                        username=username,
+                        password=password,
+                        headless=self.headless,
+                    )
+                    if not login_success:
+                        raise RuntimeError("登录妙手ERP失败, 请检查账号密码或 Cookie")
 
-            page = login_ctrl.browser_manager.page
-            assert page is not None, "Playwright page 未初始化"
+                with self._profiler.step("初始化页面"):
+                    page = login_ctrl.browser_manager.page
+                    assert page is not None, "Playwright page 未初始化"
 
-            selection_rows = self._prepare_selection_rows()
-            staff_name = ""
-            if selection_rows:
-                staff_name = self._resolve_collection_owner(selection_rows[0].owner)
+                with self._profiler.step("准备选品数据"):
+                    selection_rows = self._prepare_selection_rows()
+                    staff_name = ""
+                    if selection_rows:
+                        staff_name = self._resolve_collection_owner(selection_rows[0].owner)
 
-            miaoshou_ctrl = MiaoshouController()
-            first_edit_ctrl = FirstEditController()
-            legacy_manual = self.manual_file_override or self.default_manual_file
-            try:
-                batch_edit_ctrl = BatchEditController(
-                    page,
-                    outer_package_image=str(self.outer_package_image_override)
-                    if self.outer_package_image_override
-                    else None,
-                    manual_file_path=str(legacy_manual) if legacy_manual else None,
-                    collection_owner=staff_name,
-                    miaoshou_controller=miaoshou_ctrl,
-                )
-            except TypeError:
-                logger.warning("旧版 BatchEditController 不支持扩展参数，使用兼容参数重新初始化")
-                batch_edit_ctrl = BatchEditController()
-            publish_ctrl = PublishController()
+                with self._profiler.step("初始化控制器"):
+                    miaoshou_ctrl = MiaoshouController()
+                    first_edit_ctrl = FirstEditController()
+                    legacy_manual = self.manual_file_override or self.default_manual_file
+                    try:
+                        batch_edit_ctrl = BatchEditController(
+                            page,
+                            outer_package_image=str(self.outer_package_image_override)
+                            if self.outer_package_image_override
+                            else None,
+                            manual_file_path=str(legacy_manual) if legacy_manual else None,
+                            collection_owner=staff_name,
+                            miaoshou_controller=miaoshou_ctrl,
+                        )
+                    except TypeError:
+                        logger.warning("旧版 BatchEditController 不支持扩展参数，使用兼容参数重新初始化")
+                        batch_edit_ctrl = BatchEditController()
+                    publish_ctrl = PublishController()
 
             # ===== 阶段 1: 首次编辑 =====
             stage1_start = time.perf_counter()
@@ -570,11 +577,13 @@ class CompletePublishWorkflow:
             }
             return StageOutcome("stage1_first_edit", True, "首次编辑已跳过", details), placeholders
 
-        navigation_success = await miaoshou_ctrl.navigate_and_filter_collection_box(
-            page,
-            filter_by_user=staff_name,
-            switch_to_tab="all",
-        )
+        # 导航到采集箱并筛选（带详细计时）
+        with self._profiler.step("导航到采集箱"):
+            navigation_success = await miaoshou_ctrl.navigate_and_filter_collection_box(
+                page,
+                filter_by_user=staff_name,
+                switch_to_tab="all",
+            )
         if not navigation_success:
             return (
                 StageOutcome(
@@ -614,66 +623,68 @@ class CompletePublishWorkflow:
             processed_products: list[EditedProduct] = []
 
             for index, selection in enumerate(selections[: self.collect_count]):
-                opened = await open_edit_dialog(index)
-                if not opened:
-                    errors.append(f"第{index + 1}个商品编辑弹窗打开失败")
-                    continue
-
-                await first_edit_ctrl.wait_for_dialog(page)
-                opened_any = True
-
-                try:
-                    original_title = await first_edit_ctrl.get_original_title(page)
-                    base_title = original_title or selection.product_name
-                    payload_dict = self._build_first_edit_payload(selection, base_title)
-                    sku_image_urls = list(payload_dict.get("sku_image_urls", []) or [])
-                    size_chart_url = (payload_dict.get("size_chart_image_url") or "").strip()
-                    product_video_url = (payload_dict.get("product_video_url") or "").strip()
-
-                    hook_fn = self._build_first_edit_hook(
-                        first_edit_ctrl=first_edit_ctrl,
-                        sku_image_urls=sku_image_urls,
-                        size_chart_url=size_chart_url,
-                        product_video_url=product_video_url,
-                    )
-
-                    # ===== 直接使用 Codegen 方式，跳过 JS 注入 =====
-                    logger.info("使用 Codegen 方式填写首次编辑弹窗（已禁用JS注入）")
-                    success = await fill_first_edit_dialog_codegen(page, payload_dict)
-
-                    if not success:
-                        logger.error("Codegen 首次编辑失败 (index=%s)", index + 1)
-                        errors.append(f"第{index + 1}个商品首次编辑失败（Codegen 填写失败）")
+                # 为每个商品的编辑添加详细计时
+                with self._profiler.step(f"编辑商品{index + 1}"):
+                    opened = await open_edit_dialog(index)
+                    if not opened:
+                        errors.append(f"第{index + 1}个商品编辑弹窗打开失败")
                         continue
 
-                    # 执行图片上传 hook，并在执行后统一保存
-                    if hook_fn is not None:
-                        hook_modified = False
-                        try:
-                            hook_result = await hook_fn(page)
-                            hook_modified = True  # hook 内部会操作 SKU 区域，默认认为需要保存
-                            if hook_result:
-                                logger.success("SKU 图片同步完成")
-                            else:
-                                logger.warning("SKU 图片同步未成功")
-                        except Exception as exc:
-                            hook_modified = True
-                            logger.error("SKU 图片同步异常: {}", exc)
-                        finally:
-                            if hook_modified:
-                                saved_after_hook = await first_edit_ctrl.save_changes(
-                                    page, wait_for_close=False
-                                )
-                                if not saved_after_hook:
-                                    logger.warning("SKU/媒体操作后保存失败，可能触发离开提示")
+                    await first_edit_ctrl.wait_for_dialog(page)
+                    opened_any = True
 
-                    processed_products.append(
-                        self._create_edited_product(selection, index, payload_dict["title"])
-                    )
-                except Exception as exc:
-                    errors.append(f"第{index + 1}个商品标题更新异常: {exc}")
-                finally:
-                    await first_edit_ctrl.close_dialog(page)
+                    try:
+                        original_title = await first_edit_ctrl.get_original_title(page)
+                        base_title = original_title or selection.product_name
+                        payload_dict = self._build_first_edit_payload(selection, base_title)
+                        sku_image_urls = list(payload_dict.get("sku_image_urls", []) or [])
+                        size_chart_url = (payload_dict.get("size_chart_image_url") or "").strip()
+                        product_video_url = (payload_dict.get("product_video_url") or "").strip()
+
+                        hook_fn = self._build_first_edit_hook(
+                            first_edit_ctrl=first_edit_ctrl,
+                            sku_image_urls=sku_image_urls,
+                            size_chart_url=size_chart_url,
+                            product_video_url=product_video_url,
+                        )
+
+                        # ===== 直接使用 Codegen 方式，跳过 JS 注入 =====
+                        logger.info("使用 Codegen 方式填写首次编辑弹窗（已禁用JS注入）")
+                        success = await fill_first_edit_dialog_codegen(page, payload_dict)
+
+                        if not success:
+                            logger.error("Codegen 首次编辑失败 (index=%s)", index + 1)
+                            errors.append(f"第{index + 1}个商品首次编辑失败（Codegen 填写失败）")
+                            continue
+
+                        # 执行图片上传 hook，并在执行后统一保存
+                        if hook_fn is not None:
+                            hook_modified = False
+                            try:
+                                hook_result = await hook_fn(page)
+                                hook_modified = True  # hook 内部会操作 SKU 区域，默认认为需要保存
+                                if hook_result:
+                                    logger.success("SKU 图片同步完成")
+                                else:
+                                    logger.warning("SKU 图片同步未成功")
+                            except Exception as exc:
+                                hook_modified = True
+                                logger.error("SKU 图片同步异常: {}", exc)
+                            finally:
+                                if hook_modified:
+                                    saved_after_hook = await first_edit_ctrl.save_changes(
+                                        page, wait_for_close=False
+                                    )
+                                    if not saved_after_hook:
+                                        logger.warning("SKU/媒体操作后保存失败，可能触发离开提示")
+
+                        processed_products.append(
+                            self._create_edited_product(selection, index, payload_dict["title"])
+                        )
+                    except Exception as exc:
+                        errors.append(f"第{index + 1}个商品标题更新异常: {exc}")
+                    finally:
+                        await first_edit_ctrl.close_dialog(page)
 
             if not opened_any:
                 message = "采集箱无可编辑商品,首次编辑阶段跳过"
