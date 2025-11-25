@@ -58,6 +58,7 @@ from .legacy.complete_publish_workflow_v1 import (
 # 导入优化组件
 from ..core.checkpoint_manager import CheckpointManager, get_checkpoint_manager
 from ..core.metrics_collector import get_metrics, MetricsCollector
+from ..core.workflow_profiler import WorkflowProfiler
 
 FIRST_EDIT_STAGE_TIMEOUT_MS = 5_000
 
@@ -234,6 +235,9 @@ class CompletePublishWorkflow:
         
         # 初始化指标收集器
         self._metrics = get_metrics()
+        
+        # 初始化性能分析器
+        self._profiler: WorkflowProfiler | None = None
 
     def execute(self) -> WorkflowExecutionResult:
         """同步入口, 包装 asyncio 运行."""
@@ -248,6 +252,9 @@ class CompletePublishWorkflow:
         
         # 初始化断点管理器
         checkpoint_mgr = get_checkpoint_manager(workflow_id, "complete_publish")
+        
+        # 初始化性能分析器
+        self._profiler = WorkflowProfiler("complete_publish", workflow_id)
         
         # 开始记录指标
         self._metrics.start_workflow(workflow_id)
@@ -311,99 +318,106 @@ class CompletePublishWorkflow:
             # ===== 阶段 1: 首次编辑 =====
             stage1_start = time.perf_counter()
             
-            # 检查是否可以跳过（从检查点恢复）
-            if checkpoint_mgr.should_skip_stage("stage1_first_edit"):
-                logger.info("从检查点恢复: 跳过阶段1首次编辑")
-                stage1_data = checkpoint_mgr.get_stage_data("stage1_first_edit")
-                edited_products = restored_products or self._build_placeholder_edits(selection_rows)
-                stage1 = StageOutcome(
-                    name="stage1_first_edit",
-                    success=True,
-                    message="从检查点恢复: 首次编辑已跳过",
-                    details={"skipped": True, "restored": True},
-                )
-                stages.append(stage1)
-            elif self.only_claim:
-                logger.info("仅认领模式: 跳过首次编辑阶段")
-                edited_products = self._build_placeholder_edits(selection_rows)
-                stage1 = StageOutcome(
-                    name="stage1_first_edit",
-                    success=True,
-                    message="仅认领模式: 首次编辑已跳过",
-                    details={
-                        "skipped": True,
-                        "edited_products": [prod.to_payload() for prod in edited_products],
-                    },
-                )
-                stages.append(stage1)
-            else:
-                stage1, edited_products = await self._stage_first_edit(
-                    page,
-                    miaoshou_ctrl,
-                    first_edit_ctrl,
-                    selection_rows,
-                )
-                stages.append(stage1)
-                stage1_errors = (
-                    stage1.details.get("errors") if isinstance(stage1.details, dict) else None
-                )
-                
-                # 记录阶段指标
-                stage1_duration = time.perf_counter() - stage1_start
-                self._metrics.record_stage(workflow_id, "stage1_first_edit", stage1_duration, stage1.success)
-                
-                logger.info(
-                    "阶段1完成: success={success}, edited_products={count}, errors={errors}, duration={duration:.1f}s",
-                    success=stage1.success,
-                    count=len(edited_products),
-                    errors=stage1_errors,
-                    duration=stage1_duration,
-                )
-                
-                if stage1.success:
-                    # 保存检查点
-                    await checkpoint_mgr.mark_stage_complete(
-                        "stage1_first_edit",
-                        {"products": [p.to_payload() for p in edited_products]}
+            with self._profiler.stage("stage1_first_edit", product_count=len(selection_rows)):
+                # 检查是否可以跳过（从检查点恢复）
+                if checkpoint_mgr.should_skip_stage("stage1_first_edit"):
+                    logger.info("从检查点恢复: 跳过阶段1首次编辑")
+                    stage1_data = checkpoint_mgr.get_stage_data("stage1_first_edit")
+                    edited_products = restored_products or self._build_placeholder_edits(selection_rows)
+                    stage1 = StageOutcome(
+                        name="stage1_first_edit",
+                        success=True,
+                        message="从检查点恢复: 首次编辑已跳过",
+                        details={"skipped": True, "restored": True},
                     )
+                    stages.append(stage1)
+                    self._profiler.record_step("跳过(检查点恢复)", 0, success=True)
+                elif self.only_claim:
+                    logger.info("仅认领模式: 跳过首次编辑阶段")
+                    edited_products = self._build_placeholder_edits(selection_rows)
+                    stage1 = StageOutcome(
+                        name="stage1_first_edit",
+                        success=True,
+                        message="仅认领模式: 首次编辑已跳过",
+                        details={
+                            "skipped": True,
+                            "edited_products": [prod.to_payload() for prod in edited_products],
+                        },
+                    )
+                    stages.append(stage1)
+                    self._profiler.record_step("跳过(仅认领模式)", 0, success=True)
                 else:
-                    await checkpoint_mgr.mark_stage_failed("stage1_first_edit", stage1.message)
-                    errors.append(stage1.message)
-                    self._metrics.record_error(workflow_id, "StageError", stage1.message, "stage1_first_edit")
-                    return WorkflowExecutionResult(workflow_id, False, stages, errors)
+                    with self._profiler.step("执行首次编辑流程"):
+                        stage1, edited_products = await self._stage_first_edit(
+                            page,
+                            miaoshou_ctrl,
+                            first_edit_ctrl,
+                            selection_rows,
+                        )
+                    stages.append(stage1)
+                    stage1_errors = (
+                        stage1.details.get("errors") if isinstance(stage1.details, dict) else None
+                    )
+                    
+                    # 记录阶段指标
+                    stage1_duration = time.perf_counter() - stage1_start
+                    self._metrics.record_stage(workflow_id, "stage1_first_edit", stage1_duration, stage1.success)
+                    
+                    logger.info(
+                        "阶段1完成: success={success}, edited_products={count}, errors={errors}, duration={duration:.1f}s",
+                        success=stage1.success,
+                        count=len(edited_products),
+                        errors=stage1_errors,
+                        duration=stage1_duration,
+                    )
+                    
+                    if stage1.success:
+                        # 保存检查点
+                        await checkpoint_mgr.mark_stage_complete(
+                            "stage1_first_edit",
+                            {"products": [p.to_payload() for p in edited_products]}
+                        )
+                    else:
+                        await checkpoint_mgr.mark_stage_failed("stage1_first_edit", stage1.message)
+                        errors.append(stage1.message)
+                        self._metrics.record_error(workflow_id, "StageError", stage1.message, "stage1_first_edit")
+                        return WorkflowExecutionResult(workflow_id, False, stages, errors)
 
             # ===== 阶段 2: 认领 =====
             stage2_start = time.perf_counter()
             
-            # 检查是否可以跳过（从检查点恢复）
-            if checkpoint_mgr.should_skip_stage("stage2_claim"):
-                logger.info("从检查点恢复: 跳过阶段2认领")
-                stage2 = StageOutcome(
-                    name="stage2_claim",
-                    success=True,
-                    message="从检查点恢复: 认领已跳过",
-                    details={"skipped": True, "restored": True},
-                )
-                stages.append(stage2)
-            else:
-                stage2 = await self._stage_claim_products(
-                    page,
-                    miaoshou_ctrl,
-                    edited_products,
-                )
-                stages.append(stage2)
-                
-                # 记录阶段指标
-                stage2_duration = time.perf_counter() - stage2_start
-                self._metrics.record_stage(workflow_id, "stage2_claim", stage2_duration, stage2.success)
-                
-                if stage2.success:
-                    await checkpoint_mgr.mark_stage_complete("stage2_claim", stage2.details)
+            with self._profiler.stage("stage2_claim", product_count=len(edited_products)):
+                # 检查是否可以跳过（从检查点恢复）
+                if checkpoint_mgr.should_skip_stage("stage2_claim"):
+                    logger.info("从检查点恢复: 跳过阶段2认领")
+                    stage2 = StageOutcome(
+                        name="stage2_claim",
+                        success=True,
+                        message="从检查点恢复: 认领已跳过",
+                        details={"skipped": True, "restored": True},
+                    )
+                    stages.append(stage2)
+                    self._profiler.record_step("跳过(检查点恢复)", 0, success=True)
                 else:
-                    await checkpoint_mgr.mark_stage_failed("stage2_claim", stage2.message)
-                    errors.append(stage2.message)
-                    self._metrics.record_error(workflow_id, "StageError", stage2.message, "stage2_claim")
-                    return WorkflowExecutionResult(workflow_id, False, stages, errors)
+                    with self._profiler.step("执行认领流程"):
+                        stage2 = await self._stage_claim_products(
+                            page,
+                            miaoshou_ctrl,
+                            edited_products,
+                        )
+                    stages.append(stage2)
+                    
+                    # 记录阶段指标
+                    stage2_duration = time.perf_counter() - stage2_start
+                    self._metrics.record_stage(workflow_id, "stage2_claim", stage2_duration, stage2.success)
+                    
+                    if stage2.success:
+                        await checkpoint_mgr.mark_stage_complete("stage2_claim", stage2.details)
+                    else:
+                        await checkpoint_mgr.mark_stage_failed("stage2_claim", stage2.message)
+                        errors.append(stage2.message)
+                        self._metrics.record_error(workflow_id, "StageError", stage2.message, "stage2_claim")
+                        return WorkflowExecutionResult(workflow_id, False, stages, errors)
 
             if self.only_claim:
                 logger.info("仅认领模式: 停止后续批量编辑与发布阶段")
@@ -434,56 +448,61 @@ class CompletePublishWorkflow:
             # ===== 阶段 3: 批量编辑 =====
             stage3_start = time.perf_counter()
             
-            # 检查是否可以跳过（从检查点恢复）
-            if checkpoint_mgr.should_skip_stage("stage3_batch_edit"):
-                logger.info("从检查点恢复: 跳过阶段3批量编辑")
-                stage3 = StageOutcome(
-                    name="stage3_batch_edit",
-                    success=True,
-                    message="从检查点恢复: 批量编辑已跳过",
-                    details={"skipped": True, "restored": True},
-                )
-                stages.append(stage3)
-            else:
-                stage3 = await self._stage_batch_edit(
-                    page,
-                    batch_edit_ctrl,
-                    edited_products,
-                )
-                stages.append(stage3)
-                
-                # 记录阶段指标
-                stage3_duration = time.perf_counter() - stage3_start
-                self._metrics.record_stage(workflow_id, "stage3_batch_edit", stage3_duration, stage3.success)
-                
-                if stage3.success:
-                    await checkpoint_mgr.mark_stage_complete("stage3_batch_edit", stage3.details)
+            with self._profiler.stage("stage3_batch_edit", product_count=len(edited_products)):
+                # 检查是否可以跳过（从检查点恢复）
+                if checkpoint_mgr.should_skip_stage("stage3_batch_edit"):
+                    logger.info("从检查点恢复: 跳过阶段3批量编辑")
+                    stage3 = StageOutcome(
+                        name="stage3_batch_edit",
+                        success=True,
+                        message="从检查点恢复: 批量编辑已跳过",
+                        details={"skipped": True, "restored": True},
+                    )
+                    stages.append(stage3)
+                    self._profiler.record_step("跳过(检查点恢复)", 0, success=True)
                 else:
-                    await checkpoint_mgr.mark_stage_failed("stage3_batch_edit", stage3.message)
-                    errors.append(stage3.message)
-                    self._metrics.record_error(workflow_id, "StageError", stage3.message, "stage3_batch_edit")
-                    return WorkflowExecutionResult(workflow_id, False, stages, errors)
+                    with self._profiler.step("执行批量编辑18步"):
+                        stage3 = await self._stage_batch_edit(
+                            page,
+                            batch_edit_ctrl,
+                            edited_products,
+                        )
+                    stages.append(stage3)
+                    
+                    # 记录阶段指标
+                    stage3_duration = time.perf_counter() - stage3_start
+                    self._metrics.record_stage(workflow_id, "stage3_batch_edit", stage3_duration, stage3.success)
+                    
+                    if stage3.success:
+                        await checkpoint_mgr.mark_stage_complete("stage3_batch_edit", stage3.details)
+                    else:
+                        await checkpoint_mgr.mark_stage_failed("stage3_batch_edit", stage3.message)
+                        errors.append(stage3.message)
+                        self._metrics.record_error(workflow_id, "StageError", stage3.message, "stage3_batch_edit")
+                        return WorkflowExecutionResult(workflow_id, False, stages, errors)
 
             # ===== 阶段 4: 发布 =====
             stage4_start = time.perf_counter()
             
-            stage4 = await self._stage_publish(
-                page,
-                publish_ctrl,
-                edited_products,
-            )
-            stages.append(stage4)
-            
-            # 记录阶段指标
-            stage4_duration = time.perf_counter() - stage4_start
-            self._metrics.record_stage(workflow_id, "stage4_publish", stage4_duration, stage4.success)
-            
-            if stage4.success:
-                await checkpoint_mgr.mark_stage_complete("stage4_publish", stage4.details)
-            else:
-                await checkpoint_mgr.mark_stage_failed("stage4_publish", stage4.message)
-                errors.append(stage4.message)
-                self._metrics.record_error(workflow_id, "StageError", stage4.message, "stage4_publish")
+            with self._profiler.stage("stage4_publish", product_count=len(edited_products)):
+                with self._profiler.step("执行发布流程"):
+                    stage4 = await self._stage_publish(
+                        page,
+                        publish_ctrl,
+                        edited_products,
+                    )
+                stages.append(stage4)
+                
+                # 记录阶段指标
+                stage4_duration = time.perf_counter() - stage4_start
+                self._metrics.record_stage(workflow_id, "stage4_publish", stage4_duration, stage4.success)
+                
+                if stage4.success:
+                    await checkpoint_mgr.mark_stage_complete("stage4_publish", stage4.details)
+                else:
+                    await checkpoint_mgr.mark_stage_failed("stage4_publish", stage4.message)
+                    errors.append(stage4.message)
+                    self._metrics.record_error(workflow_id, "StageError", stage4.message, "stage4_publish")
 
             total_success = stage4.success and all(stage.success for stage in stages)
             
@@ -499,6 +518,15 @@ class CompletePublishWorkflow:
             return WorkflowExecutionResult(workflow_id, total_success, stages, errors)
 
         finally:
+            # 生成性能报告
+            if self._profiler:
+                self._profiler.finish(success=not errors and all(s.success for s in stages))
+                logger.info(self._profiler.generate_report())
+                try:
+                    self._profiler.save_profile()
+                except Exception as e:
+                    logger.warning(f"保存性能报告失败: {e}")
+            
             if login_ctrl.browser_manager and login_ctrl.browser_manager.browser:
                 workflow_failed = errors or any(not stage.success for stage in stages)
                 if workflow_failed:
