@@ -685,7 +685,7 @@ async def _step_12_sku_category(page: Page) -> None:
         await loading_mask.wait_for(state="hidden", timeout=1000)
     await page.wait_for_timeout(500)  # 等待内容加载
     
-    # 2. 先 hover 再点击"分类"下拉框 - 多种选择器尝试
+    # 2. 点击"分类"下拉框 - 多种选择器尝试
     dropdown_clicked = False
     dropdown_selectors = [
         # 通过 placeholder 定位
@@ -705,13 +705,9 @@ async def _step_12_sku_category(page: Page) -> None:
     for selector in dropdown_selectors:
         try:
             if await selector.count():
-                # 先 hover 让元素获得焦点
-                await selector.hover(timeout=500)
-                await page.wait_for_timeout(100)
-                # 再点击
                 await selector.click(timeout=800)
                 dropdown_clicked = True
-                logger.debug("✓ hover + 点击分类下拉框")
+                logger.debug("✓ 点击分类下拉框")
                 break
         except Exception as e:
             logger.debug(f"选择器失败: {e}")
@@ -733,8 +729,6 @@ async def _step_12_sku_category(page: Page) -> None:
         for option in option_selectors:
             try:
                 if await option.count():
-                    # 先 hover 再点击
-                    await option.hover(timeout=300)
                     await option.click(timeout=500)
                     option_clicked = True
                     logger.success("✓ 已选择: 单品")
@@ -828,19 +822,75 @@ async def _step_18_manual(page: Page, file_path: str) -> None:
         page: Playwright 页面对象。
         file_path: 产品说明书 PDF 文件路径(绝对路径)。
     """
-    await page.get_by_text("产品说明书").click()
-    # await _wait_for_dialog_open(page)
+    dialog = page.get_by_role("dialog")
     
-    upload_btn = page.locator("button:has-text('上传文件')").first
-    if await upload_btn.count() > 0 and await upload_btn.is_visible():
-        await upload_btn.click()
-        logger.info("      ✓ 图片URL已上传")
-    else:
-        logger.warning("⚠️ 未找到上传文件按钮")
-
+    # 1. 点击左侧导航"产品说明书"
+    await page.get_by_text("产品说明书").click()
+    await page.wait_for_timeout(300)
+    
+    if not file_path:
+        logger.warning("⚠️ 未提供产品说明书文件路径，跳过上传")
+        await page.get_by_role("button", name="预览").click()
+        await page.get_by_role("button", name="保存修改").click()
+        await _close_edit_dialog(page)
+        return
+    
+    # 2. hover 到上传区域，触发"上传文件"按钮出现
+    upload_area_selectors = [
+        dialog.locator(".upload-area").first,
+        dialog.locator(".el-upload").first,
+        dialog.locator("[class*='upload']").first,
+        dialog.locator("text=本地上传").first,
+        dialog.locator("text=上传").first,
+    ]
+    
+    for upload_area in upload_area_selectors:
+        try:
+            if await upload_area.count():
+                # hover 到上传区域
+                await upload_area.hover(timeout=500)
+                await page.wait_for_timeout(200)  # 等待 hover 效果
+                logger.debug("✓ hover 到上传区域")
+                break
+        except Exception:
+            continue
+    
+    # 3. 点击"上传文件"按钮
+    upload_btn_selectors = [
+        page.locator("button:has-text('上传文件')").first,
+        dialog.locator("button:has-text('上传文件')").first,
+        page.get_by_role("button", name="上传文件").first,
+        dialog.locator(".el-upload__input").first,
+    ]
+    
+    upload_clicked = False
+    for upload_btn in upload_btn_selectors:
+        try:
+            if await upload_btn.count():
+                if await upload_btn.is_visible():
+                    await upload_btn.click(timeout=500)
+                    upload_clicked = True
+                    logger.debug("✓ 点击上传文件按钮")
+                    break
+        except Exception:
+            continue
+    
+    # 4. 上传文件
+    if upload_clicked or True:  # 即使按钮没点击也尝试上传
+        try:
+            file_inputs = page.locator("input[type='file']")
+            if await file_inputs.count() > 0:
+                await file_inputs.last.set_input_files(file_path)
+                logger.success(f"✓ 产品说明书已上传: {file_path}")
+                await page.wait_for_timeout(300)  # 等待上传完成
+            else:
+                logger.warning("⚠️ 未找到文件输入框")
+        except Exception as exc:
+            logger.warning(f"⚠️ 产品说明书上传失败: {exc}")
+    
+    # 5. 保存
     await page.get_by_role("button", name="预览").click()
     await page.get_by_role("button", name="保存修改").click()
-    #  await _wait_for_save_toast(page)
     await _close_edit_dialog(page)
 
 
