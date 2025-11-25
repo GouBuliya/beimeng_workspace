@@ -664,35 +664,61 @@ async def _step_12_sku_category(page: Page) -> None:
     # 等待加载
     with suppress(Exception):
         await loading_mask.wait_for(state="hidden", timeout=1000)
+    await page.wait_for_timeout(500)  # 等待内容加载
     
-    # 2. 点击"分类"下拉框（placeholder是"分类"）
-    category_dropdown = dialog.get_by_placeholder("分类").first
-    if await category_dropdown.count() == 0:
-        # 备选：通过label定位
-        category_dropdown = dialog.locator("label:has-text('SKU分类')").locator("..").locator("input[placeholder='分类']").first
-    if await category_dropdown.count() == 0:
-        # 备选：直接找el-select
-        category_dropdown = dialog.locator(".el-select input[placeholder='分类']").first
+    # 2. 点击"分类"下拉框 - 多种选择器尝试
+    dropdown_clicked = False
+    dropdown_selectors = [
+        # 通过 placeholder 定位
+        dialog.get_by_placeholder("分类").first,
+        dialog.get_by_placeholder("请选择").first,
+        # 通过 SKU分类 标签旁边的 el-select 定位
+        dialog.locator("text=SKU分类").locator("..").locator(".el-select input").first,
+        dialog.locator("text=SKU分类").locator("..").locator(".el-select").first,
+        # 通过表单中的第一个 el-select 定位
+        dialog.locator("form .el-select input").first,
+        dialog.locator("form .el-select").first,
+        # 直接在对话框中找 el-select
+        dialog.locator(".el-select input").first,
+        dialog.locator(".el-select").first,
+    ]
     
-    if await category_dropdown.count():
-        await category_dropdown.click(timeout=800)
-        logger.debug("✓ 点击分类下拉框")
-        
+    for selector in dropdown_selectors:
+        try:
+            if await selector.count():
+                await selector.click(timeout=800)
+                dropdown_clicked = True
+                logger.debug("✓ 点击分类下拉框")
+                break
+        except Exception as e:
+            logger.debug(f"选择器失败: {e}")
+            continue
+    
+    if dropdown_clicked:
         # 等待下拉菜单出现
         await page.wait_for_timeout(300)
         
         # 3. 在下拉菜单中选择"单品"
-        dropdown = page.locator(".el-select-dropdown:visible").last
-        option = dropdown.locator(".el-select-dropdown__item").filter(has_text="单品").first
-        if await option.count():
-            await option.click(timeout=500)
-            logger.success("✓ 已选择: 单品")
-        else:
-            # 备选：直接点击包含"单品"文本的选项
-            option = page.get_by_text("单品", exact=True).first
-            if await option.count():
-                await option.click(timeout=500)
-                logger.success("✓ 已选择: 单品")
+        option_clicked = False
+        option_selectors = [
+            page.locator(".el-select-dropdown:visible .el-select-dropdown__item").filter(has_text="单品").first,
+            page.locator(".el-select-dropdown__item:has-text('单品')").first,
+            page.get_by_role("option", name="单品").first,
+            page.get_by_text("单品", exact=True).first,
+        ]
+        
+        for option in option_selectors:
+            try:
+                if await option.count():
+                    await option.click(timeout=500)
+                    option_clicked = True
+                    logger.success("✓ 已选择: 单品")
+                    break
+            except Exception:
+                continue
+        
+        if not option_clicked:
+            logger.warning("⚠️ 未找到'单品'选项")
     else:
         logger.warning("⚠️ 未找到分类下拉框")
     
