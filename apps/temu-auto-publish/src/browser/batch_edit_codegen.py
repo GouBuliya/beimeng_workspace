@@ -835,58 +835,64 @@ async def _step_18_manual(page: Page, file_path: str) -> None:
         await _close_edit_dialog(page)
         return
     
-    # 2. hover 到上传区域，触发"上传文件"按钮出现
-    upload_area_selectors = [
-        dialog.locator(".upload-area").first,
-        dialog.locator(".el-upload").first,
-        dialog.locator("[class*='upload']").first,
-        dialog.locator("text=本地上传").first,
-        dialog.locator("text=上传").first,
+    # 2. hover 到"上传文件"按钮，触发下拉菜单
+    upload_btn_selectors = [
+        dialog.locator("button:has-text('上传文件')").first,
+        page.locator("button:has-text('上传文件')").first,
+        page.get_by_role("button", name="上传文件").first,
     ]
     
-    for upload_area in upload_area_selectors:
+    hover_done = False
+    for upload_btn in upload_btn_selectors:
         try:
-            if await upload_area.count():
-                # hover 到上传区域
-                await upload_area.hover(timeout=500)
-                await page.wait_for_timeout(200)  # 等待 hover 效果
-                logger.debug("✓ hover 到上传区域")
+            if await upload_btn.count() and await upload_btn.is_visible():
+                # hover 到"上传文件"按钮
+                await upload_btn.hover(timeout=500)
+                await page.wait_for_timeout(300)  # 等待下拉菜单出现
+                hover_done = True
+                logger.debug("✓ hover 到上传文件按钮")
                 break
         except Exception:
             continue
     
-    # 3. 点击"上传文件"按钮
-    upload_btn_selectors = [
-        page.locator("button:has-text('上传文件')").first,
-        dialog.locator("button:has-text('上传文件')").first,
-        page.get_by_role("button", name="上传文件").first,
-        dialog.locator(".el-upload__input").first,
+    if not hover_done:
+        logger.warning("⚠️ 未找到上传文件按钮")
+    
+    # 3. 点击"本地上传"选项
+    local_upload_selectors = [
+        page.locator("text=本地上传").first,
+        page.get_by_text("本地上传", exact=True).first,
+        dialog.locator("text=本地上传").first,
+        page.locator(".el-dropdown-menu__item:has-text('本地上传')").first,
+        page.locator("li:has-text('本地上传')").first,
     ]
     
-    upload_clicked = False
-    for upload_btn in upload_btn_selectors:
+    local_clicked = False
+    for local_btn in local_upload_selectors:
         try:
-            if await upload_btn.count():
-                if await upload_btn.is_visible():
-                    await upload_btn.click(timeout=500)
-                    upload_clicked = True
-                    logger.debug("✓ 点击上传文件按钮")
-                    break
+            if await local_btn.count() and await local_btn.is_visible():
+                await local_btn.click(timeout=500)
+                local_clicked = True
+                logger.debug("✓ 点击本地上传")
+                break
         except Exception:
             continue
     
+    if not local_clicked:
+        logger.warning("⚠️ 未找到本地上传选项")
+    
     # 4. 上传文件
-    if upload_clicked or True:  # 即使按钮没点击也尝试上传
-        try:
-            file_inputs = page.locator("input[type='file']")
-            if await file_inputs.count() > 0:
-                await file_inputs.last.set_input_files(file_path)
-                logger.success(f"✓ 产品说明书已上传: {file_path}")
-                await page.wait_for_timeout(300)  # 等待上传完成
-            else:
-                logger.warning("⚠️ 未找到文件输入框")
-        except Exception as exc:
-            logger.warning(f"⚠️ 产品说明书上传失败: {exc}")
+    await page.wait_for_timeout(200)
+    try:
+        file_inputs = page.locator("input[type='file']")
+        if await file_inputs.count() > 0:
+            await file_inputs.last.set_input_files(file_path)
+            logger.success(f"✓ 产品说明书已上传: {file_path}")
+            await page.wait_for_timeout(500)  # 等待上传完成
+        else:
+            logger.warning("⚠️ 未找到文件输入框")
+    except Exception as exc:
+        logger.warning(f"⚠️ 产品说明书上传失败: {exc}")
     
     # 5. 保存
     await page.get_by_role("button", name="预览").click()
