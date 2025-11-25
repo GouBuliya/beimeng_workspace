@@ -777,7 +777,6 @@ class BatchEditStepsMixin:
         if not await self.click_step("产品说明书", "7.18"):
             return False
         #等待1s
-        await self.page.wait_for_timeout(1000)
         try:
             if manual_file_path:
                 file_path = Path(manual_file_path)

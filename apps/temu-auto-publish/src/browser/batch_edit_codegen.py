@@ -645,34 +645,43 @@ async def _step_11_platform_sku(page: Page) -> None:
     await _close_edit_dialog(page)
 
 
-@smart_retry(max_attempts=1, delay=0.3)
+@smart_retry(max_attempts=2, delay=0.5)
 async def _step_12_sku_category(page: Page) -> None:
-    """步骤 12: SKU 分类 - 选择单品,数量填 1。(极速优化版)"""
+    """步骤 12: SKU 分类 - 选择单品,数量填 1。"""
     dialog = page.get_by_role("dialog")
     
-    # 极速: 直接点击导航，只尝试最可靠的选择器
+    # 关键: 等待全屏加载遮罩消失（el-loading-mask 会拦截点击）
+    loading_mask = page.locator(".el-loading-mask")
+    with suppress(Exception):
+        await loading_mask.wait_for(state="hidden", timeout=2000)
+    
+    # 点击导航
     nav = dialog.locator(".batch-editor-left").get_by_text("SKU分类", exact=False).first
     if await nav.count():
-        await nav.click(timeout=200)
+        await nav.click(timeout=500)
     
-    # 极速: 直接尝试选择"单品"选项（最常见情况）
+    # 再次等待可能出现的加载
+    with suppress(Exception):
+        await loading_mask.wait_for(state="hidden", timeout=1000)
+    
     # 方案1: 单选按钮（最快路径）
     radio = dialog.locator(".el-radio:has-text('单品'), .jx-radio-button:has-text('单品')").first
     if await radio.count():
-        await radio.click(force=True, timeout=150)
+        await radio.click(force=True, timeout=500)
         logger.success("✓ 通过单选按钮选择: 单品")
     else:
         # 方案2: 下拉选择（降级）
         trigger = dialog.locator(".el-select input, .el-select__input").first
         if await trigger.count():
-            await trigger.click(timeout=150)
+            await trigger.click(timeout=500)
+            await page.wait_for_timeout(100)  # 等待下拉展开
             dropdown = page.locator(".el-select-dropdown:visible").last
             option = dropdown.locator(".el-select-dropdown__item:has-text('单品')").first
             if await option.count():
-                await option.click(timeout=150)
+                await option.click(timeout=500)
                 logger.success("✓ 已选择: 单品")
     
-    # 极速: 填写数量（简化）
+    # 填写数量
     qty_input = dialog.get_by_role("textbox", name="数量").first
     if await qty_input.count():
         await qty_input.fill("1")
