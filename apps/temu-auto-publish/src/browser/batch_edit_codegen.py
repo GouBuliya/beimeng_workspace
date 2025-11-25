@@ -216,7 +216,7 @@ async def run_batch_edit(page: Page, payload: dict[str, Any]) -> dict[str, Any]:
             
             try:
                 await step_factory()
-            result["completed_steps"] = idx
+                result["completed_steps"] = idx
                 
                 # 步骤完成后使用智能等待（优化: 减少等待时间）
                 await smart_wait(page, f"step_{idx}_{step_name}", min_ms=10, max_ms=150)
