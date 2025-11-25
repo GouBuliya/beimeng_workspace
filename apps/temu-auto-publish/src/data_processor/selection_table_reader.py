@@ -60,9 +60,9 @@ class ProductSelectionRow(BaseModel):
         ... )
     """
 
-    owner: str = Field(..., description="主品负责人")
-    product_name: str = Field(..., description="产品名称（用作搜索关键词）")
-    model_number: str = Field(..., description="型号编号")
+    owner: str = Field(default="未指定", description="主品负责人")
+    product_name: str = Field(default="", description="产品名称（用作搜索关键词）")
+    model_number: str = Field(default="A0000", description="型号编号")
     color_spec: str | None = Field(None, description="产品颜色/规格")
     collect_count: int = Field(default=5, ge=1, le=100, description="采集数量")
 
@@ -71,16 +71,25 @@ class ProductSelectionRow(BaseModel):
     spec_options: list[str] | None = Field(None, description="规格选项列表")
     variant_costs: list[float] | None = Field(None, description="多规格对应的进货价列表")
     image_files: list[str] | None = Field(None, description="实拍图数组")
-    size_chart_image_url: str = Field(..., description="尺寸图网络图片 URL")
+    size_chart_image_url: str = Field(default="", description="尺寸图网络图片 URL")
     product_video_url: str | None = Field(None, description="产品视频网络 URL")
+    sku_image_urls: list[str] = Field(
+        default_factory=list, description="SKU 图片 URL 列表（用于替换 SKU 图）"
+    )
 
     @field_validator("model_number")
     @classmethod
     def validate_model_number(cls, v: str) -> str:
         """验证型号编号格式（放宽验证，支持 A026, A045/A046 等格式）."""
-        if not v or not v.startswith("A"):
-            raise ValueError("型号编号必须以A开头")
-        return v
+        if not v:
+            return "A0000"
+        value = v.strip()
+        if not value:
+            return "A0000"
+        if not value.startswith("A"):
+            logger.warning("型号编号未以A开头，自动补全: %s -> A%s", value, value)
+            return f"A{value}"
+        return value
 
 
 class SelectionTableReader:
@@ -106,6 +115,7 @@ class SelectionTableReader:
         """初始化选品表读取器."""
         logger.info("选品表读取器初始化")
         self.size_chart_base_url = self._resolve_size_chart_base_url()
+        self.product_image_base_url = self._resolve_product_image_base_url()
         self.video_base_url = self._resolve_video_base_url()
 
         # Excel列名映射（支持中英文）
@@ -140,6 +150,9 @@ class SelectionTableReader:
             "image_files": "image_files",
             "尺寸图链接": "size_chart_image_url",
             "尺寸图URL": "size_chart_image_url",
+            "尺码图": "size_chart_image_url",
+            "尺码图链接": "size_chart_image_url",
+            "尺码图URL": "size_chart_image_url",
             "size_chart_url": "size_chart_image_url",
             "size_chart_image_url": "size_chart_image_url",
             "image_url": "size_chart_image_url",
@@ -300,14 +313,24 @@ class SelectionTableReader:
                 product_data["spec_options"] = self._parse_json_list(row.get("spec_options"))
                 product_data["spec_unit"] = self._parse_scalar(row.get("spec_unit"))
                 product_data["image_files"] = self._parse_json_list(row.get("image_files"))
+                product_data["sku_image_urls"] = self._build_product_image_urls(
+                    product_data["image_files"]
+                )
                 size_chart_url = self._parse_scalar(row.get("size_chart_image_url"))
                 if not size_chart_url:
                     size_chart_url = self._build_size_chart_url(product_data["image_files"])
                     if size_chart_url:
                         logger.debug("使用图片文件名生成尺寸图URL: %s", size_chart_url[:100])
+                if not size_chart_url and self.size_chart_base_url:
+                    size_chart_url = self.size_chart_base_url
+                    logger.warning(
+                        "未提供尺寸图URL，使用基础地址占位: %s (行 %s)",
+                        size_chart_url,
+                        idx + 1,
+                    )
                 if not size_chart_url:
-                    raise ValueError("缺少尺寸图URL(size_chart_image_url)")
-                product_data["size_chart_image_url"] = size_chart_url
+                    logger.warning("缺少尺寸图URL(size_chart_image_url)，将使用空字符串 (行 %s)", idx + 1)
+                product_data["size_chart_image_url"] = size_chart_url or ""
                 product_data["product_video_url"] = self._resolve_product_video_url(
                     raw_url=self._parse_scalar(row.get("product_video_url")),
                     model_number=product_data["model_number"],
@@ -507,6 +530,14 @@ class SelectionTableReader:
         text = str(base_url).strip()
         return text or None
 
+    def _resolve_product_image_base_url(self) -> str | None:
+        """解析 SKU/实拍图外链基础 URL 前缀."""
+
+        fallback = self._resolve_size_chart_base_url()
+        base_url = os.getenv("PRODUCT_IMAGE_BASE_URL", fallback or "")
+        text = str(base_url).strip()
+        return text or None
+
     def _resolve_video_base_url(self) -> str | None:
         """解析产品视频外链基础 URL 前缀."""
 
@@ -527,6 +558,24 @@ class SelectionTableReader:
             return None
         candidate = urljoin(f"{self.size_chart_base_url.rstrip('/')}/", filename.lstrip("/"))
         return candidate or None
+
+    def _build_product_image_urls(self, image_files: list[str] | None) -> list[str]:
+        """根据实拍图文件名构建 SKU 图片 URL 列表."""
+
+        if not image_files:
+            return []
+
+        urls: list[str] = []
+        for item in image_files:
+            text = (item or "").strip()
+            if not text:
+                continue
+            if text.startswith(("http://", "https://")):
+                urls.append(text)
+            elif self.product_image_base_url:
+                url = urljoin(f"{self.product_image_base_url.rstrip('/')}/", text.lstrip("/"))
+                urls.append(url)
+        return urls
 
     def _resolve_product_video_url(self, raw_url: str | None, model_number: str) -> str | None:
         """统一使用 OSS 拼接的视频 URL，确保来源一致."""
