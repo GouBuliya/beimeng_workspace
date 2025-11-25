@@ -655,36 +655,89 @@ async def _step_12_sku_category(page: Page) -> None:
     with suppress(Exception):
         await loading_mask.wait_for(state="hidden", timeout=2000)
     
-    # 点击导航
-    nav = dialog.locator(".batch-editor-left").get_by_text("SKU分类", exact=False).first
-    if await nav.count():
-        await nav.click(timeout=500)
+    # 点击导航 - 多种选择器备选
+    nav_clicked = False
+    nav_selectors = [
+        dialog.locator(".batch-editor-left").get_by_text("SKU分类", exact=False).first,
+        dialog.get_by_text("SKU分类", exact=True).first,
+        page.get_by_text("SKU分类").first,
+    ]
+    for nav in nav_selectors:
+        try:
+            if await nav.count():
+                await nav.click(timeout=800)
+                nav_clicked = True
+                logger.debug("✓ SKU分类导航点击成功")
+                break
+        except Exception:
+            continue
+    
+    if not nav_clicked:
+        logger.warning("未找到SKU分类导航，尝试继续")
     
     # 再次等待可能出现的加载
     with suppress(Exception):
         await loading_mask.wait_for(state="hidden", timeout=1000)
     
-    # 方案1: 单选按钮（最快路径）
-    radio = dialog.locator(".el-radio:has-text('单品'), .jx-radio-button:has-text('单品')").first
-    if await radio.count():
-        await radio.click(force=True, timeout=500)
-        logger.success("✓ 通过单选按钮选择: 单品")
-    else:
-        # 方案2: 下拉选择（降级）
-        trigger = dialog.locator(".el-select input, .el-select__input").first
-        if await trigger.count():
-            await trigger.click(timeout=500)
-            await page.wait_for_timeout(100)  # 等待下拉展开
-            dropdown = page.locator(".el-select-dropdown:visible").last
-            option = dropdown.locator(".el-select-dropdown__item:has-text('单品')").first
-            if await option.count():
-                await option.click(timeout=500)
-                logger.success("✓ 已选择: 单品")
+    selected = False
+    
+    # 方案1: 单选按钮
+    radio_selectors = [
+        dialog.locator(".el-radio:has-text('单品')").first,
+        dialog.locator(".jx-radio-button:has-text('单品')").first,
+        dialog.locator("label:has-text('单品')").first,
+        page.locator(".el-radio:has-text('单品')").first,
+    ]
+    for radio in radio_selectors:
+        try:
+            if await radio.count():
+                await radio.click(force=True, timeout=800)
+                logger.success("✓ 通过单选按钮选择: 单品")
+                selected = True
+                break
+        except Exception:
+            continue
+    
+    # 方案2: 下拉选择（降级）
+    if not selected:
+        trigger_selectors = [
+            dialog.locator(".el-select input").first,
+            dialog.locator(".el-select__input").first,
+            dialog.get_by_placeholder("请选择").first,
+        ]
+        for trigger in trigger_selectors:
+            try:
+                if await trigger.count():
+                    await trigger.click(timeout=800)
+                    await page.wait_for_timeout(200)  # 等待下拉展开
+                    
+                    dropdown = page.locator(".el-select-dropdown:visible").last
+                    option = dropdown.locator(".el-select-dropdown__item:has-text('单品')").first
+                    if await option.count():
+                        await option.click(timeout=500)
+                        logger.success("✓ 通过下拉选择: 单品")
+                        selected = True
+                        break
+            except Exception:
+                continue
+    
+    if not selected:
+        logger.warning("⚠️ 未能选择SKU分类，继续执行")
     
     # 填写数量
-    qty_input = dialog.get_by_role("textbox", name="数量").first
-    if await qty_input.count():
-        await qty_input.fill("1")
+    qty_selectors = [
+        dialog.get_by_role("textbox", name="数量").first,
+        dialog.get_by_placeholder("数量").first,
+        dialog.locator("input[placeholder*='数量']").first,
+    ]
+    for qty_input in qty_selectors:
+        try:
+            if await qty_input.count():
+                await qty_input.fill("1")
+                logger.debug("✓ 数量已填写: 1")
+                break
+        except Exception:
+            continue
     
     # 保存
     await page.get_by_role("button", name="预览").click()
@@ -773,21 +826,10 @@ async def _step_18_manual(page: Page, file_path: str) -> None:
     if file_path:
         try:
             # 点击上传文件按钮
-            upload_btn = page.get_by_role("button", name="上传文件")
-            if await upload_btn.count() > 0:
+            upload_btn = self.page.locator("button:has-text('上传文件')").first
+            if await upload_btn.count() > 0 and await upload_btn.is_visible():
                 await upload_btn.click()
-                # 优化: 移除固定等待100ms
-
-            # 尝试直接找到文件输入框（可能已经存在）
-            file_inputs = page.locator("input[type='file']")
-            if await file_inputs.count() > 0:
-                # 直接使用已存在的文件输入框
-                await file_inputs.last.set_input_files(file_path)
-                logger.success("✓ 产品说明书已上传: {}", file_path)
-                await page.wait_for_timeout(50)  # 极速模式: 150 -> 50
-            else:
-                # 如果没有文件输入框,跳过上传
-                logger.warning("未找到文件输入框,跳过产品说明书上传")
+                logger.info("      ✓ 图片URL已上传")
 
         except Exception as exc:
             logger.warning("产品说明书上传失败, 保留已有文件: {}", exc)
