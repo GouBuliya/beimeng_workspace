@@ -55,6 +55,7 @@ from ..core.enhanced_retry import (
     create_step_retry_policy,
     RetryPolicy,
 )
+from ..core.detailed_profiler import DetailedProfiler, get_detailed_profiler, reset_detailed_profiler
 
 MAX_TITLE_LENGTH = 250
 
@@ -144,6 +145,10 @@ async def run_batch_edit(page: Page, payload: dict[str, Any]) -> dict[str, Any]:
     
     import time
     workflow_start = time.perf_counter()
+    
+    # 初始化详细分析器
+    reset_detailed_profiler()
+    profiler = get_detailed_profiler("batch_edit_18", f"batch_{int(time.time())}")
 
     try:
         logger.info("开始执行批量编辑 18 步流程(使用优化后的等待和重试机制)")
@@ -210,39 +215,43 @@ async def run_batch_edit(page: Page, payload: dict[str, Any]) -> dict[str, Any]:
             ("产品说明书", lambda: _step_18_manual(page, payload.get("manual_file", ""))),
         ]
 
-        for idx, (step_name, step_factory) in enumerate(step_definitions, start=1):
-            step_start = time.perf_counter()
-            logger.info(f"执行步骤 {idx}/18: {step_name}")
-            
-            try:
-                await step_factory()
-                result["completed_steps"] = idx
+        # 使用详细分析器记录整个批量编辑阶段
+        with profiler.phase("batch_edit_18_steps"):
+            for idx, (step_name, step_factory) in enumerate(step_definitions, start=1):
+                step_start = time.perf_counter()
+                logger.info(f"执行步骤 {idx}/18: {step_name}")
                 
-                # 步骤完成后使用智能等待（极速模式: 最小等待）
-                await smart_wait(page, f"step_{idx}_{step_name}", min_ms=5, max_ms=50)
-                
-                step_elapsed = (time.perf_counter() - step_start) * 1000
-                result["timing"][step_name] = round(step_elapsed, 2)
-                logger.success(f"步骤 {idx}/18 完成: {step_name} ({step_elapsed:.0f}ms)")
-                
-            except Exception as step_exc:
-                step_elapsed = (time.perf_counter() - step_start) * 1000
-                result["timing"][step_name] = round(step_elapsed, 2)
-                result["step_errors"].append({
-                    "step": idx,
-                    "name": step_name,
-                    "error": str(step_exc),
-                    "elapsed_ms": round(step_elapsed, 2),
-                })
-                logger.error(f"步骤 {idx}/18 失败: {step_name} - {step_exc}")
-                
-                # 非关键步骤失败可以继续（步骤13-17为非关键）
-                if idx in (13, 16, 17):  # 尺码表、轮播图、颜色图
-                    logger.warning(f"非关键步骤 {step_name} 失败，继续执行后续步骤")
-                    result["completed_steps"] = idx
-                    continue
-                else:
-                    raise
+                # 使用分析器记录每个步骤
+                with profiler.step(f"step_{idx:02d}_{step_name}"):
+                    try:
+                        await step_factory()
+                        result["completed_steps"] = idx
+                        
+                        # 步骤完成后使用智能等待（极速模式: 最小等待）
+                        await smart_wait(page, f"step_{idx}_{step_name}", min_ms=5, max_ms=50)
+                        
+                        step_elapsed = (time.perf_counter() - step_start) * 1000
+                        result["timing"][step_name] = round(step_elapsed, 2)
+                        logger.success(f"步骤 {idx}/18 完成: {step_name} ({step_elapsed:.0f}ms)")
+                        
+                    except Exception as step_exc:
+                        step_elapsed = (time.perf_counter() - step_start) * 1000
+                        result["timing"][step_name] = round(step_elapsed, 2)
+                        result["step_errors"].append({
+                            "step": idx,
+                            "name": step_name,
+                            "error": str(step_exc),
+                            "elapsed_ms": round(step_elapsed, 2),
+                        })
+                        logger.error(f"步骤 {idx}/18 失败: {step_name} - {step_exc}")
+                        
+                        # 非关键步骤失败可以继续（步骤13-17为非关键）
+                        if idx in (13, 16, 17):  # 尺码表、轮播图、颜色图
+                            logger.warning(f"非关键步骤 {step_name} 失败，继续执行后续步骤")
+                            result["completed_steps"] = idx
+                            continue
+                        else:
+                            raise
 
         # 关闭编辑框
         await _close_edit_dialog(page)
@@ -261,6 +270,18 @@ async def run_batch_edit(page: Page, payload: dict[str, Any]) -> dict[str, Any]:
             f"批量编辑流程失败(第 {result['completed_steps']}/{result['total_steps']} 步): {exc}"
         )
         result["error"] = str(exc)
+    
+    finally:
+        # 生成详细性能报告
+        profiler.finish()
+        report = profiler.report()
+        logger.info(report)
+        
+        # 保存性能数据
+        try:
+            profiler.save()
+        except Exception as save_err:
+            logger.warning(f"保存性能数据失败: {save_err}")
 
     return result
 
