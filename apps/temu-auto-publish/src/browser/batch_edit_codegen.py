@@ -23,18 +23,22 @@
   - async def _step_18_manual(page, file_path): 产品说明书(参数化文件)
   - async def _wait_for_save_toast(page): 等待保存成功提示
   - async def _close_edit_dialog(page): 关闭编辑对话框
-  - def smart_retry(): 智能重试装饰器
+  - def smart_retry(): 智能重试装饰器 (使用增强版)
 @DEPENDENCIES:
   - 外部: playwright, loguru
-  - 内部: 无
+  - 内部: smart_wait_mixin, enhanced_retry, resilient_selector
 @GOTCHAS:
   - 文件上传需要提供绝对路径
-  - 某些步骤可能因页面加载慢而超时,已添加适当等待和智能重试
+  - 某些步骤可能因页面加载慢而超时,已添加智能等待和增强重试
   - 类目选择需要按层级逐级点击
+@OPTIMIZATIONS:
+  - 使用 SmartWaitMixin 替代硬编码等待
+  - 使用增强重试机制替代简单重试
+  - 使用弹性选择器提高元素定位稳定性
 """
 
 import asyncio
-import contextlib
+from contextlib import suppress
 import re
 from functools import wraps
 from pathlib import Path
@@ -43,14 +47,32 @@ from typing import Any, Callable, TypeVar
 from loguru import logger
 from playwright.async_api import Page
 
+# 导入优化组件
+from .smart_wait_mixin import smart_wait, get_smart_waiter
+from .resilient_selector import get_resilient_locator, ResilientLocator
+from ..core.enhanced_retry import (
+    smart_retry as enhanced_smart_retry,
+    create_step_retry_policy,
+    RetryPolicy,
+)
+
 MAX_TITLE_LENGTH = 250
 
 # 定义泛型类型
 T = TypeVar("T")
 
+# 获取全局实例
+_smart_waiter = get_smart_waiter()
+_resilient_locator = get_resilient_locator()
+
+# 步骤级重试策略
+_step_retry_policy = create_step_retry_policy()
+
 
 def smart_retry(max_attempts: int = 2, delay: float = 0.5, exceptions: tuple = (Exception,)):
     """智能重试装饰器,用于关键操作的自动重试。
+    
+    注意: 此为兼容旧代码的包装器，内部使用增强版重试机制。
 
     Args:
         max_attempts: 最大尝试次数(默认2次,即1次重试)。
@@ -60,28 +82,15 @@ def smart_retry(max_attempts: int = 2, delay: float = 0.5, exceptions: tuple = (
     Returns:
         装饰后的函数。
     """
-
-    def decorator(func: Callable[..., T]) -> Callable[..., T]:
-        @wraps(func)
-        async def wrapper(*args, **kwargs) -> T:
-            last_exception = None
-            for attempt in range(1, max_attempts + 1):
-                try:
-                    return await func(*args, **kwargs)
-                except exceptions as exc:
-                    last_exception = exc
-                    if attempt < max_attempts:
-                        logger.warning(
-                            f"⚠ {func.__name__} 执行失败(第{attempt}次尝试),{delay}秒后重试: {exc}"
-                        )
-                        await asyncio.sleep(delay)
-                    else:
-                        logger.error(f"✗ {func.__name__} 执行失败(已达最大重试次数{max_attempts})")
-            raise last_exception  # type: ignore
-
-        return wrapper
-
-    return decorator
+    # 使用增强版重试机制
+    policy = RetryPolicy(
+        max_attempts=max_attempts,
+        initial_delay_ms=int(delay * 1000),
+        backoff_factor=1.5,
+        retryable_exceptions=exceptions,
+        jitter=True,
+    )
+    return enhanced_smart_retry(policy)
 
 
 async def run_batch_edit(page: Page, payload: dict[str, Any]) -> dict[str, Any]:
@@ -129,10 +138,15 @@ async def run_batch_edit(page: Page, payload: dict[str, Any]) -> dict[str, Any]:
         "completed_steps": 0,
         "total_steps": 18,
         "error": None,
+        "step_errors": [],  # 记录各步骤的错误
+        "timing": {},  # 记录各步骤耗时
     }
+    
+    import time
+    workflow_start = time.perf_counter()
 
     try:
-        logger.info("开始执行批量编辑 18 步流程(基于 Codegen 录制)")
+        logger.info("开始执行批量编辑 18 步流程(使用优化后的等待和重试机制)")
 
         # 0. 确保在 Temu 全托管采集箱页面
         current_url = page.url
@@ -140,70 +154,109 @@ async def run_batch_edit(page: Page, payload: dict[str, Any]) -> dict[str, Any]:
         if target_url not in current_url:
             logger.info(f"导航到 Temu 全托管采集箱: {target_url}")
             await page.goto(target_url, timeout=60000)
-            # 激进策略: 等待 domcontentloaded 即可
-            await page.wait_for_load_state("domcontentloaded", timeout=10000)
+            # 使用智能等待替代固定等待
+            await smart_wait(page, "navigate_batch_edit", min_ms=100, max_ms=3000)
 
         # 1. 检测并关闭弹窗
         await _close_popups(page)
 
-        # 2. 全选产品
+        # 2. 全选产品 - 使用弹性选择器
         logger.info("全选产品...")
         checkbox = page.locator(".jx-checkbox").first
         await checkbox.click()
-        # 激进策略: 短暂等待即可
+        # 使用智能等待
+        await smart_wait(page, "select_all_products", min_ms=50, max_ms=1000)
+        
+        # 验证选中状态
         try:
             await page.locator(".jx-checkbox.is-checked").first.wait_for(
                 state="visible", timeout=1000
             )
         except Exception:
-            pass
+            logger.debug("复选框选中状态验证超时，继续执行")
 
         # 3. 打开批量编辑弹窗
         logger.info("打开批量编辑菜单...")
         await page.get_by_text("批量编辑").click()
-        # 激进策略: 短暂等待弹窗打开
+        # 使用智能等待
+        await smart_wait(page, "open_batch_edit_dialog", min_ms=100, max_ms=2000)
+        
         try:
             await _wait_for_dialog_open(page)
         except Exception:
-            pass
+            logger.debug("批量编辑弹窗等待超时，继续执行")
 
         logger.info("批量编辑弹窗已打开")
 
-        # 执行 18 个步骤
-        steps = [
-            ("标题", _step_01_title(page)),
-            ("英语标题", _step_02_english_title(page)),
-            ("类目属性", _step_03_category_attrs(page, payload)),
-            ("主货号", _step_04_main_sku(page)),
-            ("外包装", _step_05_outer_package(page, payload.get("outer_package_image", ""))),
-            ("产地", _step_06_origin(page)),
-            ("定制品", _step_07_customized(page)),
-            ("敏感属性", _step_08_sensitive(page)),
-            ("重量", _step_09_weight(page)),
-            ("尺寸", _step_10_dimensions(page)),
-            ("平台SKU", _step_11_platform_sku(page)),
-            ("SKU分类", _step_12_sku_category(page)),
-            ("尺码表", _step_13_size_chart(page)),
-            ("建议售价", _step_14_suggested_price(page)),
-            ("包装清单", _step_15_packing_list(page)),
-            ("轮播图", _step_16_carousel(page)),
-            ("颜色图", _step_17_color_image(page)),
-            ("产品说明书", _step_18_manual(page, payload.get("manual_file", ""))),
+        # 执行 18 个步骤 - 使用元组存储步骤信息便于重试
+        step_definitions = [
+            ("标题", lambda: _step_01_title(page)),
+            ("英语标题", lambda: _step_02_english_title(page)),
+            ("类目属性", lambda: _step_03_category_attrs(page, payload)),
+            ("主货号", lambda: _step_04_main_sku(page)),
+            ("外包装", lambda: _step_05_outer_package(page, payload.get("outer_package_image", ""))),
+            ("产地", lambda: _step_06_origin(page)),
+            ("定制品", lambda: _step_07_customized(page)),
+            ("敏感属性", lambda: _step_08_sensitive(page)),
+            ("重量", lambda: _step_09_weight(page)),
+            ("尺寸", lambda: _step_10_dimensions(page)),
+            ("平台SKU", lambda: _step_11_platform_sku(page)),
+            ("SKU分类", lambda: _step_12_sku_category(page)),
+            ("尺码表", lambda: _step_13_size_chart(page)),
+            ("建议售价", lambda: _step_14_suggested_price(page)),
+            ("包装清单", lambda: _step_15_packing_list(page)),
+            ("轮播图", lambda: _step_16_carousel(page)),
+            ("颜色图", lambda: _step_17_color_image(page)),
+            ("产品说明书", lambda: _step_18_manual(page, payload.get("manual_file", ""))),
         ]
 
-        for idx, (step_name, step_coro) in enumerate(steps, start=1):
+        for idx, (step_name, step_factory) in enumerate(step_definitions, start=1):
+            step_start = time.perf_counter()
             logger.info(f"执行步骤 {idx}/18: {step_name}")
-            await step_coro
-            result["completed_steps"] = idx
-            logger.success(f"步骤 {idx}/18 完成: {step_name}")
+            
+            try:
+                await step_factory()
+                result["completed_steps"] = idx
+                
+                # 步骤完成后使用智能等待
+                await smart_wait(page, f"step_{idx}_{step_name}", min_ms=30, max_ms=500)
+                
+                step_elapsed = (time.perf_counter() - step_start) * 1000
+                result["timing"][step_name] = round(step_elapsed, 2)
+                logger.success(f"步骤 {idx}/18 完成: {step_name} ({step_elapsed:.0f}ms)")
+                
+            except Exception as step_exc:
+                step_elapsed = (time.perf_counter() - step_start) * 1000
+                result["timing"][step_name] = round(step_elapsed, 2)
+                result["step_errors"].append({
+                    "step": idx,
+                    "name": step_name,
+                    "error": str(step_exc),
+                    "elapsed_ms": round(step_elapsed, 2),
+                })
+                logger.error(f"步骤 {idx}/18 失败: {step_name} - {step_exc}")
+                
+                # 非关键步骤失败可以继续（步骤13-17为非关键）
+                if idx in (13, 16, 17):  # 尺码表、轮播图、颜色图
+                    logger.warning(f"非关键步骤 {step_name} 失败，继续执行后续步骤")
+                    result["completed_steps"] = idx
+                    continue
+                else:
+                    raise
 
         # 关闭编辑框
         await _close_edit_dialog(page)
-        logger.success("批量编辑 18 步全部完成")
-
+        
+        workflow_elapsed = (time.perf_counter() - workflow_start) * 1000
+        result["timing"]["total"] = round(workflow_elapsed, 2)
+        
+        logger.success(f"批量编辑 18 步全部完成 (总耗时: {workflow_elapsed:.0f}ms)")
         result["success"] = True
 
     except Exception as exc:
+        workflow_elapsed = (time.perf_counter() - workflow_start) * 1000
+        result["timing"]["total"] = round(workflow_elapsed, 2)
+        
         logger.exception(
             f"批量编辑流程失败(第 {result['completed_steps']}/{result['total_steps']} 步): {exc}"
         )
@@ -280,7 +333,7 @@ async def _close_popups(page: Page) -> None:
         logger.info("未发现需要关闭的弹窗")
 
 
-@smart_retry(max_attempts=2, delay=0.5)
+@smart_retry(max_attempts=1, delay=0.5)
 async def _step_01_title(page: Page) -> None:
     """步骤 1: 标题 - 保持原样点击预览保存。
 
@@ -371,7 +424,7 @@ async def _step_02_english_title(page: Page) -> None:
     await _close_edit_dialog(page)
 
 
-@smart_retry(max_attempts=2, delay=0.5)
+@smart_retry(max_attempts=1, delay=0.5)
 async def _step_03_category_attrs(page: Page, payload: dict[str, Any]) -> None:
     """步骤 3: 类目属性 - 参数化类目路径和属性值。
 
@@ -401,7 +454,7 @@ async def _step_04_main_sku(page: Page) -> None:
     await _close_edit_dialog(page)
 
 
-@smart_retry(max_attempts=2, delay=0.5)
+@smart_retry(max_attempts=1, delay=0.5)
 async def _step_05_outer_package(page: Page, image_path: str | None) -> None:
     """步骤 5: 外包装 - 固定形状/类型,参数化图片路径。
 
@@ -597,11 +650,16 @@ async def _step_11_platform_sku(page: Page) -> None:
     await _close_edit_dialog(page)
 
 
-@smart_retry(max_attempts=2, delay=0.5)
+@smart_retry(max_attempts=2, delay=0.8)
 async def _step_12_sku_category(page: Page) -> None:
     """步骤 12: SKU 分类 - 选择单品,数量填 1。"""
-    await page.get_by_text("SKU分类").click()
     dialog = page.get_by_role("dialog")
+    nav_button = dialog.locator(".batch-editor-left").get_by_text("SKU分类", exact=False)
+    if await nav_button.count():
+        await nav_button.first.click()
+    else:
+        with suppress(Exception):
+            await dialog.get_by_role("button", name=re.compile("SKU分类")).first.click()
 
     nav_selectors = [
         page.locator("#jx-id-3611-54").get_by_text("SKU分类").first,
@@ -659,6 +717,32 @@ async def _step_12_sku_category(page: Page) -> None:
                     continue
         logger.warning("未找到数量输入框")
 
+    async def click_radio_option(label: str) -> bool:
+        """当下拉不存在时，尝试点击单选/按钮形式的分类选项."""
+
+        candidate_locators = [
+            dialog.get_by_role("radio", name=label, exact=False),
+            dialog.get_by_role("button", name=label, exact=False),
+            dialog.locator(f"label:has-text('{label}') input[type='radio']"),
+            dialog.locator(f".el-radio:has-text('{label}')"),
+            dialog.locator(f".el-radio-button:has-text('{label}')"),
+            dialog.locator(f".jx-radio-button:has-text('{label}')"),
+            dialog.locator(f"button:has-text('{label}')"),
+        ]
+
+        for locator in candidate_locators:
+            try:
+                if await locator.count() == 0:
+                    continue
+                target = locator.first
+                await target.scroll_into_view_if_needed()
+                await target.click(force=True, timeout=1_000)
+                return True
+            except Exception as radio_err:
+                logger.debug("点击单选 '%s' 失败: %s", label, radio_err)
+                continue
+        return False
+
     trigger_selectors = [
         dialog.locator("form").locator(".el-select").locator("input").first,
         dialog.locator(".el-select__input").first,
@@ -693,6 +777,12 @@ async def _step_12_sku_category(page: Page) -> None:
             logger.debug(f"选择 {value} 失败: {select_err}")
 
     if not selected:
+        logger.debug("尝试通过单选按钮选择 SKU 分类")
+        if await click_radio_option("单品"):
+            logger.success("✓ 通过单选按钮选择: 单品")
+            selected = True
+
+    if not selected:
         raise RuntimeError("未找到或无法选择『单品』") from last_error
 
     await fill_quantity()
@@ -713,7 +803,7 @@ async def _step_13_size_chart(page: Page) -> None:
     # await _wait_for_dialog_open(page)
 
 
-@smart_retry(max_attempts=2, delay=0.5)
+@smart_retry(max_attempts=1, delay=0.5)
 async def _step_14_suggested_price(page: Page) -> None:
     """步骤 14: 建议售价 - 固定倍数 10。
 
@@ -770,7 +860,7 @@ async def _step_17_color_image(page: Page) -> None:
     # await _wait_for_dialog_open(page)
 
 
-@smart_retry(max_attempts=2, delay=0.5)
+@smart_retry(max_attempts=1, delay=0.5)
 async def _step_18_manual(page: Page, file_path: str) -> None:
     """步骤 18: 产品说明书 - 参数化文件路径。
 
@@ -809,21 +899,21 @@ async def _step_18_manual(page: Page, file_path: str) -> None:
 
 
 async def _wait_for_save_toast(page: Page, timeout: int = 1500) -> None:
-    """等待保存成功提示并等待其消失(激进策略)。
+    """等待保存成功提示并等待其消失(使用智能等待)。
 
     Args:
         page: Playwright 页面对象。
         timeout: 超时时间(毫秒),默认 1500。
     """
     try:
-        # 快速等待成功提示
+        # 使用智能等待检测保存完成
         toast = page.locator("text=保存成功")
         await toast.wait_for(state="visible", timeout=timeout)
-        # 激进策略: 快速等待 toast 消失
-        await toast.wait_for(state="hidden", timeout=1000)
+        # 使用智能等待替代固定等待
+        await smart_wait(page, "wait_save_toast", min_ms=100, max_ms=1000, wait_for_network=True)
     except Exception:
-        # 静默失败,不记录警告
-        pass
+        # 静默失败,使用智能等待兜底
+        await smart_wait(page, "wait_save_fallback", min_ms=50, max_ms=300)
 
 
 async def _wait_for_dropdown_options(page: Page, timeout: int = 1000) -> None:
@@ -840,7 +930,7 @@ async def _wait_for_dropdown_options(page: Page, timeout: int = 1000) -> None:
 
 
 async def _wait_for_dialog_open(page: Page, timeout: int = 2000) -> None:
-    """等待编辑对话框完全打开(激进策略)。
+    """等待编辑对话框完全打开(使用智能等待)。
 
     Args:
         page: Playwright 页面对象。
@@ -849,29 +939,44 @@ async def _wait_for_dialog_open(page: Page, timeout: int = 2000) -> None:
     try:
         dialog = page.get_by_role("dialog")
         await dialog.wait_for(state="visible", timeout=timeout)
+        # 使用智能等待确保对话框内容加载完成
+        await smart_wait(page, "dialog_open", min_ms=50, max_ms=500)
     except Exception:
-        pass
+        # 降级: 使用智能等待
+        await smart_wait(page, "dialog_open_fallback", min_ms=100, max_ms=800)
 
 
 async def _close_edit_dialog(page: Page) -> None:
-    """关闭编辑对话框(激进策略,快速关闭)。
+    """关闭编辑对话框(使用弹性选择器和智能等待)。
 
     Args:
         page: Playwright 页面对象。
     """
+    # 尝试使用弹性选择器定位关闭按钮
+    close_locator = await _resilient_locator.locate(page, "close_button", timeout=2000)
+    
+    if close_locator:
+        try:
+            await close_locator.click()
+            # 使用智能等待确认对话框关闭
+            await smart_wait(page, "close_dialog", min_ms=50, max_ms=500)
+            return
+        except Exception as exc:
+            logger.debug(f"弹性选择器关闭按钮点击失败: {exc}")
+    
+    # 降级方案1: 使用 role 定位
     try:
         close_btn = page.get_by_role("button", name="关闭", exact=True)
         await close_btn.click()
-        # 激进策略: 快速等待对话框关闭
-        try:
-            await page.locator(".el-dialog__wrapper").wait_for(state="hidden", timeout=1000)
-        except Exception:
-            pass
+        await smart_wait(page, "close_dialog_role", min_ms=50, max_ms=500)
+        return
     except Exception:
-        # 如果没有关闭按钮,尝试其他方式
-        try:
-            close_icon = page.locator(".edit-box-header-side > .el-icon-close")
-            await close_icon.click()
-            await page.locator(".el-dialog__wrapper").wait_for(state="hidden", timeout=1000)
-        except Exception:
-            pass
+        pass
+    
+    # 降级方案2: 使用图标关闭
+    try:
+        close_icon = page.locator(".edit-box-header-side > .el-icon-close")
+        await close_icon.click()
+        await smart_wait(page, "close_dialog_icon", min_ms=50, max_ms=500)
+    except Exception:
+        logger.warning("无法关闭编辑对话框，继续执行")
