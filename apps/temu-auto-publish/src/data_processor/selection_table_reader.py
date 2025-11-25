@@ -98,9 +98,9 @@ class SelectionTableReader:
     负责读取和解析Excel选品表，提取商品信息用于采集流程。
 
     Notes:
-        - 如未在表中提供 `size_chart_image_url`，将使用 `SIZE_CHART_BASE_URL`
-          环境变量（默认为 OSS 域名 `https://miaoshou-tuchuang-beimeng.oss-cn-hangzhou.aliyuncs.com/10%E6%9C%88%E6%96%B0%E5%93%81%E5%8F%AF%E6%8E%A8/`）
-          与 `image_files` 的首个文件名拼接生成尺寸图外链。
+        - 尺码图URL需在CSV中通过"尺码图"列明确提供，不会从实拍图数组自动生成
+        - 支持的尺码图列名: 尺码图、尺码图链接、尺码图URL、尺寸图链接、尺寸图URL
+        - 如未提供尺码图URL，该功能将被跳过
 
     Examples:
         >>> reader = SelectionTableReader()
@@ -317,10 +317,7 @@ class SelectionTableReader:
                     product_data["image_files"]
                 )
                 size_chart_url = self._parse_scalar(row.get("size_chart_image_url"))
-                if not size_chart_url:
-                    size_chart_url = self._build_size_chart_url(product_data["image_files"])
-                    if size_chart_url:
-                        logger.debug("使用图片文件名生成尺寸图URL: %s", size_chart_url[:100])
+                # 不再从实拍图数组生成尺码图URL，仅使用CSV中明确提供的尺码图列
                 if not size_chart_url and self.size_chart_base_url:
                     size_chart_url = self.size_chart_base_url
                     logger.warning(
@@ -451,15 +448,8 @@ class SelectionTableReader:
         if not (model.startswith("A") and len(model) == 5 and model[1:].isdigit()):
             return False, f"型号编号格式错误: {model}，应为A0001-A9999"
 
-        size_chart_url = row.get("size_chart_image_url")
-        if not size_chart_url or not str(size_chart_url).strip():
-            # 如果未提供URL但存在图片文件名且可拼接，也视为有效
-            image_files = self._parse_json_list(row.get("image_files"))
-            generated_url = self._build_size_chart_url(image_files)
-            if generated_url:
-                return True, None
-            return False, "缺少尺寸图URL(size_chart_image_url)"
-
+        # 尺码图URL现在是可选的，不再从实拍图数组生成
+        # 如果CSV中提供了尺码图列则使用，否则跳过尺码图上传
         return True, None
 
     def create_sample_excel(self, output_path: str, num_samples: int = 3) -> None:
