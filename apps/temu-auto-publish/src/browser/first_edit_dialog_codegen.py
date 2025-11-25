@@ -157,8 +157,7 @@ async def fill_first_edit_dialog_codegen(page: Page, payload: dict[str, Any]) ->
 
     try:
         # 等待弹窗加载完成
-        await page.wait_for_selector(".jx-overlay-dialog", state="visible", timeout=10000)
-        # await page.wait_for_timeout(1000)
+        await page.wait_for_selector(".jx-overlay-dialog", state="visible", timeout=10_000)
         logger.success("✓ 编辑弹窗已加载")
 
         # 1. 填写标题
@@ -208,6 +207,8 @@ async def fill_first_edit_dialog_codegen(page: Page, payload: dict[str, Any]) ->
         else:
             logger.warning("⚠️ 未提供视频URL，跳过视频上传")
 
+        # 注意：SKU 图片同步已移至 workflow 层的 post_fill_hook 统一处理，避免重复上传
+
         # 7. 保存修改
         if not await _click_save(page):
             return False
@@ -233,7 +234,6 @@ async def _fill_title(page: Page, title: str) -> bool:
     try:
         logger.info(f"填写产品标题: {title}")
 
-        # 尝试多种选择器策略
         dialog = page.locator(".collect-box-editor-dialog-V2, .jx-overlay-dialog").first
         try:
             await dialog.wait_for(state="visible", timeout=3_000)
@@ -558,16 +558,6 @@ async def _upload_product_video_via_url(page: Page, video_url: str) -> bool | No
             except Exception:
                 pass
 
-        # existing_dialog = page.get_by_role("dialog", name="上传视频")
-        # if await existing_dialog.count():
-        #     try:
-        #         cancel_btn = existing_dialog.get_by_role("button", name="取消")
-        #         if await cancel_btn.count():
-        #             await cancel_btn.first.click()
-        #             await existing_dialog.wait_for(state="hidden", timeout=VIDEO_UPLOAD_TIMEOUT_MS)
-        #     except Exception as exc:
-        #         logger.debug("关闭已有上传视频弹窗失败: %s", exc)
-
         video_group = page.get_by_role("group", name="产品视频 :", exact=True)
         if not await video_group.count():
             logger.warning("未找到产品视频分组，跳过视频上传")
@@ -647,37 +637,7 @@ async def _upload_product_video_via_url(page: Page, video_url: str) -> bool | No
             await explicit_network_option.click()
             logger.debug("已通过显式文本点击『网络上传』")
         except Exception:
-            # legacy fallback 保留参考，不再执行
-            # trigger_candidates = [
-            #     page.get_by_role("menuitem", name="网络上传"),
-            #     page.locator(".jx-dropdown__menu li").filter(has_text="网络上传"),
-            #     explicit_network_option,
-            # ]
-            # trigger_button = await _first_visible(trigger_candidates, timeout=1_500)
-            # if trigger_button is None:
-            #     logger.warning("未找到『网络上传』菜单项")
-            #     await _capture_html(page, "data/debug/html/video_missing_network_option.html")
-            #     return False
-            # await trigger_button.click()
             raise
-
-        # await page.wait_for_timeout(120)
-
-        # prompt_dialog = page.locator(".jx-message-box:visible")
-        # if await prompt_dialog.count():
-        #     logger.info("检测到删除视频确认提示，执行确认删除")
-        #     confirm_btn = prompt_dialog.locator(".jx-message-box__btns .jx-button--primary").first
-        #     if await confirm_btn.count():
-        #         await confirm_btn.click()
-        #     else:
-        #         await page.keyboard.press("Enter")
-        #     try:
-        #         await prompt_dialog.wait_for(state="hidden", timeout=VIDEO_UPLOAD_TIMEOUT_MS)
-        #     except Exception:
-        #         pass
-
-        # if await _handle_existing_video_prompt(page):
-        #     logger.info("检测到已有产品视频，已删除旧视频。")
 
         video_dialog = await _wait_for_dialog(page, name_pattern="上传视频")
 
@@ -718,9 +678,6 @@ async def _upload_product_video_via_url(page: Page, video_url: str) -> bool | No
             if video_dialog is not None
             else page.get_by_role("button", name="确定")
         )
-        # legacy fallback: 使用「确认」按钮定位
-        # if not await confirm_btn.count():
-        #     confirm_btn = video_dialog.get_by_role("button", name="确认")
 
         if not await confirm_btn.count():
             logger.warning("未找到视频上传确认按钮")
@@ -735,7 +692,6 @@ async def _upload_product_video_via_url(page: Page, video_url: str) -> bool | No
             dialog=video_dialog,
             timeout_ms=VIDEO_UPLOAD_TIMEOUT_MS,
         )
-        # await _acknowledge_prompt(page)
         await _close_prompt_dialog(page, timeout_ms=VIDEO_UPLOAD_TIMEOUT_MS)
         logger.success("✓ 产品视频已上传（网络视频）: %s", normalized_url[:120])
         return True
@@ -774,7 +730,7 @@ async def _dismiss_scroll_overlay(page: Page) -> None:
     except Exception:
         try:
             await page.mouse.click(5, 5)
-            await overlay.first.wait_for(state="hidden", timeout=1000)
+            await overlay.first.wait_for(state="hidden", timeout=500)
             logger.debug("已通过点击页面关闭浮层")
         except Exception:
             logger.debug("浮层未完全关闭, 将继续尝试填写")
@@ -988,7 +944,8 @@ async def _first_visible(candidates: list[Locator | None], timeout: int = 1_000)
 
 
 def _normalize_input_url(raw_text: str) -> str:
-    """去除多余的标签和空行，确保为单个有效 URL."""
+    """去除多余的标签和空行，确保为单个有效 URL，并进行URL编码."""
+    from urllib.parse import quote, urlparse, urlunparse
 
     if not raw_text:
         return ""
@@ -1000,7 +957,33 @@ def _normalize_input_url(raw_text: str) -> str:
         cleaned = part
         break
     cleaned = cleaned or raw_text.strip()
-    return cleaned
+    
+    # 检查路径是否包含非ASCII字符（中文等），只有包含时才进行编码
+    try:
+        parsed = urlparse(cleaned)
+        path = parsed.path
+        
+        # 检查路径是否只包含 ASCII 字符（已编码的 URL 只含 ASCII）
+        if path.isascii():
+            # 路径已是纯 ASCII（可能已编码或本身无中文），无需再编码
+            logger.debug(f"URL无需编码（纯ASCII）: {cleaned}")
+            return cleaned
+        
+        # 路径包含非 ASCII 字符，需要编码
+        encoded_path = quote(path, safe='/:@!$&\'()*+,;=')
+        encoded_url = urlunparse((
+            parsed.scheme,
+            parsed.netloc,
+            encoded_path,
+            parsed.params,
+            parsed.query,
+            parsed.fragment
+        ))
+        logger.debug(f"URL编码: {cleaned} -> {encoded_url}")
+        return encoded_url
+    except Exception as e:
+        logger.warning(f"URL编码失败，使用原始URL: {e}")
+        return cleaned
 
 
 def _sanitize_media_identifier(raw: str) -> str:
@@ -1077,7 +1060,7 @@ async def _ensure_dialog_closed(
     *,
     name_pattern: str,
     dialog: Optional[Locator] = None,
-    timeout_ms: int = 1_500,
+    timeout_ms: int = VIDEO_UPLOAD_TIMEOUT_MS,
 ) -> None:
     """确保指定名称的对话框关闭."""
 
@@ -1134,5 +1117,5 @@ async def _wait_for_dialog(
         await dialog.wait_for(state="visible", timeout=timeout_ms)
         return dialog
     except Exception:
-        await _capture_html(page, "data/debug/html/dialog_missing_{}.html".format(name_pattern))
+        await _capture_html(page, f"data/debug/html/dialog_missing_{name_pattern}.html")
         return None
