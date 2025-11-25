@@ -647,100 +647,56 @@ async def _step_11_platform_sku(page: Page) -> None:
 
 @smart_retry(max_attempts=2, delay=0.5)
 async def _step_12_sku_category(page: Page) -> None:
-    """步骤 12: SKU 分类 - 选择单品,数量填 1。"""
+    """步骤 12: SKU 分类 - 点击分类下拉框选择单品，然后保存。"""
     dialog = page.get_by_role("dialog")
     
-    # 关键: 等待全屏加载遮罩消失（el-loading-mask 会拦截点击）
+    # 等待加载遮罩消失
     loading_mask = page.locator(".el-loading-mask")
     with suppress(Exception):
         await loading_mask.wait_for(state="hidden", timeout=2000)
     
-    # 点击导航 - 多种选择器备选
-    nav_clicked = False
-    nav_selectors = [
-        dialog.locator(".batch-editor-left").get_by_text("SKU分类", exact=False).first,
-        dialog.get_by_text("SKU分类", exact=True).first,
-        page.get_by_text("SKU分类").first,
-    ]
-    for nav in nav_selectors:
-        try:
-            if await nav.count():
-                await nav.click(timeout=800)
-                nav_clicked = True
-                logger.debug("✓ SKU分类导航点击成功")
-                break
-        except Exception:
-            continue
+    # 1. 点击左侧导航"SKU分类"
+    nav = dialog.locator(".batch-editor-left").get_by_text("SKU分类", exact=False).first
+    if await nav.count():
+        await nav.click(timeout=800)
+        logger.debug("✓ 点击SKU分类导航")
     
-    if not nav_clicked:
-        logger.warning("未找到SKU分类导航，尝试继续")
-    
-    # 再次等待可能出现的加载
+    # 等待加载
     with suppress(Exception):
         await loading_mask.wait_for(state="hidden", timeout=1000)
     
-    selected = False
+    # 2. 点击"分类"下拉框（placeholder是"分类"）
+    category_dropdown = dialog.get_by_placeholder("分类").first
+    if await category_dropdown.count() == 0:
+        # 备选：通过label定位
+        category_dropdown = dialog.locator("label:has-text('SKU分类')").locator("..").locator("input[placeholder='分类']").first
+    if await category_dropdown.count() == 0:
+        # 备选：直接找el-select
+        category_dropdown = dialog.locator(".el-select input[placeholder='分类']").first
     
-    # 方案1: 单选按钮
-    radio_selectors = [
-        dialog.locator(".el-radio:has-text('单品')").first,
-        dialog.locator(".jx-radio-button:has-text('单品')").first,
-        dialog.locator("label:has-text('单品')").first,
-        page.locator(".el-radio:has-text('单品')").first,
-    ]
-    for radio in radio_selectors:
-        try:
-            if await radio.count():
-                await radio.click(force=True, timeout=800)
-                logger.success("✓ 通过单选按钮选择: 单品")
-                selected = True
-                break
-        except Exception:
-            continue
+    if await category_dropdown.count():
+        await category_dropdown.click(timeout=800)
+        logger.debug("✓ 点击分类下拉框")
+        
+        # 等待下拉菜单出现
+        await page.wait_for_timeout(300)
+        
+        # 3. 在下拉菜单中选择"单品"
+        dropdown = page.locator(".el-select-dropdown:visible").last
+        option = dropdown.locator(".el-select-dropdown__item").filter(has_text="单品").first
+        if await option.count():
+            await option.click(timeout=500)
+            logger.success("✓ 已选择: 单品")
+        else:
+            # 备选：直接点击包含"单品"文本的选项
+            option = page.get_by_text("单品", exact=True).first
+            if await option.count():
+                await option.click(timeout=500)
+                logger.success("✓ 已选择: 单品")
+    else:
+        logger.warning("⚠️ 未找到分类下拉框")
     
-    # 方案2: 下拉选择（降级）
-    if not selected:
-        trigger_selectors = [
-            dialog.locator(".el-select input").first,
-            dialog.locator(".el-select__input").first,
-            dialog.get_by_placeholder("请选择").first,
-        ]
-        for trigger in trigger_selectors:
-            try:
-                if await trigger.count():
-                    await trigger.click(timeout=800)
-                    await page.wait_for_timeout(200)  # 等待下拉展开
-                    
-                    dropdown = page.locator(".el-select-dropdown:visible").last
-                    option = dropdown.locator(".el-select-dropdown__item:has-text('单品')").first
-                    if await option.count():
-                        await option.click(timeout=500)
-                        logger.success("✓ 通过下拉选择: 单品")
-                        selected = True
-                        break
-            except Exception:
-                continue
-    
-    if not selected:
-        logger.warning("⚠️ 未能选择SKU分类，继续执行")
-    
-    # 填写数量
-    qty_selectors = [
-        dialog.get_by_role("textbox", name="数量").first,
-        dialog.get_by_placeholder("数量").first,
-        dialog.locator("input[placeholder*='数量']").first,
-    ]
-    for qty_input in qty_selectors:
-        try:
-            if await qty_input.count():
-                await qty_input.fill("1")
-                logger.debug("✓ 数量已填写: 1")
-                break
-        except Exception:
-            continue
-    
-    # 保存
-    await page.get_by_role("button", name="预览").click()
+    # 4. 点击保存修改
     await page.get_by_role("button", name="保存修改").click()
     await _close_edit_dialog(page)
 
