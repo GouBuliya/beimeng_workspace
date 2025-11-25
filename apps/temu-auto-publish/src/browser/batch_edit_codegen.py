@@ -685,7 +685,7 @@ async def _step_12_sku_category(page: Page) -> None:
         await loading_mask.wait_for(state="hidden", timeout=1000)
     await page.wait_for_timeout(500)  # 等待内容加载
     
-    # 2. 点击"分类"下拉框 - 多种选择器尝试
+    # 2. 先 hover 再点击"分类"下拉框 - 多种选择器尝试
     dropdown_clicked = False
     dropdown_selectors = [
         # 通过 placeholder 定位
@@ -705,9 +705,13 @@ async def _step_12_sku_category(page: Page) -> None:
     for selector in dropdown_selectors:
         try:
             if await selector.count():
+                # 先 hover 让元素获得焦点
+                await selector.hover(timeout=500)
+                await page.wait_for_timeout(100)
+                # 再点击
                 await selector.click(timeout=800)
                 dropdown_clicked = True
-                logger.debug("✓ 点击分类下拉框")
+                logger.debug("✓ hover + 点击分类下拉框")
                 break
         except Exception as e:
             logger.debug(f"选择器失败: {e}")
@@ -729,6 +733,8 @@ async def _step_12_sku_category(page: Page) -> None:
         for option in option_selectors:
             try:
                 if await option.count():
+                    # 先 hover 再点击
+                    await option.hover(timeout=300)
                     await option.click(timeout=500)
                     option_clicked = True
                     logger.success("✓ 已选择: 单品")
@@ -824,16 +830,13 @@ async def _step_18_manual(page: Page, file_path: str) -> None:
     """
     await page.get_by_text("产品说明书").click()
     # await _wait_for_dialog_open(page)
-    if file_path:
-        try:
-            # 点击上传文件按钮
-            upload_btn = self.page.locator("button:has-text('上传文件')").first
-            if await upload_btn.count() > 0 and await upload_btn.is_visible():
-                await upload_btn.click()
-                logger.info("      ✓ 图片URL已上传")
-
-        except Exception as exc:
-            logger.warning("产品说明书上传失败, 保留已有文件: {}", exc)
+    
+    upload_btn = page.locator("button:has-text('上传文件')").first
+    if await upload_btn.count() > 0 and await upload_btn.is_visible():
+        await upload_btn.click()
+        logger.info("      ✓ 图片URL已上传")
+    else:
+        logger.warning("⚠️ 未找到上传文件按钮")
 
     await page.get_by_role("button", name="预览").click()
     await page.get_by_role("button", name="保存修改").click()
