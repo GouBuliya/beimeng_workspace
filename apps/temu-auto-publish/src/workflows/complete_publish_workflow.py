@@ -527,13 +527,14 @@ class CompletePublishWorkflow:
                 except Exception as e:
                     logger.warning(f"保存性能报告失败: {e}")
             
+            # 工作流结束后保持浏览器运行，以便 web 前端继续连接
             if login_ctrl.browser_manager and login_ctrl.browser_manager.browser:
                 workflow_failed = errors or any(not stage.success for stage in stages)
                 if workflow_failed:
-                    logger.warning("检测到阶段失败，保留浏览器以便继续排查，未执行自动关闭。")
+                    logger.warning("检测到阶段失败，保留浏览器以便继续排查。")
                     logger.info(f"可使用 --resume --checkpoint-id={workflow_id} 从断点恢复")
                 else:
-                    await login_ctrl.browser_manager.close()
+                    logger.success("工作流已完成，浏览器保持运行以供 web 前端连接。")
 
     async def _stage_first_edit(
         self,
