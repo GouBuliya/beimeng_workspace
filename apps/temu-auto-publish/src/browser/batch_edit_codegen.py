@@ -655,11 +655,30 @@ async def _step_12_sku_category(page: Page) -> None:
     with suppress(Exception):
         await loading_mask.wait_for(state="hidden", timeout=2000)
     
-    # 1. 点击左侧导航"SKU分类"
-    nav = dialog.locator(".batch-editor-left").get_by_text("SKU分类", exact=False).first
-    if await nav.count():
-        await nav.click(timeout=800)
-        logger.debug("✓ 点击SKU分类导航")
+    # 1. 点击左侧导航"SKU分类" - 多种选择器
+    nav_clicked = False
+    nav_selectors = [
+        dialog.locator(".batch-editor-left").get_by_text("SKU分类", exact=False).first,
+        dialog.get_by_text("SKU分类", exact=True).first,
+        dialog.locator(".el-menu-item:has-text('SKU分类')").first,
+        dialog.locator("li:has-text('SKU分类')").first,
+        page.get_by_text("SKU分类").first,
+        page.locator(".batch-editor-left >> text=SKU分类").first,
+    ]
+    
+    for nav in nav_selectors:
+        try:
+            if await nav.count():
+                await nav.click(timeout=800)
+                nav_clicked = True
+                logger.debug("✓ 点击SKU分类导航成功")
+                break
+        except Exception as e:
+            logger.debug(f"导航选择器失败: {e}")
+            continue
+    
+    if not nav_clicked:
+        logger.warning("⚠️ 未能点击SKU分类导航，尝试继续")
     
     # 等待加载
     with suppress(Exception):
