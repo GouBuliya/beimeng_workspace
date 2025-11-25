@@ -55,17 +55,17 @@ class WaitMetrics:
 class AdaptiveWaitConfig:
     """自适应等待配置
     
-    注意: 已优化为快速模式，减少等待时间以提升性能
+    注意: 已优化为极速模式，最小化等待时间
     """
     
-    min_wait_ms: int = 10           # 优化: 30 -> 10
-    max_wait_ms: int = 800          # 优化: 2000 -> 800
-    network_idle_timeout_ms: int = 150   # 优化: 500 -> 150
-    dom_stable_timeout_ms: int = 150     # 优化: 500 -> 150
-    dom_stable_checks: int = 2           # 优化: 3 -> 2
-    dom_stable_interval_ms: int = 20     # 优化: 30 -> 20
+    min_wait_ms: int = 5            # 极速: 10 -> 5
+    max_wait_ms: int = 300          # 极速: 800 -> 300
+    network_idle_timeout_ms: int = 50    # 极速: 150 -> 50
+    dom_stable_timeout_ms: int = 50      # 极速: 150 -> 50
+    dom_stable_checks: int = 1           # 极速: 2 -> 1
+    dom_stable_interval_ms: int = 10     # 极速: 20 -> 10
     # 学习因子：根据历史数据调整等待时间
-    learning_factor: float = 0.3
+    learning_factor: float = 0.2
 
 
 class SmartWaitMixin:

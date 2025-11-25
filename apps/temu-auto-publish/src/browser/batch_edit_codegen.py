@@ -155,7 +155,7 @@ async def run_batch_edit(page: Page, payload: dict[str, Any]) -> dict[str, Any]:
             logger.info(f"导航到 Temu 全托管采集箱: {target_url}")
             await page.goto(target_url, timeout=60000)
             # 使用智能等待替代固定等待
-            await smart_wait(page, "navigate_batch_edit", min_ms=100, max_ms=3000)
+            await smart_wait(page, "navigate_batch_edit", min_ms=50, max_ms=500)
 
         # 1. 检测并关闭弹窗
         await _close_popups(page)
@@ -165,12 +165,12 @@ async def run_batch_edit(page: Page, payload: dict[str, Any]) -> dict[str, Any]:
         checkbox = page.locator(".jx-checkbox").first
         await checkbox.click()
         # 使用智能等待
-        await smart_wait(page, "select_all_products", min_ms=50, max_ms=1000)
+        await smart_wait(page, "select_all_products", min_ms=20, max_ms=300)
         
         # 验证选中状态
         try:
             await page.locator(".jx-checkbox.is-checked").first.wait_for(
-                state="visible", timeout=1000
+                state="visible", timeout=300
             )
         except Exception:
             logger.debug("复选框选中状态验证超时，继续执行")
@@ -178,8 +178,8 @@ async def run_batch_edit(page: Page, payload: dict[str, Any]) -> dict[str, Any]:
         # 3. 打开批量编辑弹窗
         logger.info("打开批量编辑菜单...")
         await page.get_by_text("批量编辑").click()
-        # 优化: 减少等待时间 2000 -> 600
-        await smart_wait(page, "open_batch_edit_dialog", min_ms=30, max_ms=600)
+        # 优化: 减少等待时间 600 -> 300
+        await smart_wait(page, "open_batch_edit_dialog", min_ms=20, max_ms=300)
         
         try:
             await _wait_for_dialog_open(page)
@@ -218,8 +218,8 @@ async def run_batch_edit(page: Page, payload: dict[str, Any]) -> dict[str, Any]:
                 await step_factory()
                 result["completed_steps"] = idx
                 
-                # 步骤完成后使用智能等待（优化: 减少等待时间）
-                await smart_wait(page, f"step_{idx}_{step_name}", min_ms=10, max_ms=150)
+                # 步骤完成后使用智能等待（极速模式: 最小等待）
+                await smart_wait(page, f"step_{idx}_{step_name}", min_ms=5, max_ms=50)
                 
                 step_elapsed = (time.perf_counter() - step_start) * 1000
                 result["timing"][step_name] = round(step_elapsed, 2)
@@ -495,7 +495,7 @@ async def _step_05_outer_package(page: Page, image_path: str | None) -> None:
             # 直接使用已存在的文件输入框
             await file_inputs.last.set_input_files(chosen_path)
             logger.success("✓ 外包装图片已上传: {}", chosen_path)
-            await page.wait_for_timeout(150)  # 优化: 500 -> 150
+            await page.wait_for_timeout(50)  # 极速模式: 150 -> 50
         else:
             # 如果没有文件输入框,尝试通过下拉菜单触发
             logger.warning("未找到文件输入框,跳过外包装图片上传")
@@ -517,7 +517,7 @@ async def _step_06_origin(page: Page) -> None:
     """
     await page.get_by_text("产地").click()
     await page.get_by_role("dialog", name="dialog").get_by_placeholder("请选择或输入搜索").click()
-    await page.wait_for_timeout(500)  # 等待下拉栏展开
+    await page.wait_for_timeout(200)  # 极速: 500 -> 200
     await (
         page.get_by_role("dialog", name="dialog")
         .get_by_placeholder("请选择或输入搜索")
@@ -666,8 +666,8 @@ async def _step_12_sku_category(page: Page) -> None:
     for nav in nav_selectors:
         if await nav.count() > 0:
             try:
-                await nav.click(timeout=2000)
-                await page.wait_for_timeout(100)
+                await nav.click(timeout=500)
+                await page.wait_for_timeout(30)
                 break
             except Exception:
                 continue
@@ -682,16 +682,16 @@ async def _step_12_sku_category(page: Page) -> None:
         if await dropdown.count() == 0:
             return False
         dropdown = dropdown.last
-        await dropdown.wait_for(state="visible", timeout=1500)
+        await dropdown.wait_for(state="visible", timeout=400)
         option = dropdown.locator(".el-select-dropdown__item").filter(has_text=value).first
         if await option.count() > 0:
             await option.scroll_into_view_if_needed()
-            await option.click(timeout=1000)
+            await option.click(timeout=300)
             return True
         option = page.get_by_role("option", name=value)
         if await option.count() > 0:
             await option.first.scroll_into_view_if_needed()
-            await option.first.click(timeout=1000)
+            await option.first.click(timeout=300)
             return True
         return False
 
@@ -731,7 +731,7 @@ async def _step_12_sku_category(page: Page) -> None:
                     continue
                 target = locator.first
                 await target.scroll_into_view_if_needed()
-                await target.click(force=True, timeout=1_000)
+                await target.click(force=True, timeout=300)
                 return True
             except Exception as radio_err:
                 logger.debug("点击单选 '%s' 失败: %s", label, radio_err)
@@ -749,7 +749,7 @@ async def _step_12_sku_category(page: Page) -> None:
     for trigger in trigger_selectors:
         if await trigger.count() > 0:
             try:
-                await trigger.click(timeout=2000)
+                await trigger.click(timeout=500)
                 opened = True
                 logger.debug("✓ 点击下拉触发器成功")
                 break
@@ -879,7 +879,7 @@ async def _step_18_manual(page: Page, file_path: str) -> None:
                 # 直接使用已存在的文件输入框
                 await file_inputs.last.set_input_files(file_path)
                 logger.success("✓ 产品说明书已上传: {}", file_path)
-                await page.wait_for_timeout(150)  # 优化: 500 -> 150
+                await page.wait_for_timeout(50)  # 极速模式: 150 -> 50
             else:
                 # 如果没有文件输入框,跳过上传
                 logger.warning("未找到文件输入框,跳过产品说明书上传")
@@ -893,30 +893,29 @@ async def _step_18_manual(page: Page, file_path: str) -> None:
     await _close_edit_dialog(page)
 
 
-async def _wait_for_save_toast(page: Page, timeout: int = 600) -> None:
-    """等待保存成功提示并等待其消失(使用智能等待)。
+async def _wait_for_save_toast(page: Page, timeout: int = 200) -> None:
+    """等待保存成功提示并等待其消失(极速模式)。
 
     Args:
         page: Playwright 页面对象。
-        timeout: 超时时间(毫秒),默认 600（优化: 1500 -> 600）。
+        timeout: 超时时间(毫秒),默认 200（极速: 600 -> 200）。
     """
     try:
-        # 使用智能等待检测保存完成
         toast = page.locator("text=保存成功")
         await toast.wait_for(state="visible", timeout=timeout)
-        # 优化: 减少等待时间 1000 -> 300
-        await smart_wait(page, "wait_save_toast", min_ms=30, max_ms=300, wait_for_network=True)
+        # 极速模式: 减少等待时间 300 -> 100
+        await smart_wait(page, "wait_save_toast", min_ms=10, max_ms=100, wait_for_network=True)
     except Exception:
-        # 静默失败,使用智能等待兜底（优化: 300 -> 100）
-        await smart_wait(page, "wait_save_fallback", min_ms=20, max_ms=100)
+        # 静默失败（极速: 100 -> 30）
+        await smart_wait(page, "wait_save_fallback", min_ms=10, max_ms=30)
 
 
-async def _wait_for_dropdown_options(page: Page, timeout: int = 400) -> None:
-    """等待下拉选项列表出现(激进策略)。
+async def _wait_for_dropdown_options(page: Page, timeout: int = 150) -> None:
+    """等待下拉选项列表出现(极速模式)。
 
     Args:
         page: Playwright 页面对象。
-        timeout: 超时时间(毫秒),默认 400（优化: 1000 -> 400）。
+        timeout: 超时时间(毫秒),默认 150（极速: 400 -> 150）。
     """
     try:
         await page.locator(".el-select-dropdown").wait_for(state="visible", timeout=timeout)
@@ -924,37 +923,37 @@ async def _wait_for_dropdown_options(page: Page, timeout: int = 400) -> None:
         pass
 
 
-async def _wait_for_dialog_open(page: Page, timeout: int = 800) -> None:
-    """等待编辑对话框完全打开(使用智能等待)。
+async def _wait_for_dialog_open(page: Page, timeout: int = 300) -> None:
+    """等待编辑对话框完全打开(极速模式)。
 
     Args:
         page: Playwright 页面对象。
-        timeout: 超时时间(毫秒),默认 800（优化: 2000 -> 800）。
+        timeout: 超时时间(毫秒),默认 300（极速: 800 -> 300）。
     """
     try:
         dialog = page.get_by_role("dialog")
         await dialog.wait_for(state="visible", timeout=timeout)
-        # 优化: 减少等待时间 500 -> 150
-        await smart_wait(page, "dialog_open", min_ms=20, max_ms=150)
+        # 极速模式: 150 -> 50
+        await smart_wait(page, "dialog_open", min_ms=10, max_ms=50)
     except Exception:
-        # 降级: 使用智能等待（优化: 800 -> 200）
-        await smart_wait(page, "dialog_open_fallback", min_ms=30, max_ms=200)
+        # 降级（极速: 200 -> 50）
+        await smart_wait(page, "dialog_open_fallback", min_ms=10, max_ms=50)
 
 
 async def _close_edit_dialog(page: Page) -> None:
-    """关闭编辑对话框(使用弹性选择器和智能等待)。
+    """关闭编辑对话框(极速模式)。
 
     Args:
         page: Playwright 页面对象。
     """
-    # 尝试使用弹性选择器定位关闭按钮（优化: 2000 -> 800）
-    close_locator = await _resilient_locator.locate(page, "close_button", timeout=800)
+    # 极速: 800 -> 300
+    close_locator = await _resilient_locator.locate(page, "close_button", timeout=300)
     
     if close_locator:
         try:
             await close_locator.click()
-            # 优化: 减少等待时间 500 -> 150
-            await smart_wait(page, "close_dialog", min_ms=20, max_ms=150)
+            # 极速: 150 -> 30
+            await smart_wait(page, "close_dialog", min_ms=10, max_ms=30)
             return
         except Exception as exc:
             logger.debug(f"弹性选择器关闭按钮点击失败: {exc}")
@@ -963,8 +962,8 @@ async def _close_edit_dialog(page: Page) -> None:
     try:
         close_btn = page.get_by_role("button", name="关闭", exact=True)
         await close_btn.click()
-        # 优化: 减少等待时间 500 -> 150
-        await smart_wait(page, "close_dialog_role", min_ms=20, max_ms=150)
+        # 极速: 150 -> 30
+        await smart_wait(page, "close_dialog_role", min_ms=10, max_ms=30)
         return
     except Exception:
         pass
@@ -973,7 +972,7 @@ async def _close_edit_dialog(page: Page) -> None:
     try:
         close_icon = page.locator(".edit-box-header-side > .el-icon-close")
         await close_icon.click()
-        # 优化: 减少等待时间 500 -> 150
-        await smart_wait(page, "close_dialog_icon", min_ms=20, max_ms=150)
+        # 极速: 150 -> 30
+        await smart_wait(page, "close_dialog_icon", min_ms=10, max_ms=30)
     except Exception:
         logger.warning("无法关闭编辑对话框，继续执行")

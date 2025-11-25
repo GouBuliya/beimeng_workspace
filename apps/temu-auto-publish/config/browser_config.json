@@ -9,18 +9,29 @@
     "timezone": "Asia/Shanghai",
     "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
   },
+  "fast_mode": {
+    "enabled": true,
+    "first_edit_target_ms": 5000,
+    "batch_edit_step_target_ms": 1500,
+    "dialog_wait_ms": 300,
+    "element_wait_ms": 250,
+    "upload_wait_ms": 300,
+    "save_wait_ms": 300,
+    "toast_visible_ms": 100,
+    "toast_hidden_ms": 200
+  },
   "timing": {
     "slow_mo_ms": 0,
-    "wait_after_action_ms": 30,
-    "wait_for_stability_timeout_ms": 375,
-    "wait_for_network_idle_timeout_ms": 750,
-    "retry_initial_delay_ms": 30,
-    "retry_backoff_factor": 1.6,
-    "retry_max_delay_ms": 375,
-    "validation_timeout_ms": 500,
-    "dom_stable_checks": 3,
-    "dom_stable_interval_ms": 30,
-    "network_idle_trigger_ms": 300
+    "wait_after_action_ms": 10,
+    "wait_for_stability_timeout_ms": 150,
+    "wait_for_network_idle_timeout_ms": 150,
+    "retry_initial_delay_ms": 20,
+    "retry_backoff_factor": 1.5,
+    "retry_max_delay_ms": 200,
+    "validation_timeout_ms": 200,
+    "dom_stable_checks": 2,
+    "dom_stable_interval_ms": 20,
+    "network_idle_trigger_ms": 100
   },
   "stealth": {
     "enabled": true,
@@ -52,11 +63,11 @@
     "cookie_max_age_hours": 24
   },
   "search": {
-    "wait_after_search": 3000,
+    "wait_after_search": 500,
     "max_results": 10
   },
   "edit": {
-    "wait_after_action": 2000
+    "wait_after_action": 200
   },
   "screenshots": {
     "enabled": true,
