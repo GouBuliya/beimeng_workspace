@@ -1,7 +1,7 @@
 {
   "browser": {
     "type": "chromium",
-    "headless": false,
+    "headless": true,
     "window_width": 1280,
     "window_height": 720,
     "device_scale_factor": 1.0,
