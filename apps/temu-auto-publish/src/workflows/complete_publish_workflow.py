@@ -280,18 +280,18 @@ class CompletePublishWorkflow:
             # ===== 阶段 0: 预处理（登录+初始化） =====
             with self._profiler.stage("stage0_preparation"):
                 with self._profiler.step("解析凭证"):
-            username, password = self._resolve_credentials()
-            if not username or not password:
-                raise RuntimeError("缺少登录凭证 (MIAOSHOU_USERNAME/MIAOSHOU_PASSWORD)")
+                    username, password = self._resolve_credentials()
+                    if not username or not password:
+                        raise RuntimeError("缺少登录凭证 (MIAOSHOU_USERNAME/MIAOSHOU_PASSWORD)")
 
                 with self._profiler.step("登录妙手ERP"):
-            login_success = await login_ctrl.login(
-                username=username,
-                password=password,
-                headless=self.headless,
-            )
-            if not login_success:
-                raise RuntimeError("登录妙手ERP失败, 请检查账号密码或 Cookie")
+                    login_success = await login_ctrl.login(
+                        username=username,
+                        password=password,
+                        headless=self.headless,
+                    )
+                    if not login_success:
+                        raise RuntimeError("登录妙手ERP失败, 请检查账号密码或 Cookie")
 
                 with self._profiler.step("初始化页面"):
             page = login_ctrl.browser_manager.page
