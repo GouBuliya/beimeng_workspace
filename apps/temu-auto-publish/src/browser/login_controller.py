@@ -315,23 +315,77 @@ class LoginController:
     async def _dismiss_health_migration_popup(self, page) -> bool:
         """关闭'店铺健康功能迁移'等弹窗 - 点击3次'我已知晓'."""
         clicked_count = 0
+        
+        # 先等待页面稳定
+        await page.wait_for_timeout(1000)
+        
         try:
-            # 使用文字定位，点击3次处理可能出现的多个弹窗
+            # 使用多种定位方式，点击3次处理可能出现的多个弹窗
             for attempt in range(3):
-                try:
-                    btn = page.get_by_text("我已知晓", exact=True)
-                    if await btn.count() and await btn.first.is_visible(timeout=500):
-                        await btn.first.click()
-                        clicked_count += 1
-                        logger.info("✓ 点击'我已知晓'按钮 (第%s次)", attempt + 1)
-                        await page.wait_for_timeout(300)
-                except Exception:
-                    # 没有更多弹窗了
+                clicked = False
+                
+                # 方式1: 直接用 CSS 选择器找按钮
+                selectors = [
+                    "button:has-text('我已知晓')",
+                    ".el-button:has-text('我已知晓')",
+                    "button.el-button--primary:has-text('我已知晓')",
+                    "[class*='dialog'] button:has-text('我已知晓')",
+                    "footer button",
+                    ".el-dialog__footer button.el-button--primary",
+                ]
+                
+                for selector in selectors:
+                    try:
+                        btn = page.locator(selector).first
+                        if await btn.count() > 0:
+                            is_visible = await btn.is_visible()
+                            logger.debug(f"选择器 {selector}: count={await btn.count()}, visible={is_visible}")
+                            if is_visible:
+                                await btn.click(timeout=2000)
+                                clicked = True
+                                clicked_count += 1
+                                logger.info("✓ 点击'我已知晓'按钮成功 (第%s次, selector: %s)", attempt + 1, selector)
+                                await page.wait_for_timeout(500)
+                                break
+                    except Exception as e:
+                        logger.debug(f"选择器 {selector} 失败: {e}")
+                        continue
+                
+                # 方式2: 使用 get_by_role
+                if not clicked:
+                    try:
+                        btn = page.get_by_role("button", name="我已知晓")
+                        if await btn.count() > 0 and await btn.first.is_visible():
+                            await btn.first.click(timeout=2000)
+                            clicked = True
+                            clicked_count += 1
+                            logger.info("✓ 点击'我已知晓'按钮成功 (第%s次, role定位)", attempt + 1)
+                            await page.wait_for_timeout(500)
+                    except Exception as e:
+                        logger.debug(f"role定位失败: {e}")
+                
+                # 方式3: 使用 get_by_text
+                if not clicked:
+                    try:
+                        btn = page.get_by_text("我已知晓")
+                        if await btn.count() > 0 and await btn.first.is_visible():
+                            await btn.first.click(timeout=2000)
+                            clicked = True
+                            clicked_count += 1
+                            logger.info("✓ 点击'我已知晓'按钮成功 (第%s次, text定位)", attempt + 1)
+                            await page.wait_for_timeout(500)
+                    except Exception as e:
+                        logger.debug(f"text定位失败: {e}")
+                
+                if not clicked:
+                    logger.debug(f"第{attempt + 1}次尝试未找到'我已知晓'按钮")
                     break
             
             if clicked_count > 0:
                 logger.info("✓ 共关闭 %s 个'我已知晓'弹窗", clicked_count)
                 return True
+            else:
+                logger.debug("未找到'我已知晓'弹窗")
             return False
         except Exception as exc:
             logger.debug("关闭店铺健康弹窗时出错: %s", exc)
