@@ -437,3 +437,4 @@ def reset_detailed_profiler() -> None:
     global _detailed_profiler
     _detailed_profiler = None
 
+

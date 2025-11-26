@@ -983,6 +983,15 @@ class ImageManager:
             logger.error("填写图片链接失败: %s", exc)
             return False
 
+        # 勾选"同时保存图片到妙手图片空间"
+        try:
+            save_to_space_checkbox = page.get_by_text("同时保存图片到妙手图片空间", exact=False)
+            if await save_to_space_checkbox.count():
+                await save_to_space_checkbox.click()
+                logger.debug("已勾选『同时保存图片到妙手图片空间』")
+        except Exception as exc:
+            logger.debug("勾选保存到图片空间失败（可能已勾选）: %s", exc)
+
         try:
             confirm_btn = page.get_by_role("button", name="确定").first
             await confirm_btn.wait_for(state="visible", timeout=2_000)

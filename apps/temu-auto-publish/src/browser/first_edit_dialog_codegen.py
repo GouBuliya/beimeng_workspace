@@ -533,6 +533,15 @@ async def _upload_size_chart_via_url(page: Page, image_url: str) -> bool:
         await url_input.press("ControlOrMeta+a")
         await url_input.fill(normalized_url)
 
+        # 勾选"同时保存图片到妙手图片空间"
+        try:
+            save_to_space_checkbox = page.get_by_text("同时保存图片到妙手图片空间", exact=False)
+            if await save_to_space_checkbox.count():
+                await save_to_space_checkbox.click()
+                logger.debug("已勾选『同时保存图片到妙手图片空间』")
+        except Exception as exc:
+            logger.debug("勾选保存到图片空间失败（可能已勾选）: %s", exc)
+
         confirm_btn = page.get_by_role("button", name="确定")
         await confirm_btn.wait_for(state="visible", timeout=150)  # 激进: 250 -> 150
         await confirm_btn.click()
@@ -693,6 +702,16 @@ async def _upload_product_video_via_url(page: Page, video_url: str) -> bool | No
         await target_input.click()
         await target_input.press("ControlOrMeta+a")
         await target_input.fill(normalized_url)
+
+        # 勾选"同时保存图片到妙手图片空间"（视频上传弹窗）
+        try:
+            scope = video_dialog if video_dialog is not None else page
+            save_to_space_checkbox = scope.get_by_text("同时保存图片到妙手图片空间", exact=False)
+            if await save_to_space_checkbox.count():
+                await save_to_space_checkbox.click()
+                logger.debug("已勾选『同时保存图片到妙手图片空间』")
+        except Exception as exc:
+            logger.debug("勾选保存到图片空间失败（可能已勾选）: %s", exc)
 
         confirm_btn = (
             video_dialog.get_by_role("button", name="确定")
