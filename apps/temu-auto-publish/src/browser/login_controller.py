@@ -239,6 +239,9 @@ class LoginController:
         if not page:
             return
 
+        # 首先处理"店铺健康功能迁移"弹窗 - 使用精确定位
+        await self._dismiss_health_migration_popup(page)
+
         overlay_selector = ".jx-overlay-dialog, .el-dialog, .pro-dialog, [role='dialog']"
         close_selectors = [
             "button:has-text('我已知晓')",
@@ -308,6 +311,40 @@ class LoginController:
                 break
 
             await page.wait_for_timeout(5)
+
+    async def _dismiss_health_migration_popup(self, page) -> bool:
+        """关闭'店铺健康功能迁移'弹窗."""
+        try:
+            # 多种定位方式尝试
+            selectors = [
+                # XPath方式 - 用户提供的路径
+                "xpath=/html/body/div[6]/div[2]/footer/div[2]/button",
+                "xpath=/html/body/div[7]/div[2]/footer/div[2]/button",
+                "xpath=/html/body/div[8]/div[2]/footer/div[2]/button",
+                # 文本定位
+                "text=我已知晓",
+                # footer中的按钮
+                "footer button:has-text('我已知晓')",
+                ".el-dialog__footer button:has-text('我已知晓')",
+                # 包含店铺健康文字的弹窗内的按钮
+                "div:has-text('店铺健康') button:has-text('我已知晓')",
+            ]
+            
+            for selector in selectors:
+                try:
+                    btn = page.locator(selector).first
+                    if await btn.count() and await btn.is_visible(timeout=500):
+                        await btn.click()
+                        logger.info("✓ 已关闭'店铺健康功能迁移'弹窗 (selector: %s)", selector)
+                        await page.wait_for_timeout(300)
+                        return True
+                except Exception:
+                    continue
+            
+            return False
+        except Exception as exc:
+            logger.debug("关闭店铺健康弹窗时出错: %s", exc)
+            return False
 
     async def _check_login_status(self) -> bool:
         """检查是否已登录妙手ERP.
