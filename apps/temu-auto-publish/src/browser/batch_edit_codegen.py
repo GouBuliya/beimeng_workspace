@@ -219,13 +219,13 @@ async def run_batch_edit(page: Page, payload: dict[str, Any]) -> dict[str, Any]:
         with profiler.phase("batch_edit_18_steps"):
             for idx, (step_name, step_factory) in enumerate(step_definitions, start=1):
                 step_start = time.perf_counter()
-            logger.info(f"执行步骤 {idx}/18: {step_name}")
+                logger.info(f"执行步骤 {idx}/18: {step_name}")
                 
                 # 使用分析器记录每个步骤
                 with profiler.step(f"step_{idx:02d}_{step_name}"):
                     try:
                         await step_factory()
-            result["completed_steps"] = idx
+                        result["completed_steps"] = idx
                         
                         # 步骤完成后使用智能等待（极速模式: 最小等待）
                         await smart_wait(page, f"step_{idx}_{step_name}", min_ms=5, max_ms=50)
@@ -326,19 +326,19 @@ async def _close_popups(page: Page) -> None:
             if count > 0:
                 logger.debug(f"发现 {count} 个弹窗(选择器: {selector})")
                 # 只点击第一个可见的（优化: 不遍历所有）
-                    try:
+                try:
                     button = close_buttons.first
                     if await button.is_visible(timeout=300):  # 优化: 1000 -> 300
                         await button.click(timeout=500)       # 优化: 2000 -> 500
-                            closed_count += 1
+                        closed_count += 1
                         logger.debug(f"已关闭弹窗")
                         # 优化: 减少等待 800 -> 200
-                            try:
+                        try:
                             await button.wait_for(state="hidden", timeout=200)
-                            except Exception:
-                                pass
-                    except Exception:
-                        continue
+                        except Exception:
+                            pass
+                except Exception:
+                    continue
         except Exception:
             continue
 
@@ -673,7 +673,7 @@ async def _step_12_sku_category(page: Page) -> None:
     
     # 等待加载遮罩消失
     loading_mask = page.locator(".el-loading-mask")
-        with suppress(Exception):
+    with suppress(Exception):
         await loading_mask.wait_for(state="hidden", timeout=2000)
 
     # 1. 点击左侧导航"SKU分类" - 多种选择器
@@ -696,7 +696,7 @@ async def _step_12_sku_category(page: Page) -> None:
                 break
         except Exception as e:
             logger.debug(f"导航选择器失败: {e}")
-                continue
+            continue
 
     if not nav_clicked:
         logger.warning("⚠️ 未能点击SKU分类导航，尝试继续")
@@ -732,7 +732,7 @@ async def _step_12_sku_category(page: Page) -> None:
                 break
         except Exception as e:
             logger.debug(f"选择器失败: {e}")
-                    continue
+            continue
     
     if dropdown_clicked:
         # 等待下拉菜单出现
@@ -905,14 +905,14 @@ async def _step_18_manual(page: Page, file_path: str) -> None:
     # 4. 上传文件
     await page.wait_for_timeout(200)
     try:
-            file_inputs = page.locator("input[type='file']")
-            if await file_inputs.count() > 0:
-                await file_inputs.last.set_input_files(file_path)
+        file_inputs = page.locator("input[type='file']")
+        if await file_inputs.count() > 0:
+            await file_inputs.last.set_input_files(file_path)
             logger.success(f"✓ 产品说明书已上传: {file_path}")
-                await page.wait_for_timeout(500)  # 等待上传完成
-            else:
+            await page.wait_for_timeout(500)  # 等待上传完成
+        else:
             logger.warning("⚠️ 未找到文件输入框")
-        except Exception as exc:
+    except Exception as exc:
         logger.warning(f"⚠️ 产品说明书上传失败: {exc}")
 
     # 5. 保存
@@ -993,14 +993,14 @@ async def _close_edit_dialog(page: Page) -> None:
         # 极速: 150 -> 30
         await smart_wait(page, "close_dialog_role", min_ms=10, max_ms=30)
         return
-        except Exception:
-            pass
+    except Exception:
+        pass
     
     # 降级方案2: 使用图标关闭
-        try:
-            close_icon = page.locator(".edit-box-header-side > .el-icon-close")
-            await close_icon.click()
+    try:
+        close_icon = page.locator(".edit-box-header-side > .el-icon-close")
+        await close_icon.click()
         # 极速: 150 -> 30
         await smart_wait(page, "close_dialog_icon", min_ms=10, max_ms=30)
-        except Exception:
+    except Exception:
         logger.warning("无法关闭编辑对话框，继续执行")
