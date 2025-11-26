@@ -241,6 +241,7 @@ class LoginController:
 
         overlay_selector = ".jx-overlay-dialog, .el-dialog, .pro-dialog, [role='dialog']"
         close_selectors = [
+            "button:has-text('我已知晓')",
             "button:has-text('关闭')",
             "button:has-text('我知道了')",
             "button:has-text('知道了')",
