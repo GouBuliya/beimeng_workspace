@@ -15,6 +15,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import platform
 from pathlib import Path
@@ -26,6 +27,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from starlette.middleware.sessions import SessionMiddleware
+from loguru import logger
 
 from .env_settings import (
     ENV_FIELDS,
@@ -41,6 +43,7 @@ from .service import SelectionFileStore, WorkflowTaskManager, create_task_manage
 APP_ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE_DIR = APP_ROOT / "web_panel" / "templates"
 DEFAULT_SELECTION = APP_ROOT / "data" / "input" / "selection.xlsx"
+SELECTOR_FILE = APP_ROOT / "config" / "miaoshou_selectors_v2.json"
 SESSION_KEY = "web_panel_admin"
 DEFAULT_ADMIN_PASSWORD = "bm123456789"
 
@@ -137,6 +140,10 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
         use_ai_titles: str | None = Form(default="off"),
         skip_first_edit: str | None = Form(default="off"),
         only_claim: str | None = Form(default="off"),
+        only_stage4_publish: str | None = Form(default="off"),
+        single_run: str | None = Form(default="on"),
+        publish_close_retry: str | None = Form(default="5"),
+        publish_repeat_count: str | None = Form(default="5"),
     ) -> RunStatus:
         resolved_path = await _resolve_selection_path(store, selection_file, selection_path)
         owner_value = (collection_owner or "").strip()
@@ -160,15 +167,26 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
             suffixes=(".pdf",),
             default_suffix=".pdf",
         )
+        only_claim_flag = _to_bool(only_claim)
+        only_stage4_flag = _to_bool(only_stage4_publish)
+        if only_stage4_flag and only_claim_flag:
+            raise HTTPException(status_code=400, detail="“仅认领”与“仅发布”不可同时启用")
+
+        close_retry = _coerce_int(publish_close_retry, default=5, min_value=1, max_value=10)
+        repeat_count = _coerce_int(publish_repeat_count, default=5, min_value=1, max_value=10)
+        _persist_publish_preferences(repeat_count, close_retry)
+
         options = WorkflowOptions(
             selection_path=resolved_path,
             collection_owner=owner_value,
             headless_mode=_normalize_choice(headless_mode),
             use_ai_titles=_to_bool(use_ai_titles),
             skip_first_edit=_to_bool(skip_first_edit),
-            only_claim=_to_bool(only_claim),
+            only_claim=only_claim_flag,
+            only_stage4_publish=only_stage4_flag,
             outer_package_image=outer_package_image,
             manual_file=manual_file_path,
+            single_run=_to_bool(single_run),
         )
         try:
             status = manager.start(options)
@@ -315,3 +333,53 @@ def _normalize_choice(value: str) -> str:
     if value in {"auto", "on", "off"}:
         return value
     return "auto"
+
+
+def _coerce_int(
+    value: str | None,
+    *,
+    default: int,
+    min_value: int,
+    max_value: int,
+) -> int:
+    try:
+        parsed = int(str(value).strip())
+        if parsed < min_value:
+            return min_value
+        if parsed > max_value:
+            return max_value
+        return parsed
+    except Exception:
+        return default
+
+
+def _persist_publish_preferences(repeat_per_batch: int, close_retry: int) -> None:
+    """将 Web 端配置写入选择器文件, 供发布控制器读取."""
+
+    try:
+        if not SELECTOR_FILE.exists():
+            logger.warning("选择器配置文件不存在，跳过发布参数写入: {}", SELECTOR_FILE)
+            return
+
+        data = json.loads(SELECTOR_FILE.read_text(encoding="utf-8"))
+        publish_cfg = data.get("publish") or {}
+        publish_confirm_cfg = data.get("publish_confirm") or {}
+
+        publish_cfg["repeat_per_batch"] = repeat_per_batch
+        publish_confirm_cfg["close_retry"] = close_retry
+
+        data["publish"] = publish_cfg
+        data["publish_confirm"] = publish_confirm_cfg
+
+        SELECTOR_FILE.write_text(
+            json.dumps(data, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        logger.info(
+            "已更新发布配置: repeat_per_batch=%s, close_retry=%s -> %s",
+            repeat_per_batch,
+            close_retry,
+            SELECTOR_FILE,
+        )
+    except Exception as exc:  # pragma: no cover - 运行时保护
+        logger.warning("更新发布配置失败: {}", exc)

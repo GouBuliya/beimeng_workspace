@@ -103,9 +103,8 @@ TEMU_USERNAME=your_temu_username
 TEMU_PASSWORD=your_temu_password
 
 # 媒体外链配置（可选）
-# 若选品表未提供尺寸图/视频 URL，将以该前缀 + 文件名自动拼接
+# SKU 图片与视频可通过以下前缀拼接；尺寸图需在选品表中直接提供完整 URL
 PRODUCT_IMAGE_BASE_URL=https://miaoshou-tuchuang-beimeng.oss-cn-hangzhou.aliyuncs.com/10月新品可推/
-SIZE_CHART_BASE_URL=https://miaoshou-tuchuang-beimeng.oss-cn-hangzhou.aliyuncs.com/10月新品可推/
 VIDEO_BASE_URL=https://miaoshou-tuchuang-beimeng.oss-cn-hangzhou.aliyuncs.com/video/
 ```
 
@@ -164,8 +163,7 @@ python run_collection_to_edit_test.py --no-skip-collection
 
 > **媒体配置说明**
 >
-> - 选品表可新增列 `尺寸图链接`（或 `尺寸图URL/size_chart_url/size_chart_image_url`），填写可直接访问的图片外链。
-> - 若未提供上述列，系统会读取 `实拍图数组` 的首个文件名，并与 `SIZE_CHART_BASE_URL` 拼接生成尺寸图 URL。
+> - 选品表必须新增列 `尺寸图链接`（或 `尺寸图URL/size_chart_url/size_chart_image_url`），填写可直接访问的图片外链。
 > - 可选新增列 `视频链接`（或 `视频URL/video_url/product_video_url`），用于提供产品视频的网络地址。
 > - 系统始终使用 `VIDEO_BASE_URL` + 型号编号（如 `A026.mp4`）拼接生成 OSS 视频 URL；仅当未配置 `VIDEO_BASE_URL` 时才回退到表格中的链接。
 > - 请确保外链对象具备公共读权限或生成有效签名 URL，否则首次编辑将无法完成上传。
@@ -185,6 +183,24 @@ python3 run_real_test.py
 # 5. 验证认领成功
 ```
 
+### ♻️ 持续运行脚本：`run_until_empty.py`
+
+当需要“盯盘式”持续发布时，可使用新脚本自动循环运行完整发布工作流，直到选品表被清空或发现格式异常：
+
+```bash
+cd apps/temu-auto-publish
+python run_until_empty.py \
+  --input data/input/selection.xlsx \
+  --batch-size 20 \
+  --interval 15 \
+  --headless
+```
+
+- `SelectionTableQueue` 会把 Excel 当成队列处理：每次 `pop` 取出前 `batch_size` 条，剩余数据立即写回；失败时调用 `return_batch` 即可回滚到表头。
+- `--interval` 控制批次间的等待秒数，适合人工在中途往 Excel 添补数据。
+- `--archive/--no-archive` 控制是否把已处理批次归档到 `data/output/processed/`，方便稽核。
+- 当选品表为空或 pandas 无法解析表格时，脚本会安全退出并给出日志提示。
+
 ## 🖥️ Web 管理面板 (零指令入口)
 
 面向运营/质检等非技术角色，提供“上传文件 → 点击开始”的完整引导。
@@ -201,6 +217,9 @@ python3 run_real_test.py
   ```
 
 启动后浏览器会自动打开 Web UI，界面包含参数提示、进度状态、实时日志、环境自检按钮以及示例选品表下载链接，真正做到电脑小白也能独立操作。
+
+- “仅运行一次流程” 开关默认开启，表示执行单轮完整 SOP。
+- 关闭后 Web Panel 会进入守护模式：配合 `SelectionTableQueue` 自动循环取数、出错回滚、选品表归档，直到 Excel 空/格式异常。
 
 ### Windows 下载即用打包
 

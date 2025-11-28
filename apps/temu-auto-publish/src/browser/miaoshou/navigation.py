@@ -11,7 +11,7 @@ from contextlib import suppress
 from typing import Any, ClassVar
 
 from loguru import logger
-from playwright.async_api import Page
+from playwright.async_api import Frame, Page
 
 from .base import MiaoshouControllerBase
 from .navigation_codegen import fallback_apply_user_filter, fallback_switch_tab
@@ -107,10 +107,10 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                 return True
 
             if not use_sidebar:
-                logger.warning("Unexpected URL %s, retrying via sidebar navigation", page.url)
+                logger.warning("Unexpected URL {}, retrying via sidebar navigation", page.url)
                 return await self.navigate_to_collection_box(page, use_sidebar=True)
 
-            logger.error("Navigation failed: unexpected URL %s", page.url)
+            logger.error("Navigation failed: unexpected URL {}", page.url)
             return False
         except Exception as exc:
             logger.error(f"Failed to navigate to collection box: {exc}")
@@ -126,17 +126,17 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
         Returns:
             True when the filter and search were executed, otherwise False.
         """
-        logger.info("Filtering and searching by staff: %s", staff_name or "(all)")
+        logger.info("Filtering and searching by staff: {}", staff_name or "(all)")
 
         try:
             collection_box_config = self.selectors.get("collection_box", {})
             search_box_config = collection_box_config.get("search_box", {})
 
             if staff_name:
-                logger.debug("Selecting staff member: %s", staff_name)
+                logger.debug("Selecting staff member: {}", staff_name)
                 all_selects = page.locator(".jx-select, .el-select, .ant-select, .pro-select")
                 select_count = await all_selects.count()
-                logger.debug("Located %s select elements", select_count)
+                logger.debug("Located {} select elements", select_count)
 
                 primary_filter_ok = False
                 if select_count >= 2:
@@ -180,14 +180,14 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                                     with suppress(Exception):
                                         await dropdown_locator.first.wait_for(state="hidden", timeout=1_500)
                                     staff_option_clicked = True
-                                    logger.success("Staff member selected: %s", staff_name)
+                                    logger.success("Staff member selected: {}", staff_name)
                                     break
                             except Exception as err:  # pragma: no cover - UI variance
-                                logger.debug("Selector %s failed: %s", selector, err)
+                                logger.debug("Selector {} failed: {}", selector, err)
                                 continue
 
                         if not staff_option_clicked:
-                            logger.warning("Could not locate staff option: %s", staff_name)
+                            logger.warning("Could not locate staff option: {}", staff_name)
                         else:
                             primary_filter_ok = True
                 else:
@@ -212,7 +212,7 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
             search_btn_selector = search_box_config.get("search_btn", "button:has-text('搜索')")
             search_btn = page.locator(search_btn_selector).first
             if await search_btn.count() == 0:
-                logger.warning("Search button not found with selector %s, skipping explicit search", search_btn_selector)
+                logger.warning("Search button not found with selector {}, skipping explicit search", search_btn_selector)
             else:
                 await search_btn.click()
             await self._wait_for_table_refresh(page)
@@ -222,6 +222,19 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
         except Exception as exc:
             logger.error(f"Filter/search failed: {exc}")
             return False
+
+    def _collect_popup_scopes(self, page: Page) -> list[tuple[str, Page | Frame]]:
+        """Collect the main page and child frames for popup detection."""
+
+        scopes: list[tuple[str, Page | Frame]] = [("page", page)]
+        try:
+            for idx, frame in enumerate(page.frames):
+                label = frame.name or frame.url or f"frame-{idx}"
+                scopes.append((f"frame[{idx}]::{label}", frame))
+        except Exception as exc:
+            logger.debug(f"Enumerating popup scopes failed: {exc}")
+
+        return scopes
 
     async def close_popup_if_exists(self, page: Page) -> bool:
         """Close known popups if they are currently visible.
@@ -238,6 +251,8 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                 "text='知道了'",
                 "text='确定'",
                 "text='关闭'",
+                "text='我已知晓'",
+                "button:has-text('我已知晓')",
                 "button[aria-label='关闭']",
                 "button[aria-label='Close']",
             ]
@@ -246,62 +261,97 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                 ".jx-dialog__headerbtn",
                 ".el-dialog__headerbtn",
             ]
+            scopes = self._collect_popup_scopes(page)
 
             for selector in popup_buttons:
-                try:
-                    locator = page.locator(selector)
-                    if await locator.count() > 0:
-                        logger.debug("Found popup button: %s", selector)
+                for scope_name, scope in scopes:
+                    try:
+                        locator = scope.locator(selector)
+                        count = await locator.count()
+                    except Exception as exc:
+                        logger.debug("Popup selector {} failed in {}: {}", selector, scope_name, exc)
+                        continue
+
+                    if not count:
+                        continue
+
+                    try:
                         await locator.first.click(timeout=2_000)
-                        await self._wait_for_message_box_dismissal(page)
-                        logger.success("Popup closed via button: %s", selector)
-                        return True
-                except Exception:
+                    except Exception as exc:
+                        logger.debug("Click selector {} failed in {}: {}", selector, scope_name, exc)
+                        continue
+
+                    await self._wait_for_message_box_dismissal(page)
+                    logger.success("Popup closed via button: {} ({})", selector, scope_name)
+                    return True
+
+            for scope_name, scope in scopes:
+                try:
+                    dialogs = scope.locator(overlay_selector)
+                    dialog_count = await dialogs.count()
+                except Exception as exc:
+                    logger.debug("Enumerating dialogs failed in {}: {}", scope_name, exc)
                     continue
 
-            dialogs = page.locator(overlay_selector)
-            dialog_count = await dialogs.count()
-            if dialog_count:
+                if not dialog_count:
+                    continue
+
                 for index in range(dialog_count - 1, -1, -1):
                     dialog = dialogs.nth(index)
                     for selector in header_close_selectors:
                         try:
                             btn = dialog.locator(selector)
                             if await btn.count() and await btn.first.is_visible(timeout=1_000):
-                                logger.debug("Clicking dialog header close: %s (idx=%s)", selector, index)
+                                logger.debug(
+                                    "Clicking dialog header close: %s (idx=%s, scope=%s)",
+                                    selector,
+                                    index,
+                                    scope_name,
+                                )
                                 await btn.first.click()
                                 await self._wait_for_message_box_dismissal(page)
-                                logger.success("Popup closed via header button")
+                                logger.success("Popup closed via header button ({})", scope_name)
                                 return True
                         except Exception as exc:
-                            logger.debug("Header close failed (%s): %s", selector, exc)
+                            logger.debug("Header close failed ({}, scope={}): {}", selector, scope_name, exc)
 
             # 针对 .jx-overlay-message-box（如“提示”“知道了”）的兜底处理
-            message_box = page.locator(".jx-overlay-message-box:visible")
-            msg_count = await message_box.count()
-            if msg_count:
-                logger.debug("Found overlay message box: count=%s", msg_count)
+            for scope_name, scope in scopes:
+                try:
+                    message_box = scope.locator(".jx-overlay-message-box:visible, .el-message-box:visible")
+                    msg_count = await message_box.count()
+                except Exception as exc:
+                    logger.debug("Message box lookup failed in {}: {}", scope_name, exc)
+                    continue
+
+                if not msg_count:
+                    continue
+
+                logger.debug("Found overlay message box: count={}, scope={}", msg_count, scope_name)
                 close_candidates = [
                     ".jx-overlay-message-box button.jx-message-box__headerbtn",
                     ".jx-overlay-message-box button:has-text('确定')",
                     ".jx-overlay-message-box button:has-text('知道了')",
                     ".jx-overlay-message-box button:has-text('关闭')",
                     ".jx-overlay-message-box button[aria-label*='关闭']",
+                    ".el-message-box button:has-text('我已知晓')",
+                    ".el-message-box button:has-text('确定')",
                 ]
                 for selector in close_candidates:
                     try:
-                        btn = page.locator(selector).first
+                        btn = scope.locator(selector).first
                         if await btn.count() and await btn.is_visible(timeout=500):
                             await btn.click(timeout=1_000)
                             await self._wait_for_message_box_dismissal(page)
-                            logger.success("Overlay message box closed via %s", selector)
+                            logger.success("Overlay message box closed via {} ({})", selector, scope_name)
                             return True
-                    except Exception:
+                    except Exception as exc:
+                        logger.debug("Closing overlay via {} failed in {}: {}", selector, scope_name, exc)
                         continue
                 with suppress(Exception):
                     await page.keyboard.press("Escape")
                     await self._wait_for_message_box_dismissal(page)
-                    logger.success("Overlay message box dismissed via Escape")
+                    logger.success("Overlay message box dismissed via Escape ({})", scope_name)
                     return True
 
             logger.debug("No popup detected for closure")
@@ -323,11 +373,13 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
 
     async def _wait_for_message_box_dismissal(self, page: Page, timeout: int = 1_500) -> None:
         """Wait until transient message boxes are hidden."""
-        locator = page.locator(".jx-overlay-message-box, .jx-message-box, .el-message-box")
-        try:
-            await locator.first.wait_for(state="hidden", timeout=timeout)
-        except Exception:
-            pass
+        selector = ".jx-overlay-message-box, .jx-message-box, .el-message-box"
+        for _, scope in self._collect_popup_scopes(page):
+            try:
+                locator = scope.locator(selector)
+                await locator.first.wait_for(state="hidden", timeout=timeout)
+            except Exception:
+                continue
 
     async def _wait_for_bulk_selection(self, page: Page, timeout: int = 800) -> None:
         """Wait for any checkbox to reflect the 'selected' state. 激进优化: 2000 -> 800"""
@@ -401,7 +453,7 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                 except Exception:
                     continue
 
-            logger.debug("Product counts: %s", counts)
+            logger.debug("Product counts: {}", counts)
             return counts
         except Exception as exc:
             logger.error(f"Failed to fetch product counts: {exc}")
@@ -472,7 +524,7 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
             }
 
             if tab_name not in tab_mapping:
-                logger.warning("Unknown tab requested: %s", tab_name)
+                logger.warning("Unknown tab requested: {}", tab_name)
 
             default_selectors: list[str] = []
             for label in normalized_labels or [tab_name]:
@@ -523,7 +575,7 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
 
                     await button.click()
                     clicked = True
-                    logger.success("Tab click succeeded via %s", selector)
+                    logger.success("Tab click succeeded via {}", selector)
                     break
                 except Exception:
                     continue
@@ -577,7 +629,7 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
             search_config = collection_box_config.get("search_box", {})
 
             if title:
-                logger.debug("Applying title filter: %s", title)
+                logger.debug("Applying title filter: {}", title)
                 title_selector = search_config.get("product_title", "input[placeholder*='标题']")
                 title_field = page.locator(title_selector)
                 await title_field.fill(title)
@@ -585,7 +637,7 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                     await title_field.blur()
 
             if source_id:
-                logger.debug("Applying source ID filter: %s", source_id)
+                logger.debug("Applying source ID filter: {}", source_id)
                 id_selector = search_config.get("source_id", "input[placeholder*='ID']")
                 source_field = page.locator(id_selector)
                 await source_field.fill(source_id)
@@ -593,7 +645,7 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                     await source_field.blur()
 
             if price_min is not None:
-                logger.debug("Applying minimum price: %s", price_min)
+                logger.debug("Applying minimum price: {}", price_min)
                 min_selector = search_config.get("source_price_min", "input[placeholder*='最低']")
                 min_field = page.locator(min_selector)
                 await min_field.fill(str(price_min))
@@ -601,7 +653,7 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                     await min_field.blur()
 
             if price_max is not None:
-                logger.debug("Applying maximum price: %s", price_max)
+                logger.debug("Applying maximum price: {}", price_max)
                 max_selector = search_config.get("source_price_max", "input[placeholder*='最高']")
                 max_field = page.locator(max_selector)
                 await max_field.fill(str(price_max))
@@ -660,7 +712,7 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                         await button.first.scroll_into_view_if_needed()
                     await button.first.click()
                     clicked = True
-                    logger.success("Select all checkbox clicked via %s", selector)
+                    logger.success("Select all checkbox clicked via {}", selector)
                     break
                 except Exception:
                     continue
@@ -696,7 +748,7 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
         Returns:
             True when the edit button was clicked, otherwise False.
         """
-        logger.info("Clicking edit button for product index %s", index)
+        logger.info("Clicking edit button for product index {}", index)
 
         try:
             await self._ensure_popups_closed(page)
@@ -723,13 +775,13 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                         await button.scroll_into_view_if_needed()
                     await button.wait_for(state="visible", timeout=2_000)
                     await button.click()
-                    logger.success("Edit button clicked using selector %s", selector)
+                    logger.success("Edit button clicked using selector {}", selector)
                     return True
                 except Exception as exc:
-                    logger.debug("Edit selector %s failed: %s", selector, exc)
+                    logger.debug("Edit selector {} failed: {}", selector, exc)
                     continue
 
-            logger.error("No matching edit button found for index %s", index)
+            logger.error("No matching edit button found for index {}", index)
             return False
         except Exception as exc:
             logger.error(f"Failed to click edit button: {exc}")

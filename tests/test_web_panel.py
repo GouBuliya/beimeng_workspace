@@ -29,6 +29,14 @@ from web_panel.models import (  # type: ignore[import-not-found]
     WorkflowOptions,
 )
 
+# 默认管理员密码 (与 api.py 中的 DEFAULT_ADMIN_PASSWORD 一致)
+TEST_ADMIN_PASSWORD = "bm123456789"
+
+
+async def login_client(client: AsyncClient) -> None:
+    """使用管理员密码登录, 让 client 获得认证 session."""
+    await client.post("/login", data={"password": TEST_ADMIN_PASSWORD})
+
 
 class DummyManager:
     """最小化的任务管理器, 便于注入到 FastAPI."""
@@ -55,6 +63,7 @@ async def test_run_with_upload(tmp_path) -> None:
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
+        await login_client(client)
         response = await client.post(
             "/api/run",
             files={"selection_file": ("demo.xlsx", b"content", "application/vnd.ms-excel")},
@@ -64,8 +73,27 @@ async def test_run_with_upload(tmp_path) -> None:
     assert response.status_code == 200
     assert manager.started_with is not None
     assert manager.started_with.selection_path.exists()
-    assert manager.started_with.use_codegen_batch_edit is True
     assert manager.started_with.collection_owner == "Tester(account)"
+    assert manager.started_with.single_run is True
+
+
+@pytest.mark.asyncio
+async def test_run_continuous_flag(tmp_path) -> None:
+    manager = DummyManager()
+    app = create_app(task_manager=manager)
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        await login_client(client)
+        response = await client.post(
+            "/api/run",
+            files={"selection_file": ("demo.xlsx", b"content", "application/vnd.ms-excel")},
+            data={"collection_owner": "Tester(account)", "single_run": "off"},
+        )
+
+    assert response.status_code == 200
+    assert manager.started_with is not None
+    assert manager.started_with.single_run is False
 
 
 @pytest.mark.asyncio
@@ -75,6 +103,7 @@ async def test_run_without_payload() -> None:
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
+        await login_client(client)
         response = await client.post(
             "/api/run",
             data={"collection_owner": "Tester(account)"},
@@ -90,6 +119,7 @@ async def test_logs_endpoint() -> None:
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
+        await login_client(client)
         response = await client.get("/api/logs")
 
     assert response.status_code == 200
@@ -107,6 +137,7 @@ async def test_env_settings_update(tmp_path, monkeypatch) -> None:
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
+        await login_client(client)
         load_resp = await client.get("/api/env-settings")
         assert load_resp.status_code == 200
         assert any(field["key"] == "MIAOSHOU_USERNAME" for field in load_resp.json())
@@ -133,6 +164,7 @@ async def test_env_settings_validation(tmp_path, monkeypatch) -> None:
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
+        await login_client(client)
         resp = await client.post(
             "/api/env-settings",
             json={"entries": {"MIAOSHOU_USERNAME": "", "MIAOSHOU_PASSWORD": ""}},

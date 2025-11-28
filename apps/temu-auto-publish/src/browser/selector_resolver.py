@@ -7,7 +7,9 @@
 @GOTCHAS:
   - 支持 get_by_label, get_by_role, get_by_placeholder, get_by_text, css 等类型
   - 按配置顺序尝试，找到第一个可用的返回
+  - 自动记录成功的选择器命中信息
 @DEPENDENCIES:
+  - 内部: utils.selector_hit_recorder
   - 外部: playwright.async_api
 @RELATED: first_edit/base.py, miaoshou_selectors_v2.json
 """
@@ -18,6 +20,9 @@ from typing import Any
 
 from loguru import logger
 from playwright.async_api import Locator, Page
+
+from ..utils.selector_hit_recorder import record_selector_hit
+from ..utils.selector_race import TIMEOUTS
 
 
 class SelectorResolver:
@@ -74,13 +79,17 @@ class SelectorResolver:
             return self.page.locator(value)
 
     async def resolve_field(
-        self, field_config: dict[str, Any], timeout_ms: int = 2000
+        self,
+        field_config: dict[str, Any],
+        timeout_ms: int = TIMEOUTS.NORMAL,
+        context_name: str = "",
     ) -> Locator | None:
         """解析字段配置，返回第一个可用的 Locator.
 
         Args:
             field_config: 字段配置，包含 locators 列表.
             timeout_ms: 等待超时时间（毫秒）.
+            context_name: 业务上下文名称，用于记录选择器命中（如"产品标题输入框"）.
 
         Returns:
             第一个可见的 Locator，如果都不可用则返回 None.
@@ -92,7 +101,7 @@ class SelectorResolver:
             ...         {"type": "css", "value": "input[placeholder*='标题']"}
             ...     ]
             ... }
-            >>> locator = await resolver.resolve_field(config)
+            >>> locator = await resolver.resolve_field(config, context_name="产品标题")
         """
         locators_config = field_config.get("locators", [])
 
@@ -100,7 +109,7 @@ class SelectorResolver:
         if isinstance(locators_config, str):
             locators_config = [locators_config]
 
-        for loc_config in locators_config:
+        for index, loc_config in enumerate(locators_config):
             try:
                 locator = self.resolve_locator(loc_config)
                 # 检查元素是否存在且可见
@@ -108,6 +117,13 @@ class SelectorResolver:
                     first = locator.first
                     try:
                         await first.wait_for(state="visible", timeout=timeout_ms)
+                        # 记录选择器命中
+                        record_selector_hit(
+                            selector=loc_config,
+                            selector_list=locators_config,
+                            index=index,
+                            context=context_name or field_config.get("name", "resolve_field"),
+                        )
                         return first
                     except Exception:
                         # 元素存在但不可见，继续尝试下一个

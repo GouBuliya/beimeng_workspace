@@ -9,6 +9,7 @@ from __future__ import annotations
 from loguru import logger
 from playwright.async_api import Page
 
+from ...utils.selector_race import TIMEOUTS, try_selectors_race
 from .base import FirstEditBase
 
 
@@ -46,18 +47,22 @@ class FirstEditCategoryMixin(FirstEditBase):
                 ".jx-overlay-dialog input[placeholder*='选择类目']",
             ]
 
+            # 使用并行竞速策略查找类目元素
+            category_element = await try_selectors_race(
+                page,
+                category_selectors,
+                timeout_ms=TIMEOUTS.NORMAL,
+                context_name="类目选择器",
+            )
+
             category_text = ""
-            for selector in category_selectors:
-                try:
-                    element = page.locator(selector).first
-                    if await element.is_visible(timeout=1_000):
-                        category_text = await element.input_value() or await element.inner_text()
-                        if category_text:
-                            logger.debug("找到类目信息: %s (selector=%s)", category_text, selector)
-                            break
-                except Exception as exc:
-                    logger.debug("尝试选择器 %s 失败: %s", selector, exc)
-                    continue
+            if category_element:
+                category_text = (
+                    await category_element.input_value()
+                    or await category_element.inner_text()
+                )
+                if category_text:
+                    logger.debug("找到类目信息: {}", category_text)
 
             if not category_text:
                 logger.warning("未能读取类目信息,默认认为合规(建议人工确认)")
@@ -65,10 +70,10 @@ class FirstEditCategoryMixin(FirstEditBase):
 
             for unsupported in unsupported_categories:
                 if unsupported in category_text:
-                    logger.warning("类目不合规: %s(包含 %s)", category_text, unsupported)
+                    logger.warning("类目不合规: {}(包含 {})", category_text, unsupported)
                     return False, category_text
 
-            logger.success("类目合规: %s", category_text)
+            logger.success("类目合规: {}", category_text)
             return True, category_text
         except Exception as exc:
             logger.error(f"核对类目失败: {exc}")

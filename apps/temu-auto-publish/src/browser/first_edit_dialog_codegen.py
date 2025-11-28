@@ -3,6 +3,7 @@
 @OUTLINE:
   - def smart_retry(): 智能重试装饰器,用于关键操作的自动重试
   - async def fill_first_edit_dialog_codegen(): 主函数,填写弹窗内所有字段
+  - (步骤0) SKU规格替换: 通过 payload.spec_array 或 payload.sku_spec_array 传入规格数组
   - async def _fill_title(): 填写产品标题
   - async def _fill_basic_specs(): 填写价格/库存/重量/尺寸等基础字段
   - async def _upload_size_chart_via_url(): 使用网络图片URL上传尺寸图
@@ -32,7 +33,8 @@ from urllib.parse import urljoin
 from loguru import logger
 from playwright.async_api import Locator, Page
 
-from ..core.detailed_profiler import get_detailed_profiler
+from ..core.performance import profile
+from .first_edit.sku_spec_replace import replace_sku_spec_options
 
 # 激进优化: 进一步最小化超时时间
 DEFAULT_PRIMARY_TIMEOUT_MS = 200     # 激进: 300 -> 200
@@ -112,6 +114,7 @@ def _fallback_video_url_from_payload(payload: dict[str, Any]) -> str | None:
     return None
 
 
+@profile()
 async def fill_first_edit_dialog_codegen(page: Page, payload: dict[str, Any]) -> bool:
     """使用 Codegen 录制逻辑填写首次编辑弹窗的所有字段.
 
@@ -127,7 +130,7 @@ async def fill_first_edit_dialog_codegen(page: Page, payload: dict[str, Any]) ->
             - length_cm: 长度 (厘米)
             - width_cm: 宽度 (厘米)
             - height_cm: 高度 (厘米)
-            - model_spec_name: 多规格新增维度名称(默认“型号”)
+            - model_spec_name: 多规格新增维度名称(默认"型号")
             - model_spec_option: 规格选项值(默认使用 product_number)
             - supplier_link: 供货商链接
 
@@ -158,43 +161,36 @@ async def fill_first_edit_dialog_codegen(page: Page, payload: dict[str, Any]) ->
     logger.info("使用 Codegen 录制逻辑填写首次编辑弹窗")
     logger.info("=" * 60)
 
-    # 获取详细分析器
-    profiler = get_detailed_profiler("first_edit_dialog")
-
     try:
-        # 激进优化: 500 -> 300
-        import time
-        step_start = time.perf_counter()
-        await page.wait_for_selector(".jx-overlay-dialog", state="visible", timeout=300)
-        profiler.action("wait", "弹窗加载", (time.perf_counter() - step_start) * 1000)
+        # 弹窗加载需要足够时间，不能过于激进
+        await page.wait_for_selector(".jx-overlay-dialog", state="visible", timeout=3000)
         logger.success("✓ 编辑弹窗已加载")
 
+        # 0. 替换 SKU 规格选项（如果提供了 spec_array）
+        spec_array = payload.get("spec_array") or payload.get("sku_spec_array")
+        if spec_array:
+            spec_success = await replace_sku_spec_options(page, spec_array)
+            if not spec_success:
+                logger.warning("⚠️ SKU 规格替换失败，继续后续流程")
+
         # 1. 填写标题
-        step_start = time.perf_counter()
         if not await _fill_title(page, payload.get("title", "")):
             return False
-        profiler.action("fill", "标题", (time.perf_counter() - step_start) * 1000)
 
         # 2. 填写基础规格字段
         logger.info("跳过销售属性/多规格, 仅填写价格与库存等基础字段")
-        step_start = time.perf_counter()
         if not await _fill_basic_specs(page, payload):
             return False
-        profiler.action("fill", "基础规格", (time.perf_counter() - step_start) * 1000)
 
         # 4. 记录供货商链接
-        step_start = time.perf_counter()
         if not await _fill_supplier_link(page, payload.get("supplier_link", "")):
             return False
-        profiler.action("fill", "供货商链接", (time.perf_counter() - step_start) * 1000)
 
         # 5. 上传尺寸图（仅支持网络图片URL）
         size_chart_image_url = (payload.get("size_chart_image_url") or "").strip()
         if size_chart_image_url:
             logger.info("开始通过网络图片上传尺寸图...")
-            step_start = time.perf_counter()
             upload_success = await _upload_size_chart_via_url(page, size_chart_image_url)
-            profiler.action("upload", "尺寸图", (time.perf_counter() - step_start) * 1000, success=upload_success)
             if upload_success:
                 logger.success("✓ 尺寸图上传成功（网络图片）")
             else:
@@ -208,15 +204,13 @@ async def fill_first_edit_dialog_codegen(page: Page, payload: dict[str, Any]) ->
             fallback_video_url = _fallback_video_url_from_payload(payload)
             if fallback_video_url:
                 product_video_url = fallback_video_url
-                logger.info("未提供视频URL，使用 OSS 默认视频: %s", product_video_url)
+                logger.info("未提供视频URL，使用 OSS 默认视频: {}", product_video_url)
             else:
                 logger.warning("⚠️ 未提供有效视频URL，跳过视频上传")
 
         if product_video_url:
             logger.info("开始通过网络视频上传产品视频...")
-            step_start = time.perf_counter()
             video_result = await _upload_product_video_via_url(page, product_video_url)
-            profiler.action("upload", "产品视频", (time.perf_counter() - step_start) * 1000, success=video_result is True)
             if video_result is True:
                 logger.success("✓ 产品视频上传成功（网络视频）")
             elif video_result is None:
@@ -229,10 +223,8 @@ async def fill_first_edit_dialog_codegen(page: Page, payload: dict[str, Any]) ->
         # 注意：SKU 图片同步已移至 workflow 层的 post_fill_hook 统一处理，避免重复上传
 
         # 7. 保存修改
-        step_start = time.perf_counter()
         if not await _click_save(page):
             return False
-        profiler.action("click", "保存修改", (time.perf_counter() - step_start) * 1000)
 
         logger.success("✓ 首次编辑弹窗填写完成")
         return True
@@ -289,7 +281,7 @@ async def _fill_basic_specs(page: Page, payload: dict[str, Any]) -> bool:
         dialog = page.locator(".collect-box-editor-dialog-V2, .jx-overlay-dialog").first
         await dialog.wait_for(state="visible", timeout=200)  # 激进: 300 -> 200
     except Exception as exc:
-        logger.error("未能定位首次编辑弹窗: %s", exc)
+        logger.error("未能定位首次编辑弹窗: {}", exc)
         return False
 
     variants = payload.get("variants") or []
@@ -334,7 +326,7 @@ async def _fill_variant_rows(
 
     for index, variant in enumerate(variants):
         if index >= row_count:
-            logger.warning("⚠️ 规格行数量不足，忽略多余的规格数据 (row=%s)", index + 1)
+            logger.warning("⚠️ 规格行数量不足，忽略多余的规格数据 (row={})", index + 1)
             break
 
         row = rows.nth(index)
@@ -348,7 +340,7 @@ async def _fill_variant_rows(
 
         candidates = await _collect_input_candidates(row)
         if not candidates:
-            logger.debug("规格行%s 未找到可用输入框", index + 1)
+            logger.debug("规格行{} 未找到可用输入框", index + 1)
             continue
 
         await _assign_values_by_keywords(candidates, field_values, log_prefix=f"规格行{index + 1}")
@@ -393,7 +385,7 @@ async def _fill_dimension_fields(dialog: Locator, payload: dict[str, Any]) -> No
         ]
 
         if not matched_inputs:
-            logger.debug("字段 %s 未能写入任何输入", field)
+            logger.debug("字段 {} 未能写入任何输入", field)
             continue
 
         field_filled = False
@@ -407,9 +399,9 @@ async def _fill_dimension_fields(dialog: Locator, payload: dict[str, Any]) -> No
                 continue
 
         if field_filled:
-            logger.debug("✓ 字段 %s 已写入所有匹配输入", field)
+            logger.debug("✓ 字段 {} 已写入所有匹配输入", field)
         else:
-            logger.debug("字段 %s 未能写入任何输入", field)
+            logger.debug("字段 {} 未能写入任何输入", field)
 
 
 async def _click_save(page: Page) -> bool:
@@ -484,7 +476,7 @@ async def _fill_supplier_link(page: Page, supplier_link: str) -> bool:
         logger.warning("⚠️ 未找到供货商链接输入框")
         return True
     except Exception as exc:
-        logger.error("填写供货商链接失败: %s", exc)
+        logger.error("填写供货商链接失败: {}", exc)
         return False
 
 
@@ -496,12 +488,12 @@ async def _upload_size_chart_via_url(page: Page, image_url: str) -> bool:
         logger.info("未提供尺寸图URL，跳过网络图片上传")
         return False
 
-    logger.debug("使用网络图片上传尺寸图: %s", image_url[:120])
+    logger.debug("使用网络图片上传尺寸图: {}", image_url[:120])
 
     try:
         normalized_url = _normalize_input_url(image_url)
         if not normalized_url:
-            logger.warning("提供的尺寸图URL无效，跳过上传: %s", image_url)
+            logger.warning("提供的尺寸图URL无效，跳过上传: {}", image_url)
             return False
 
         size_group = page.get_by_role("group", name="尺寸图表 :", exact=True)
@@ -519,7 +511,7 @@ async def _upload_size_chart_via_url(page: Page, image_url: str) -> bool:
                 target_index = min(4, max(thumb_count - 1, 0))
                 await thumbnails.nth(target_index).click()
         except Exception as exc:
-            logger.debug("点击尺寸图缩略图失败: %s", exc)
+            logger.debug("点击尺寸图缩略图失败: {}", exc)
 
         upload_btn = page.get_by_text("使用网络图片", exact=True)
         await upload_btn.wait_for(state="visible", timeout=150)  # 激进: 250 -> 150
@@ -540,7 +532,7 @@ async def _upload_size_chart_via_url(page: Page, image_url: str) -> bool:
                 await save_to_space_checkbox.click()
                 logger.debug("已勾选『同时保存图片到妙手图片空间』")
         except Exception as exc:
-            logger.debug("勾选保存到图片空间失败（可能已勾选）: %s", exc)
+            logger.debug("勾选保存到图片空间失败（可能已勾选）: {}", exc)
 
         confirm_btn = page.get_by_role("button", name="确定")
         await confirm_btn.wait_for(state="visible", timeout=150)  # 激进: 250 -> 150
@@ -552,11 +544,11 @@ async def _upload_size_chart_via_url(page: Page, image_url: str) -> bool:
             timeout_ms=VIDEO_UPLOAD_TIMEOUT_MS,
         )
         await _close_prompt_dialog(page, timeout_ms=VIDEO_UPLOAD_TIMEOUT_MS)
-        logger.success("✓ 尺寸图已上传（网络图片）: %s", normalized_url[:120])
+        logger.success("✓ 尺寸图已上传（网络图片）: {}", normalized_url[:120])
         return True
 
     except Exception as exc:
-        logger.warning("网络图片上传尺寸图失败: %s", exc)
+        logger.warning("网络图片上传尺寸图失败: {}", exc)
         await _capture_html(page, "data/debug/html/size_chart_exception.html")
         return False
 
@@ -575,10 +567,10 @@ async def _upload_product_video_via_url(page: Page, video_url: str) -> bool | No
 
     normalized_url = _normalize_input_url(video_url)
     if not normalized_url:
-        logger.warning("提供的视频URL无效，跳过上传: %s", video_url)
+        logger.warning("提供的视频URL无效，跳过上传: {}", video_url)
         return False
 
-    logger.debug("使用网络视频上传产品视频: %s", normalized_url[:120])
+    logger.debug("使用网络视频上传产品视频: {}", normalized_url[:120])
 
     try:
         dialog = page.get_by_role("dialog")
@@ -651,7 +643,7 @@ async def _upload_product_video_via_url(page: Page, video_url: str) -> bool | No
                     logger.info("检测到已有产品视频，跳过上传步骤。")
                     return None
             except Exception as exc:
-                logger.debug("检测现有视频状态失败: %s", exc)
+                logger.debug("检测现有视频状态失败: {}", exc)
 
         try:
             await page.locator(".video-wrap").click()
@@ -659,7 +651,7 @@ async def _upload_product_video_via_url(page: Page, video_url: str) -> bool | No
             try:
                 await video_group.get_by_role("img").first.click()
             except Exception as exc:
-                logger.debug("点击产品视频区域失败: %s", exc)
+                logger.debug("点击产品视频区域失败: {}", exc)
 
         explicit_network_option = page.get_by_text("网络上传", exact=True)
         try:
@@ -711,7 +703,7 @@ async def _upload_product_video_via_url(page: Page, video_url: str) -> bool | No
                 await save_to_space_checkbox.click()
                 logger.debug("已勾选『同时保存图片到妙手图片空间』")
         except Exception as exc:
-            logger.debug("勾选保存到图片空间失败（可能已勾选）: %s", exc)
+            logger.debug("勾选保存到图片空间失败（可能已勾选）: {}", exc)
 
         confirm_btn = (
             video_dialog.get_by_role("button", name="确定")
@@ -733,11 +725,11 @@ async def _upload_product_video_via_url(page: Page, video_url: str) -> bool | No
             timeout_ms=VIDEO_UPLOAD_TIMEOUT_MS,
         )
         await _close_prompt_dialog(page, timeout_ms=VIDEO_UPLOAD_TIMEOUT_MS)
-        logger.success("✓ 产品视频已上传（网络视频）: %s", normalized_url[:120])
+        logger.success("✓ 产品视频已上传（网络视频）: {}", normalized_url[:120])
         return True
 
     except Exception as exc:
-        logger.warning("网络视频上传产品视频失败: %s", exc)
+        logger.warning("网络视频上传产品视频失败: {}", exc)
         await _capture_html(page, "data/debug/html/video_upload_exception.html")
         return False
 
@@ -801,9 +793,9 @@ async def _dump_dialog_snapshot(page: Page, filename: str) -> None:
         target = Path(__file__).resolve().parents[2] / "data" / "debug_screenshots" / filename
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(html, encoding="utf-8")
-        logger.debug("已写入调试快照: %s", target)
+        logger.debug("已写入调试快照: {}", target)
     except Exception as exc:
-        logger.warning("写入调试快照失败: %s", exc)
+        logger.warning("写入调试快照失败: {}", exc)
 
 
 async def _wait_first_visible(
@@ -917,14 +909,14 @@ async def _assign_values_by_keywords(
         locator = _match_candidate(candidates, keywords)
         str_value = str(raw_value)
         if locator is None:
-            logger.debug("%s字段 %s 未找到匹配输入框", prefix, field)
+            logger.debug("{}字段 {} 未找到匹配输入框", prefix, field)
             continue
         try:
             await locator.wait_for(state="visible", timeout=DEFAULT_PRIMARY_TIMEOUT_MS)
             await _set_input_value(locator, str_value)
-            logger.debug("✓ %s字段 %s 已写入 %s", prefix, field, str_value)
+            logger.debug("✓ {}字段 {} 已写入 {}", prefix, field, str_value)
         except Exception as exc:
-            logger.debug("%s字段 %s 写入失败: %s", prefix, field, exc)
+            logger.debug("{}字段 {} 写入失败: {}", prefix, field, exc)
 
 
 def _match_candidate(candidates: list[dict[str, Any]], keywords: list[str]) -> Locator | None:
@@ -1085,13 +1077,13 @@ async def _click_dialog_close_icon(page: Page, dialog: Locator) -> bool:
                 await candidate.first.click()
                 return True
         except Exception as exc:
-            logger.debug("关闭弹窗按钮点击失败: %s", exc)
+            logger.debug("关闭弹窗按钮点击失败: {}", exc)
 
     try:
         await page.keyboard.press("Escape")
         return True
     except Exception as exc:
-        logger.debug("发送 Escape 关闭弹窗失败: %s", exc)
+        logger.debug("发送 Escape 关闭弹窗失败: {}", exc)
         return False
 
 
@@ -1112,7 +1104,7 @@ async def _ensure_dialog_closed(
         await target_dialog.wait_for(state="hidden", timeout=timeout_ms)
         return
     except Exception:
-        logger.debug("弹窗在 %sms 内未关闭,尝试点击叉叉", timeout_ms)
+        logger.debug("弹窗在 {}ms 内未关闭,尝试点击叉叉", timeout_ms)
 
     await _click_dialog_close_icon(page, target_dialog)
 
@@ -1130,9 +1122,9 @@ async def _capture_html(page: Page, path: str) -> None:
         target = Path(__file__).resolve().parents[2] / path
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(html, encoding="utf-8")
-        logger.debug("已写出调试 HTML: %s", target)
+        logger.debug("已写出调试 HTML: {}", target)
     except Exception as exc:
-        logger.warning("写出调试 HTML 失败: %s", exc)
+        logger.warning("写出调试 HTML 失败: {}", exc)
 
 
 async def upload_size_chart_via_url(page: Page, image_url: str) -> bool:

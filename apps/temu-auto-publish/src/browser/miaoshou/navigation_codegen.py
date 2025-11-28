@@ -92,7 +92,7 @@ async def _click_search_button_candidates(page: Page) -> bool:
             if await candidate.count():
                 await candidate.first.click()
                 await _wait_for_search_completion(page)
-                logger.success("Search triggered via locator: %s", candidate)
+                logger.success("Search triggered via locator: {}", candidate)
                 return True
         except Exception:
             continue
@@ -104,7 +104,7 @@ async def _click_search_button_candidates(page: Page) -> bool:
 async def fallback_apply_user_filter(page: Page, staff_name: str) -> bool:
     """Best-effort user filter using recorded selectors (用于兼容旧环境)."""
 
-    logger.info("Fallback: applying user filter via recorded selectors -> %s", staff_name)
+    logger.info("Fallback: applying user filter via recorded selectors -> {}", staff_name)
 
     input_candidates = [
         page.get_by_placeholder("请输入创建人员", exact=False),
@@ -247,7 +247,7 @@ async def fallback_apply_user_filter(page: Page, staff_name: str) -> bool:
             await page.keyboard.insert_text(staff_name)
         await _wait_for_dropdown_visibility(page, state="visible")
     except Exception as exc:
-        logger.error("Fallback user filter: unable to type staff name (%s)", exc)
+        logger.error("Fallback user filter: unable to type staff name ({})", exc)
         return False
 
     option_selectors = [
@@ -328,7 +328,7 @@ async def fallback_switch_tab(page: Page, tab_name: str) -> bool:
         for candidate in locator_candidates:
             locator = page.locator(candidate)
             if await _click_candidate(locator):
-                logger.success("Fallback tab switch succeeded via locator %s", candidate)
+                logger.success("Fallback tab switch succeeded via locator {}", candidate)
                 await _wait_for_tab_activation(page, label)
                 return True
 
@@ -348,7 +348,7 @@ async def fallback_switch_tab(page: Page, tab_name: str) -> bool:
                 await _wait_for_tab_activation(page, variant)
                 return True
 
-    logger.error("Fallback tab switch failed for labels: %s", labels)
+    logger.error("Fallback tab switch failed for labels: {}", labels)
     return False
 
 

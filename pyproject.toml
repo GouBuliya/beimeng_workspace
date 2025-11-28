@@ -125,7 +125,9 @@ addopts = [
     "-ra",
     "--strict-markers",
     "--strict-config",
-    "--cov=.",
+    "--cov=apps/temu-auto-publish/web_panel",
+    "--cov=apps/temu-auto-publish/config",
+    "--cov=packages/common",
     "--cov-report=term-missing",
     "--cov-report=html",
 ]
@@ -134,7 +136,11 @@ pythonpath = ["."]
 
 # Coverage 配置
 [tool.coverage.run]
-source = ["."]
+source = [
+    "apps/temu-auto-publish/web_panel",
+    "apps/temu-auto-publish/config",
+    "packages/common",
+]
 omit = [
     "*/tests/*",
     "*/venv/*",

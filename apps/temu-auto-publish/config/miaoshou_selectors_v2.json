@@ -4,21 +4,18 @@
   "last_updated": "2025-10-30",
   "strategy": "text_locator",
   "note": "使用文本定位器替代动态的aria-ref，提高选择器稳定性",
-  
   "login": {
     "url": "https://erp.91miaoshou.com/sub_account/users",
     "username_input": "input[name='mobile'].account-input",
     "password_input": "input[name='password'].password-input",
     "login_button": "button.login-button, button:has-text('登录'), button:has-text('立即登录')"
   },
-  
   "homepage": {
     "url": "https://erp.91miaoshou.com/welcome",
     "product_menu": "text='产品'",
     "product_collection_link": "text='产品采集'",
     "pending_publish_count": "text='待发布'"
   },
-  
   "product_collection": {
     "url": "https://erp.91miaoshou.com/common_collect_box/index",
     "link_input": "textarea[placeholder*='支持输入'], textarea[placeholder*='链接']",
@@ -29,13 +26,11 @@
     "collect_and_claim_btn": "button:has-text('采集并自动认领')",
     "collect_and_publish_btn": "button:has-text('采集并自动发布')"
   },
-  
   "sidebar_menu": {
     "common_functions": "text='通用功能'",
     "product_collection_item": "text='产品采集'",
     "common_collection_box": "text='公用采集箱'"
   },
-  
   "temu_collect_box": {
     "comment": "Temu全托管采集箱 - 批量编辑入口",
     "url": "https://erp.91miaoshou.com/pddkj/collect_box/items",
@@ -53,7 +48,6 @@
       "batch_publish": "button:has-text('批量发布')"
     }
   },
-  
   "collection_box": {
     "url": "https://erp.91miaoshou.com/common_collect_box/items",
     "search_box": {
@@ -131,7 +125,6 @@
       "per_page_selector": "text='条/页'"
     }
   },
-  
   "first_edit_dialog": {
     "comment": "首次编辑弹窗（产品编辑对话框） - 使用文本定位器",
     "close_btn": "button[aria-label='关闭'], button[aria-label='Close'], button.jx-dialog__headerbtn, .jx-dialog__close, .el-dialog__headerbtn, .el-dialog__close",
@@ -203,7 +196,6 @@
       "save_btn": "button:has-text('保存'), button:has-text('保存修改')"
     }
   },
-  
   "batch_edit": {
     "comment": "批量编辑功能 - 18步编辑流程",
     "entry_point": {
@@ -304,7 +296,7 @@
       "step_15_package_list": {
         "comment": "7.15 包装清单 - 不改动",
         "step_button": "text='包装清单'"
-    },
+      },
       "step_16_carousel_images": {
         "comment": "7.16 轮播图 - 暂时不需要",
         "step_button": "text='轮播图'"
@@ -335,10 +327,14 @@
       "confirm_button": "button:has-text('确定'), button:has-text('确认')"
     }
   },
-  
   "publish_flow": {
     "comment": "发布流程 - SOP步骤10的预览和发布",
     "note": "发布页面的具体选择器需要在实际进入页面后再获取"
+  },
+  "publish": {
+    "repeat_per_batch": 5
+  },
+  "publish_confirm": {
+    "close_retry": 5
   }
 }
-

@@ -95,6 +95,13 @@ FORM_FIELDS: tuple[FormField, ...] = (
         ],
     ),
     FormField(
+        name="single_run",
+        label="仅运行一次流程",
+        help_text="默认仅执行一轮。关闭后会循环执行，直到选品表耗尽或格式异常。",
+        kind="toggle",
+        default=True,
+    ),
+    FormField(
         name="use_ai_titles",
         label="启用 AI 标题生成",
         help_text="自动尝试生成更优标题, 失败时会回退为手动标题。",
@@ -114,5 +121,28 @@ FORM_FIELDS: tuple[FormField, ...] = (
         help_text="仅验证认领步骤, 自动跳过首次编辑/批量编辑/发布。",
         kind="toggle",
         default=False,
+    ),
+    FormField(
+        name="only_stage4_publish",
+        label="仅执行发布阶段",
+        help_text="跳过首次编辑、认领与批量编辑，仅运行 Stage 4 发布。确保前置步骤已人工完成。",
+        kind="toggle",
+        default=False,
+    ),
+    FormField(
+        name="publish_close_retry",
+        label="发布结果弹窗关闭重试",
+        help_text="发布结果弹窗关闭按钮的重试次数（1-10，默认 5）。",
+        kind="path",
+        placeholder="默认 5，最大 10",
+        default="5",
+    ),
+    FormField(
+        name="publish_repeat_count",
+        label="单批次发布重复次数",
+        help_text="每批20条商品重复发布的次数（1-10次，默认5次，即发布 20×N 条商品）。",
+        kind="path",
+        placeholder="默认 5，最大 10",
+        default="5",
     ),
 )

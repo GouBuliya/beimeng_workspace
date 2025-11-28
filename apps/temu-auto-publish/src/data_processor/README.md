@@ -47,6 +47,7 @@ src/data_processor/
 | `PriceCalculator` | 根据 SOP 定义计算建议售价、供货价、真实供货价 | 支持倍率配置，返回 `PriceResult` |
 | `AITitleGenerator` | 调用 OpenAI/Anthropic 或回退使用原标题 | 下一阶段将加入缓存与批量接口 |
 | `RandomDataGenerator` | 生成物流尺寸/重量、包装参数 | 测试用例覆盖 |
+| `SelectionTableQueue` | 把选品表当作队列，提供 pop/rollback/archive | 供 `run_until_empty.py` 等守护脚本使用 |
 
 ---
 
@@ -85,6 +86,7 @@ src/data_processor/
 from pathlib import Path
 from src.data_processor.selection_table_reader import SelectionTableReader
 from src.data_processor.price_calculator import PriceCalculator
+from src.data_processor.selection_table_queue import SelectionTableQueue
 
 reader = SelectionTableReader()
 rows = reader.read_excel(Path("data/input/10月新品可上架.csv"))
@@ -92,6 +94,11 @@ rows = reader.read_excel(Path("data/input/10月新品可上架.csv"))
 calculator = PriceCalculator(suggested_multiplier=10.0, supply_multiplier=7.5)
 price = calculator.calculate_one(cost_price=12.5)
 print(rows[0].product_name, price.suggested_price, price.supply_price)
+
+queue = SelectionTableQueue("data/input/selection.xlsx")
+batch = queue.pop_next_batch(batch_size=20)
+# ...执行发布逻辑...
+queue.archive_batch(batch.rows, suffix="success")
 ```
 
 AI 标题生成回退示例：

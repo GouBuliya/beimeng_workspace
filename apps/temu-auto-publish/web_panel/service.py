@@ -15,9 +15,18 @@ import time
 from collections import deque
 from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
-from typing import BinaryIO
+from typing import BinaryIO, Sequence
 
 from loguru import logger
+from config.settings import settings
+from src.browser.login_controller import LoginController
+from src.data_processor.selection_table_queue import (
+    SelectionTableEmptyError,
+    SelectionTableFormatError,
+    SelectionTableQueue,
+)
+from src.data_processor.selection_table_reader import ProductSelectionRow
+from src.utils.selector_hit_recorder import export_selector_report
 from src.workflows.complete_publish_workflow import CompletePublishWorkflow
 
 from .models import LogChunk, RunState, RunStatus, WorkflowOptions
@@ -35,6 +44,7 @@ def _resolve_upload_dir() -> Path:
 
 
 UPLOAD_DIR = _resolve_upload_dir()
+DEFAULT_BATCH_SIZE = max(1, min(settings.business.collect_count, 5))
 
 
 class SelectionFileStore:
@@ -75,7 +85,7 @@ class SelectionFileStore:
             while chunk:
                 buffer.write(chunk)
                 chunk = stream.read(1024 * 1024)
-        logger.info("已保存上传文件: %s", target)
+        logger.info("已保存上传文件: {}", target)
         return target
 
     @staticmethod
@@ -132,28 +142,124 @@ class WorkflowTaskManager:
             return [log for log in self._logs if log.index > after]
 
     def _run_workflow(self, options: WorkflowOptions) -> None:
-        logger.info("Web Panel 启动 Temu 工作流")
+        logger.info(
+            "Web Panel 启动 Temu 工作流 (%s)",
+            "单次模式" if options.single_run else "循环模式",
+        )
         try:
-            workflow = CompletePublishWorkflow(**options.as_workflow_kwargs())
-            result = workflow.execute()
-            self._mark_success(
-                workflow_id=result.workflow_id,
-                total_success=result.total_success,
-                errors=result.errors,
-            )
+            if options.single_run:
+                self._run_single(options)
+            else:
+                self._run_continuous(options)
         except Exception as exc:  # pragma: no cover - 运行时错误
             logger.exception("Temu 工作流运行失败: %s", exc)
             self._mark_failure(str(exc))
         finally:
             self._detach_log_sink()
+            # 导出选择器命中报告
+            try:
+                export_selector_report("D:/codespace/beimeng_workspace/data/temp")
+            except Exception as exc:
+                logger.warning(f"导出选择器命中报告失败: {exc}")
 
-    def _mark_success(self, workflow_id: str, total_success: bool, errors: list[str]) -> None:
-        message = "全部步骤完成" if total_success else "流程结束, 但存在告警"
+    def _run_single(self, options: WorkflowOptions) -> None:
+        result = self._execute_workflow(options)
+        self._mark_success(
+            workflow_id=result.workflow_id,
+            total_success=result.total_success,
+            errors=result.errors,
+        )
+
+    def _run_continuous(self, options: WorkflowOptions) -> None:
+        queue = SelectionTableQueue(options.selection_path)
+        processed_batches = 0
+        last_workflow_id: str | None = None
+        # 在循环外部创建 LoginController，复用同一个浏览器实例
+        login_ctrl = LoginController()
+
+        while True:
+            try:
+                batch = queue.pop_next_batch(DEFAULT_BATCH_SIZE)
+            except SelectionTableEmptyError as exc:
+                logger.info("{}", exc)
+                message = (
+                    "循环模式结束, 未检测到待处理数据"
+                    if processed_batches == 0
+                    else f"循环模式完成, 成功批次 {processed_batches}"
+                )
+                self._mark_success(
+                    workflow_id=last_workflow_id or "continuous",
+                    total_success=True,
+                    errors=[],
+                    message=message,
+                )
+                return
+            except SelectionTableFormatError as exc:
+                logger.error("选品表格式异常: {}", exc)
+                self._mark_failure(str(exc))
+                return
+
+            logger.info(
+                "循环模式: 开始处理批次 #%s (条目=%s)", processed_batches + 1, batch.size
+            )
+            try:
+                result = self._execute_workflow(
+                    options,
+                    selection_rows_override=batch.rows,
+                    execution_round=processed_batches + 1,
+                    login_ctrl=login_ctrl,
+                )
+            except Exception:
+                queue.return_batch(batch.rows)
+                raise
+
+            if result.total_success:
+                processed_batches += 1
+                last_workflow_id = result.workflow_id or last_workflow_id
+                queue.archive_batch(batch.rows, suffix="success")
+            else:
+                queue.return_batch(batch.rows)
+                queue.archive_batch(batch.rows, suffix="failed")
+                error_msg = (
+                    "; ".join(result.errors) if result.errors else "批次执行存在失败"
+                )
+                self._mark_failure(error_msg)
+                return
+
+    def _execute_workflow(
+        self,
+        options: WorkflowOptions,
+        *,
+        selection_rows_override: Sequence[ProductSelectionRow] | None = None,
+        execution_round: int | None = None,
+        login_ctrl: LoginController | None = None,
+    ):
+        workflow_kwargs = options.as_workflow_kwargs()
+        if selection_rows_override is not None:
+            workflow_kwargs["selection_rows_override"] = selection_rows_override
+        if execution_round is not None:
+            workflow_kwargs["execution_round"] = execution_round
+        if login_ctrl is not None:
+            workflow_kwargs["login_ctrl"] = login_ctrl
+        workflow = CompletePublishWorkflow(**workflow_kwargs)
+        return workflow.execute()
+
+    def _mark_success(
+        self,
+        workflow_id: str,
+        total_success: bool,
+        errors: list[str],
+        *,
+        message: str | None = None,
+    ) -> None:
+        final_message = message or (
+            "全部步骤完成" if total_success else "流程结束, 但存在告警"
+        )
         error_msg = "; ".join(errors) if errors else None
         with self._lock:
             self._status = RunStatus(
                 state=RunState.SUCCESS if total_success else RunState.FAILED,
-                message=message,
+                message=final_message,
                 workflow_id=workflow_id,
                 started_at=self._status.started_at,
                 finished_at=time.time(),

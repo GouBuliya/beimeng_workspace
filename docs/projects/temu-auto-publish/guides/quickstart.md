@@ -51,8 +51,6 @@ vim .env  # 或使用你喜欢的编辑器
 TEMU_USERNAME=your_username
 TEMU_PASSWORD=your_password
 YINGDAO_FLOW_ID=flow_123
-# 若需自动拼接尺寸图 URL，可配置 OSS 前缀
-SIZE_CHART_BASE_URL=https://miaoshou-tuchuang-beimeng.oss-cn-hangzhou.aliyuncs.com/10月新品可推/
 ```
 
 ---
@@ -66,9 +64,9 @@ SIZE_CHART_BASE_URL=https://miaoshou-tuchuang-beimeng.oss-cn-hangzhou.aliyuncs.c
 | 商品名称 | 成本价 | 类目 | 关键词 | 实拍图数组 | 尺寸图链接 | 视频链接 | 备注 |
 |---------|--------|------|--------|------------|------------|----------|------|
 | 智能手表运动防水 | 150 | 电子产品/智能穿戴 | 智能手表 | ["A045.jpg"] | https://oss.example.com/A045.jpg | https://video.example.com/A045.mp4 | 测试商品 |
-| 蓝牙耳机无线降噪 | 80 | 电子产品/音频设备 | 蓝牙耳机 | ["A046.jpg"] | *(留空则使用 SIZE_CHART_BASE_URL 拼接)* | *(可选)* | |
+| 蓝牙耳机无线降噪 | 80 | 电子产品/音频设备 | 蓝牙耳机 | ["A046.jpg"] | https://oss.example.com/A046.jpg | *(可选)* | |
 
-> 若省略 `尺寸图链接`，系统会使用 `SIZE_CHART_BASE_URL` 与 `实拍图数组` 的首个文件名拼接生成尺寸图外链；视频 URL 列留空则默认使用 `https://www.baidu.com` 并尝试上传。请确保外链资源可直接访问或提供有效签名链接。
+> 若省略 `尺寸图链接`，首次编辑阶段将跳过尺寸图上传，脚本不会再尝试根据前缀自动拼接。请确保提供的尺寸图/视频外链可直接访问或包含有效签名。
 
 ---
 

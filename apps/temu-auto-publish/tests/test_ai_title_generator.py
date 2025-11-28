@@ -1,10 +1,14 @@
 """
 @PURPOSE: AI标题生成器的单元测试
 @OUTLINE:
-  - test_ai_title_generator_init(): 测试初始化
-  - test_build_prompt(): 测试提示词构建
-  - test_generate_titles_simple(): 测试简单标题生成
-  - test_generate_titles_fallback(): 测试降级策略
+  - TestAITitleGenerator: 基础测试
+    - test_init_default: 测试默认初始化
+    - test_init_custom: 测试自定义初始化
+    - test_build_prompt: 测试提示词构建
+    - test_generate_titles_without_ai: 测试不使用AI
+    - test_generate_titles_with_mock_api: 测试Mock API调用
+  - TestAITitleGeneratorMocked: Mock API 测试
+  - TestAITitleGeneratorIntegration: 集成测试
 @DEPENDENCIES:
   - 内部: src.data_processor.ai_title_generator
   - 外部: pytest, pytest-asyncio
@@ -13,6 +17,7 @@
 import asyncio
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
+from dataclasses import dataclass
 
 from src.data_processor.ai_title_generator import AITitleGenerator, generate_titles_simple
 
@@ -41,6 +46,21 @@ class TestAITitleGenerator:
         assert generator.model == "claude-3-haiku-20240307"
         assert generator.max_retries == 5
         assert generator.timeout == 60
+    
+    def test_init_with_base_url(self):
+        """测试自定义base_url（兼容接口）"""
+        generator = AITitleGenerator(
+            provider="openai",
+            api_key="test-key",
+            base_url="https://dashscope.aliyuncs.com/compatible-mode/v1"
+        )
+        assert generator.base_url == "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    
+    def test_init_unsupported_provider(self):
+        """测试不支持的提供商"""
+        generator = AITitleGenerator(provider="unknown")
+        assert generator.provider == "unknown"
+        assert generator.api_key == ""
     
     def test_build_prompt(self):
         """测试提示词构建."""
@@ -155,6 +175,130 @@ class TestAITitleGenerator:
         for title in new_titles:
             # 确保型号只出现一次
             assert title.count(model_number) == 1
+
+
+class TestAITitleGeneratorMocked:
+    """使用 Mock 的 AI 标题生成器测试"""
+    
+    @pytest.mark.asyncio
+    async def test_generate_titles_with_mocked_openai(self):
+        """测试使用 Mock OpenAI API 生成标题"""
+        generator = AITitleGenerator(provider="openai", api_key="test-key")
+        
+        # Mock OpenAI API 响应
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = """便携收纳盒家用整理箱
+大容量收纳盒多功能整理包
+家用便携式收纳箱储物盒
+多功能收纳整理盒便携款
+大容量家用收纳包整理箱"""
+        
+        with patch('openai.AsyncOpenAI') as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
+            mock_client_class.return_value = mock_client
+            
+            original_titles = ["标题1", "标题2", "标题3", "标题4", "标题5"]
+            new_titles = await generator.generate_titles(
+                original_titles,
+                model_number="A0001型号",
+                use_ai=True
+            )
+            
+            assert len(new_titles) == 5
+            for title in new_titles:
+                assert "A0001型号" in title
+    
+    @pytest.mark.asyncio
+    async def test_generate_single_title_without_ai(self):
+        """测试不使用AI生成单个标题"""
+        generator = AITitleGenerator()
+        
+        result = await generator.generate_single_title(
+            "便携药箱家用急救包",
+            model_number="A0001型号",
+            use_ai=False
+        )
+        
+        assert "便携药箱家用急救包" in result
+        assert "A0001型号" in result
+    
+    @pytest.mark.asyncio
+    async def test_generate_single_title_fallback(self):
+        """测试单个标题生成的降级策略"""
+        generator = AITitleGenerator(api_key="test-key")
+        generator.max_retries = 1
+        
+        with patch.object(generator, '_call_openai_api', side_effect=Exception("API Error")):
+            result = await generator.generate_single_title(
+                "原始标题",
+                model_number="型号001",
+                use_ai=True
+            )
+            
+            # 降级返回原标题+型号
+            assert "原始标题" in result
+            assert "型号001" in result
+    
+    @pytest.mark.asyncio
+    async def test_api_response_parsing(self):
+        """测试API响应解析（去除编号）"""
+        generator = AITitleGenerator(provider="openai", api_key="test-key")
+        
+        # 模拟带编号的响应
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = """1. 收纳盒标题一
+2. 收纳盒标题二
+3. 收纳盒标题三
+4. 收纳盒标题四
+5. 收纳盒标题五"""
+        
+        with patch('openai.AsyncOpenAI') as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
+            mock_client_class.return_value = mock_client
+            
+            original_titles = ["标题1", "标题2", "标题3", "标题4", "标题5"]
+            new_titles = await generator.generate_titles(
+                original_titles,
+                model_number="",
+                use_ai=True
+            )
+            
+            assert len(new_titles) == 5
+            # 验证编号被正确去除
+            for title in new_titles:
+                assert not title.startswith("1.")
+                assert not title.startswith("2.")
+    
+    @pytest.mark.asyncio
+    async def test_insufficient_api_response(self):
+        """测试API返回标题数量不足的情况"""
+        generator = AITitleGenerator(provider="openai", api_key="test-key")
+        
+        # 模拟只返回3个标题的响应
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = """收纳盒标题一
+收纳盒标题二
+收纳盒标题三"""
+        
+        with patch('openai.AsyncOpenAI') as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
+            mock_client_class.return_value = mock_client
+            
+            original_titles = ["标题1", "标题2", "标题3", "标题4", "标题5"]
+            new_titles = await generator.generate_titles(
+                original_titles,
+                model_number="",
+                use_ai=True
+            )
+            
+            # 应该自动补齐到5个
+            assert len(new_titles) == 5
 
 
 class TestAITitleGeneratorIntegration:

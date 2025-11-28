@@ -92,11 +92,6 @@ ENV_FIELDS: Final[tuple[EnvField, ...]] = (
         secret=True,
     ),
     EnvField(
-        key="SIZE_CHART_BASE_URL",
-        label="尺寸图 OSS 前缀",
-        help_text="选品表未提供尺寸图时会用该前缀 + 文件名拼接。",
-    ),
-    EnvField(
         key="VIDEO_BASE_URL",
         label="视频 OSS 前缀",
         help_text="选品表未提供视频链接时使用。",

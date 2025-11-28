@@ -17,6 +17,7 @@ from typing import Optional
 from loguru import logger
 
 from ...utils.batch_edit_helpers import retry_on_failure
+from ...utils.selector_race import TIMEOUTS
 
 
 class BatchEditStepsMixin:
@@ -38,8 +39,8 @@ class BatchEditStepsMixin:
         try:
             logger.info("  填写英语标题（输入空格）...")
 
-            # 等待页面加载
-            await self.page.wait_for_timeout(500)
+            # 等待页面 DOM 加载
+            await self.page.wait_for_load_state("domcontentloaded", timeout=TIMEOUTS.SLOW)
 
             # 精准定位：排除disabled/readonly，优先匹配placeholder包含"英"的输入框
             precise_selectors = [
@@ -99,7 +100,7 @@ class BatchEditStepsMixin:
 
         try:
             logger.info("  检查主货号是否需要填写...")
-            await self.page.wait_for_timeout(500)
+            await self.page.wait_for_load_state("domcontentloaded", timeout=TIMEOUTS.SLOW)
 
             # 精准定位：排除disabled/readonly
             precise_selectors = [
@@ -145,8 +146,8 @@ class BatchEditStepsMixin:
         try:
             logger.info("  填写外包装信息...")
 
-            # 等待页面加载完成
-            await self.page.wait_for_timeout(1000)
+            # 等待页面 DOM 加载
+            await self.page.wait_for_load_state("domcontentloaded", timeout=TIMEOUTS.SLOW)
 
             # 1. 选择外包装形状：长方体（使用下拉选择框）
             logger.info("    - 外包装形状：长方体")
@@ -164,7 +165,6 @@ class BatchEditStepsMixin:
                         # 点击下拉框打开选项
                         await select_input.click()
                         logger.debug("      已点击外包装形状下拉框")
-                        await self.page.wait_for_timeout(500)
 
                         # 选择"长方体"选项
                         option_selectors = [
@@ -201,8 +201,6 @@ class BatchEditStepsMixin:
                 except Exception:  # noqa: BLE001
                     pass
 
-            await self.page.wait_for_timeout(500)
-
             # 2. 选择外包装类型：硬包装（使用下拉选择框）
             logger.info("    - 外包装类型：硬包装")
             type_selected = False
@@ -217,7 +215,6 @@ class BatchEditStepsMixin:
                     if await select_input.count() > 0 and await select_input.is_visible():
                         await select_input.click()
                         logger.debug("      已点击外包装类型下拉框")
-                        await self.page.wait_for_timeout(500)
 
                         option_selectors = [
                             ".el-select-dropdown__item:has-text('硬包装')",
@@ -252,8 +249,6 @@ class BatchEditStepsMixin:
                 except Exception:  # noqa: BLE001
                     pass
 
-            await self.page.wait_for_timeout(500)
-
             def _is_url(value: str) -> bool:
                 return value.lower().startswith(("http://", "https://"))
 
@@ -265,12 +260,11 @@ class BatchEditStepsMixin:
                         network_img_btn = self.page.locator("button:has-text('使用网络图片')").first
                         if await network_img_btn.count() > 0 and await network_img_btn.is_visible():
                             await network_img_btn.click()
-                            await self.page.wait_for_timeout(1000)
-
+                            # 等待输入框出现
                             url_input = self.page.locator("input[placeholder*='图片'], textarea").first
+                            await url_input.wait_for(state="visible", timeout=TIMEOUTS.NORMAL)
                             if await url_input.count() > 0:
                                 await url_input.fill(upload_source)
-                                await self.page.wait_for_timeout(500)
 
                                 confirm_btn = self.page.locator(
                                     "button:has-text('确定'), button:has-text('确认')",
@@ -295,7 +289,6 @@ class BatchEditStepsMixin:
                             if await file_inputs.count() > 0:
                                 await file_inputs.last.set_input_files(str(file_path))
                                 logger.success("      ✓ 本地图片已上传")
-                                await self.page.wait_for_timeout(500)
                             else:
                                 logger.warning("      ⚠️ 未找到图片文件选择框")
                         except Exception as err:  # noqa: BLE001
@@ -305,7 +298,6 @@ class BatchEditStepsMixin:
             else:
                 logger.info("    - 跳过图片上传（未提供图片）")
 
-            await self.page.wait_for_timeout(500)
             return await self.click_preview_and_save("外包装")
 
         except Exception as exc:  # noqa: BLE001
@@ -320,7 +312,7 @@ class BatchEditStepsMixin:
         try:
             logger.info("  填写产地：浙江 -> 中国大陆 / 浙江省...")
 
-            await self.page.wait_for_timeout(1000)
+            await self.page.wait_for_load_state("domcontentloaded", timeout=TIMEOUTS.SLOW)
 
             precise_selectors = [
                 "input[placeholder='请选择或输入搜索']:not([readonly]):not([disabled]):not([type='number'])",
@@ -340,8 +332,7 @@ class BatchEditStepsMixin:
                                 continue
 
                             try:
-                                await input_elem.click(timeout=1000)
-                                await self.page.wait_for_timeout(200)
+                                await input_elem.click(timeout=TIMEOUTS.NORMAL)
                                 await input_elem.clear()
                                 await input_elem.fill("浙江")
                                 logger.success(
@@ -349,7 +340,15 @@ class BatchEditStepsMixin:
                                 )
                                 input_found = True
 
-                                await self.page.wait_for_timeout(1500)
+                                # 等待下拉选项出现
+                                try:
+                                    await self.page.wait_for_selector(
+                                        ".el-select-dropdown__item:visible",
+                                        state="visible",
+                                        timeout=TIMEOUTS.NORMAL,
+                                    )
+                                except Exception:  # noqa: BLE001
+                                    pass
 
                                 option_selectors = [
                                     "text='中国大陆 / 浙江省'",
@@ -387,7 +386,6 @@ class BatchEditStepsMixin:
                                 if not selected:
                                     try:
                                         await input_elem.press("ArrowDown")
-                                        await self.page.wait_for_timeout(300)
                                         await input_elem.press("Enter")
                                         logger.info("  ✓ 已按ArrowDown+Enter确认")
                                     except Exception:  # noqa: BLE001
@@ -416,7 +414,6 @@ class BatchEditStepsMixin:
                 except Exception:  # noqa: BLE001
                     pass
 
-            await self.page.wait_for_timeout(500)
             return await self.click_preview_and_save("产地")
 
         except Exception as exc:  # noqa: BLE001
@@ -668,20 +665,19 @@ class BatchEditStepsMixin:
 
             selected = False
             for selector in option_selectors:
-            try:
+                try:
                     option = self.page.locator(selector).first
                     if await option.count() > 0 and await option.is_visible():
                         await option.click()
                         logger.success("  ✓ 已选择：单品")
-                    selected = True
-                    break
+                        selected = True
+                        break
                 except Exception:  # noqa: BLE001
-                continue
+                    continue
 
-        if not selected:
+            if not selected:
                 logger.warning("  ⚠️ 未找到'单品'选项")
 
-            await self.page.wait_for_timeout(300)
             return await self.click_preview_and_save("SKU分类")
 
         except Exception as exc:  # noqa: BLE001
@@ -776,7 +772,7 @@ class BatchEditStepsMixin:
         """步骤7.18：产品说明书（上传PDF文件）."""
         if not await self.click_step("产品说明书", "7.18"):
             return False
-        #等待1s
+
         try:
             if manual_file_path:
                 file_path = Path(manual_file_path)
@@ -791,45 +787,43 @@ class BatchEditStepsMixin:
                         uploaded = False
                         file_chooser = None
                         try:
-                    logger.info(f"  上传产品说明书: {file_path.name}...")
+                            logger.info(f"  上传产品说明书: {file_path.name}...")
 
-                    upload_btn_selectors = [
-                        "button:has-text('上传文件')",
-                        "text='上传文件'",
-                        ".el-button:has-text('上传文件')",
-                        "span:has-text('上传文件')",
-                        "xpath=/html/body/div[12]/div/div[2]/div[1]/div[2]/form/div/div[1]/div/div/button",
-                    ]
-                    section_candidates = [
-                        "text='批量编辑方式'",
-                        "text='使用网络的说明书'",
-                        "text='使用网络说明书'",
-                        "text='使用网络说明书 '",
-                    ]
-                    upload_section = None
-                    for section in section_candidates:
-                        try:
-                            label = self.page.locator(section).first
-                            if await label.count() > 0 and await label.is_visible():
-                                upload_section = label.locator("..").locator("..")
-                                break
-                        except Exception:
-                            continue
-                    upload_btn_scope = upload_section or self.page
+                            upload_btn_selectors = [
+                                "button:has-text('上传文件')",
+                                "text='上传文件'",
+                                ".el-button:has-text('上传文件')",
+                                "span:has-text('上传文件')",
+                                "xpath=/html/body/div[12]/div/div[2]/div[1]/div[2]/form/div/div[1]/div/div/button",
+                            ]
+                            section_candidates = [
+                                "text='批量编辑方式'",
+                                "text='使用网络的说明书'",
+                                "text='使用网络说明书'",
+                                "text='使用网络说明书 '",
+                            ]
+                            upload_section = None
+                            for section in section_candidates:
+                                try:
+                                    label = self.page.locator(section).first
+                                    if await label.count() > 0 and await label.is_visible():
+                                        upload_section = label.locator("..").locator("..")
+                                        break
+                                except Exception:
+                                    continue
+                            upload_btn_scope = upload_section or self.page
 
                             hovered = False
                             for selector in upload_btn_selectors:
                                 try:
-                            upload_btn = upload_btn_scope.locator(selector).first
+                                    upload_btn = upload_btn_scope.locator(selector).first
                                     if await upload_btn.count() > 0 and await upload_btn.is_visible():
                                         await upload_btn.hover()
                                         logger.debug("  ✓ 已悬停在'上传文件'按钮")
-                                        await self.page.wait_for_timeout(100)
                                         with suppress(Exception):
                                             await upload_btn.click()
                                         with suppress(Exception):
                                             await upload_btn.click(button="right")
-                                        await self.page.wait_for_timeout(150)
                                         hovered = True
                                         break
                                 except Exception as err:  # noqa: BLE001
@@ -856,9 +850,9 @@ class BatchEditStepsMixin:
                                             ".el-dropdown-menu:visible, .el-popover:visible"
                                         )
                                         with suppress(Exception):
-                                            await dropdown_wrapper.first.wait_for(state="visible", timeout=1500)
+                                            await dropdown_wrapper.first.wait_for(state="visible", timeout=TIMEOUTS.NORMAL)
                                         try:
-                                            with self.page.expect_file_chooser(timeout=2000) as fc_info:
+                                            with self.page.expect_file_chooser(timeout=TIMEOUTS.NORMAL) as fc_info:
                                                 await local_upload_option.click()
                                             file_chooser = await fc_info.value
                                             logger.debug("  ✓ 已点击'本地上传'并捕获文件选择器")
@@ -877,9 +871,16 @@ class BatchEditStepsMixin:
 
                             try:
                                 await file_chooser.set_files(str(file_path))
-                                await self.page.wait_for_timeout(1500)
+                                # 等待上传完成，通过检测上传成功提示
+                                try:
+                                    await self.page.wait_for_selector(
+                                        ".el-message--success:visible, .upload-success:visible",
+                                        state="visible",
+                                        timeout=TIMEOUTS.SLOW,
+                                    )
+                                except Exception:  # noqa: BLE001
+                                    await self.page.wait_for_load_state("networkidle", timeout=TIMEOUTS.SLOW)
                                 logger.success(f"  ✅ 已上传产品说明书: {file_path.name}")
-                                await self.page.wait_for_timeout(500)
                                 uploaded = True
                             except Exception as err:  # noqa: BLE001
                                 logger.error(f"  ❌ 文件选择器上传失败: {err}")
@@ -902,7 +903,7 @@ class BatchEditStepsMixin:
                                     if selector in seen:
                                         continue
                                     seen.add(selector)
-                        try:
+                                    try:
                                         file_input = self.page.locator(selector).last
                                         if await file_input.count() == 0:
                                             continue
@@ -916,26 +917,25 @@ class BatchEditStepsMixin:
                                                 accept_attr,
                                             )
                                             continue
-                                await file_input.set_input_files(str(file_path))
-                                        await self.page.wait_for_timeout(1500)
+                                        await file_input.set_input_files(str(file_path))
+                                        await self.page.wait_for_load_state("networkidle", timeout=TIMEOUTS.SLOW)
                                         logger.success(f"  ✅ 已上传产品说明书: {file_path.name}")
-                                        await self.page.wait_for_timeout(500)
-                                uploaded = True
-                                break
-                        except Exception as err:  # noqa: BLE001
-                            logger.debug(f"  上传选择器 {selector} 失败: {err}")
-                            continue
+                                        uploaded = True
+                                        break
+                                    except Exception as err:  # noqa: BLE001
+                                        logger.debug(f"  上传选择器 {selector} 失败: {err}")
+                                        continue
 
                             if uploaded:
                                 success_upload = True
                                 break
                             else:
-                                logger.warning("  ⚠️ 第 %s 次尝试仍未上传成功，重试中...", attempt)
-                                await self.page.wait_for_timeout(400)
+                                logger.warning(f"  ⚠️ 第 {attempt} 次尝试仍未上传成功，重试中...")
+                                await self.page.wait_for_load_state("domcontentloaded")
                         except Exception as err:  # noqa: BLE001
                             last_error = err
-                            logger.warning("  ⚠️ 上传尝试 %s 失败: %s", attempt, err)
-                            await self.page.wait_for_timeout(400)
+                            logger.warning(f"  ⚠️ 上传尝试 {attempt} 失败: {err}")
+                            await self.page.wait_for_load_state("domcontentloaded")
 
                     if not success_upload:
                         if last_error:

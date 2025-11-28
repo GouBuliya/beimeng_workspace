@@ -6,6 +6,7 @@
 @GOTCHAS:
   - 必须使用 --input/-i 指定选品表 Excel 文件
   - 可选参数继承工作流的行为配置
+  - 程序结束时自动导出选择器命中报告到 data/temp
 """
 
 from __future__ import annotations
@@ -13,6 +14,8 @@ from __future__ import annotations
 from pathlib import Path
 
 import typer
+
+from src.utils.selector_hit_recorder import export_selector_report
 from src.workflows.complete_publish_workflow import CompletePublishWorkflow
 
 app = typer.Typer(help="Temu 完整发布工作流 CLI")
@@ -69,16 +72,19 @@ def run(
     only_claim: bool = ONLY_CLAIM_OPTION,
 ) -> None:
     """执行 Temu 完整发布工作流."""
-
-    workflow = CompletePublishWorkflow(
-        selection_table=input,
-        headless=headless,
-        use_ai_titles=use_ai_titles,
-        use_codegen_batch_edit=use_codegen_batch_edit,
-        skip_first_edit=skip_first_edit,
-        only_claim=only_claim,
-    )
-    workflow.execute()
+    try:
+        workflow = CompletePublishWorkflow(
+            selection_table=input,
+            headless=headless,
+            use_ai_titles=use_ai_titles,
+            use_codegen_batch_edit=use_codegen_batch_edit,
+            skip_first_edit=skip_first_edit,
+            only_claim=only_claim,
+        )
+        workflow.execute()
+    finally:
+        # 无论成功或失败，都导出选择器命中报告
+        export_selector_report("D:/codespace/beimeng_workspace/data/temp")
 
 
 if __name__ == "__main__":

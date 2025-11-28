@@ -35,8 +35,10 @@ class WorkflowOptions(BaseModel):
     use_ai_titles: bool = Field(default=False)
     skip_first_edit: bool = Field(default=False)
     only_claim: bool = Field(default=False)
+    only_stage4_publish: bool = Field(default=False, description="仅运行阶段4发布")
     outer_package_image: Path | None = Field(default=None, description="外包装图片文件路径")
     manual_file: Path | None = Field(default=None, description="产品说明书PDF路径")
+    single_run: bool = Field(default=True, description="是否仅运行一次流程")
 
     def as_workflow_kwargs(self) -> dict[str, object]:
         """转换为 CompletePublishWorkflow 所需的关键参数."""
@@ -56,6 +58,7 @@ class WorkflowOptions(BaseModel):
             "use_ai_titles": self.use_ai_titles,
             "skip_first_edit": self.skip_first_edit,
             "only_claim": self.only_claim,
+            "only_stage4_publish": self.only_stage4_publish,
             "outer_package_image": str(self.outer_package_image) if self.outer_package_image else None,
             "manual_file": str(self.manual_file) if self.manual_file else None,
         }

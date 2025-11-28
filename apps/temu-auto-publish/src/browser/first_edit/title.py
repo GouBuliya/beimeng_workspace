@@ -9,6 +9,7 @@ from __future__ import annotations
 from loguru import logger
 from playwright.async_api import Page
 
+from ...utils.selector_race import TIMEOUTS, try_selectors_race
 from .base import FirstEditBase
 
 
@@ -27,50 +28,45 @@ class FirstEditTitleMixin(FirstEditBase):
         """
         logger.debug("获取产品原始标题...")
 
+        # 优化顺序：基于选择器命中记录，将成功率最高的选择器放在前面
+        title_selectors = [
+            ".jx-overlay-dialog input.jx-input__inner[type='text']:visible",  # 命中率最高
+            "xpath=//label[contains(text(), '产品标题')]/following-sibling::*/descendant::input[@type='text'][1]",
+            "xpath=//label[contains(text(), '产品标题')]/following::input[@type='text'][1]",
+            "xpath=//div[contains(@class, 'jx-form-item')]//label[contains(text(), '产品标题:')]//following-sibling::*/descendant::input[@type='text']",
+            "xpath=//label[contains(text(), '产品标题')]/ancestor::div[contains(@class, 'jx-form-item')]//input[contains(@class, 'jx-input__inner') and @type='text']",
+        ]
+
         for attempt in range(1, max_retries + 1):
             try:
                 if attempt > 1:
-                    logger.info("第 %s/%s 次尝试获取原始标题...", attempt, max_retries)
+                    logger.info("第 {}/{} 次尝试获取原始标题...", attempt, max_retries)
 
-                title_selectors = [
-                    "xpath=//label[contains(text(), '产品标题')]/following-sibling::*/descendant::input[@type='text'][1]",
-                    "xpath=//label[contains(text(), '产品标题')]/following::input[@type='text'][1]",
-                    "xpath=//div[contains(@class, 'jx-form-item')]//label[contains(text(), '产品标题:')]//following-sibling::*/descendant::input[@type='text']",
-                    "xpath=//label[contains(text(), '产品标题')]/ancestor::div[contains(@class, 'jx-form-item')]//input[contains(@class, 'jx-input__inner') and @type='text']",
-                    ".jx-overlay-dialog input.jx-input__inner[type='text']:visible",
-                ]
-
-                title_input = None
-                for selector in title_selectors:
-                    try:
-                        count = await page.locator(selector).count()
-                        if count > 0:
-                            for index in range(count):
-                                element = page.locator(selector).nth(index)
-                                if await element.is_visible(timeout=1_000):
-                                    title_input = element
-                                    logger.debug("使用选择器: %s (第 %s 个)", selector, index + 1)
-                                    break
-                            if title_input:
-                                break
-                    except Exception:
-                        continue
+                # 使用并行竞速策略查找标题输入框
+                title_input = await try_selectors_race(
+                    page,
+                    title_selectors,
+                    timeout_ms=TIMEOUTS.NORMAL,
+                    context_name="获取原始标题",
+                )
 
                 if not title_input:
                     if attempt < max_retries:
-                        logger.warning("第 %s 次尝试未找到标题输入框,准备重试...", attempt)
-                        await page.wait_for_timeout(1_000)
+                        logger.warning("第 {} 次尝试未找到标题输入框,准备重试...", attempt)
+                        # 智能等待: 等待 DOM 稳定而非固定延迟
+                        await page.wait_for_load_state("domcontentloaded", timeout=TIMEOUTS.NORMAL)
                         continue
-                    logger.error("未找到标题输入框(已重试 %s 次)", max_retries)
+                    logger.error("未找到标题输入框(已重试 {} 次)", max_retries)
                     return ""
 
                 title = await title_input.input_value()
-                logger.success("获取到原始标题: %s...", title[:50])
+                logger.success("获取到原始标题: {}...", title[:50])
                 return title
             except Exception as exc:
                 if attempt < max_retries:
                     logger.warning(f"第 {attempt} 次获取原始标题失败: {exc},准备重试...")
-                    await page.wait_for_timeout(1_000)
+                    # 智能等待: 等待 DOM 稳定而非固定延迟
+                    await page.wait_for_load_state("domcontentloaded", timeout=TIMEOUTS.NORMAL)
                     continue
                 logger.error(f"获取原始标题失败(已重试 {max_retries} 次): {exc}")
                 return ""
@@ -87,62 +83,49 @@ class FirstEditTitleMixin(FirstEditBase):
         Returns:
             标题是否成功更新.
         """
-        logger.info("SOP 4.1: 编辑标题 -> %s", new_title)
-        logger.debug("标题长度: %s 字符", len(new_title))
+        logger.info("SOP 4.1: 编辑标题 -> {}", new_title)
+        logger.debug("标题长度: {} 字符", len(new_title))
 
         try:
+            # 优化顺序：基于选择器命中记录，将成功率最高的选择器放在前面
             title_selectors = [
+                ".jx-overlay-dialog input.jx-input__inner[type='text']:visible",  # 命中率最高
                 "xpath=//label[contains(text(), '产品标题')]/following-sibling::*/descendant::input[@type='text'][1]",
                 "xpath=//label[contains(text(), '产品标题')]/following::input[@type='text'][1]",
                 "xpath=//div[contains(@class, 'jx-form-item')]//label[contains(text(), '产品标题:')]//following-sibling::*/descendant::input[@type='text']",
                 "xpath=//label[contains(text(), '产品标题')]/ancestor::div[contains(@class, 'jx-form-item')]//input[contains(@class, 'jx-input__inner') and @type='text']",
-                ".jx-overlay-dialog input.jx-input__inner[type='text']:visible",
             ]
 
-            title_input = None
-            used_selector = None
-            for index, selector in enumerate(title_selectors, start=1):
-                try:
-                    logger.debug("[%s/%s] 尝试选择器: %s...", index, len(title_selectors), selector[:60])
-                    count = await page.locator(selector).count()
-                    logger.debug("找到 %s 个匹配元素", count)
-
-                    if count > 0:
-                        for elem_index in range(count):
-                            element = page.locator(selector).nth(elem_index)
-                            if await element.is_visible(timeout=1_000):
-                                title_input = element
-                                used_selector = f"{selector} (第 {elem_index + 1} 个)"
-                                logger.info("使用选择器定位到标题输入框: %s", used_selector)
-                                break
-                        if title_input:
-                            break
-                except Exception as exc:
-                    logger.debug("选择器失败: %s", exc)
-                    continue
+            # 使用并行竞速策略查找标题输入框
+            title_input = await try_selectors_race(
+                page,
+                title_selectors,
+                timeout_ms=TIMEOUTS.NORMAL,
+                context_name="编辑标题输入框",
+            )
 
             if not title_input:
                 logger.error("未找到标题输入框")
-                logger.error("尝试了 %s 种选择器均失败", len(title_selectors))
+                logger.error("尝试了 {} 种选择器均失败", len(title_selectors))
                 return False
 
             current_title = await title_input.input_value()
-            logger.debug("当前标题: %s...", current_title[:50])
+            logger.debug("当前标题: {}...", current_title[:50])
 
             logger.info("清空标题字段并填写新标题")
             await title_input.fill("")
             await title_input.fill(new_title)
 
             updated_title = await title_input.input_value()
-            logger.debug("更新后的标题: %s...", updated_title[:50])
+            logger.debug("更新后的标题: {}...", updated_title[:50])
 
             if updated_title == new_title:
-                logger.success("标题已成功更新: %s", new_title)
+                logger.success("标题已成功更新: {}", new_title)
                 return True
 
             logger.warning("标题可能未完全更新")
-            logger.warning("期望: %s", new_title)
-            logger.warning("实际: %s", updated_title)
+            logger.warning("期望: {}", new_title)
+            logger.warning("实际: {}", updated_title)
             return True
         except Exception as exc:
             logger.error(f"编辑标题失败: {exc}")
@@ -168,7 +151,7 @@ class FirstEditTitleMixin(FirstEditBase):
         Returns:
             标题是否成功更新.
         """
-        logger.info("SOP 4.2: 使用 AI 生成标题(产品 %s/5)", product_index + 1)
+        logger.info("SOP 4.2: 使用 AI 生成标题(产品 {}/5)", product_index + 1)
 
         try:
             from ...data_processor.ai_title_generator import AITitleGenerator
@@ -181,17 +164,17 @@ class FirstEditTitleMixin(FirstEditBase):
             )
 
             if product_index >= len(new_titles):
-                logger.error("产品索引超出范围: %s/%s", product_index, len(new_titles))
+                logger.error("产品索引超出范围: {}/{}", product_index, len(new_titles))
                 return False
 
             new_title = new_titles[product_index]
-            logger.info("为产品 %s 生成的标题: %s", product_index + 1, new_title)
+            logger.info("为产品 {} 生成的标题: {}", product_index + 1, new_title)
             return await self.edit_title(page, new_title)
         except Exception as exc:
             logger.error(f"使用 AI 编辑标题失败: {exc}")
             if product_index < len(all_original_titles):
                 fallback_title = f"{all_original_titles[product_index]} {model_number}"
-                logger.warning("使用降级方案: %s", fallback_title)
+                logger.warning("使用降级方案: {}", fallback_title)
                 return await self.edit_title(page, fallback_title)
             return False
 

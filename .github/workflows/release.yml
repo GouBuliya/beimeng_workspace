@@ -1,0 +1,73 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+env:
+  UV_CACHE_DIR: ~\AppData\Local\uv\cache
+
+jobs:
+  build-windows-exe:
+    name: Build Windows EXE
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        shell: pwsh
+        run: |
+          irm https://astral.sh/uv/install.ps1 | iex
+          "$HOME\.cargo\bin" >> $env:GITHUB_PATH
+
+      - name: Cache uv
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~\AppData\Local\uv
+            ~\.cache\uv
+          key: uv-win-${{ hashFiles('uv.lock') }}
+
+      - name: Sync dependencies
+        shell: pwsh
+        run: uv sync --extra dev --extra temu
+
+      - name: Install Playwright browsers
+        shell: pwsh
+        run: uv run playwright install chromium
+
+      - name: Build Windows executable
+        shell: pwsh
+        run: uv run python apps/temu-auto-publish/build_windows_exe.py build
+
+      - name: Upload EXE artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TemuWebPanel.exe
+          path: apps/temu-auto-publish/dist/TemuWebPanel.exe
+
+  attach-release:
+    name: Attach Assets to Release
+    runs-on: ubuntu-latest
+    needs: build-windows-exe
+    steps:
+      - name: Download EXE artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: TemuWebPanel.exe
+          path: dist
+
+      - name: Publish to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/TemuWebPanel.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -2,6 +2,7 @@
 @PURPOSE: 提供首次编辑控制器通用的选择器加载与配置工具.
 @OUTLINE:
   - class FirstEditBase: 基础初始化与选择器读取
+  - TIMEOUTS: 统一超时配置常量（从 selector_race 导出）
 """
 
 from __future__ import annotations
@@ -13,7 +14,11 @@ from typing import Any
 from loguru import logger
 from playwright.async_api import Page
 
+from ...utils.selector_race import TIMEOUTS
 from ..selector_resolver import SelectorResolver
+
+# 导出 TIMEOUTS 供 mixin 模块直接使用
+__all__ = ["FirstEditBase", "TIMEOUTS"]
 
 
 class FirstEditBase:

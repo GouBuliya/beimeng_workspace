@@ -6,12 +6,10 @@
   - def _read_csv(): CSV读取辅助
   - def validate_row(): 验证行数据完整性
   - def extract_products(): 提取产品列表
-  - def _resolve_size_chart_base_url(): 解析尺寸图URL前缀
-  - def _build_size_chart_url(): 通过文件名拼接尺寸图URL
 @GOTCHAS:
   - Excel格式必须符合SOP规范
   - 型号编号格式为A0001, A0002等
-  - 必填字段：产品名称、型号编号、尺寸图URL（可通过图片文件名自动拼接）
+  - 尺寸图列需提供完整可访问的 URL, 不再支持按前缀拼接
 @DEPENDENCIES:
   - 外部: pandas, openpyxl
   - 内部: loguru
@@ -27,6 +25,7 @@ from urllib.parse import urljoin
 from pathlib import Path
 
 import pandas as pd
+from pandas.errors import ParserError
 from loguru import logger
 from pydantic import BaseModel, Field, field_validator
 
@@ -87,7 +86,7 @@ class ProductSelectionRow(BaseModel):
         if not value:
             return "A0000"
         if not value.startswith("A"):
-            logger.warning("型号编号未以A开头，自动补全: %s -> A%s", value, value)
+            logger.warning("型号编号未以A开头，自动补全: {} -> A{}", value, value)
             return f"A{value}"
         return value
 
@@ -114,7 +113,6 @@ class SelectionTableReader:
     def __init__(self):
         """初始化选品表读取器."""
         logger.info("选品表读取器初始化")
-        self.size_chart_base_url = self._resolve_size_chart_base_url()
         self.product_image_base_url = self._resolve_product_image_base_url()
         self.video_base_url = self._resolve_video_base_url()
 
@@ -147,6 +145,8 @@ class SelectionTableReader:
             "价格": "cost_price",
             # 新增映射：实拍图数组
             "实拍图数组": "image_files",
+            "sku实拍图数组": "image_files",
+            "SKU实拍图数组": "image_files",
             "image_files": "image_files",
             "尺寸图链接": "size_chart_image_url",
             "尺寸图URL": "size_chart_image_url",
@@ -223,7 +223,14 @@ class SelectionTableReader:
 
     def _read_csv(self, path: Path, skip_rows: int) -> pd.DataFrame:
         """读取CSV选品表，自动处理常见编码."""
-        encoding_candidates = ("utf-8-sig", "utf-8", "gbk", "gb2312")
+        encoding_candidates = (
+            "utf-8-sig",
+            "utf-8",
+            "utf-16",
+            "gbk",
+            "gb2312",
+            "latin-1",  # 最后兜底，避免提前错误解码中文列名
+        )
         last_error: str | None = None
 
         for encoding in encoding_candidates:
@@ -243,6 +250,60 @@ class SelectionTableReader:
                     encoding,
                     exc,
                 )
+            except ParserError as exc:
+                last_error = str(exc)
+                logger.warning(
+                    "CSV解析异常，尝试使用 python engine 跳过异常行: %s", exc
+                )
+                try:
+                    df = pd.read_csv(
+                        path,
+                        skiprows=skip_rows,
+                        dtype=str,
+                        encoding=encoding,
+                        engine="python",
+                        on_bad_lines="skip",
+                    )
+                    logger.info(
+                        "CSV读取成功（python engine, 编码=%s，已跳过异常行），共 %s 行数据",
+                        encoding,
+                        len(df),
+                    )
+                    return df
+                except Exception as fallback_exc:
+                    last_error = str(fallback_exc)
+                    logger.debug(
+                        "CSV python engine 读取失败，编码=%s，错误=%s。继续尝试下一个编码。",
+                        encoding,
+                        fallback_exc,
+                    )
+            except Exception as exc:
+                last_error = str(exc)
+                logger.debug(
+                    "CSV读取尝试失败，编码=%s，错误=%s。继续尝试下一个编码。",
+                    encoding,
+                    exc,
+                )
+
+        # 最后兜底：宽松解码 + 跳过坏行
+        try:
+            df = pd.read_csv(
+                path,
+                skiprows=skip_rows,
+                dtype=str,
+                encoding="utf-8",
+                encoding_errors="replace",
+                engine="python",
+                on_bad_lines="skip",
+            )
+            logger.warning(
+                "CSV读取进入容错模式（utf-8 replace, 跳过异常行），共 %s 行数据",
+                len(df),
+            )
+            return df
+        except Exception as exc:
+            last_error = str(exc)
+            logger.debug("CSV容错模式读取失败: {}", exc)
 
         error_message = (
             "CSV文件读取失败，无法识别编码。"
@@ -317,16 +378,10 @@ class SelectionTableReader:
                     product_data["image_files"]
                 )
                 size_chart_url = self._parse_scalar(row.get("size_chart_image_url"))
-                # 不再从实拍图数组生成尺码图URL，仅使用CSV中明确提供的尺码图列
-                if not size_chart_url and self.size_chart_base_url:
-                    size_chart_url = self.size_chart_base_url
-                    logger.warning(
-                        "未提供尺寸图URL，使用基础地址占位: %s (行 %s)",
-                        size_chart_url,
-                        idx + 1,
-                    )
                 if not size_chart_url:
-                    logger.warning("缺少尺寸图URL(size_chart_image_url)，将使用空字符串 (行 %s)", idx + 1)
+                    logger.warning(
+                        "缺少尺寸图URL(size_chart_image_url)，将使用空字符串 (行 %s)", idx + 1
+                    )
                 product_data["size_chart_image_url"] = size_chart_url or ""
                 product_data["product_video_url"] = self._resolve_product_video_url(
                     raw_url=self._parse_scalar(row.get("product_video_url")),
@@ -510,21 +565,10 @@ class SelectionTableReader:
         logger.success(f"✓ 示例选品表已创建: {output_path}")
         logger.info(f"  包含 {len(data)} 个示例产品")
 
-    def _resolve_size_chart_base_url(self) -> str | None:
-        """解析尺寸图外链的基础 URL 前缀."""
-
-        base_url = os.getenv(
-            "SIZE_CHART_BASE_URL",
-            "https://miaoshou-tuchuang-beimeng.oss-cn-hangzhou.aliyuncs.com/10%E6%9C%88%E6%96%B0%E5%93%81%E5%8F%AF%E6%8E%A8/",
-        )
-        text = str(base_url).strip()
-        return text or None
-
     def _resolve_product_image_base_url(self) -> str | None:
         """解析 SKU/实拍图外链基础 URL 前缀."""
 
-        fallback = self._resolve_size_chart_base_url()
-        base_url = os.getenv("PRODUCT_IMAGE_BASE_URL", fallback or "")
+        base_url = os.getenv("PRODUCT_IMAGE_BASE_URL", "")
         text = str(base_url).strip()
         return text or None
 
@@ -537,17 +581,6 @@ class SelectionTableReader:
         )
         text = str(base_url).strip()
         return text or None
-
-    def _build_size_chart_url(self, image_files: list[str] | None) -> str | None:
-        """根据实拍图文件名拼接尺寸图URL."""
-
-        if not self.size_chart_base_url or not image_files:
-            return None
-        filename = next((item for item in image_files if item), None)
-        if not filename:
-            return None
-        candidate = urljoin(f"{self.size_chart_base_url.rstrip('/')}/", filename.lstrip("/"))
-        return candidate or None
 
     def _build_product_image_urls(self, image_files: list[str] | None) -> list[str]:
         """根据实拍图文件名构建 SKU 图片 URL 列表."""

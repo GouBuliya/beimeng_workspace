@@ -55,7 +55,7 @@ from ..core.enhanced_retry import (
     create_step_retry_policy,
     RetryPolicy,
 )
-from ..core.detailed_profiler import DetailedProfiler, get_detailed_profiler, reset_detailed_profiler
+from ..core.performance import profile
 
 MAX_TITLE_LENGTH = 250
 
@@ -94,6 +94,7 @@ def smart_retry(max_attempts: int = 2, delay: float = 0.5, exceptions: tuple = (
     return enhanced_smart_retry(policy)
 
 
+@profile()
 async def run_batch_edit(page: Page, payload: dict[str, Any]) -> dict[str, Any]:
     """执行批量编辑 18 步完整流程。
 
@@ -145,10 +146,6 @@ async def run_batch_edit(page: Page, payload: dict[str, Any]) -> dict[str, Any]:
     
     import time
     workflow_start = time.perf_counter()
-    
-    # 初始化详细分析器
-    reset_detailed_profiler()
-    profiler = get_detailed_profiler("batch_edit_18", f"batch_{int(time.time())}")
 
     try:
         logger.info("开始执行批量编辑 18 步流程(使用优化后的等待和重试机制)")
@@ -215,43 +212,40 @@ async def run_batch_edit(page: Page, payload: dict[str, Any]) -> dict[str, Any]:
             ("产品说明书", lambda: _step_18_manual(page, payload.get("manual_file", ""))),
         ]
 
-        # 使用详细分析器记录整个批量编辑阶段
-        with profiler.phase("batch_edit_18_steps"):
-            for idx, (step_name, step_factory) in enumerate(step_definitions, start=1):
-                step_start = time.perf_counter()
-                logger.info(f"执行步骤 {idx}/18: {step_name}")
-                
-                # 使用分析器记录每个步骤
-                with profiler.step(f"step_{idx:02d}_{step_name}"):
-                    try:
-                        await step_factory()
-                        result["completed_steps"] = idx
-                        
-                        # 步骤完成后使用智能等待（极速模式: 最小等待）
-                        await smart_wait(page, f"step_{idx}_{step_name}", min_ms=5, max_ms=50)
-                        
-                        step_elapsed = (time.perf_counter() - step_start) * 1000
-                        result["timing"][step_name] = round(step_elapsed, 2)
-                        logger.success(f"步骤 {idx}/18 完成: {step_name} ({step_elapsed:.0f}ms)")
-                        
-                    except Exception as step_exc:
-                        step_elapsed = (time.perf_counter() - step_start) * 1000
-                        result["timing"][step_name] = round(step_elapsed, 2)
-                        result["step_errors"].append({
-                            "step": idx,
-                            "name": step_name,
-                            "error": str(step_exc),
-                            "elapsed_ms": round(step_elapsed, 2),
-                        })
-                        logger.error(f"步骤 {idx}/18 失败: {step_name} - {step_exc}")
-                        
-                        # 非关键步骤失败可以继续（步骤13-17为非关键）
-                        if idx in (13, 16, 17):  # 尺码表、轮播图、颜色图
-                            logger.warning(f"非关键步骤 {step_name} 失败，继续执行后续步骤")
-                            result["completed_steps"] = idx
-                            continue
-                        else:
-                            raise
+        for idx, (step_name, step_factory) in enumerate(step_definitions, start=1):
+            step_start = time.perf_counter()
+            logger.info(f"执行步骤 {idx}/18: {step_name}")
+
+            try:
+                await step_factory()
+                result["completed_steps"] = idx
+
+                # 步骤完成后使用智能等待（极速模式: 最小等待）
+                await smart_wait(page, f"step_{idx}_{step_name}", min_ms=5, max_ms=50)
+
+                step_elapsed = (time.perf_counter() - step_start) * 1000
+                result["timing"][step_name] = round(step_elapsed, 2)
+                logger.success(f"步骤 {idx}/18 完成: {step_name} ({step_elapsed:.0f}ms)")
+
+            except Exception as step_exc:
+                step_elapsed = (time.perf_counter() - step_start) * 1000
+                result["timing"][step_name] = round(step_elapsed, 2)
+                result["step_errors"].append(
+                    {
+                        "step": idx,
+                        "name": step_name,
+                        "error": str(step_exc),
+                        "elapsed_ms": round(step_elapsed, 2),
+                    }
+                )
+                logger.error(f"步骤 {idx}/18 失败: {step_name} - {step_exc}")
+
+                # 非关键步骤失败可以继续（步骤13-17为非关键）
+                if idx in (13, 16, 17):  # 尺码表、轮播图、颜色图
+                    logger.warning(f"非关键步骤 {step_name} 失败，继续执行后续步骤")
+                    result["completed_steps"] = idx
+                    continue
+                raise
 
         # 关闭编辑框
         await _close_edit_dialog(page)
@@ -270,18 +264,6 @@ async def run_batch_edit(page: Page, payload: dict[str, Any]) -> dict[str, Any]:
             f"批量编辑流程失败(第 {result['completed_steps']}/{result['total_steps']} 步): {exc}"
         )
         result["error"] = str(exc)
-    
-    finally:
-        # 生成详细性能报告
-        profiler.finish()
-        report = profiler.report()
-        logger.info(report)
-        
-        # 保存性能数据
-        try:
-            profiler.save()
-        except Exception as save_err:
-            logger.warning(f"保存性能数据失败: {save_err}")
 
     return result
 
@@ -329,9 +311,9 @@ async def _close_popups(page: Page) -> None:
                 try:
                     button = close_buttons.first
                     if await button.is_visible(timeout=300):  # 优化: 1000 -> 300
-                        await button.click(timeout=500)       # 优化: 2000 -> 500
+                        await button.click(timeout=500)  # 优化: 2000 -> 500
                         closed_count += 1
-                        logger.debug(f"已关闭弹窗")
+                        logger.debug("已关闭弹窗")
                         # 优化: 减少等待 800 -> 200
                         try:
                             await button.wait_for(state="hidden", timeout=200)
@@ -530,23 +512,125 @@ async def _step_05_outer_package(page: Page, image_path: str | None) -> None:
     await _close_edit_dialog(page)
 
 
+@smart_retry(max_attempts=3, delay=0.8)
 async def _step_06_origin(page: Page) -> None:
     """步骤 6: 产地 - 固定为浙江。
 
     Args:
         page: Playwright 页面对象。
     """
-    await page.get_by_text("产地").click()
-    await page.get_by_role("dialog", name="dialog").get_by_placeholder("请选择或输入搜索").click()
-    await page.wait_for_timeout(200)  # 极速: 500 -> 200
-    await (
-        page.get_by_role("dialog", name="dialog")
-        .get_by_placeholder("请选择或输入搜索")
-        .fill("浙江")
-    )
-    await page.get_by_text("中国大陆 / 浙江省").click()
+    dialog = page.get_by_role("dialog")
+
+    # 等待加载遮罩消失
+    loading_mask = page.locator(".el-loading-mask")
+    with suppress(Exception):
+        await loading_mask.wait_for(state="hidden", timeout=2000)
+
+    # 1. 点击左侧导航"产地" - 多种选择器
+    nav_clicked = False
+    nav_selectors = [
+        dialog.locator(".batch-editor-left").get_by_text("产地", exact=False).first,
+        dialog.get_by_text("产地", exact=True).first,
+        dialog.locator(".el-menu-item:has-text('产地')").first,
+        dialog.locator("li:has-text('产地')").first,
+        page.get_by_text("产地").first,
+    ]
+
+    for nav in nav_selectors:
+        try:
+            if await nav.count():
+                await nav.click(timeout=1000)
+                nav_clicked = True
+                logger.debug("✓ 点击产地导航成功")
+                break
+        except Exception as e:
+            logger.debug(f"产地导航选择器失败: {e}")
+            continue
+
+    if not nav_clicked:
+        raise RuntimeError("未能点击产地导航")
+
+    # 等待加载
+    with suppress(Exception):
+        await loading_mask.wait_for(state="hidden", timeout=1000)
+    await page.wait_for_timeout(300)
+
+    # 2. 点击输入框 - 多种选择器
+    input_clicked = False
+    input_selectors = [
+        dialog.get_by_placeholder("请选择或输入搜索").first,
+        dialog.locator(".el-select input").first,
+        dialog.locator("input[placeholder*='选择']").first,
+        dialog.locator("input[placeholder*='搜索']").first,
+    ]
+
+    for selector in input_selectors:
+        try:
+            if await selector.count():
+                await selector.click(timeout=800)
+                input_clicked = True
+                logger.debug("✓ 点击产地输入框成功")
+                break
+        except Exception as e:
+            logger.debug(f"产地输入框选择器失败: {e}")
+            continue
+
+    if not input_clicked:
+        raise RuntimeError("未能点击产地输入框")
+
+    await page.wait_for_timeout(200)
+
+    # 3. 填写"浙江"
+    fill_success = False
+    fill_selectors = [
+        dialog.get_by_placeholder("请选择或输入搜索").first,
+        dialog.locator(".el-select input:visible").first,
+        dialog.locator("input[placeholder*='选择']:visible").first,
+    ]
+
+    for selector in fill_selectors:
+        try:
+            if await selector.count():
+                await selector.fill("浙江")
+                fill_success = True
+                logger.debug("✓ 填写产地关键词成功")
+                break
+        except Exception as e:
+            logger.debug(f"产地填写选择器失败: {e}")
+            continue
+
+    if not fill_success:
+        raise RuntimeError("未能填写产地关键词")
+
+    await page.wait_for_timeout(500)
+
+    # 4. 选择"中国大陆 / 浙江省" - 多种选择器
+    option_clicked = False
+    option_selectors = [
+        page.get_by_text("中国大陆 / 浙江省").first,
+        page.locator(".el-select-dropdown:visible").get_by_text("中国大陆 / 浙江省").first,
+        page.locator(".el-select-dropdown__item:has-text('浙江省')").first,
+        page.locator("li:has-text('浙江省')").first,
+    ]
+
+    for option in option_selectors:
+        try:
+            if await option.count():
+                await option.click(timeout=800)
+                option_clicked = True
+                logger.success("✓ 已选择: 中国大陆 / 浙江省")
+                break
+        except Exception as e:
+            logger.debug(f"产地选项选择器失败: {e}")
+            continue
+
+    if not option_clicked:
+        raise RuntimeError("未能选择产地选项")
+
+    await page.wait_for_timeout(200)
+
+    # 5. 保存修改
     await page.get_by_role("button", name="保存修改").click()
-    # await _wait_for_save_toast(page)
     await _close_edit_dialog(page)
 
 
@@ -666,7 +750,7 @@ async def _step_11_platform_sku(page: Page) -> None:
     await _close_edit_dialog(page)
 
 
-@smart_retry(max_attempts=2, delay=0.5)
+@smart_retry(max_attempts=4, delay=1.0)
 async def _step_12_sku_category(page: Page) -> None:
     """步骤 12: SKU 分类 - 点击分类下拉框选择单品，然后保存。"""
     dialog = page.get_by_role("dialog")
@@ -674,7 +758,7 @@ async def _step_12_sku_category(page: Page) -> None:
     # 等待加载遮罩消失
     loading_mask = page.locator(".el-loading-mask")
     with suppress(Exception):
-        await loading_mask.wait_for(state="hidden", timeout=2000)
+        await loading_mask.wait_for(state="hidden", timeout=3000)
 
     # 1. 点击左侧导航"SKU分类" - 多种选择器
     nav_clicked = False
@@ -690,7 +774,7 @@ async def _step_12_sku_category(page: Page) -> None:
     for nav in nav_selectors:
         try:
             if await nav.count():
-                await nav.click(timeout=800)
+                await nav.click(timeout=1000)
                 nav_clicked = True
                 logger.debug("✓ 点击SKU分类导航成功")
                 break
@@ -699,12 +783,12 @@ async def _step_12_sku_category(page: Page) -> None:
             continue
 
     if not nav_clicked:
-        logger.warning("⚠️ 未能点击SKU分类导航，尝试继续")
+        raise RuntimeError("未能点击SKU分类导航")
     
     # 等待加载
     with suppress(Exception):
-        await loading_mask.wait_for(state="hidden", timeout=1000)
-    await page.wait_for_timeout(500)  # 等待内容加载
+        await loading_mask.wait_for(state="hidden", timeout=2000)
+    await page.wait_for_timeout(600)  # 等待内容加载
     
     # 2. 点击"分类"下拉框 - 多种选择器尝试
     dropdown_clicked = False
@@ -721,12 +805,15 @@ async def _step_12_sku_category(page: Page) -> None:
         # 直接在对话框中找 el-select
         dialog.locator(".el-select input").first,
         dialog.locator(".el-select").first,
-        ]
+        # 通过 class 定位
+        dialog.locator(".batch-editor-right .el-select input").first,
+        dialog.locator(".batch-editor-right .el-select").first,
+    ]
     
     for selector in dropdown_selectors:
         try:
             if await selector.count():
-                await selector.click(timeout=800)
+                await selector.click(timeout=1000)
                 dropdown_clicked = True
                 logger.debug("✓ 点击分类下拉框")
                 break
@@ -734,36 +821,47 @@ async def _step_12_sku_category(page: Page) -> None:
             logger.debug(f"选择器失败: {e}")
             continue
     
-    if dropdown_clicked:
-        # 等待下拉菜单出现
-        await page.wait_for_timeout(300)
-        
-        # 3. 在下拉菜单中选择"单品"
-        option_clicked = False
-        option_selectors = [
-            page.locator(".el-select-dropdown:visible .el-select-dropdown__item").filter(has_text="单品").first,
-            page.locator(".el-select-dropdown__item:has-text('单品')").first,
-            page.get_by_role("option", name="单品").first,
-            page.get_by_text("单品", exact=True).first,
+    if not dropdown_clicked:
+        raise RuntimeError("未找到SKU分类下拉框")
+
+    # 等待下拉菜单出现
+    await page.wait_for_timeout(500)
+    
+    # 3. 在下拉菜单中选择"单品"
+    option_clicked = False
+    option_selectors = [
+        page.locator(".el-select-dropdown:visible .el-select-dropdown__item").filter(has_text="单品").first,
+        page.locator(".el-select-dropdown__item:has-text('单品')").first,
+        page.get_by_role("option", name="单品").first,
+        page.get_by_text("单品", exact=True).first,
+        page.locator(".el-select-dropdown__item").filter(has_text="单品").first,
+        page.locator("li.el-select-dropdown__item:has-text('单品')").first,
     ]
 
-        for option in option_selectors:
-            try:
-                if await option.count():
-                    await option.click(timeout=500)
-                    option_clicked = True
-                    logger.success("✓ 已选择: 单品")
+    for option in option_selectors:
+        try:
+            if await option.count():
+                await option.click(timeout=800)
+                option_clicked = True
+                logger.success("✓ 已选择: 单品")
                 break
-            except Exception:
-                continue
+        except Exception as e:
+            logger.debug(f"选项选择器失败: {e}")
+            continue
 
-        if not option_clicked:
-            logger.warning("⚠️ 未找到'单品'选项")
-    else:
-        logger.warning("⚠️ 未找到分类下拉框")
+    if not option_clicked:
+        raise RuntimeError("未找到'单品'选项")
+
+    await page.wait_for_timeout(300)
     
     # 4. 点击保存修改
-    await page.get_by_role("button", name="保存修改").click()
+    save_btn = page.get_by_role("button", name="保存修改")
+    try:
+        await save_btn.click(timeout=2000)
+    except Exception as e:
+        logger.warning(f"点击保存修改失败: {e}，尝试备用选择器")
+        await page.locator("button:has-text('保存修改')").first.click(timeout=2000)
+    
     await _close_edit_dialog(page)
 
 
@@ -1002,5 +1100,6 @@ async def _close_edit_dialog(page: Page) -> None:
         await close_icon.click()
         # 极速: 150 -> 30
         await smart_wait(page, "close_dialog_icon", min_ms=10, max_ms=30)
+        return
     except Exception:
         logger.warning("无法关闭编辑对话框，继续执行")

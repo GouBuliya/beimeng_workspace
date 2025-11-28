@@ -12,18 +12,19 @@ from contextlib import suppress
 from loguru import logger
 from playwright.async_api import Locator, Page
 
+from ...utils.selector_race import TIMEOUTS, try_selectors_race
 from .base import FirstEditBase
 
 
 class FirstEditDialogMixin(FirstEditBase):
     """封装首次编辑弹窗的等待,保存与关闭逻辑."""
 
-    async def wait_for_dialog(self, page: Page, timeout: int = 300) -> bool:
+    async def wait_for_dialog(self, page: Page, timeout: int = 3000) -> bool:
         """等待首次编辑弹窗打开.
 
         Args:
             page: Playwright 页面对象.
-            timeout: 等待弹窗的超时时间(毫秒).
+            timeout: 等待弹窗的超时时间(毫秒)，默认 3000ms（弹窗加载需要时间）.
 
         Returns:
             弹窗是否在超时时间内成功打开.
@@ -58,19 +59,17 @@ class FirstEditDialogMixin(FirstEditBase):
                 "button:has-text('提交')",
             ]
 
-            saved = False
-            for selector in save_selectors:
-                try:
-                    count = await page.locator(selector).count()
-                    if count > 0:
-                        logger.debug("找到保存按钮: %s", selector)
-                        await page.locator(selector).first.click()
-                        saved = True
-                        break
-                except Exception:
-                    continue
+            # 使用并行竞速策略查找保存按钮
+            save_btn = await try_selectors_race(
+                page,
+                save_selectors,
+                timeout_ms=TIMEOUTS.FAST,
+                context_name="保存按钮",
+            )
 
-            if not saved:
+            if save_btn:
+                await save_btn.click()
+            else:
                 logger.error("未找到保存按钮")
                 return False
 
@@ -90,7 +89,7 @@ class FirstEditDialogMixin(FirstEditBase):
                     if dialog_count == 0:
                         logger.success("修改已保存并关闭弹窗")
                     else:
-                        logger.debug("弹窗仍存在(%s 个),继续等待", dialog_count)
+                        logger.debug("弹窗仍存在({} 个),继续等待", dialog_count)
                         
                       
                         try:
@@ -98,13 +97,13 @@ class FirstEditDialogMixin(FirstEditBase):
                             if dialog_count == 0:
                                 logger.success("修改已保存并关闭弹窗")
                             else:
-                                logger.warning("修改已保存,但弹窗仍打开(%s 个)", dialog_count)
+                                logger.warning("修改已保存,但弹窗仍打开({} 个)", dialog_count)
                         except Exception as inner_exc:
-                            logger.warning("第二次检查弹窗状态时出错: %s", inner_exc)
+                            logger.warning("第二次检查弹窗状态时出错: {}", inner_exc)
                             logger.success("修改已保存(弹窗状态未知)")
                             
                 except Exception as exc:
-                    logger.warning("检查弹窗状态时出错: %s", exc)
+                    logger.warning("检查弹窗状态时出错: {}", exc)
                     logger.success("修改已保存(弹窗状态检查失败)")
             else:
                 logger.success("修改已保存")
@@ -167,7 +166,7 @@ class FirstEditDialogMixin(FirstEditBase):
                             continue
                         for index in range(count):
                             candidate = locator.nth(index)
-                            if await candidate.is_visible(timeout=500):
+                            if await candidate.is_visible(timeout=TIMEOUTS.FAST):
                                 await candidate.click()
                                 return True
                     except Exception:
@@ -212,7 +211,7 @@ class FirstEditDialogMixin(FirstEditBase):
                 overlay = page.locator(".scroll-menu-pane__content")
                 message_boxes = page.locator(".jx-overlay-message-box:visible, .jx-message-box:visible")
                 with suppress(Exception):
-                    has_overlay = await overlay.count() and await overlay.first.is_visible(timeout=100)
+                    has_overlay = await overlay.count() and await overlay.first.is_visible(timeout=TIMEOUTS.FAST)
                     has_modal_prompt = await message_boxes.count() > 0
                     if has_overlay and not has_modal_prompt:
                         logger.debug("检测到遮挡浮层,尝试点击背景关闭")
@@ -224,14 +223,14 @@ class FirstEditDialogMixin(FirstEditBase):
                 attempt += 1
                 if closed:
                     with suppress(Exception):
-                        await target_dialog.wait_for(state="hidden", timeout=100)
+                        await target_dialog.wait_for(state="hidden", timeout=TIMEOUTS.FAST)
 
             remaining = await page.locator(visible_dialog_selector).count()
             if remaining == 0:
                 logger.success("编辑弹窗已关闭")
                 return True
 
-            logger.error("关闭弹窗超时,仍检测到 %s 个弹窗", remaining)
+            logger.error("关闭弹窗超时,仍检测到 {} 个弹窗", remaining)
             return False
         except Exception as exc:
             logger.error(f"关闭弹窗失败: {exc}")
@@ -256,7 +255,7 @@ class FirstEditDialogMixin(FirstEditBase):
                 
             logger.debug(f"检测到 {count} 个遮挡消息框，尝试关闭")
             
-            # 尝试多种关闭方式
+            # 使用并行竞速策略查找关闭按钮
             close_selectors = [
                 ".jx-overlay-message-box button.jx-message-box__headerbtn",  # 关闭图标按钮
                 ".jx-overlay-message-box button:has-text('确定')",
@@ -264,28 +263,30 @@ class FirstEditDialogMixin(FirstEditBase):
                 ".jx-overlay-message-box button:has-text('关闭')",
                 ".jx-overlay-message-box button[aria-label*='关闭']",
             ]
-            
-            for selector in close_selectors:
-                try:
-                    btn = page.locator(selector).first
-                    if await btn.is_visible(timeout=300):
-                        await btn.click(timeout=100)
-                        logger.debug(f"已关闭遮挡消息框: {selector}")
-                        with suppress(Exception):
-                            await page.locator(".jx-overlay-message-box").first.wait_for(
-                                state="hidden", timeout=300
-                            )
-                        return
-                except Exception:
-                    continue
-            
+
+            close_btn = await try_selectors_race(
+                page,
+                close_selectors,
+                timeout_ms=TIMEOUTS.FAST,
+                context_name="消息框关闭按钮",
+            )
+
+            if close_btn:
+                await close_btn.click(timeout=TIMEOUTS.FAST)
+                logger.debug("已关闭遮挡消息框")
+                with suppress(Exception):
+                    await page.locator(".jx-overlay-message-box").first.wait_for(
+                        state="hidden", timeout=TIMEOUTS.FAST
+                    )
+                return
+
             # 如果没有找到按钮，尝试按 Escape
             logger.debug("未找到消息框按钮，尝试 Escape")
             with suppress(Exception):
                 await page.keyboard.press("Escape")
                 with suppress(Exception):
                     await page.locator(".jx-overlay-message-box").first.wait_for(
-                        state="hidden", timeout=300
+                        state="hidden", timeout=TIMEOUTS.FAST
                     )
                 
         except Exception as exc:

@@ -15,6 +15,7 @@
 @RELATED: browser_manager.py, cookie_manager.py, miaoshou_controller.py
 """
 
+import asyncio
 import json
 from datetime import datetime
 from pathlib import Path
@@ -23,6 +24,7 @@ from loguru import logger
 
 from .browser_manager import BrowserManager
 from .cookie_manager import CookieManager
+from ..utils.selector_race import TIMEOUTS
 
 
 class LoginController:
@@ -79,12 +81,71 @@ class LoginController:
             logger.warning(f"加载选择器配置失败: {e}")
             return {}
 
+    async def _is_browser_valid(self) -> bool:
+        """检查浏览器是否仍然有效。
+
+        Returns:
+            True 如果浏览器有效且可用
+        """
+        try:
+            # 检查基本对象是否存在
+            if not self.browser_manager.browser:
+                return False
+            if not self.browser_manager.page:
+                return False
+            if not self.browser_manager.playwright:
+                return False
+
+            # 尝试执行一个简单操作来验证连接是否有效
+            # 使用 evaluate 检查页面是否响应
+            await self.browser_manager.page.evaluate("() => true")
+            return True
+        except Exception as e:
+            logger.debug(f"浏览器有效性检查失败: {e}")
+            return False
+
+    async def _cleanup_browser(self) -> None:
+        """清理失效的浏览器资源。"""
+        try:
+            if self.browser_manager.page:
+                try:
+                    await self.browser_manager.page.close()
+                except Exception:
+                    pass
+                self.browser_manager.page = None
+
+            if self.browser_manager.context:
+                try:
+                    await self.browser_manager.context.close()
+                except Exception:
+                    pass
+                self.browser_manager.context = None
+
+            if self.browser_manager.browser:
+                try:
+                    await self.browser_manager.browser.close()
+                except Exception:
+                    pass
+                self.browser_manager.browser = None
+
+            if self.browser_manager.playwright:
+                try:
+                    await self.browser_manager.playwright.stop()
+                except Exception:
+                    pass
+                self.browser_manager.playwright = None
+
+            logger.debug("已清理失效的浏览器资源")
+        except Exception as e:
+            logger.debug(f"清理浏览器资源时出错: {e}")
+
     async def login(
         self,
         username: str,
         password: str,
         force: bool = False,
         headless: bool = False,
+        keep_browser_open: bool = True,
     ) -> bool:
         """执行登录.
 
@@ -141,8 +202,12 @@ class LoginController:
         logger.info("开始自动化登录妙手ERP...")
 
         try:
-            # 启动浏览器（如果未启动）
-            if not self.browser_manager.browser:
+            # 启动浏览器（如果未启动或已失效）
+            browser_valid = await self._is_browser_valid()
+            if not browser_valid:
+                logger.info("浏览器未启动或已失效，正在重新启动...")
+                # 清理旧的浏览器资源
+                await self._cleanup_browser()
                 await self.browser_manager.start(headless=headless)
 
             page = self.browser_manager.page
@@ -229,18 +294,63 @@ class LoginController:
 
         finally:
             # 如果是 headless 模式，关闭浏览器
-            if headless:
+            if headless and not keep_browser_open:
                 await self.browser_manager.close()
 
-    async def _dismiss_overlays_if_any(self) -> None:
-        """登录后尝试关闭广告或提示弹窗."""
+    async def ensure_collect_box_ready(self, target_url: str) -> None:
+        """登录后跳转到指定采集箱，并清理弹窗/新手教程."""
+
+        page = self.browser_manager.page
+        if not page:
+            raise RuntimeError("浏览器页面未初始化，无法导航到采集箱")
+
+        logger.info("导航到采集箱页面: {}", target_url)
+        await page.goto(target_url, timeout=60_000)
+        await page.wait_for_load_state("domcontentloaded")
+        await self._dismiss_overlays_if_any()
+        await self._dismiss_newbie_guide(page)
+
+    async def dismiss_login_overlays(self) -> None:
+        """对外暴露登录后弹窗关闭能力(并行处理重点弹窗与常规弹窗)."""
 
         page = self.browser_manager.page
         if not page:
             return
 
-        # 首先处理"店铺健康功能迁移"弹窗 - 使用精确定位
-        await self._dismiss_health_migration_popup(page)
+        results = await asyncio.gather(
+            self._dismiss_overlays_if_any(skip_health=True),
+            self._dismiss_health_migration_popup(page),
+            return_exceptions=True,
+        )
+        for task_result in results:
+            if isinstance(task_result, Exception):
+                logger.debug("关闭登录弹窗子任务异常: {}", task_result)
+
+    async def _dismiss_overlays_if_any(self, *, skip_health: bool = False) -> None:
+        """登录后尝试关闭广告或提示弹窗.
+
+        Args:
+            skip_health: True 时跳过“店铺健康功能迁移”弹窗，由调用方单独处理。
+        """
+
+        page = self.browser_manager.page
+        if not page:
+            return
+
+        # 登录后优先尝试关闭已知弹窗（录制的稳定选择器）
+        try:
+            quick_close = page.locator(
+                "body > div:nth-child(27) > div > div > header > button"
+            ).first
+            if await quick_close.count() and await quick_close.is_visible(timeout=500):
+                await quick_close.click(timeout=TIMEOUTS.NORMAL)
+                logger.info("✓ 快速关闭登录后弹窗 (nth-child(27) header button)")
+        except Exception as exc:  # pragma: no cover - 运行时保护
+            logger.debug("快速关闭登录后弹窗失败: {}", exc)
+
+        if not skip_health:
+            # 首先处理"店铺健康功能迁移"弹窗 - 使用精确定位
+            await self._dismiss_health_migration_popup(page)
 
         overlay_selector = ".jx-overlay-dialog, .el-dialog, .pro-dialog, [role='dialog']"
         close_selectors = [
@@ -261,13 +371,20 @@ class LoginController:
             "button:has-text('立即进入')",
         ]
 
+        if skip_health:
+            close_selectors = [
+                selector
+                for selector in close_selectors
+                if "我已知晓" not in selector
+            ]
+
         for attempt in range(5):
             dialogs = page.locator(overlay_selector)
             dialog_count = await dialogs.count()
             if dialog_count == 0:
                 return
 
-            logger.info("检测到登录后弹窗, 尝试关闭 (第%s次)", attempt + 1)
+            logger.info("检测到登录后弹窗, 尝试关闭 (第{}次)", attempt + 1)
 
             closed_any = False
             for index in range(dialog_count - 1, -1, -1):
@@ -277,21 +394,19 @@ class LoginController:
                     locator = dialog.locator(selector)
                     try:
                         if await locator.count() and await locator.first.is_visible(timeout=1000):
-                            logger.debug("点击弹窗关闭控件 selector=%s index=%s", selector, index)
+                            logger.debug("点击弹窗关闭控件 selector={} index={}", selector, index)
                             await locator.first.click()
                             closed_any = True
                             closed_this_dialog = True
-                            await page.wait_for_timeout(1)
                             break
                     except Exception as exc:  # pragma: no cover - 调试场景
-                        logger.debug("关闭弹窗时忽略异常: %s", exc)
+                        logger.debug("关闭弹窗时忽略异常: {}", exc)
                 if not closed_this_dialog:
                     try:
                         logger.debug("未找到关闭按钮, 尝试发送 Escape")
                         await page.keyboard.press("Escape")
                         closed_any = True
                         closed_this_dialog = True
-                        await page.wait_for_timeout(3)
                     except Exception:
                         pass
 
@@ -305,25 +420,103 @@ class LoginController:
                 try:
                     await page.screenshot(path=str(screenshot_path))
                     html_path.write_text(await page.content(), encoding="utf-8")
-                    logger.warning("⚠️ 未能识别弹窗关闭控件, 已保存快照: %s", screenshot_path)
+                    logger.warning("⚠️ 未能识别弹窗关闭控件, 已保存快照: {}", screenshot_path)
                 except Exception as exc:
-                    logger.debug("保存弹窗快照失败: %s", exc)
+                    logger.debug("保存弹窗快照失败: {}", exc)
                 break
 
-            await page.wait_for_timeout(5)
+    async def _dismiss_newbie_guide(self, page) -> None:
+        """处理新手教程/引导层."""
+
+        guide_overlay_selectors = [
+            ".novice-guide",
+            ".guide-overlay",
+            ".tour-guide",
+            "[class*='guide-mask']",
+            "[class*='tour']",
+            "[id*='guide']",
+        ]
+        skip_button_selectors = [
+            "button:has-text('跳过新手教程')",
+            "button:has-text('跳过教程')",
+            "button:has-text('跳过')",
+            "a:has-text('跳过')",
+            ".guide-skip",
+            ".novice-guide__skip",
+            ".introjs-skipbutton",
+            ".driver-popover-close-btn",
+            ".driver-close-btn",
+        ]
+
+        for attempt in range(3):
+            overlay_found = False
+            for selector in guide_overlay_selectors:
+                locator = page.locator(selector)
+                try:
+                    if await locator.count() and await locator.first.is_visible(timeout=500):
+                        overlay_found = True
+                        break
+                except Exception:
+                    continue
+
+            if not overlay_found:
+                return
+
+            logger.info("检测到新手教程引导，尝试跳过 (第{}次)", attempt + 1)
+            skipped = False
+            for selector in skip_button_selectors:
+                locator = page.locator(selector)
+                try:
+                    if await locator.count() == 0:
+                        continue
+                    candidate = locator.first
+                    if await candidate.is_visible(timeout=500):
+                        await candidate.click(timeout=2_000)
+                        skipped = True
+                        break
+                except Exception as exc:
+                    logger.debug("点击跳过教程控件失败 ({}): {}", selector, exc)
+
+            if not skipped:
+                try:
+                    await page.keyboard.press("Escape")
+                    skipped = True
+                except Exception:
+                    pass
+
+            if not skipped:
+                logger.warning("未能自动跳过新手教程，引导仍在")
+                break
+
+    def _collect_page_scopes(self, page):
+        """Collect main page and visible frames for popup detection."""
+
+        if not page:
+            return []
+
+        scopes = [("page", page)]
+        try:
+            for idx, frame in enumerate(page.frames):
+                label = frame.name or frame.url or f"frame-{idx}"
+                scopes.append((f"frame[{idx}]::{label}", frame))
+        except Exception as exc:
+            logger.debug("枚举 frame 时出错: {}", exc)
+
+        return scopes
 
     async def _dismiss_health_migration_popup(self, page) -> bool:
         """关闭'店铺健康功能迁移'等弹窗 - 点击3次'我已知晓'."""
         clicked_count = 0
-        
-        # 先等待页面稳定
-        await page.wait_for_timeout(1000)
-        
+
+        # 等待页面稳定
+        await page.wait_for_load_state("domcontentloaded", timeout=TIMEOUTS.SLOW)
+
         try:
             # 使用多种定位方式，点击3次处理可能出现的多个弹窗
             for attempt in range(3):
                 clicked = False
-                
+                scopes = self._collect_page_scopes(page)
+
                 # 方式1: 直接用 CSS 选择器找按钮
                 selectors = [
                     "button:has-text('我已知晓')",
@@ -333,62 +526,100 @@ class LoginController:
                     "footer button",
                     ".el-dialog__footer button.el-button--primary",
                 ]
-                
+
                 for selector in selectors:
-                    try:
-                        btn = page.locator(selector).first
-                        if await btn.count() > 0:
-                            is_visible = await btn.is_visible()
-                            logger.debug(f"选择器 {selector}: count={await btn.count()}, visible={is_visible}")
-                            if is_visible:
-                                await btn.click(timeout=2000)
-                                clicked = True
-                                clicked_count += 1
-                                logger.info("✓ 点击'我已知晓'按钮成功 (第%s次, selector: %s)", attempt + 1, selector)
-                                await page.wait_for_timeout(500)
-                                break
-                    except Exception as e:
-                        logger.debug(f"选择器 {selector} 失败: {e}")
-                        continue
-                
+                    for scope_name, scope in scopes:
+                        try:
+                            locator = scope.locator(selector)
+                            count = await locator.count()
+                        except Exception as e:
+                            logger.debug(f"选择器 {selector} 在 {scope_name} 失败: {e}")
+                            continue
+
+                        if count == 0:
+                            continue
+
+                        candidate = locator.first
+
+                        try:
+                            is_visible = await candidate.is_visible()
+                        except Exception as exc:
+                            logger.debug(f"检测 {selector} 可见性失败 ({scope_name}): {exc}")
+                            continue
+
+                        if not is_visible:
+                            continue
+
+                        try:
+                            await candidate.click(timeout=2000)
+                        except Exception as exc:
+                            logger.debug(f"点击 {selector} 失败 ({scope_name}): {exc}")
+                            continue
+
+                        clicked = True
+                        clicked_count += 1
+                        logger.info(
+                            "✓ 点击'我已知晓'按钮成功 (第%s次, selector: %s, scope: %s)",
+                            attempt + 1,
+                            selector,
+                            scope_name,
+                        )
+                        break
+
+                    if clicked:
+                        break
+
                 # 方式2: 使用 get_by_role
                 if not clicked:
-                    try:
-                        btn = page.get_by_role("button", name="我已知晓")
-                        if await btn.count() > 0 and await btn.first.is_visible():
-                            await btn.first.click(timeout=2000)
-                            clicked = True
-                            clicked_count += 1
-                            logger.info("✓ 点击'我已知晓'按钮成功 (第%s次, role定位)", attempt + 1)
-                            await page.wait_for_timeout(500)
-                    except Exception as e:
-                        logger.debug(f"role定位失败: {e}")
-                
+                    for scope_name, scope in scopes:
+                        if not hasattr(scope, "get_by_role"):
+                            continue
+                        try:
+                            btn = scope.get_by_role("button", name="我已知晓")
+                            if await btn.count() > 0 and await btn.first.is_visible():
+                                await btn.first.click(timeout=2000)
+                                clicked = True
+                                clicked_count += 1
+                                logger.info(
+                                    "✓ 点击'我已知晓'按钮成功 (第%s次, role定位, scope: %s)",
+                                    attempt + 1,
+                                    scope_name,
+                                )
+                                break
+                        except Exception as e:
+                            logger.debug(f"role定位失败({scope_name}): {e}")
+
                 # 方式3: 使用 get_by_text
                 if not clicked:
-                    try:
-                        btn = page.get_by_text("我已知晓")
-                        if await btn.count() > 0 and await btn.first.is_visible():
-                            await btn.first.click(timeout=2000)
-                            clicked = True
-                            clicked_count += 1
-                            logger.info("✓ 点击'我已知晓'按钮成功 (第%s次, text定位)", attempt + 1)
-                            await page.wait_for_timeout(500)
-                    except Exception as e:
-                        logger.debug(f"text定位失败: {e}")
-                
+                    for scope_name, scope in scopes:
+                        if not hasattr(scope, "get_by_text"):
+                            continue
+                        try:
+                            btn = scope.get_by_text("我已知晓")
+                            if await btn.count() > 0 and await btn.first.is_visible():
+                                await btn.first.click(timeout=2000)
+                                clicked = True
+                                clicked_count += 1
+                                logger.info(
+                                    "✓ 点击'我已知晓'按钮成功 (第%s次, text定位, scope: %s)",
+                                    attempt + 1,
+                                    scope_name,
+                                )
+                                break
+                        except Exception as e:
+                            logger.debug(f"text定位失败({scope_name}): {e}")
+
                 if not clicked:
                     logger.debug(f"第{attempt + 1}次尝试未找到'我已知晓'按钮")
-                    break
-            
+
             if clicked_count > 0:
-                logger.info("✓ 共关闭 %s 个'我已知晓'弹窗", clicked_count)
+                logger.info("✓ 共关闭 {} 个'我已知晓'弹窗", clicked_count)
                 return True
             else:
                 logger.debug("未找到'我已知晓'弹窗")
             return False
         except Exception as exc:
-            logger.debug("关闭店铺健康弹窗时出错: %s", exc)
+            logger.debug("关闭店铺健康弹窗时出错: {}", exc)
             return False
 
     async def _check_login_status(self) -> bool:

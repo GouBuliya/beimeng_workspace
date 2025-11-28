@@ -22,6 +22,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
 import time
 from collections.abc import Sequence
@@ -58,7 +59,7 @@ from .legacy.complete_publish_workflow_v1 import (
 # 导入优化组件
 from ..core.checkpoint_manager import CheckpointManager, get_checkpoint_manager
 from ..core.metrics_collector import get_metrics, MetricsCollector
-from ..core.workflow_profiler import WorkflowProfiler
+from ..core.performance import profile
 
 FIRST_EDIT_STAGE_TIMEOUT_MS = 5_000
 
@@ -144,7 +145,7 @@ async def _capture_html_snapshot(page: Page, filename: str) -> None:
     try:
         html = await page.content()
     except Exception as exc:  # pragma: no cover - 调试辅助
-        logger.warning("获取页面 HTML 失败: %s", exc)
+        logger.warning("获取页面 HTML 失败: {}", exc)
         return
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -153,9 +154,9 @@ async def _capture_html_snapshot(page: Page, filename: str) -> None:
     target_file = target_root / f"{timestamp}_{filename}"
     try:
         target_file.write_text(html, encoding="utf-8")
-        logger.debug("已写出调试 HTML: %s", target_file)
+        logger.debug("已写出调试 HTML: {}", target_file)
     except Exception as exc:  # pragma: no cover - IO 失败
-        logger.warning("写出调试 HTML 失败: %s", exc)
+        logger.warning("写出调试 HTML 失败: {}", exc)
 
 
 class CompletePublishWorkflow:
@@ -166,16 +167,22 @@ class CompletePublishWorkflow:
         *,
         headless: bool | None = None,
         selection_table: Path | str | None = None,
+        selection_rows_override: Sequence[ProductSelectionRow] | None = None,
         use_ai_titles: bool = False,
         use_codegen_batch_edit: bool = False,
         skip_first_edit: bool = False,
         only_claim: bool = False,
+        only_stage4_publish: bool = False,
         outer_package_image: Path | str | None = None,
         manual_file: Path | str | None = None,
         collection_owner: str | None = None,
         # 新增: 断点恢复参数
         resume_from_checkpoint: bool = False,
         checkpoint_id: str | None = None,
+        # 新增: 执行轮次与浏览器复用
+        execution_round: int = 1,
+        login_ctrl: "LoginController" | None = None,
+        reuse_existing_login: bool = False,
     ) -> None:
         """初始化工作流控制器.
 
@@ -187,6 +194,8 @@ class CompletePublishWorkflow:
             skip_first_edit: 是否直接跳过首次编辑阶段.
             resume_from_checkpoint: 是否从检查点恢复.
             checkpoint_id: 指定要恢复的检查点ID，为空则使用最新检查点.
+            execution_round: 连续执行的轮位（从 1 开始），用于计算首次编辑起始索引.
+            login_ctrl: 可选复用的登录控制器，传入后会复用同一浏览器实例.
         """
 
         if load_dotenv:  # pragma: no cover - 环境可选
@@ -197,7 +206,13 @@ class CompletePublishWorkflow:
         self.use_codegen_batch_edit = use_codegen_batch_edit
         self.skip_first_edit = skip_first_edit
         self.only_claim = only_claim
+        self.only_stage4_publish = only_stage4_publish
+        if self.only_stage4_publish and self.only_claim:
+            raise ValueError("only_stage4_publish 与 only_claim 不能同时为 True")
         self.collection_owner_override = (collection_owner or "").strip()
+        self._selection_rows_override = (
+            list(selection_rows_override) if selection_rows_override else None
+        )
         self.collect_count = max(1, min(self.settings.business.collect_count, 5))
         self.claim_times = max(1, self.settings.business.claim_count)
         self.headless = headless if headless is not None else self.settings.browser.headless
@@ -205,6 +220,9 @@ class CompletePublishWorkflow:
         # 断点恢复配置
         self.resume_from_checkpoint = resume_from_checkpoint
         self.checkpoint_id = checkpoint_id
+        self.execution_round = max(1, execution_round)
+        self.login_ctrl = login_ctrl
+        self.reuse_existing_login = reuse_existing_login
 
         # 归一化相对路径(以应用根目录为基准，适配 Windows)
         self._app_root = Path(__file__).resolve().parents[2]
@@ -235,16 +253,20 @@ class CompletePublishWorkflow:
         
         # 初始化指标收集器
         self._metrics = get_metrics()
-        
-        # 初始化性能分析器
-        self._profiler: WorkflowProfiler | None = None
 
     def execute(self) -> WorkflowExecutionResult:
-        """同步入口, 包装 asyncio 运行."""
+        """????, ?? asyncio ??."""
 
-        logger.info("启动 Temu 完整发布工作流 (SOTA 模式)")
-        return asyncio.run(self._run())
+        logger.info("?? Temu ??????? (SOTA ??)")
+        return asyncio.run(self.execute_async())
 
+    async def execute_async(self) -> WorkflowExecutionResult:
+        """?????????????????????."""
+
+        logger.info("?? Temu ??????? (SOTA ????)")
+        return await self._run()
+
+    @profile()
     async def _run(self) -> WorkflowExecutionResult:
         workflow_id = self.checkpoint_id or f"temu_publish_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         stages: list[StageOutcome] = []
@@ -252,9 +274,6 @@ class CompletePublishWorkflow:
         
         # 初始化断点管理器
         checkpoint_mgr = get_checkpoint_manager(workflow_id, "complete_publish")
-        
-        # 初始化性能分析器
-        self._profiler = WorkflowProfiler("complete_publish", workflow_id)
         
         # 开始记录指标
         self._metrics.start_workflow(workflow_id)
@@ -274,127 +293,181 @@ class CompletePublishWorkflow:
                     # 重建 EditedProduct 对象（简化处理）
                     logger.info(f"恢复了 {len(stage1_data['products'])} 个商品数据")
 
-        login_ctrl = LoginController()
+        login_ctrl = self.login_ctrl or LoginController()
+        self.login_ctrl = login_ctrl
 
         try:
+            selection_rows: list[ProductSelectionRow] = []
+            staff_name = ""
+            page = None
+            miaoshou_ctrl: MiaoshouController | None = None
+            first_edit_ctrl: FirstEditController | None = None
+            batch_edit_ctrl: BatchEditController | None = None
+            publish_ctrl: PublishController | None = None
+            edited_products: list[EditedProduct] = []
+
             # ===== 阶段 0: 预处理（登录+初始化） =====
-            with self._profiler.stage("stage0_preparation"):
-                with self._profiler.step("解析凭证"):
-                    username, password = self._resolve_credentials()
-                    if not username or not password:
-                        raise RuntimeError("缺少登录凭证 (MIAOSHOU_USERNAME/MIAOSHOU_PASSWORD)")
+            logger.info("阶段0: 预处理开始")
+            
+            # 解析凭证
+            username, password = self._resolve_credentials()
+            if not username or not password:
+                raise RuntimeError("缺少登录凭证 (MIAOSHOU_USERNAME/MIAOSHOU_PASSWORD)")
 
-                with self._profiler.step("登录妙手ERP"):
-                    login_success = await login_ctrl.login(
-                        username=username,
-                        password=password,
-                        headless=self.headless,
+            # 登录ERP
+            already_logged_in = False
+            try:
+                if (
+                    self.reuse_existing_login
+                    and login_ctrl.browser_manager.page
+                    and await login_ctrl._check_login_status()
+                ):
+                    already_logged_in = True
+                    logger.info("检测到已登录状态，跳过登录流程")
+            except Exception as exc:
+                logger.debug("检查登录状态失败: {}", exc)
+
+            login_success = True
+            if not already_logged_in:
+                login_success = await login_ctrl.login(
+                    username=username,
+                    password=password,
+                    headless=self.headless,
+                    keep_browser_open=True,
+                )
+
+            if not login_success:
+                raise RuntimeError("登录ERP失败, 请检查账户或 Cookie")
+            
+            # 关闭登录后弹窗
+            await login_ctrl.dismiss_login_overlays()
+
+            # 初始化页面
+            page = login_ctrl.browser_manager.page
+            if page is None:
+                raise RuntimeError("Playwright page 未初始化")
+
+            if self.only_stage4_publish:
+                # 跳转 Temu 采集箱页面(仅发布)
+                collect_box_url = (
+                    login_ctrl.selectors.get("temu_collect_box", {}).get(
+                        "url", "https://erp.91miaoshou.com/pddkj/collect_box/items"
                     )
-                    if not login_success:
-                        raise RuntimeError("登录妙手ERP失败, 请检查账号密码或 Cookie")
+                )
+                await login_ctrl.ensure_collect_box_ready(collect_box_url)
 
-                with self._profiler.step("初始化页面"):
-                    page = login_ctrl.browser_manager.page
-                    assert page is not None, "Playwright page 未初始化"
+            # 准备选品数据
+            selection_rows = self._prepare_selection_rows()
+            staff_name = ""
+            if selection_rows:
+                staff_name = self._resolve_collection_owner(selection_rows[0].owner)
 
-                with self._profiler.step("准备选品数据"):
-                    selection_rows = self._prepare_selection_rows()
-                    staff_name = ""
-                    if selection_rows:
-                        staff_name = self._resolve_collection_owner(selection_rows[0].owner)
+            # 初始化控制器
+            miaoshou_ctrl = MiaoshouController()
+            first_edit_ctrl = FirstEditController()
+            legacy_manual = self.manual_file_override or self.default_manual_file
+            try:
+                batch_edit_ctrl = BatchEditController(
+                    page,
+                    outer_package_image=str(self.outer_package_image_override)
+                    if self.outer_package_image_override
+                    else None,
+                    manual_file_path=str(legacy_manual) if legacy_manual else None,
+                    collection_owner=staff_name,
+                    miaoshou_controller=miaoshou_ctrl,
+                )
+            except TypeError:
+                logger.warning("旧版 BatchEditController 不支持扩展参数，使用兼容参数重新初始化")
+                batch_edit_ctrl = BatchEditController()
+            publish_ctrl = PublishController()
 
-                with self._profiler.step("初始化控制器"):
-                    miaoshou_ctrl = MiaoshouController()
-                    first_edit_ctrl = FirstEditController()
-                    legacy_manual = self.manual_file_override or self.default_manual_file
-                    try:
-                        batch_edit_ctrl = BatchEditController(
-                            page,
-                            outer_package_image=str(self.outer_package_image_override)
-                            if self.outer_package_image_override
-                            else None,
-                            manual_file_path=str(legacy_manual) if legacy_manual else None,
-                            collection_owner=staff_name,
-                            miaoshou_controller=miaoshou_ctrl,
-                        )
-                    except TypeError:
-                        logger.warning("旧版 BatchEditController 不支持扩展参数，使用兼容参数重新初始化")
-                        batch_edit_ctrl = BatchEditController()
-                    publish_ctrl = PublishController()
+            if (
+                page is None
+                or miaoshou_ctrl is None
+                or first_edit_ctrl is None
+                or batch_edit_ctrl is None
+                or publish_ctrl is None
+            ):
+                raise RuntimeError("工作流初始化失败，关键控制器未创建")
 
             # ===== 阶段 1: 首次编辑 =====
             stage1_start = time.perf_counter()
-            
-            with self._profiler.stage("stage1_first_edit", product_count=len(selection_rows)):
-                # 检查是否可以跳过（从检查点恢复）
-                if checkpoint_mgr.should_skip_stage("stage1_first_edit"):
-                    logger.info("从检查点恢复: 跳过阶段1首次编辑")
-                    stage1_data = checkpoint_mgr.get_stage_data("stage1_first_edit")
-                    edited_products = restored_products or self._build_placeholder_edits(selection_rows)
-                    stage1 = StageOutcome(
-                        name="stage1_first_edit",
-                        success=True,
-                        message="从检查点恢复: 首次编辑已跳过",
-                        details={"skipped": True, "restored": True},
+            logger.info("阶段1: 首次编辑开始")
+            if checkpoint_mgr.should_skip_stage("stage1_first_edit"):
+                logger.info("从检查点恢复: 跳过阶段1首次编辑")
+                stage1_data = checkpoint_mgr.get_stage_data("stage1_first_edit")
+                if stage1_data:
+                    logger.debug("恢复阶段1数据: {}", stage1_data.keys())
+                edited_products = restored_products or self._build_placeholder_edits(selection_rows)
+                stage1 = StageOutcome(
+                    name="stage1_first_edit",
+                    success=True,
+                    message="检查点恢复: 首次编辑已跳过",
+                    details={"skipped": True, "restored": True, "execution_round": self.execution_round},
+                )
+                stages.append(stage1)
+            elif self.only_claim or self.only_stage4_publish:
+                mode_label = "仅认领模式" if self.only_claim else "仅发布模式"
+                mode_key = "only_claim" if self.only_claim else "only_stage4_publish"
+                logger.info("{}: 跳过首次编辑阶段", mode_label)
+                edited_products = self._build_placeholder_edits(selection_rows)
+                stage1 = StageOutcome(
+                    name="stage1_first_edit",
+                    success=True,
+                    message=f"{mode_label}: 首次编辑已跳过",
+                    details={
+                        "skipped": True,
+                        "mode": mode_key,
+                        "edited_products": [prod.to_payload() for prod in edited_products],
+                    },
+                )
+                stages.append(stage1)
+            else:
+                stage1, edited_products = await self._stage_first_edit(
+                    page,
+                    miaoshou_ctrl,
+                    first_edit_ctrl,
+                    selection_rows,
+                )
+                stages.append(stage1)
+                stage1_errors = (
+                    stage1.details.get("errors") if isinstance(stage1.details, dict) else None
+                )
+                stage1_duration = time.perf_counter() - stage1_start
+                self._metrics.record_stage(
+                    workflow_id, "stage1_first_edit", stage1_duration, stage1.success
+                )
+                logger.info(
+                    "阶段1完成: success={success}, edited_products={count}, errors={errors}, duration={duration:.1f}s",
+                    success=stage1.success,
+                    count=len(edited_products),
+                    errors=stage1_errors,
+                    duration=stage1_duration,
+                )
+                if stage1.success:
+                    await checkpoint_mgr.mark_stage_complete(
+                        "stage1_first_edit", {"products": [p.to_payload() for p in edited_products]}
                     )
-                    stages.append(stage1)
-                    self._profiler.record_step("跳过(检查点恢复)", 0, success=True)
-                elif self.only_claim:
-                    logger.info("仅认领模式: 跳过首次编辑阶段")
-                    edited_products = self._build_placeholder_edits(selection_rows)
-                    stage1 = StageOutcome(
-                        name="stage1_first_edit",
-                        success=True,
-                        message="仅认领模式: 首次编辑已跳过",
-                        details={
-                            "skipped": True,
-                            "edited_products": [prod.to_payload() for prod in edited_products],
-                        },
-                    )
-                    stages.append(stage1)
-                    self._profiler.record_step("跳过(仅认领模式)", 0, success=True)
                 else:
-                    with self._profiler.step("执行首次编辑流程"):
-                        stage1, edited_products = await self._stage_first_edit(
-                            page,
-                            miaoshou_ctrl,
-                            first_edit_ctrl,
-                            selection_rows,
-                        )
-                        stages.append(stage1)
-                        stage1_errors = (
-                            stage1.details.get("errors") if isinstance(stage1.details, dict) else None
-                        )
-                    
-                    # 记录阶段指标
-                    stage1_duration = time.perf_counter() - stage1_start
-                    self._metrics.record_stage(workflow_id, "stage1_first_edit", stage1_duration, stage1.success)
-                    
-                    logger.info(
-                        "阶段1完成: success={success}, edited_products={count}, errors={errors}, duration={duration:.1f}s",
-                        success=stage1.success,
-                        count=len(edited_products),
-                        errors=stage1_errors,
-                        duration=stage1_duration,
+                    await checkpoint_mgr.mark_stage_failed("stage1_first_edit", stage1.message)
+                    errors.append(stage1.message)
+                    self._metrics.record_error(
+                        workflow_id, "StageError", stage1.message, "stage1_first_edit"
                     )
-                    
-                    if stage1.success:
-                        # 保存检查点
-                        await checkpoint_mgr.mark_stage_complete(
-                            "stage1_first_edit",
-                            {"products": [p.to_payload() for p in edited_products]}
-                        )
-                    else:
-                        await checkpoint_mgr.mark_stage_failed("stage1_first_edit", stage1.message)
-                        errors.append(stage1.message)
-                        self._metrics.record_error(workflow_id, "StageError", stage1.message, "stage1_first_edit")
-                        return WorkflowExecutionResult(workflow_id, False, stages, errors)
+                    return WorkflowExecutionResult(workflow_id, False, stages, errors)
 
             # ===== 阶段 2: 认领 =====
-            stage2_start = time.perf_counter()
-            
-            with self._profiler.stage("stage2_claim", product_count=len(edited_products)):
-                # 检查是否可以跳过（从检查点恢复）
+            if self.only_stage4_publish:
+                stage2 = StageOutcome(
+                    name="stage2_claim",
+                    success=True,
+                    message="仅发布模式: 认领阶段已跳过",
+                    details={"skipped": True, "mode": "only_stage4_publish"},
+                )
+                stages.append(stage2)
+            else:
+                stage2_start = time.perf_counter()
+                logger.info("阶段2: 认领开始")
                 if checkpoint_mgr.should_skip_stage("stage2_claim"):
                     logger.info("从检查点恢复: 跳过阶段2认领")
                     stage2 = StageOutcome(
@@ -404,29 +477,28 @@ class CompletePublishWorkflow:
                         details={"skipped": True, "restored": True},
                     )
                     stages.append(stage2)
-                    self._profiler.record_step("跳过(检查点恢复)", 0, success=True)
                 else:
-                    with self._profiler.step("执行认领流程"):
-                        stage2 = await self._stage_claim_products(
-                            page,
-                            miaoshou_ctrl,
-                            edited_products,
-                        )
-                        stages.append(stage2)
-                    
-                    # 记录阶段指标
+                    stage2 = await self._stage_claim_products(
+                        page,
+                        miaoshou_ctrl,
+                        edited_products,
+                    )
+                    stages.append(stage2)
                     stage2_duration = time.perf_counter() - stage2_start
-                    self._metrics.record_stage(workflow_id, "stage2_claim", stage2_duration, stage2.success)
-                    
+                    self._metrics.record_stage(
+                        workflow_id, "stage2_claim", stage2_duration, stage2.success
+                    )
                     if stage2.success:
                         await checkpoint_mgr.mark_stage_complete("stage2_claim", stage2.details)
                     else:
                         await checkpoint_mgr.mark_stage_failed("stage2_claim", stage2.message)
                         errors.append(stage2.message)
-                        self._metrics.record_error(workflow_id, "StageError", stage2.message, "stage2_claim")
+                        self._metrics.record_error(
+                            workflow_id, "StageError", stage2.message, "stage2_claim"
+                        )
                         return WorkflowExecutionResult(workflow_id, False, stages, errors)
 
-            if self.only_claim:
+            if self.only_claim and not self.only_stage4_publish:
                 logger.info("仅认领模式: 停止后续批量编辑与发布阶段")
                 stages.append(
                     StageOutcome(
@@ -445,18 +517,23 @@ class CompletePublishWorkflow:
                     )
                 )
                 total_success = all(stage.success for stage in stages)
-                # 记录工作流完成
                 self._metrics.end_workflow(workflow_id, "success" if total_success else "partial")
-                # 清除检查点（成功完成）
                 if total_success:
                     await checkpoint_mgr.clear_checkpoint()
                 return WorkflowExecutionResult(workflow_id, total_success, stages, errors)
 
             # ===== 阶段 3: 批量编辑 =====
-            stage3_start = time.perf_counter()
-            
-            with self._profiler.stage("stage3_batch_edit", product_count=len(edited_products)):
-                # 检查是否可以跳过（从检查点恢复）
+            if self.only_stage4_publish:
+                stage3 = StageOutcome(
+                    name="stage3_batch_edit",
+                    success=True,
+                    message="仅发布模式: 批量编辑阶段已跳过",
+                    details={"skipped": True, "mode": "only_stage4_publish"},
+                )
+                stages.append(stage3)
+            else:
+                stage3_start = time.perf_counter()
+                logger.info("阶段3: 批量编辑开始")
                 if checkpoint_mgr.should_skip_stage("stage3_batch_edit"):
                     logger.info("从检查点恢复: 跳过阶段3批量编辑")
                     stage3 = StageOutcome(
@@ -466,74 +543,61 @@ class CompletePublishWorkflow:
                         details={"skipped": True, "restored": True},
                     )
                     stages.append(stage3)
-                    self._profiler.record_step("跳过(检查点恢复)", 0, success=True)
                 else:
-                    with self._profiler.step("执行批量编辑18步"):
-                        stage3 = await self._stage_batch_edit(
-                            page,
-                            batch_edit_ctrl,
-                            edited_products,
-                        )
-                        stages.append(stage3)
-                    
-                    # 记录阶段指标
+                    stage3 = await self._stage_batch_edit(
+                        page,
+                        batch_edit_ctrl,
+                        edited_products,
+                    )
+                    stages.append(stage3)
                     stage3_duration = time.perf_counter() - stage3_start
-                    self._metrics.record_stage(workflow_id, "stage3_batch_edit", stage3_duration, stage3.success)
-                    
+                    self._metrics.record_stage(
+                        workflow_id, "stage3_batch_edit", stage3_duration, stage3.success
+                    )
                     if stage3.success:
                         await checkpoint_mgr.mark_stage_complete("stage3_batch_edit", stage3.details)
                     else:
                         await checkpoint_mgr.mark_stage_failed("stage3_batch_edit", stage3.message)
                         errors.append(stage3.message)
-                        self._metrics.record_error(workflow_id, "StageError", stage3.message, "stage3_batch_edit")
+                        self._metrics.record_error(
+                            workflow_id, "StageError", stage3.message, "stage3_batch_edit"
+                        )
                         return WorkflowExecutionResult(workflow_id, False, stages, errors)
 
             # ===== 阶段 4: 发布 =====
             stage4_start = time.perf_counter()
-            
-            with self._profiler.stage("stage4_publish", product_count=len(edited_products)):
-                with self._profiler.step("执行发布流程"):
-                    stage4 = await self._stage_publish(
-                        page,
-                        publish_ctrl,
-                        edited_products,
-                    )
-                    stages.append(stage4)
-                
-                # 记录阶段指标
-                stage4_duration = time.perf_counter() - stage4_start
-                self._metrics.record_stage(workflow_id, "stage4_publish", stage4_duration, stage4.success)
-                
-                if stage4.success:
-                    await checkpoint_mgr.mark_stage_complete("stage4_publish", stage4.details)
-                else:
-                    await checkpoint_mgr.mark_stage_failed("stage4_publish", stage4.message)
-                    errors.append(stage4.message)
-                    self._metrics.record_error(workflow_id, "StageError", stage4.message, "stage4_publish")
+            logger.info("阶段4: 发布开始")
+            stage4 = await self._stage_publish(
+                page,
+                publish_ctrl,
+                edited_products,
+            )
+            stages.append(stage4)
+            stage4_duration = time.perf_counter() - stage4_start
+            self._metrics.record_stage(
+                workflow_id, "stage4_publish", stage4_duration, stage4.success
+            )
+            if stage4.success:
+                await checkpoint_mgr.mark_stage_complete("stage4_publish", stage4.details)
+            else:
+                await checkpoint_mgr.mark_stage_failed("stage4_publish", stage4.message)
+                errors.append(stage4.message)
+                self._metrics.record_error(
+                    workflow_id, "StageError", stage4.message, "stage4_publish"
+                )
 
-            total_success = stage4.success and all(stage.success for stage in stages)
-            
-            # 记录工作流完成
+            total_success = all(stage.success for stage in stages)
+
             workflow_duration = time.perf_counter() - workflow_start_time
             self._metrics.end_workflow(workflow_id, "success" if total_success else "failure")
             logger.info(f"工作流完成: {workflow_id}, 总耗时: {workflow_duration:.1f}s")
-            
-            # 清除检查点（成功完成）
+
             if total_success:
                 await checkpoint_mgr.clear_checkpoint()
-                
+
             return WorkflowExecutionResult(workflow_id, total_success, stages, errors)
 
         finally:
-            # 生成性能报告
-            if self._profiler:
-                self._profiler.finish(success=not errors and all(s.success for s in stages))
-                logger.info(self._profiler.generate_report())
-                try:
-                    self._profiler.save_profile()
-                except Exception as e:
-                    logger.warning(f"保存性能报告失败: {e}")
-            
             # 工作流结束后保持浏览器运行，以便 web 前端继续连接
             if login_ctrl.browser_manager and login_ctrl.browser_manager.browser:
                 workflow_failed = errors or any(not stage.success for stage in stages)
@@ -563,7 +627,35 @@ class CompletePublishWorkflow:
                 [],
             )
 
-        staff_name = selections[0].owner
+        page_size = 20
+        use_override_rows = self._selection_rows_override is not None
+        if use_override_rows:
+            start_offset = 0
+            working_selections = list(selections)
+        else:
+            start_offset = max(0, (self.execution_round - 1) * self.collect_count)
+            working_selections = selections[start_offset : start_offset + self.collect_count]
+
+        if not working_selections:
+            message = f"执行轮位 {self.execution_round} 超出可编辑范围，跳过首次编辑"
+            logger.warning(message)
+            return (
+                StageOutcome(
+                    name="stage1_first_edit",
+                    success=True,
+                    message=message,
+                    details={
+                        "owner": "",
+                        "edited_products": [],
+                        "errors": [],
+                        "skipped": True,
+                        "execution_round": self.execution_round,
+                    },
+                ),
+                [],
+            )
+
+        staff_name = working_selections[0].owner
         staff_name = self._resolve_collection_owner(staff_name)
 
         if self.skip_first_edit:
@@ -577,23 +669,69 @@ class CompletePublishWorkflow:
             }
             return StageOutcome("stage1_first_edit", True, "首次编辑已跳过", details), placeholders
 
-        # 导航到采集箱并筛选（带详细计时）
-        with self._profiler.step("导航到采集箱"):
-            navigation_success = await miaoshou_ctrl.navigate_and_filter_collection_box(
-                page,
-                filter_by_user=staff_name,
-                switch_to_tab="all",
+        # 导航到采集箱并筛选
+        navigation_success = await miaoshou_ctrl.navigate_and_filter_collection_box(
+            page,
+            filter_by_user=staff_name,
+            switch_to_tab="all",
+        )
+        if not navigation_success:
+            return (
+                StageOutcome(
+                    name="stage1_first_edit",
+                    success=False,
+                    message="导航或筛选妙手公用采集箱失败",
+                    details={},
+                ),
+                [],
             )
-            if not navigation_success:
-                return (
-                    StageOutcome(
-                        name="stage1_first_edit",
-                        success=False,
-                        message="导航或筛选妙手公用采集箱失败",
-                        details={},
-                    ),
-                    [],
-                )
+
+        if use_override_rows:
+            logger.info(
+                "Execution round %s (override rows): editing batch size %s",
+                self.execution_round,
+                len(working_selections),
+            )
+        else:
+            logger.info(
+                "Execution round %s: editing from product #%s (round size %s)",
+                self.execution_round,
+                start_offset + 1,
+                self.collect_count,
+            )
+        current_page = 1
+
+        async def _jump_to_page(target_page: int) -> int:
+            nonlocal current_page
+            if target_page <= 1 and current_page == 1:
+                return current_page
+
+            selectors = [
+                'input#jx-id-6212-797.jx-input__inner[type="number"]',
+                'input.jx-input__inner[type="number"][aria-label]',
+                'input[type="number"][aria-label]',
+                '.jx-pagination__goto input[type="number"]',
+            ]
+            for selector in selectors:
+                locator = page.locator(selector).first
+                try:
+                    if await locator.count() == 0:
+                        continue
+                    await locator.click()
+                    await locator.fill(str(target_page))
+                    with contextlib.suppress(Exception):
+                        await locator.press('Enter')
+                    await page.wait_for_timeout(800)
+                    with contextlib.suppress(Exception):
+                        await miaoshou_ctrl._wait_for_table_refresh(page)  # type: ignore[attr-defined]
+                    current_page = target_page
+                    logger.info('????? {} ???????', target_page)
+                    return current_page
+                except Exception as exc:
+                    logger.debug('???? selector={} ??: {}', selector, exc)
+
+            logger.warning('???????? {} ????????? {}', target_page, current_page)
+            return current_page
 
         original_timeout_ms = getattr(
             page, "_bemg_default_timeout_ms", self.settings.browser.timeout
@@ -615,31 +753,41 @@ class CompletePublishWorkflow:
                 opened = await miaoshou_ctrl.click_edit_product_by_index(page, index)
                 if opened:
                     return True
-                logger.debug("默认点击失败，尝试 Codegen 录制逻辑打开第 %s 个商品", index + 1)
+                logger.debug("默认点击失败，尝试 Codegen 录制逻辑打开第 {} 个商品", index + 1)
                 return await open_edit_dialog_codegen(page, index)
 
             errors: list[str] = []
             opened_any = False
             processed_products: list[EditedProduct] = []
+            per_item_max_retry = 3
 
-            for index, selection in enumerate(selections[: self.collect_count]):
-                # 为每个商品的编辑添加详细计时
-                with self._profiler.step(f"编辑商品{index + 1}"):
-                    opened = await open_edit_dialog(index)
-                    if not opened:
-                        errors.append(f"第{index + 1}个商品编辑弹窗打开失败")
-                        continue
+            for index, selection in enumerate(working_selections):
+                absolute_index = start_offset + index
+                target_page = absolute_index // page_size + 1
+                index_on_page = absolute_index % page_size
 
-                    await first_edit_ctrl.wait_for_dialog(page)
-                    opened_any = True
+                # 为每个商品的编辑添加重试
+                logger.info(f"编辑商品 {absolute_index + 1}")
+                attempt_success = False
+                for attempt in range(1, per_item_max_retry + 1):
+                    if target_page != current_page:
+                        current_page = await _jump_to_page(target_page)
 
+                    opened = False
                     try:
+                        opened = await open_edit_dialog(index_on_page)
+                        if not opened:
+                            raise RuntimeError("编辑弹窗打开失败")
+
+                        await first_edit_ctrl.wait_for_dialog(page)
+                        opened_any = True
+
                         original_title = await first_edit_ctrl.get_original_title(page)
                         base_title = original_title or selection.product_name
                         payload_dict = self._build_first_edit_payload(selection, base_title)
-                        sku_image_urls = list(payload_dict.get("sku_image_urls", []) or [])
-                        size_chart_url = (payload_dict.get("size_chart_image_url") or "").strip()
-                        product_video_url = (payload_dict.get("product_video_url") or "").strip()
+                        sku_image_urls = list(payload_dict.get('sku_image_urls', []) or [])
+                        size_chart_url = (payload_dict.get('size_chart_image_url') or '').strip()
+                        product_video_url = (payload_dict.get('product_video_url') or '').strip()
 
                         hook_fn = self._build_first_edit_hook(
                             first_edit_ctrl=first_edit_ctrl,
@@ -648,44 +796,47 @@ class CompletePublishWorkflow:
                             product_video_url=product_video_url,
                         )
 
-                        # ===== 直接使用 Codegen 方式，跳过 JS 注入 =====
-                        logger.info("使用 Codegen 方式填写首次编辑弹窗（已禁用JS注入）")
+                        logger.info('使用 Codegen 方式填写首次编辑弹窗（已禁用JS注入）')
                         success = await fill_first_edit_dialog_codegen(page, payload_dict)
 
                         if not success:
-                            logger.error("Codegen 首次编辑失败 (index=%s)", index + 1)
-                            errors.append(f"第{index + 1}个商品首次编辑失败（Codegen 填写失败）")
-                            continue
+                            raise RuntimeError("Codegen 填写失败")
 
-                        # 执行图片上传 hook，并在执行后统一保存
                         if hook_fn is not None:
                             hook_modified = False
                             try:
                                 hook_result = await hook_fn(page)
-                                hook_modified = True  # hook 内部会操作 SKU 区域，默认认为需要保存
-                                if hook_result:
-                                    logger.success("SKU 图片同步完成")
-                                else:
-                                    logger.warning("SKU 图片同步未成功")
-                            except Exception as exc:
                                 hook_modified = True
-                                logger.error("SKU 图片同步异常: {}", exc)
+                                if hook_result:
+                                    logger.success('SKU 图片同步完成')
+                                else:
+                                    logger.warning('SKU 图片同步未成功')
+                            except Exception as exc:  # pragma: no cover - 运行时保护
+                                hook_modified = True
+                                logger.error('SKU 图片同步异常: {}', exc)
                             finally:
                                 if hook_modified:
-                                    saved_after_hook = await first_edit_ctrl.save_changes(
-                                        page, wait_for_close=False
-                                    )
+                                    saved_after_hook = await first_edit_ctrl.save_changes(page, wait_for_close=False)
                                     if not saved_after_hook:
-                                        logger.warning("SKU/媒体操作后保存失败，可能触发离开提示")
+                                        logger.warning('SKU/媒体操作后保存失败，可能触发离开提示')
 
                         processed_products.append(
-                            self._create_edited_product(selection, index, payload_dict["title"])
+                            self._create_edited_product(selection, absolute_index, payload_dict['title'])
                         )
+                        attempt_success = True
+                        break
                     except Exception as exc:
-                        errors.append(f"第{index + 1}个商品标题更新异常: {exc}")
+                        errors.append(
+                            f'第{absolute_index + 1}个商品处理失败(第{attempt}/{per_item_max_retry}次): {exc}'
+                        )
+                        logger.warning("商品 {} 第 {} 次尝试失败，准备重试", absolute_index + 1, attempt)
+                        await page.wait_for_timeout(500)
                     finally:
-                        await first_edit_ctrl.close_dialog(page)
-
+                        if opened:
+                            with contextlib.suppress(Exception):
+                                await first_edit_ctrl.close_dialog(page)
+                if not attempt_success:
+                    logger.error("商品 {} 在 {} 次尝试后仍未成功", absolute_index + 1, per_item_max_retry)
             if not opened_any:
                 message = "采集箱无可编辑商品,首次编辑阶段跳过"
                 logger.warning(message)
@@ -694,6 +845,7 @@ class CompletePublishWorkflow:
                     "edited_products": [],
                     "errors": errors or ["未能打开任何首次编辑弹窗"],
                     "skipped": True,
+                    "execution_round": self.execution_round,
                 }
                 return StageOutcome("stage1_first_edit", True, message, details), []
 
@@ -703,6 +855,7 @@ class CompletePublishWorkflow:
                 "owner": staff_name,
                 "edited_products": [product.to_payload() for product in processed_products],
                 "errors": errors,
+                "execution_round": self.execution_round,
             }
 
             return StageOutcome("stage1_first_edit", success, message, details), processed_products
@@ -737,7 +890,7 @@ class CompletePublishWorkflow:
                             target_page, urls_for_hook
                         )
                     except Exception as exc:
-                        logger.error("SKU 图片同步异常: %s", exc)
+                        logger.error("SKU 图片同步异常: {}", exc)
                         return False
 
                 hooks.append(_sync_sku_images)
@@ -755,7 +908,7 @@ class CompletePublishWorkflow:
                     result = await hook(target_page)
                     overall = overall and (result is not False)
                 except Exception as exc:
-                    logger.error("首次编辑附加步骤执行异常: %s", exc)
+                    logger.error("首次编辑附加步骤执行异常: {}", exc)
                     overall = False
             return overall
 
@@ -806,6 +959,13 @@ class CompletePublishWorkflow:
                         }
                     )
 
+        # 提取规格选项数组用于 SKU 规格替换
+        spec_array: list[str] = []
+        if selection.spec_options:
+            spec_array = [option.strip() for option in selection.spec_options if option.strip()]
+            if spec_array:
+                logger.debug("SKU 规格数组: {}", spec_array)
+
         payload: dict[str, Any] = {
             "title": new_title,
             "product_number": model_number,
@@ -820,19 +980,20 @@ class CompletePublishWorkflow:
             "supplier_link": "",
             "specs": specs,
             "variants": variants_payload,
+            "spec_array": spec_array,  # SKU 规格替换数组
         }
 
         if selection.size_chart_image_url:
             payload["size_chart_image_url"] = selection.size_chart_image_url
-            logger.debug("添加尺寸图URL: %s", payload["size_chart_image_url"][:100])
+            logger.debug("添加尺寸图URL: {}", payload["size_chart_image_url"][:100])
 
         if getattr(selection, "sku_image_urls", None):
             payload["sku_image_urls"] = selection.sku_image_urls
-            logger.debug("添加 SKU 图片: %s", len(selection.sku_image_urls))
+            logger.debug("添加 SKU 图片: {}", len(selection.sku_image_urls))
 
         if getattr(selection, "product_video_url", None):
             payload["product_video_url"] = selection.product_video_url
-            logger.debug("添加产品视频URL: %s", payload["product_video_url"][:100])
+            logger.debug("添加产品视频URL: {}", payload["product_video_url"][:100])
 
         return payload
 
@@ -920,7 +1081,7 @@ class CompletePublishWorkflow:
             try:
                 filter_owner = self._resolve_collection_owner(owner_candidate)
             except RuntimeError as exc:
-                logger.warning("Unable to resolve collection owner for claim stage: %s", exc)
+                logger.warning("Unable to resolve collection owner for claim stage: {}", exc)
                 filter_owner = None
 
         await miaoshou_ctrl.refresh_collection_box(page, filter_owner=filter_owner)
@@ -1039,7 +1200,7 @@ class CompletePublishWorkflow:
             )
             return False
         except Exception as exc:
-            logger.warning("Fallback claim verification failed: %s", exc)
+            logger.warning("Fallback claim verification failed: {}", exc)
             return False
 
     async def _stage_batch_edit(
@@ -1048,7 +1209,7 @@ class CompletePublishWorkflow:
         batch_edit_ctrl: BatchEditController,
         edited_products: Sequence[EditedProduct],
     ) -> StageOutcome:
-        """阶段 3: Temu 全托管批量编辑 18 步."""
+        """阶段 3: Temu 全托管批量编辑 18 步，增加重试保障."""
 
         if not edited_products:
             message = "无待批量编辑商品,批量编辑阶段跳过"
@@ -1061,6 +1222,7 @@ class CompletePublishWorkflow:
             )
 
         reference = edited_products[0]
+        max_attempts = 3
 
         def _build_codegen_payload() -> dict[str, object]:
             manual_source = self.manual_file_override or self.default_manual_file
@@ -1069,7 +1231,7 @@ class CompletePublishWorkflow:
                 if manual_source.exists():
                     manual_path_str = str(manual_source)
                 else:
-                    logger.warning("说明书文件不存在, 将跳过上传: %s", manual_source)
+                    logger.warning("说明书文件不存在, 将跳过上传: {}", manual_source)
 
             return {
                 "category_path": ["收纳用品", "收纳篮、箱子、盒子", "盖式储物箱"],
@@ -1111,21 +1273,25 @@ class CompletePublishWorkflow:
         if self.use_codegen_batch_edit:
             # 使用 codegen 录制的批量编辑模块(自带导航)
             logger.info("使用 Codegen 录制模块执行批量编辑 18 步")
+            last_outcome: StageOutcome | None = None
+            for attempt in range(1, max_attempts + 1):
+                outcome = await _run_codegen_stage("Codegen")
+                outcome.details["attempts"] = attempt  # type: ignore[index]
+                if outcome.success:
+                    return outcome
+                last_outcome = outcome
+                logger.warning("Codegen 批量编辑第 {}/{} 次失败，准备重试", attempt, max_attempts)
+                await page.wait_for_timeout(800)
+            if last_outcome:
+                last_outcome.message = f"{last_outcome.message}（已重试 {max_attempts} 次）"
+                return last_outcome
             return await _run_codegen_stage("Codegen")
+
         # 使用原有的批量编辑控制器(需要先导航)
         logger.info("使用原有批量编辑控制器执行 18 步")
 
         target_count = max(edited_products.__len__() * self.claim_times, 20)
         if hasattr(batch_edit_ctrl, "navigate_to_batch_edit"):
-            navigation_ok = await batch_edit_ctrl.navigate_to_batch_edit(select_count=target_count)
-            if not navigation_ok:
-                return StageOutcome(
-                    name="stage3_batch_edit",
-                    success=False,
-                    message="无法进入Temu全托管批量编辑页面",
-                    details={},
-                )
-
             payload = {
                 "product_name": reference.selection.product_name if reference else "",
                 "cost_price": reference.cost_price if reference else 0.0,
@@ -1135,24 +1301,48 @@ class CompletePublishWorkflow:
                 "height": reference.dimensions_cm[2] if reference else 50,
             }
 
-            batch_result = await batch_edit_ctrl.execute_all_steps(payload)
+            last_stage: StageOutcome | None = None
+            for attempt in range(1, max_attempts + 1):
+                navigation_ok = await batch_edit_ctrl.navigate_to_batch_edit(select_count=target_count)
+                if not navigation_ok:
+                    last_stage = StageOutcome(
+                        name="stage3_batch_edit",
+                        success=False,
+                        message="无法进入Temu全托管批量编辑页面",
+                        details={"attempts": attempt},
+                    )
+                    await page.wait_for_timeout(500)
+                    continue
 
-            total = batch_result.get("total", 18)
-            success_steps = batch_result.get("success", 0)
-            threshold = int(total * 0.9)
-            overall_success = success_steps >= threshold
-            message = (
-                f"批量编辑成功 {success_steps}/{total} 步"
-                if overall_success
-                else f"批量编辑仅成功 {success_steps}/{total} 步, 低于阈值 {threshold}"
-            )
+                batch_result = await batch_edit_ctrl.execute_all_steps(payload)
 
-            return StageOutcome(
-                name="stage3_batch_edit",
-                success=overall_success,
-                message=message,
-                details=batch_result,
-            )
+                total = batch_result.get("total", 18)
+                success_steps = batch_result.get("success", 0)
+                threshold = int(total * 0.9)
+                overall_success = success_steps >= threshold
+                message = (
+                    f"批量编辑成功 {success_steps}/{total} 步"
+                    if overall_success
+                    else f"批量编辑仅成功 {success_steps}/{total} 步, 低于阈值 {threshold}"
+                )
+
+                stage = StageOutcome(
+                    name="stage3_batch_edit",
+                    success=overall_success,
+                    message=message,
+                    details={**batch_result, "attempts": attempt},
+                )
+                last_stage = stage
+
+                if overall_success:
+                    return stage
+
+                logger.warning("批量编辑第 {}/{} 次未达标，准备重试", attempt, max_attempts)
+                await page.wait_for_timeout(800)
+
+            if last_stage:
+                last_stage.message = f"{last_stage.message}（已重试 {max_attempts} 次）"
+                return last_stage
 
         logger.info("检测到 Legacy BatchEditController，回退到 Codegen 流程")
         return await _run_codegen_stage("Legacy")
@@ -1178,6 +1368,7 @@ class CompletePublishWorkflow:
         shop_name = self._resolve_shop_name(edited_products)
         costs = [{"cost": product.cost_price} for product in edited_products]
 
+        # 选择店铺
         selection_ok = await publish_ctrl.select_shop(page, shop_name)
         if not selection_ok:
             return StageOutcome(
@@ -1187,23 +1378,34 @@ class CompletePublishWorkflow:
                 details={},
             )
 
+        # 设置供货价
         set_price_ok = await publish_ctrl.set_supply_price(page, costs)
+        # 批量发布
         publish_ok = await publish_ctrl.batch_publish(page)
-        publish_result = await publish_ctrl.check_publish_result(page)
 
-        success = bool(set_price_ok and publish_ok and publish_result.get("success", True))
-        message = "批量发布完成" if success else "批量发布存在失败, 请检查发布记录"
+        success = bool(set_price_ok and publish_ok)
+        message = "批量发布完成" if success else "批量发布存在失败, 请检查执行日志"
 
         details = {
             "shop_name": shop_name,
             "set_price_success": set_price_ok,
-            "publish_result": publish_result,
+            "publish_success": publish_ok,
+            "publish_result": {},
         }
 
         return StageOutcome("stage4_publish", success, message, details)
 
     def _prepare_selection_rows(self) -> list[ProductSelectionRow]:
         """读取/生成选品数据."""
+
+        if self._selection_rows_override is not None:
+            if not self._selection_rows_override:
+                raise RuntimeError("外部注入的选品数据为空, 无法继续执行")
+            logger.info(
+                "使用外部注入的选品数据 (共 %s 条)",
+                len(self._selection_rows_override),
+            )
+            return self._finalize_selection_rows(self._selection_rows_override)
 
         if not self.selection_table_path:
             raise RuntimeError("未指定选品表, 请通过 --input=路径 提供 Excel 文件")
@@ -1228,7 +1430,20 @@ class CompletePublishWorkflow:
         if not rows:
             raise RuntimeError(f"选品表 {self.selection_table_path} 未包含有效数据, 无法继续执行")
 
-        for idx, row in enumerate(rows[: self.collect_count], start=1):
+        return self._finalize_selection_rows(rows)
+
+    def _finalize_selection_rows(
+        self, rows: Sequence[ProductSelectionRow]
+    ) -> list[ProductSelectionRow]:
+        """根据 collect_count 截断并输出日志."""
+
+        # 当外部注入数据时不再截断，便于按 execution_round 逐批处理不同商品
+        if self._selection_rows_override is not None:
+            limited_rows = list(rows)
+        else:
+            limited_rows = list(rows[: self.collect_count])
+
+        for idx, row in enumerate(limited_rows, start=1):
             cost_value = float(row.cost_price) if row.cost_price else 0.0
             logger.info(
                 "选品[{}]: 负责人={}, 商品={}, 型号={}, 采集数={}, 成本={:.2f}",
@@ -1247,7 +1462,7 @@ class CompletePublishWorkflow:
                 self.collect_count,
             )
 
-        return list(rows[: self.collect_count])
+        return limited_rows
 
     def _resolve_credentials(self) -> tuple[str, str]:
         """解析登录凭证."""
@@ -1274,10 +1489,10 @@ class CompletePublishWorkflow:
         if not candidate.is_absolute():
             candidate = (self._app_root / candidate).resolve()
         if candidate.exists():
-            logger.info("使用自定义%s: %s", description, candidate)
+            logger.info("使用自定义{}: {}", description, candidate)
             return candidate
 
-        logger.warning("%s 不存在: %s，将忽略该配置", description, candidate)
+        logger.warning("{} 不存在: {}，将忽略该配置", description, candidate)
         return None
 
     def _resolve_cost_price(self, selection: ProductSelectionRow) -> float:

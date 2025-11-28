@@ -18,7 +18,6 @@
 @RELATED: browser_manager.py, search_controller.py
 """
 
-import asyncio
 import random
 from datetime import datetime
 
@@ -177,7 +176,6 @@ class EditController:
 
                 # 导航到商品页面
                 await page.goto(url, wait_until="networkidle")
-                await asyncio.sleep(1 + random.random())
 
                 # TODO: 定位认领按钮并点击4次
                 # 示例实现（需要根据实际页面调整）:
@@ -190,7 +188,6 @@ class EditController:
                     # 点击4次认领（5条→20条）
                     for i in range(4):
                         await claim_button.click()
-                        await asyncio.sleep(0.5 + random.random())
                         logger.debug(f"    认领第 {i + 1} 次")
 
                     # 提取商品ID（从URL或页面元素）
@@ -236,19 +233,18 @@ class EditController:
         if "edit" not in page.url:
             edit_url = f"{product_url}/edit"  # 示例，需根据实际调整
             await page.goto(edit_url, wait_until="networkidle")
-            await asyncio.sleep(1)
 
         # 2. 修改中文标题
         logger.debug("  修改标题...")
         title_input = page.locator('input[name*="title"], input[placeholder*="标题"]').first
         await title_input.clear()
         await title_input.fill(ai_title)
-        await asyncio.sleep(0.5)
 
         # 3. 按空格触发AI生成英文标题
         logger.debug("  触发AI生成英文标题...")
         await title_input.press("Space")
-        await asyncio.sleep(3)  # 等待AI生成
+        # 等待AI生成完成
+        await page.wait_for_load_state("networkidle", timeout=5000)
 
         # 4. 选择类目（简化版，假设只需要输入文本）
         logger.debug("  选择类目...")
@@ -256,7 +252,6 @@ class EditController:
         category_input = page.locator('input[name*="category"], input[placeholder*="类目"]').first
         if await category_input.count() > 0:
             await category_input.fill(category)
-            await asyncio.sleep(0.5)
 
         logger.debug("  ✓ 标题和类目修改完成")
 
@@ -323,7 +318,6 @@ class EditController:
         price_input = page.locator('input[name*="price"], input[placeholder*="价格"]').first
         if await price_input.count() > 0:
             await price_input.fill(str(product.suggested_price))
-            await asyncio.sleep(0.5)
 
         logger.debug("  ✓ 批量编辑完成（简化版）")
         logger.warning("  ⚠️ 注意：完整18步编辑需要根据实际需求进一步实现")
@@ -345,7 +339,8 @@ class EditController:
 
         if await save_button.count() > 0:
             await save_button.click()
-            await asyncio.sleep(2)
+            # 等待保存完成
+            await page.wait_for_load_state("networkidle", timeout=5000)
 
             # 检查保存结果
             # TODO: 根据实际页面的成功提示调整

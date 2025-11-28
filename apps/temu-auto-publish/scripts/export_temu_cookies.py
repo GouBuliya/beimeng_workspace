@@ -80,7 +80,7 @@ class CookieExporter:
                 self.headless,
             )
         else:
-            logger.info("启动 Chromium 浏览器 (headless=%s)", self.headless)
+            logger.info("启动 Chromium 浏览器 (headless={})", self.headless)
 
         return playwright.chromium.launch(**launch_kwargs)
 

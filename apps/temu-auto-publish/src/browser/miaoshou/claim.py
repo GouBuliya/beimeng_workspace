@@ -93,14 +93,14 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
         await self._wait_for_rows(page)
 
         if filter_owner:
-            logger.info("尝试按负责人筛选：%s", filter_owner)
+            logger.info("尝试按负责人筛选：{}", filter_owner)
             try:
                 filtered = await self.filter_and_search(page, filter_owner)
                 if not filtered:
-                    logger.warning("负责人筛选逻辑返回 False：%s", filter_owner)
+                    logger.warning("负责人筛选逻辑返回 False：{}", filter_owner)
                 await self._wait_for_rows(page)
             except Exception as exc:
-                logger.warning("负责人筛选失败(%s): %s", filter_owner, exc)
+                logger.warning("负责人筛选失败({}): {}", filter_owner, exc)
 
     async def _wait_for_rows(self, page: Page, *, timeout: int = 1_500) -> bool:
         """Wait until the collection box table rows are rendered."""
@@ -783,7 +783,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                             if temu_option is not None:
                                 break
 
-                            logger.debug("未立即找到下拉菜单项，尝试第 %s 次点击按钮展开", attempt + 1)
+                            logger.debug("未立即找到下拉菜单项，尝试第 {} 次点击按钮展开", attempt + 1)
                             await claim_button.click(force=True)
                             await self._wait_for_claim_dropdown(page, state="visible", timeout=300)
 
@@ -949,7 +949,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
             except PlaywrightTimeoutError:
                 logger.debug("认领进度条未在预期时间显示完成状态")
 
-            logger.debug("认领进度条状态: completed=%s", progress_ready)
+            logger.debug("认领进度条状态: completed={}", progress_ready)
 
             # 尝试关闭弹窗，最多重试3次
             max_retries = 3
@@ -977,7 +977,6 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         max_retries,
                     )
                     if attempt < max_retries - 1:
-                        await page.wait_for_timeout(300)
                         continue
                     return False
 
@@ -995,7 +994,6 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                 except Exception as exc:
                     logger.debug(f"点击认领进度弹窗关闭按钮失败 attempt={attempt + 1}/{max_retries}: {exc}")
                     if attempt < max_retries - 1:
-                        await page.wait_for_timeout(300)
                         continue
                     return False
 
@@ -1010,12 +1008,10 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         dialog_closed = True
                 
                 if dialog_closed:
-                    logger.debug("认领进度弹窗关闭成功 attempt=%d/%d", attempt + 1, max_retries)
+                    logger.debug("认领进度弹窗关闭成功 attempt={}/{}", attempt + 1, max_retries)
                     return True
                 
-                logger.debug("认领进度弹窗关闭失败，准备重试 attempt=%d/%d", attempt + 1, max_retries)
-                if attempt < max_retries - 1:
-                    await page.wait_for_timeout(1_000)
+                logger.debug("认领进度弹窗关闭失败，准备重试 attempt={}/{}", attempt + 1, max_retries)
             
             logger.debug("认领进度弹窗关闭失败，已达最大重试次数")
             return False
@@ -1139,7 +1135,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
             if button is None:
                 continue
 
-            logger.debug("认领进度弹窗关闭按钮定位成功: selector=%s", selector)
+            logger.debug("认领进度弹窗关闭按钮定位成功: selector={}", selector)
             return button
 
         return None
@@ -1527,7 +1523,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
         except Exception:
             pass
 
-        logger.error("未找到目标下拉菜单项: %s", texts)
+        logger.error("未找到目标下拉菜单项: {}", texts)
         return None
 
     async def _locate_temu_option_via_label(self, page: Page) -> Locator | None:

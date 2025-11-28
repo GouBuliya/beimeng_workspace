@@ -36,6 +36,7 @@ def _build_args(name: str, clean: bool, onefile: bool) -> list[str]:
         "web_panel.service",
         "web_panel.cli",
         "src.workflows.complete_publish_workflow",
+        "itsdangerous",
     ]
 
     args = [

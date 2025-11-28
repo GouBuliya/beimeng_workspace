@@ -212,6 +212,7 @@
                 type="text"
                 name="{{ field.name }}"
                 placeholder="{{ field.placeholder }}"
+                value="{{ field.default or '' }}"
                 {% if field.required %}required{% endif %}
               />
             </label>
@@ -354,6 +355,9 @@
         event.preventDefault();
         formError.hidden = true;
         const data = new FormData(form);
+        if (!data.has("single_run")) {
+          data.append("single_run", "off");
+        }
         runBtn.setAttribute("aria-busy", "true");
         runBtn.disabled = true;
         if (usesDefaultMiaoshouAccount()) {
@@ -524,4 +528,3 @@
     </script>
   </body>
 </html>
-

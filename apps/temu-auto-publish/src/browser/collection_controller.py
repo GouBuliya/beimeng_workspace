@@ -20,6 +20,7 @@ from loguru import logger
 from playwright.async_api import Page, TimeoutError as PlaywrightTimeout
 
 from src.browser.browser_manager import BrowserManager
+from src.utils.selector_race import TIMEOUTS
 
 
 class CollectionController:
@@ -150,7 +151,7 @@ class CollectionController:
             await page.locator(visit_btn_selector).first.click()
 
             # 等待页面跳转
-            await page.wait_for_timeout(2000)
+            await page.wait_for_load_state("domcontentloaded", timeout=TIMEOUTS.SLOW)
 
             # 验证是否成功跳转到店铺
             current_url = page.url
@@ -235,7 +236,6 @@ class CollectionController:
             # 输入关键词
             logger.debug(f"输入关键词: {keyword}")
             await page.locator(search_input_selector).first.fill(keyword)
-            await page.wait_for_timeout(500)
 
             # 点击搜索按钮或按回车
             logger.debug("执行搜索...")
@@ -248,7 +248,7 @@ class CollectionController:
                 await page.locator(search_input_selector).first.press("Enter")
 
             # 等待搜索结果加载
-            await page.wait_for_timeout(3000)
+            await page.wait_for_load_state("networkidle", timeout=TIMEOUTS.SLOW)
 
             # 验证是否有搜索结果
             product_config = self.selectors.get("product", {})
@@ -482,7 +482,6 @@ class CollectionController:
                     # 1. 访问商品详情页
                     logger.debug(f"    [尝试 {retry_count + 1}/{max_retries}] 访问商品页...")
                     await page.goto(url, wait_until="networkidle", timeout=30000)
-                    await page.wait_for_timeout(2000)  # 等待页面和插件加载
 
                     # 2. 尝试查找妙手插件按钮
                     plugin_found = False
@@ -525,13 +524,12 @@ class CollectionController:
                     if not plugin_found:
                         logger.warning(f"    ⚠️  未找到妙手插件按钮")
                         retry_count += 1
-                        await page.wait_for_timeout(1000)
                         continue
 
                     # 3. 点击采集按钮
                     logger.debug("    点击妙手插件采集按钮...")
                     await plugin_button.click()
-                    await page.wait_for_timeout(1500)
+                    await page.wait_for_load_state("networkidle", timeout=TIMEOUTS.SLOW)
 
                     # 4. 检测采集成功提示
                     success_indicators = [
@@ -568,7 +566,6 @@ class CollectionController:
                 except Exception as e:
                     logger.error(f"    ✗ 采集失败: {e}")
                     retry_count += 1
-                    await page.wait_for_timeout(1000)
 
             if not success:
                 result["failed_count"] += 1

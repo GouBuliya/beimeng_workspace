@@ -131,7 +131,7 @@ class CompletePublishWorkflow:
                 and result["stage3_result"].get("success", False)
             )
 
-            logger.info("完整发布工作流 v1 执行结束，结果: %s", result["success"])
+            logger.info("完整发布工作流 v1 执行结束，结果: {}", result["success"])
             return result
 
         except Exception as exc:  # noqa: BLE001
@@ -151,11 +151,11 @@ class CompletePublishWorkflow:
     ) -> Dict:
         """带重试机制的执行完整工作流."""
 
-        logger.info("完整发布工作流 v1 将重试执行，最大次数 %s", max_retries)
+        logger.info("完整发布工作流 v1 将重试执行，最大次数 {}", max_retries)
 
         last_result: Dict = {}
         for attempt in range(max_retries):
-            logger.info("尝试第 %s/%s 次", attempt + 1, max_retries)
+            logger.info("尝试第 {}/{} 次", attempt + 1, max_retries)
             last_result = await self.execute(
                 page,
                 products_data,
@@ -165,14 +165,14 @@ class CompletePublishWorkflow:
             )
 
             if last_result.get("success"):
-                logger.success("第 %s 次尝试成功", attempt + 1)
+                logger.success("第 {} 次尝试成功", attempt + 1)
                 return last_result
 
             wait_ms = (attempt + 1) * 5000
-            logger.warning("第 %s 次尝试失败，等待 %sms 后重试", attempt + 1, wait_ms)
+            logger.warning("第 {} 次尝试失败，等待 {}ms 后重试", attempt + 1, wait_ms)
             await page.wait_for_timeout(wait_ms)
 
-        logger.error("工作流执行失败，已重试 %s 次", max_retries)
+        logger.error("工作流执行失败，已重试 {} 次", max_retries)
         return last_result
 
 

@@ -18,7 +18,7 @@ class FirstEditMediaMixin(FirstEditBase):
 
     async def upload_size_chart(self, page: Page, image_url: str) -> bool:
         """上传尺寸图(SOP 步骤 4.5 补充)."""
-        logger.info("SOP 4.5: 上传尺寸图 -> %s...", image_url[:50])
+        logger.info("SOP 4.5: 上传尺寸图 -> {}...", image_url[:50])
 
         try:
             success = await upload_size_chart_via_url(page, image_url)
@@ -33,7 +33,7 @@ class FirstEditMediaMixin(FirstEditBase):
 
     async def upload_product_video(self, page: Page, video_url: str) -> bool:
         """上传产品视频(SOP 步骤 4.5 补充)."""
-        logger.info("SOP 4.5: 上传产品视频 -> %s...", video_url[:50])
+        logger.info("SOP 4.5: 上传产品视频 -> {}...", video_url[:50])
 
         try:
             result = await upload_product_video_via_url(page, video_url)

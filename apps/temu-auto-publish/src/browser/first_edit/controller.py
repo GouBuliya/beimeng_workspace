@@ -12,6 +12,7 @@ from .dialog import FirstEditDialogMixin
 from .logistics import FirstEditLogisticsMixin
 from .media import FirstEditMediaMixin
 from .sku import FirstEditSkuMixin
+from .sku_spec_replace import FirstEditSkuSpecReplaceMixin
 from .title import FirstEditTitleMixin
 from .workflow import FirstEditWorkflowMixin
 
@@ -20,6 +21,7 @@ class FirstEditController(
     FirstEditWorkflowMixin,
     FirstEditMediaMixin,
     FirstEditSkuMixin,
+    FirstEditSkuSpecReplaceMixin,
     FirstEditLogisticsMixin,
     FirstEditTitleMixin,
     FirstEditCategoryMixin,

@@ -54,6 +54,7 @@ from ...utils.batch_edit_helpers import (
     StepValidator,
     GenericSelectors,
 )
+from ...utils.selector_race import TIMEOUTS
 
 
 class BatchEditController:
@@ -204,7 +205,7 @@ class BatchEditController:
         try:
             # TODO: 使用codegen获取选择器
             # await page.click(self.select_all_checkbox)
-            await asyncio.sleep(1)
+            await page.wait_for_load_state("domcontentloaded", timeout=TIMEOUTS.SLOW)
 
             # 验证选中数量
             # selected_count = await page.locator('.selected').count()
@@ -230,10 +231,9 @@ class BatchEditController:
         try:
             # TODO: 使用codegen获取选择器
             # await page.click(self.batch_edit_button)
-            await asyncio.sleep(2)
 
             # 等待批量编辑页面加载
-            await page.wait_for_load_state("domcontentloaded")
+            await page.wait_for_load_state("domcontentloaded", timeout=TIMEOUTS.SLOW)
 
             # 验证是否进入批量编辑
             if "batch" in page.url.lower() or "批量" in await page.title():
@@ -325,7 +325,6 @@ class BatchEditController:
             是否执行成功
         """
         logger.info("步骤8.1：修改标题（跳过，已在首次编辑中完成）")
-        await asyncio.sleep(0.5)
         return True
 
     async def step_02_english_title(self, page: Page, products_data: List[dict]) -> bool:
@@ -362,9 +361,7 @@ class BatchEditController:
 
             # 按空格键（SOP要求）
             await input_element.click()
-            await page.wait_for_timeout(300)
             await input_element.press("Space")
-            await page.wait_for_timeout(500)
 
             logger.success("✓ 英文标题已填写（空格键）")
 
@@ -389,7 +386,6 @@ class BatchEditController:
         try:
             # TODO: 使用codegen获取选择器
             # 批量设置类目属性
-            await asyncio.sleep(1)
 
             logger.success("✓ 类目属性已设置")
             logger.warning("⚠️ 类目属性选择器待获取")
@@ -417,8 +413,7 @@ class BatchEditController:
             # 1. 点击预览按钮
             preview_selector = "button:has-text('预览'), button:contains('预览')"
             try:
-                await page.locator(preview_selector).first.click(timeout=3000)
-                await page.wait_for_timeout(500)
+                await page.locator(preview_selector).first.click(timeout=TIMEOUTS.NORMAL)
                 logger.info("  已点击预览")
             except Exception as e:
                 logger.warning(f"  预览按钮点击失败: {e}")
@@ -428,8 +423,9 @@ class BatchEditController:
                 "button:has-text('保存修改'), button:has-text('保存'), button:contains('保存')"
             )
             try:
-                await page.locator(save_selector).first.click(timeout=3000)
-                await page.wait_for_timeout(1000)  # 等待保存完成
+                await page.locator(save_selector).first.click(timeout=TIMEOUTS.NORMAL)
+                # 等待保存完成
+                await page.wait_for_load_state("networkidle", timeout=TIMEOUTS.SLOW)
                 logger.success("  ✓ 已保存修改")
             except Exception as e:
                 logger.warning(f"  保存按钮点击失败: {e}")
@@ -471,7 +467,6 @@ class BatchEditController:
             # await page.select_option(
             #     self.selectors["step_05_packaging_shape"], "盒装"
             # )
-            await asyncio.sleep(0.5)
 
             logger.success("✓ 包装信息已设置")
             logger.warning("⚠️ 包装选择器待获取")
@@ -496,7 +491,6 @@ class BatchEditController:
             # await page.select_option(
             #     self.selectors["step_06_origin"], "中国"
             # )
-            await asyncio.sleep(0.5)
 
             logger.success("✓ 产地信息已设置")
             logger.warning("⚠️ 产地选择器待获取")
@@ -524,8 +518,7 @@ class BatchEditController:
             # 1. 点击预览按钮
             preview_selector = "button:has-text('预览'), button:contains('预览')"
             try:
-                await page.locator(preview_selector).first.click(timeout=3000)
-                await page.wait_for_timeout(500)
+                await page.locator(preview_selector).first.click(timeout=TIMEOUTS.NORMAL)
                 logger.info("  已点击预览")
             except Exception as e:
                 logger.warning(f"  预览按钮点击失败: {e}")
@@ -535,8 +528,9 @@ class BatchEditController:
                 "button:has-text('保存修改'), button:has-text('保存'), button:contains('保存')"
             )
             try:
-                await page.locator(save_selector).first.click(timeout=3000)
-                await page.wait_for_timeout(1000)  # 等待保存完成
+                await page.locator(save_selector).first.click(timeout=TIMEOUTS.NORMAL)
+                # 等待保存完成
+                await page.wait_for_load_state("networkidle", timeout=TIMEOUTS.SLOW)
                 logger.success("  ✓ 已保存修改")
             except Exception as e:
                 logger.warning(f"  保存按钮点击失败: {e}")
@@ -578,8 +572,7 @@ class BatchEditController:
             # 1. 点击预览按钮
             preview_selector = "button:has-text('预览'), button:contains('预览')"
             try:
-                await page.locator(preview_selector).first.click(timeout=3000)
-                await page.wait_for_timeout(500)
+                await page.locator(preview_selector).first.click(timeout=TIMEOUTS.NORMAL)
                 logger.info("  已点击预览")
             except Exception as e:
                 logger.warning(f"  预览按钮点击失败: {e}")
@@ -589,8 +582,9 @@ class BatchEditController:
                 "button:has-text('保存修改'), button:has-text('保存'), button:contains('保存')"
             )
             try:
-                await page.locator(save_selector).first.click(timeout=3000)
-                await page.wait_for_timeout(1000)  # 等待保存完成
+                await page.locator(save_selector).first.click(timeout=TIMEOUTS.NORMAL)
+                # 等待保存完成
+                await page.wait_for_load_state("networkidle", timeout=TIMEOUTS.SLOW)
                 logger.success("  ✓ 已保存修改")
             except Exception as e:
                 logger.warning(f"  保存按钮点击失败: {e}")
@@ -722,7 +716,6 @@ class BatchEditController:
         try:
             # TODO: 使用codegen获取选择器
             # 设置SKU
-            await asyncio.sleep(1)
 
             logger.success("✓ SKU已设置")
             logger.warning("⚠️ SKU选择器待获取")
@@ -745,7 +738,6 @@ class BatchEditController:
         try:
             # TODO: 使用codegen获取选择器
             # 选择SKU类目
-            await asyncio.sleep(1)
 
             logger.success("✓ SKU类目已选择")
             logger.warning("⚠️ SKU类目选择器待获取")
@@ -796,9 +788,7 @@ class BatchEditController:
 
             # 填写建议售价
             await input_element.fill("")
-            await page.wait_for_timeout(300)
             await input_element.fill(str(suggested_price))
-            await page.wait_for_timeout(500)
 
             logger.success(f"✓ 建议售价已设置: ¥{suggested_price}")
 
@@ -828,8 +818,7 @@ class BatchEditController:
             # 1. 点击预览按钮
             preview_selector = "button:has-text('预览'), button:contains('预览')"
             try:
-                await page.locator(preview_selector).first.click(timeout=3000)
-                await page.wait_for_timeout(500)
+                await page.locator(preview_selector).first.click(timeout=TIMEOUTS.NORMAL)
                 logger.info("  已点击预览")
             except Exception as e:
                 logger.warning(f"  预览按钮点击失败: {e}")
@@ -839,8 +828,9 @@ class BatchEditController:
                 "button:has-text('保存修改'), button:has-text('保存'), button:contains('保存')"
             )
             try:
-                await page.locator(save_selector).first.click(timeout=3000)
-                await page.wait_for_timeout(1000)  # 等待保存完成
+                await page.locator(save_selector).first.click(timeout=TIMEOUTS.NORMAL)
+                # 等待保存完成
+                await page.wait_for_load_state("networkidle", timeout=TIMEOUTS.SLOW)
                 logger.success("  ✓ 已保存修改")
             except Exception as e:
                 logger.warning(f"  保存按钮点击失败: {e}")
@@ -877,7 +867,6 @@ class BatchEditController:
         try:
             # TODO: 使用codegen获取选择器
             # 确认手动上传
-            await asyncio.sleep(1)
 
             logger.success("✓ 手动上传已确认")
             logger.warning("⚠️ 手动上传选择器待获取")
@@ -904,7 +893,7 @@ class BatchEditController:
 
             # 等待保存完成
             logger.info("  等待保存完成...")
-            await page.wait_for_timeout(5000)
+            await page.wait_for_load_state("networkidle", timeout=TIMEOUTS.SLOW)
 
             logger.success("✓ 批量编辑已保存")
             return True
@@ -927,8 +916,8 @@ class BatchEditController:
             # 1. 预览
             preview_btn = nav_config.get("preview_button", "button:has-text('预览')")
             try:
-                await page.locator(preview_btn).first.click(timeout=3000)
-                await page.wait_for_timeout(1000)
+                await page.locator(preview_btn).first.click(timeout=TIMEOUTS.NORMAL)
+                await page.wait_for_load_state("domcontentloaded", timeout=TIMEOUTS.SLOW)
                 logger.debug("  已预览")
             except Exception:
                 logger.debug("  未找到预览按钮，跳过")
@@ -936,8 +925,8 @@ class BatchEditController:
             # 2. 保存
             save_btn = nav_config.get("save_button", "button:has-text('保存')")
             try:
-                await page.locator(save_btn).first.click(timeout=3000)
-                await page.wait_for_timeout(2000)
+                await page.locator(save_btn).first.click(timeout=TIMEOUTS.NORMAL)
+                await page.wait_for_load_state("networkidle", timeout=TIMEOUTS.SLOW)
                 logger.debug("  已保存")
             except Exception:
                 logger.warning("  未找到保存按钮")
