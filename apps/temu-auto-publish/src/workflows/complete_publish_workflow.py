@@ -629,12 +629,13 @@ class CompletePublishWorkflow:
 
         page_size = 20
         use_override_rows = self._selection_rows_override is not None
+        # 数据已在 _finalize_selection_rows 中根据 execution_round 截取，这里直接使用
+        working_selections = list(selections)
+        # start_offset 用于计算采集箱中的商品位置（基于原始数据的绝对索引）
         if use_override_rows:
             start_offset = 0
-            working_selections = list(selections)
         else:
             start_offset = max(0, (self.execution_round - 1) * self.collect_count)
-            working_selections = selections[start_offset : start_offset + self.collect_count]
 
         if not working_selections:
             message = f"执行轮位 {self.execution_round} 超出可编辑范围，跳过首次编辑"
@@ -1435,13 +1436,25 @@ class CompletePublishWorkflow:
     def _finalize_selection_rows(
         self, rows: Sequence[ProductSelectionRow]
     ) -> list[ProductSelectionRow]:
-        """根据 collect_count 截断并输出日志."""
+        """根据 collect_count 和 execution_round 截取正确的数据段并输出日志."""
 
         # 当外部注入数据时不再截断，便于按 execution_round 逐批处理不同商品
         if self._selection_rows_override is not None:
             limited_rows = list(rows)
         else:
-            limited_rows = list(rows[: self.collect_count])
+            # 根据 execution_round 计算起始偏移，截取对应批次的数据
+            start_offset = max(0, (self.execution_round - 1) * self.collect_count)
+            end_offset = start_offset + self.collect_count
+            limited_rows = list(rows[start_offset:end_offset])
+            
+            if start_offset > 0:
+                logger.info(
+                    "起始轮次=%s: 跳过前 %s 条，处理第 %s-%s 条数据",
+                    self.execution_round,
+                    start_offset,
+                    start_offset + 1,
+                    min(end_offset, len(rows)),
+                )
 
         for idx, row in enumerate(limited_rows, start=1):
             cost_value = float(row.cost_price) if row.cost_price else 0.0
@@ -1455,11 +1468,13 @@ class CompletePublishWorkflow:
                 cost_value,
             )
 
-        if len(rows) < self.collect_count:
+        expected_count = self.collect_count
+        if len(limited_rows) < expected_count:
             logger.warning(
-                "选品数据仅有 %s 条, 低于预期 %s 条",
+                "当前批次选品数据仅有 %s 条, 低于预期 %s 条 (总数据 %s 条)",
+                len(limited_rows),
+                expected_count,
                 len(rows),
-                self.collect_count,
             )
 
         return limited_rows
