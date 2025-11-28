@@ -163,7 +163,11 @@ class WorkflowTaskManager:
                 logger.warning(f"导出选择器命中报告失败: {exc}")
 
     def _run_single(self, options: WorkflowOptions) -> None:
-        result = self._execute_workflow(options)
+        # 单次运行时使用配置的起始轮次
+        result = self._execute_workflow(
+            options,
+            execution_round=options.start_round,
+        )
         self._mark_success(
             workflow_id=result.workflow_id,
             total_success=result.total_success,
@@ -173,9 +177,18 @@ class WorkflowTaskManager:
     def _run_continuous(self, options: WorkflowOptions) -> None:
         queue = SelectionTableQueue(options.selection_path)
         processed_batches = 0
+        # 起始轮次偏移：支持从指定轮次开始（模拟已运行次数）
+        start_round_offset = max(0, options.start_round - 1)
         last_workflow_id: str | None = None
         # 在循环外部创建 LoginController，复用同一个浏览器实例
         login_ctrl = LoginController()
+
+        if start_round_offset > 0:
+            logger.info(
+                "循环模式: 起始轮次=%s，将跳过前 %s 轮对应的选品数据",
+                options.start_round,
+                start_round_offset,
+            )
 
         while True:
             try:
@@ -199,14 +212,19 @@ class WorkflowTaskManager:
                 self._mark_failure(str(exc))
                 return
 
+            # 计算实际轮次 = 起始偏移 + 当前处理批次 + 1
+            actual_round = start_round_offset + processed_batches + 1
             logger.info(
-                "循环模式: 开始处理批次 #%s (条目=%s)", processed_batches + 1, batch.size
+                "循环模式: 开始处理批次 #%s (实际轮次=%s, 条目=%s)",
+                processed_batches + 1,
+                actual_round,
+                batch.size,
             )
             try:
                 result = self._execute_workflow(
                     options,
                     selection_rows_override=batch.rows,
-                    execution_round=processed_batches + 1,
+                    execution_round=actual_round,
                     login_ctrl=login_ctrl,
                 )
             except Exception:

@@ -145,4 +145,12 @@ FORM_FIELDS: tuple[FormField, ...] = (
         placeholder="默认 5，最大 10",
         default="5",
     ),
+    FormField(
+        name="start_round",
+        label="起始轮次",
+        help_text="从第几轮开始执行（模拟已运行次数）。默认1表示从头开始，设为N则跳过前N-1轮的选品数据。",
+        kind="path",
+        placeholder="默认 1，即从头开始",
+        default="1",
+    ),
 )

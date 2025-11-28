@@ -144,6 +144,7 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
         single_run: str | None = Form(default="on"),
         publish_close_retry: str | None = Form(default="5"),
         publish_repeat_count: str | None = Form(default="5"),
+        start_round: str | None = Form(default="1"),
     ) -> RunStatus:
         resolved_path = await _resolve_selection_path(store, selection_file, selection_path)
         owner_value = (collection_owner or "").strip()
@@ -174,6 +175,7 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
 
         close_retry = _coerce_int(publish_close_retry, default=5, min_value=1, max_value=10)
         repeat_count = _coerce_int(publish_repeat_count, default=5, min_value=1, max_value=10)
+        execution_round = _coerce_int(start_round, default=1, min_value=1, max_value=100)
         _persist_publish_preferences(repeat_count, close_retry)
 
         options = WorkflowOptions(
@@ -187,6 +189,7 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
             outer_package_image=outer_package_image,
             manual_file=manual_file_path,
             single_run=_to_bool(single_run),
+            start_round=execution_round,
         )
         try:
             status = manager.start(options)
