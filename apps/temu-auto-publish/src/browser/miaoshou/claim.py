@@ -344,8 +344,8 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
         try:
             js_code = """
             async (indexes) => {
-                const ROW_HEIGHT = 119;
                 const MAX_SCROLL_ATTEMPTS = 8;
+                const DEFAULT_ROW_HEIGHT = 128;  // 默认值，会被动态检测覆盖
                 
                 // 检查是否为 page-mode（页面级滚动）
                 const recycleScroller = document.querySelector('.vue-recycle-scroller');
@@ -366,6 +366,38 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                     visibleRows.sort((a, b) => a.y - b.y);
                     return visibleRows;
                 };
+                
+                // 动态检测实际行高（通过测量相邻行的Y差值）
+                const detectRowHeight = () => {
+                    const visibleRows = getVisibleRows();
+                    if (visibleRows.length >= 2) {
+                        // 计算相邻行之间的Y差值
+                        const diffs = [];
+                        for (let i = 1; i < visibleRows.length; i++) {
+                            const diff = visibleRows[i].y - visibleRows[i-1].y;
+                            if (diff > 50 && diff < 300) {  // 合理范围内的差值
+                                diffs.push(diff);
+                            }
+                        }
+                        if (diffs.length > 0) {
+                            // 取中位数作为行高（更稳定）
+                            diffs.sort((a, b) => a - b);
+                            const median = diffs[Math.floor(diffs.length / 2)];
+                            return median;
+                        }
+                    }
+                    // 尝试从第一行的boundingClientRect获取高度
+                    if (visibleRows.length >= 1) {
+                        const rect = visibleRows[0].row.getBoundingClientRect();
+                        if (rect.height > 50 && rect.height < 300) {
+                            return rect.height;
+                        }
+                    }
+                    return DEFAULT_ROW_HEIGHT;
+                };
+                
+                // 检测实际行高
+                const ROW_HEIGHT = detectRowHeight();
                 
                 // 查找所有可能的滚动容器
                 const findAllScrollContainers = () => {
@@ -429,7 +461,12 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                 
                 let selected = 0;
                 const results = [];
-                let debugInfo = { containers: findAllScrollContainers().length };
+                let debugInfo = { containers: findAllScrollContainers().length, detectedRowHeight: ROW_HEIGHT };
+                
+                // 根据可见行推断索引的辅助函数
+                const inferRowIndex = (y) => {
+                    return Math.round(y / ROW_HEIGHT);
+                };
                 
                 for (const idx of indexes) {
                     const targetTranslateY = idx * ROW_HEIGHT;
@@ -449,13 +486,25 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                             continue;
                         }
                         
-                        // 检查目标行是否已经可见
+                        // 方法1: 基于Y坐标精确匹配（容差为行高的70%）
                         for (const item of visibleRows) {
                             const diff = Math.abs(item.y - targetTranslateY);
-                            if (diff < ROW_HEIGHT / 2) {
+                            if (diff < ROW_HEIGHT * 0.7) {
                                 targetRow = item.row;
                                 matchedY = item.y;
                                 break;
+                            }
+                        }
+                        
+                        // 方法2: 基于推断索引匹配（更健壮的匹配方式）
+                        if (!targetRow) {
+                            for (const item of visibleRows) {
+                                const inferredIdx = inferRowIndex(item.y);
+                                if (inferredIdx === idx) {
+                                    targetRow = item.row;
+                                    matchedY = item.y;
+                                    break;
+                                }
                             }
                         }
                         
@@ -498,7 +547,9 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                             success: false, 
                             error: 'Target row not found after scroll attempts', 
                             visibleYs: finalVisibleRows.map(r => r.y),
+                            inferredIdxs: finalVisibleRows.map(r => inferRowIndex(r.y)),
                             targetY: targetTranslateY,
+                            detectedRowHeight: ROW_HEIGHT,
                             attempts,
                             scrolledTotal
                         });
@@ -525,14 +576,20 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
             result = await page.evaluate(js_code, indexes)
             selected = result.get("selected", 0)
             is_page_mode = result.get("isPageMode", False)
-            logger.debug(f"JS 批量勾选完成: {selected}/{len(indexes)}, page-mode={is_page_mode}")
+            debug_info = result.get("debugInfo", {})
+            detected_row_height = debug_info.get("detectedRowHeight", "unknown")
+            logger.debug(
+                f"JS 批量勾选完成: {selected}/{len(indexes)}, "
+                f"page-mode={is_page_mode}, 检测行高={detected_row_height}px"
+            )
             
             # 输出失败项的详细信息
             for r in result.get("results", []):
                 if not r.get("success"):
                     logger.debug(
                         f"  索引 {r.get('idx')} 失败: {r.get('error')}, "
-                        f"目标Y={r.get('targetY')}, 可见Y={r.get('visibleYs')}"
+                        f"目标Y={r.get('targetY')}, 检测行高={r.get('detectedRowHeight')}px, "
+                        f"可见Y={r.get('visibleYs')}, 推断索引={r.get('inferredIdxs')}"
                     )
             
             return selected
@@ -545,34 +602,88 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
         try:
             js_code = """
             async (index) => {
-                const ROW_HEIGHT = 119;
+                const DEFAULT_ROW_HEIGHT = 128;
                 
                 const scroller = document.querySelector('.vue-recycle-scroller') ||
                                 document.querySelector('.vue-recycle-scroller__item-wrapper')?.parentElement;
                 
                 if (!scroller) return false;
                 
+                // 获取可见行
+                const getVisibleRows = () => {
+                    const rows = document.querySelectorAll('.vue-recycle-scroller__item-view');
+                    const visibleRows = [];
+                    rows.forEach(row => {
+                        const style = row.getAttribute('style') || '';
+                        const match = style.match(/translateY\\((-?\\d+(?:\\.\\d+)?)\\s*(?:px)?\\s*\\)/);
+                        if (match) {
+                            const y = parseFloat(match[1]);
+                            if (y >= 0) visibleRows.push({ row, y });
+                        }
+                    });
+                    visibleRows.sort((a, b) => a.y - b.y);
+                    return visibleRows;
+                };
+                
+                // 动态检测实际行高
+                const detectRowHeight = () => {
+                    const visibleRows = getVisibleRows();
+                    if (visibleRows.length >= 2) {
+                        const diffs = [];
+                        for (let i = 1; i < visibleRows.length; i++) {
+                            const diff = visibleRows[i].y - visibleRows[i-1].y;
+                            if (diff > 50 && diff < 300) diffs.push(diff);
+                        }
+                        if (diffs.length > 0) {
+                            diffs.sort((a, b) => a - b);
+                            return diffs[Math.floor(diffs.length / 2)];
+                        }
+                    }
+                    if (visibleRows.length >= 1) {
+                        const rect = visibleRows[0].row.getBoundingClientRect();
+                        if (rect.height > 50 && rect.height < 300) return rect.height;
+                    }
+                    return DEFAULT_ROW_HEIGHT;
+                };
+                
+                const ROW_HEIGHT = detectRowHeight();
+                
                 // 滚动到目标位置
                 scroller.scrollTop = index * ROW_HEIGHT;
                 await new Promise(r => setTimeout(r, 200));
                 
-                // 获取可见行
-                const rows = document.querySelectorAll('.vue-recycle-scroller__item-view');
-                const visibleRows = [];
-                rows.forEach(row => {
-                    const style = row.getAttribute('style') || '';
-                    const match = style.match(/translateY\\((-?\\d+(?:\\.\\d+)?)\\s*(?:px)?\\s*\\)/);
-                    if (match) {
-                        const y = parseFloat(match[1]);
-                        if (y >= 0) visibleRows.push({ row, y });
-                    }
-                });
-                visibleRows.sort((a, b) => a.y - b.y);
-                
+                // 重新获取可见行
+                const visibleRows = getVisibleRows();
                 if (visibleRows.length === 0) return false;
                 
-                const checkbox = visibleRows[0].row.querySelector('.jx-checkbox__inner') ||
-                                visibleRows[0].row.querySelector('.jx-checkbox');
+                // 基于索引推断找到目标行
+                const targetY = index * ROW_HEIGHT;
+                let targetRow = null;
+                
+                // 方法1: Y坐标匹配
+                for (const item of visibleRows) {
+                    if (Math.abs(item.y - targetY) < ROW_HEIGHT * 0.7) {
+                        targetRow = item.row;
+                        break;
+                    }
+                }
+                
+                // 方法2: 基于推断索引匹配
+                if (!targetRow) {
+                    for (const item of visibleRows) {
+                        const inferredIdx = Math.round(item.y / ROW_HEIGHT);
+                        if (inferredIdx === index) {
+                            targetRow = item.row;
+                            break;
+                        }
+                    }
+                }
+                
+                // 回退: 使用第一个可见行
+                if (!targetRow) targetRow = visibleRows[0].row;
+                
+                const checkbox = targetRow.querySelector('.jx-checkbox__inner') ||
+                                targetRow.querySelector('.jx-checkbox');
                 if (checkbox) {
                     checkbox.click();
                     return true;

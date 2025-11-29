@@ -807,12 +807,51 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
             # JavaScript：滚动到目标位置，然后点击编辑按钮
             js_code = """
             async (index) => {
-                const ROW_HEIGHT = 128;
-                const targetScrollTop = index * ROW_HEIGHT;
+                const DEFAULT_ROW_HEIGHT = 128;
                 
                 // 检查是否为 page-mode（页面级滚动）
                 const recycleScroller = document.querySelector('.vue-recycle-scroller');
                 const isPageMode = recycleScroller && recycleScroller.classList.contains('page-mode');
+                
+                // 获取所有可见行的辅助函数
+                const getVisibleRows = () => {
+                    const rows = document.querySelectorAll('.vue-recycle-scroller__item-view');
+                    const visibleRows = [];
+                    rows.forEach(row => {
+                        const style = row.getAttribute('style') || '';
+                        const match = style.match(/translateY\\((-?\\d+(?:\\.\\d+)?)\\s*(?:px)?\\s*\\)/);
+                        if (match) {
+                            const y = parseFloat(match[1]);
+                            if (y >= 0) visibleRows.push({ row, y });
+                        }
+                    });
+                    visibleRows.sort((a, b) => a.y - b.y);
+                    return visibleRows;
+                };
+                
+                // 动态检测实际行高（通过测量相邻行的Y差值）
+                const detectRowHeight = () => {
+                    const visibleRows = getVisibleRows();
+                    if (visibleRows.length >= 2) {
+                        const diffs = [];
+                        for (let i = 1; i < visibleRows.length; i++) {
+                            const diff = visibleRows[i].y - visibleRows[i-1].y;
+                            if (diff > 50 && diff < 300) diffs.push(diff);
+                        }
+                        if (diffs.length > 0) {
+                            diffs.sort((a, b) => a - b);
+                            return diffs[Math.floor(diffs.length / 2)];
+                        }
+                    }
+                    if (visibleRows.length >= 1) {
+                        const rect = visibleRows[0].row.getBoundingClientRect();
+                        if (rect.height > 50 && rect.height < 300) return rect.height;
+                    }
+                    return DEFAULT_ROW_HEIGHT;
+                };
+                
+                const ROW_HEIGHT = detectRowHeight();
+                const targetScrollTop = index * ROW_HEIGHT;
                 
                 let scrollerInfo = '';
                 let actualScrollTop = 0;
@@ -858,41 +897,41 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                     }
                 }
                 
-                // 获取所有虚拟滚动行
+                // 重新获取可见行（滚动后）
                 const rows = document.querySelectorAll('.vue-recycle-scroller__item-view');
-                const visibleRows = [];
+                const visibleRows = getVisibleRows();
                 
-                rows.forEach(row => {
-                    const style = row.getAttribute('style') || '';
-                    const match = style.match(/translateY\\((-?\\d+(?:\\.\\d+)?)\\s*(?:px)?\\s*\\)/);
-                    if (match) {
-                        const y = parseFloat(match[1]);
-                        // 只收集可见行（translateY >= 0，排除 -9999px 的隐藏行）
-                        if (y >= 0) {
-                            visibleRows.push({ row, y });
-                        }
-                    }
-                });
+                // 根据可见行推断索引的辅助函数
+                const inferRowIndex = (y) => Math.round(y / ROW_HEIGHT);
                 
-                // 按 translateY 排序
-                visibleRows.sort((a, b) => a.y - b.y);
-                
-                // 直接使用 index * ROW_HEIGHT 计算目标 translateY（无偏移）
+                // 直接使用 index * ROW_HEIGHT 计算目标 translateY
                 let targetRow = null;
                 let targetTranslateY = index * ROW_HEIGHT;
                 let matchedY = -1;
                 
+                // 方法1: 基于Y坐标匹配（容差为行高的70%）
                 for (const item of visibleRows) {
-                    // 允许半行高度的误差
                     const diff = Math.abs(item.y - targetTranslateY);
-                    if (diff < ROW_HEIGHT / 2) {
+                    if (diff < ROW_HEIGHT * 0.7) {
                         targetRow = item.row;
                         matchedY = item.y;
                         break;
                     }
                 }
                 
-                // 如果精确匹配失败，记录所有可见行的 Y 值用于调试
+                // 方法2: 基于推断索引匹配（更健壮的匹配方式）
+                if (!targetRow) {
+                    for (const item of visibleRows) {
+                        const inferredIdx = inferRowIndex(item.y);
+                        if (inferredIdx === index) {
+                            targetRow = item.row;
+                            matchedY = item.y;
+                            break;
+                        }
+                    }
+                }
+                
+                // 如果匹配失败，记录所有可见行的 Y 值用于调试
                 if (!targetRow) {
                     return { 
                         success: false, 
@@ -902,7 +941,9 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                         targetScrollTop,
                         actualScrollTop,
                         rowCount: rows.length,
-                        visibleYs: visibleRows.map(r => r.y)
+                        visibleYs: visibleRows.map(r => r.y),
+                        inferredIdxs: visibleRows.map(r => inferRowIndex(r.y)),
+                        detectedRowHeight: ROW_HEIGHT
                     };
                 }
                 
@@ -1004,4 +1045,5 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
         except Exception as exc:
             logger.debug(f"行内点击编辑按钮异常: {exc}")
             return False
+
 
