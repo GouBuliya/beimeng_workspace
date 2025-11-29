@@ -5,6 +5,8 @@
     - async def refresh_collection_box(): 导航并确保列表可见
     - async def select_products_for_claim(): 勾选表格前 N 条商品
     - async def _resolve_checkbox_locator(): 复用勾选候选定位器并返回可点击元素
+    - async def _click_claim_button_in_row_by_js(): 复用首次编辑定位逻辑点击行内认领按钮
+    - async def claim_products_by_row_js(): 使用 JS 定位逻辑逐行认领商品
     - async def _ensure_claim_button_visible(): 确保认领按钮可见并返回定位器
     - async def _find_clickable_in_scopes(): 在 Page/Frame 中定位可交互按钮
     - async def _click_claim_confirmation_button(): 在认领弹窗中定位并点击确认按钮
@@ -694,6 +696,337 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
             return await page.evaluate(js_code, index)
         except Exception:
             return False
+
+    async def _click_claim_button_in_row_by_js(
+        self, page: Page, index: int
+    ) -> dict[str, Any]:
+        """使用 JavaScript 直接定位并点击第 index 行的"认领到"按钮，然后选择下拉第一项。
+
+        复用首次编辑的定位逻辑（动态行高检测、translateY 定位等），
+        将点击目标改为"认领到"下拉按钮，并自动点击下拉菜单的第一个选项。
+
+        Args:
+            page: Playwright 页面对象
+            index: 目标商品索引（全局索引，0-based）
+
+        Returns:
+            包含操作结果的字典: {success, error?, scrollerInfo, matchedY, ...}
+        """
+        try:
+            js_code = """
+            async (index) => {
+                const DEFAULT_ROW_HEIGHT = 128;
+                
+                // 检查是否为 page-mode（页面级滚动）
+                const recycleScroller = document.querySelector('.vue-recycle-scroller');
+                const isPageMode = recycleScroller && recycleScroller.classList.contains('page-mode');
+                
+                // 获取所有可见行的辅助函数
+                const getVisibleRows = () => {
+                    const rows = document.querySelectorAll('.vue-recycle-scroller__item-view');
+                    const visibleRows = [];
+                    rows.forEach(row => {
+                        const style = row.getAttribute('style') || '';
+                        const match = style.match(/translateY\\((-?\\d+(?:\\.\\d+)?)\\s*(?:px)?\\s*\\)/);
+                        if (match) {
+                            const y = parseFloat(match[1]);
+                            if (y >= 0) visibleRows.push({ row, y });
+                        }
+                    });
+                    visibleRows.sort((a, b) => a.y - b.y);
+                    return visibleRows;
+                };
+                
+                // 动态检测实际行高（通过测量相邻行的Y差值）
+                const detectRowHeight = () => {
+                    const visibleRows = getVisibleRows();
+                    if (visibleRows.length >= 2) {
+                        const diffs = [];
+                        for (let i = 1; i < visibleRows.length; i++) {
+                            const diff = visibleRows[i].y - visibleRows[i-1].y;
+                            if (diff > 50 && diff < 300) diffs.push(diff);
+                        }
+                        if (diffs.length > 0) {
+                            diffs.sort((a, b) => a - b);
+                            return diffs[Math.floor(diffs.length / 2)];
+                        }
+                    }
+                    if (visibleRows.length >= 1) {
+                        const rect = visibleRows[0].row.getBoundingClientRect();
+                        if (rect.height > 50 && rect.height < 300) return rect.height;
+                    }
+                    return DEFAULT_ROW_HEIGHT;
+                };
+                
+                const ROW_HEIGHT = detectRowHeight();
+                const targetScrollTop = index * ROW_HEIGHT;
+                
+                let scrollerInfo = '';
+                let actualScrollTop = 0;
+                
+                if (isPageMode) {
+                    // page-mode：滚动整个页面或找到真正的滚动父容器
+                    scrollerInfo = 'page-mode';
+                    
+                    let scrollParent = recycleScroller.parentElement;
+                    let foundScrollable = false;
+                    
+                    while (scrollParent && scrollParent !== document.body) {
+                        const style = window.getComputedStyle(scrollParent);
+                        const overflowY = style.overflowY;
+                        if ((overflowY === 'auto' || overflowY === 'scroll') && 
+                            scrollParent.scrollHeight > scrollParent.clientHeight) {
+                            scrollParent.scrollTop = targetScrollTop;
+                            await new Promise(r => setTimeout(r, 500));
+                            actualScrollTop = scrollParent.scrollTop;
+                            scrollerInfo = `parent: ${scrollParent.className.split(' ')[0] || scrollParent.tagName}`;
+                            foundScrollable = true;
+                            break;
+                        }
+                        scrollParent = scrollParent.parentElement;
+                    }
+                    
+                    if (!foundScrollable) {
+                        window.scrollTo({ top: targetScrollTop, behavior: 'instant' });
+                        await new Promise(r => setTimeout(r, 500));
+                        actualScrollTop = window.scrollY || document.documentElement.scrollTop;
+                        scrollerInfo = 'window';
+                    }
+                } else {
+                    if (recycleScroller) {
+                        recycleScroller.scrollTop = targetScrollTop;
+                        await new Promise(r => setTimeout(r, 500));
+                        actualScrollTop = recycleScroller.scrollTop;
+                        scrollerInfo = 'vue-recycle-scroller';
+                    }
+                }
+                
+                // 重新获取可见行（滚动后）
+                const visibleRows = getVisibleRows();
+                
+                // 根据可见行推断索引的辅助函数
+                const inferRowIndex = (y) => Math.round(y / ROW_HEIGHT);
+                
+                // 计算目标 translateY
+                let targetRow = null;
+                let targetTranslateY = index * ROW_HEIGHT;
+                let matchedY = -1;
+                
+                // 方法1: 基于Y坐标匹配（容差为行高的70%）
+                for (const item of visibleRows) {
+                    const diff = Math.abs(item.y - targetTranslateY);
+                    if (diff < ROW_HEIGHT * 0.7) {
+                        targetRow = item.row;
+                        matchedY = item.y;
+                        break;
+                    }
+                }
+                
+                // 方法2: 基于推断索引匹配
+                if (!targetRow) {
+                    for (const item of visibleRows) {
+                        const inferredIdx = inferRowIndex(item.y);
+                        if (inferredIdx === index) {
+                            targetRow = item.row;
+                            matchedY = item.y;
+                            break;
+                        }
+                    }
+                }
+                
+                if (!targetRow) {
+                    return { 
+                        success: false, 
+                        error: `Target Y=${targetTranslateY} not found in visible rows`,
+                        scrollerInfo,
+                        isPageMode,
+                        targetScrollTop,
+                        actualScrollTop,
+                        visibleYs: visibleRows.map(r => r.y),
+                        inferredIdxs: visibleRows.map(r => inferRowIndex(r.y)),
+                        detectedRowHeight: ROW_HEIGHT
+                    };
+                }
+                
+                // 在行内查找"认领到"按钮
+                // 选择器优先级：包含"认领到"文本的按钮
+                const claimBtnSelectors = [
+                    'button.jx-button.is-text span:has-text("认领到")',
+                    'button.pro-button.is-text',
+                    'button[aria-haspopup="menu"]',
+                    '.jx-tooltip__trigger.pro-button',
+                ];
+                
+                let claimBtn = null;
+                
+                // 方法1: 通过文本内容查找
+                const allButtons = targetRow.querySelectorAll('button');
+                for (const btn of allButtons) {
+                    const text = btn.textContent || '';
+                    if (text.includes('认领到')) {
+                        claimBtn = btn;
+                        break;
+                    }
+                }
+                
+                // 方法2: 通过选择器查找
+                if (!claimBtn) {
+                    for (const selector of claimBtnSelectors) {
+                        try {
+                            const found = targetRow.querySelector(selector);
+                            if (found) {
+                                claimBtn = found.closest('button') || found;
+                                break;
+                            }
+                        } catch (e) {}
+                    }
+                }
+                
+                if (!claimBtn) {
+                    return { 
+                        success: false, 
+                        error: 'Claim button not found in target row',
+                        scrollerInfo,
+                        matchedY,
+                        buttonsFound: allButtons.length
+                    };
+                }
+                
+                // 点击认领按钮
+                claimBtn.click();
+                
+                // 等待下拉菜单出现
+                await new Promise(r => setTimeout(r, 500));
+                
+                // 查找下拉菜单并点击第一个选项
+                const dropdownSelectors = [
+                    '.el-dropdown-menu',
+                    '.jx-dropdown-menu', 
+                    '.pro-dropdown__menu',
+                    '[role="menu"]',
+                    '.jx-popper[aria-hidden="false"]',
+                ];
+                
+                let dropdown = null;
+                for (const selector of dropdownSelectors) {
+                    const found = document.querySelector(selector);
+                    if (found && found.offsetParent !== null) {
+                        dropdown = found;
+                        break;
+                    }
+                }
+                
+                if (!dropdown) {
+                    return { 
+                        success: false, 
+                        error: 'Dropdown menu not found after clicking claim button',
+                        scrollerInfo,
+                        matchedY,
+                        claimBtnClicked: true
+                    };
+                }
+                
+                // 点击下拉菜单的第一个选项
+                const optionSelectors = [
+                    '.el-dropdown-menu__item',
+                    '.jx-dropdown-menu__item',
+                    '[role="menuitem"]',
+                    'li',
+                ];
+                
+                let firstOption = null;
+                for (const selector of optionSelectors) {
+                    const options = dropdown.querySelectorAll(selector);
+                    if (options.length > 0) {
+                        firstOption = options[0];
+                        break;
+                    }
+                }
+                
+                if (!firstOption) {
+                    return { 
+                        success: false, 
+                        error: 'No option found in dropdown menu',
+                        scrollerInfo,
+                        matchedY,
+                        claimBtnClicked: true,
+                        dropdownFound: true
+                    };
+                }
+                
+                // 点击第一个选项
+                firstOption.click();
+                
+                return { 
+                    success: true, 
+                    scrollerInfo,
+                    isPageMode,
+                    targetScrollTop,
+                    actualScrollTop,
+                    targetTranslateY,
+                    matchedY,
+                    detectedRowHeight: ROW_HEIGHT,
+                    optionText: firstOption.textContent?.trim() || ''
+                };
+            }
+            """
+
+            result = await page.evaluate(js_code, index)
+
+            if result.get("success"):
+                logger.success(
+                    f"✓ JS 点击认领按钮成功，索引={index}, 容器={result.get('scrollerInfo')}, "
+                    f"page-mode={result.get('isPageMode')}, 匹配Y={result.get('matchedY')}px, "
+                    f"选项={result.get('optionText')}"
+                )
+            else:
+                logger.warning(
+                    f"JS 点击认领按钮失败: {result.get('error')}, 容器={result.get('scrollerInfo')}, "
+                    f"可见Y值={result.get('visibleYs')}, 检测行高={result.get('detectedRowHeight')}"
+                )
+
+            return result
+
+        except Exception as exc:
+            logger.warning(f"JS 点击认领按钮异常: {exc}")
+            return {"success": False, "error": str(exc)}
+
+    async def claim_products_by_row_js(
+        self,
+        page: Page,
+        indexes: Sequence[int],
+    ) -> tuple[int, int]:
+        """使用 JS 定位逻辑逐行认领商品。
+
+        复用首次编辑的定位逻辑，对每个索引：
+        1. 滚动到目标行
+        2. 点击该行的"认领到"按钮
+        3. 选择下拉菜单第一项
+
+        Args:
+            page: Playwright 页面对象
+            indexes: 要认领的商品索引列表
+
+        Returns:
+            (成功数, 失败数) 元组
+        """
+        success_count = 0
+        fail_count = 0
+
+        for idx in indexes:
+            logger.info(f"正在认领索引 {idx} 的商品...")
+            result = await self._click_claim_button_in_row_by_js(page, idx)
+
+            if result.get("success"):
+                success_count += 1
+                # 等待认领操作完成
+                await page.wait_for_timeout(800)
+            else:
+                fail_count += 1
+                logger.warning(f"索引 {idx} 认领失败: {result.get('error')}")
+
+        logger.info(f"批量认领完成: 成功={success_count}, 失败={fail_count}")
+        return success_count, fail_count
 
     async def _find_row_by_translate_y(self, page: Page, index: int):
         """通过 translateY 值定位 vue-recycle-scroller 中的行。
