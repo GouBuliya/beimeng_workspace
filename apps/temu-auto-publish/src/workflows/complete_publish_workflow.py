@@ -750,12 +750,43 @@ class CompletePublishWorkflow:
             timeout_overridden = True
 
         try:
-            async def open_edit_dialog(index: int) -> bool:
-                opened = await miaoshou_ctrl.click_edit_product_by_index(page, index)
+            # 导入精确滚动工具
+            from ..utils.scroll_helper import (
+                scroll_to_product_position,
+                scroll_one_product,
+                PRODUCT_ROW_HEIGHT,
+            )
+
+            # 是否使用精确滚动模式（当起始偏移大于等于5时启用）
+            use_precise_scroll = start_offset >= 5
+            
+            if use_precise_scroll:
+                logger.info(
+                    "启用精确滚动模式: 起始偏移=%s, 滚动距离=%spx",
+                    start_offset,
+                    start_offset * PRODUCT_ROW_HEIGHT,
+                )
+                # 先滚动到起始位置
+                await scroll_to_product_position(page, target_index=start_offset)
+
+            async def open_edit_dialog(index: int, *, use_first_visible: bool = False) -> bool:
+                """打开编辑弹窗。
+                
+                Args:
+                    index: 商品索引
+                    use_first_visible: 是否点击第一个可见的编辑按钮（精确滚动模式）
+                """
+                if use_first_visible:
+                    # 精确滚动后，点击第一个可见的编辑按钮
+                    opened = await miaoshou_ctrl.click_edit_product_by_index(
+                        page, 0, enable_scroll=False
+                    )
+                else:
+                    opened = await miaoshou_ctrl.click_edit_product_by_index(page, index)
                 if opened:
                     return True
                 logger.debug("默认点击失败，尝试 Codegen 录制逻辑打开第 {} 个商品", index + 1)
-                return await open_edit_dialog_codegen(page, index)
+                return await open_edit_dialog_codegen(page, index if not use_first_visible else 0)
 
             errors: list[str] = []
             opened_any = False
@@ -768,15 +799,21 @@ class CompletePublishWorkflow:
                 index_on_page = absolute_index % page_size
 
                 # 为每个商品的编辑添加重试
-                logger.info(f"编辑商品 {absolute_index + 1}")
+                logger.info(f"编辑商品 {absolute_index + 1} (批次内第 {index + 1}/{len(working_selections)} 个)")
                 attempt_success = False
                 for attempt in range(1, per_item_max_retry + 1):
-                    if target_page != current_page:
+                    # 非精确滚动模式下，可能需要翻页
+                    if not use_precise_scroll and target_page != current_page:
                         current_page = await _jump_to_page(target_page)
 
                     opened = False
                     try:
-                        opened = await open_edit_dialog(index_on_page)
+                        # 精确滚动模式：点击第一个可见的编辑按钮
+                        # 非精确滚动模式：按索引点击
+                        opened = await open_edit_dialog(
+                            index_on_page,
+                            use_first_visible=use_precise_scroll,
+                        )
                         if not opened:
                             raise RuntimeError("编辑弹窗打开失败")
 
@@ -836,8 +873,14 @@ class CompletePublishWorkflow:
                         if opened:
                             with contextlib.suppress(Exception):
                                 await first_edit_ctrl.close_dialog(page)
+                
                 if not attempt_success:
                     logger.error("商品 {} 在 {} 次尝试后仍未成功", absolute_index + 1, per_item_max_retry)
+                
+                # 精确滚动模式：编辑完成后滚动到下一个商品
+                if use_precise_scroll and index < len(working_selections) - 1:
+                    logger.debug(f"滚动到下一个商品，距离: {PRODUCT_ROW_HEIGHT}px")
+                    await scroll_one_product(page)
             if not opened_any:
                 message = "采集箱无可编辑商品,首次编辑阶段跳过"
                 logger.warning(message)

@@ -744,23 +744,26 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
         index: int,
         *,
         enable_scroll: bool = True,
-        max_scroll_attempts: int = 15,
+        use_precise_scroll: bool = True,
     ) -> bool:
         """Click the edit button of a product at a specific index.
 
-        支持滚动查找：当目标商品不在当前可视区域时，会自动向下滚动
-        直到找到目标商品或到达列表底部。
+        支持精确滚动：根据商品行高度（128px）直接计算滚动距离，
+        比循环查找更高效。
 
         Args:
             page: Active Playwright page instance.
             index: Zero-based index of the product in the grid.
-            enable_scroll: 是否启用滚动查找（默认启用）
-            max_scroll_attempts: 最大滚动尝试次数
+            enable_scroll: 是否启用滚动（默认启用）
+            use_precise_scroll: 是否使用精确滚动（默认启用，基于128px行高）
 
         Returns:
             True when the edit button was clicked, otherwise False.
         """
-        logger.info("Clicking edit button for product index {} (scroll={})", index, enable_scroll)
+        logger.info(
+            "Clicking edit button for product index {} (scroll={}, precise={})",
+            index, enable_scroll, use_precise_scroll
+        )
 
         try:
             await self._ensure_popups_closed(page)
@@ -775,7 +778,38 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                 default=self._DEFAULT_EDIT_BUTTON_SELECTORS,
             )
 
-            # 首先尝试直接定位（不滚动）
+            # 如果需要滚动且目标索引较大，先精确滚动到目标位置
+            if enable_scroll and use_precise_scroll and index >= 5:
+                from ...utils.scroll_helper import scroll_to_product_position
+                
+                logger.info("使用精确滚动，目标索引: {}", index)
+                await scroll_to_product_position(page, target_index=index)
+                
+                # 滚动后，目标商品应该在视口顶部附近，尝试点击第一个可见的编辑按钮
+                for selector in selectors:
+                    try:
+                        # 获取可见的编辑按钮
+                        buttons = page.locator(selector)
+                        count = await buttons.count()
+                        if count == 0:
+                            continue
+
+                        # 点击第一个可见的按钮（滚动后它就是目标）
+                        button = buttons.first
+                        with suppress(Exception):
+                            await button.scroll_into_view_if_needed()
+                        await button.wait_for(state="visible", timeout=2_000)
+                        await button.click()
+                        logger.success(
+                            "✓ 精确滚动后成功点击编辑按钮，索引: {}, 选择器: {}",
+                            index, selector
+                        )
+                        return True
+                    except Exception as exc:
+                        logger.debug("精确滚动后点击失败 {}: {}", selector, exc)
+                        continue
+
+            # 直接定位（不滚动或索引较小）
             for selector in selectors:
                 try:
                     buttons = page.locator(selector)
@@ -794,37 +828,7 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                     logger.debug("Edit selector {} failed: {}", selector, exc)
                     continue
 
-            # 如果未启用滚动或索引较小，直接返回失败
-            if not enable_scroll or index < 5:
-                logger.error("No matching edit button found for index {}", index)
-                return False
-
-            # 启用滚动查找
-            logger.info("元素不在视口内，启用滚动查找模式，目标索引: {}", index)
-            from ...utils.scroll_helper import scroll_to_find_element
-
-            for selector in selectors:
-                # 使用滚动查找
-                element = await scroll_to_find_element(
-                    page,
-                    locator_factory=lambda s=selector: page.locator(s),
-                    target_index=index,
-                    max_scroll_attempts=max_scroll_attempts,
-                    scroll_distance=350,
-                    wait_after_scroll_ms=600,
-                )
-
-                if element is not None:
-                    try:
-                        await element.wait_for(state="visible", timeout=2_000)
-                        await element.click()
-                        logger.success("✓ 滚动后成功点击编辑按钮，索引: {}, 选择器: {}", index, selector)
-                        return True
-                    except Exception as exc:
-                        logger.debug("滚动后点击失败: {}", exc)
-                        continue
-
-            logger.error("滚动查找后仍未找到索引 {} 的编辑按钮", index)
+            logger.error("No matching edit button found for index {}", index)
             return False
         except Exception as exc:
             logger.error(f"Failed to click edit button: {exc}")

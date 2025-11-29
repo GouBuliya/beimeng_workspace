@@ -1,12 +1,16 @@
 """
 @PURPOSE: 提供滚动查找元素的工具函数，用于处理商品列表中元素不在可视区域的情况
 @OUTLINE:
-  - async def scroll_to_find_element(): 滚动查找指定索引的元素
-  - async def scroll_container(): 滚动容器
+  - PRODUCT_ROW_HEIGHT: 商品行高度常量（128px）
+  - async def scroll_to_top(): 滚动到容器顶部
+  - async def scroll_to_product_position(): 精确滚动到指定商品位置
+  - async def scroll_container(): 滚动容器指定距离
+  - async def scroll_to_find_element(): 滚动查找指定索引的元素（兼容旧逻辑）
   - async def is_at_scroll_bottom(): 检测是否到达滚动底部
 @GOTCHAS:
   - 商品列表可能使用虚拟滚动，滚动时DOM会动态更新
   - 需要在滚动后等待DOM更新
+  - 商品行高度固定为 128px，可通过精确计算滚动距离
 @DEPENDENCIES:
   - 外部: playwright
 """
@@ -22,6 +26,9 @@ if TYPE_CHECKING:
     from playwright.async_api import Locator, Page
 
 
+# 商品行高度（像素）- 用于精确滚动计算
+PRODUCT_ROW_HEIGHT = 128
+
 # 默认商品列表容器选择器（按优先级排序）
 DEFAULT_CONTAINER_SELECTORS = (
     "#appScrollContainer",
@@ -32,6 +39,127 @@ DEFAULT_CONTAINER_SELECTORS = (
     "table tbody",
     ".el-table__body-wrapper",
 )
+
+
+async def scroll_to_top(
+    page: "Page",
+    container_selectors: tuple[str, ...] | None = None,
+) -> bool:
+    """
+    滚动到容器顶部。
+
+    Args:
+        page: Playwright 页面对象
+        container_selectors: 容器选择器列表
+
+    Returns:
+        是否成功滚动到顶部
+    """
+    selectors = container_selectors or DEFAULT_CONTAINER_SELECTORS
+
+    for selector in selectors:
+        try:
+            container = page.locator(selector).first
+            if await container.count() == 0:
+                continue
+
+            await container.evaluate("el => el.scrollTop = 0")
+            logger.debug(f"已滚动到容器顶部: {selector}")
+            return True
+        except Exception as exc:
+            logger.debug(f"滚动到顶部失败 {selector}: {exc}")
+            continue
+
+    # 回退：滚动整个页面到顶部
+    try:
+        await page.evaluate("window.scrollTo(0, 0)")
+        logger.debug("回退滚动页面到顶部")
+        return True
+    except Exception as exc:
+        logger.warning(f"页面滚动到顶部失败: {exc}")
+        return False
+
+
+async def scroll_to_product_position(
+    page: "Page",
+    target_index: int,
+    *,
+    row_height: int = PRODUCT_ROW_HEIGHT,
+    container_selectors: tuple[str, ...] | None = None,
+    wait_after_scroll_ms: int = 300,
+) -> bool:
+    """
+    精确滚动到指定商品位置。
+
+    根据商品索引和行高度，计算精确的滚动距离，直接滚动到目标位置。
+    比循环查找更高效。
+
+    Args:
+        page: Playwright 页面对象
+        target_index: 目标商品索引（0-based）
+        row_height: 每行商品高度（像素），默认 128px
+        container_selectors: 容器选择器列表
+        wait_after_scroll_ms: 滚动后等待时间（毫秒）
+
+    Returns:
+        是否成功滚动到目标位置
+
+    Examples:
+        >>> # 滚动到第 6 个商品（索引 5）
+        >>> await scroll_to_product_position(page, target_index=5)
+        >>> # 滚动距离 = 5 × 128 = 640px
+    """
+    if target_index < 0:
+        logger.warning(f"无效的目标索引: {target_index}")
+        return False
+
+    scroll_distance = target_index * row_height
+    logger.info(
+        f"精确滚动到商品 #{target_index + 1}，滚动距离: {scroll_distance}px "
+        f"(索引={target_index}, 行高={row_height}px)"
+    )
+
+    # 先滚动到顶部，确保从头开始计算
+    await scroll_to_top(page, container_selectors)
+    await page.wait_for_timeout(100)
+
+    # 滚动到目标位置
+    if scroll_distance > 0:
+        success = await scroll_container(page, scroll_distance, container_selectors)
+        if not success:
+            return False
+
+    # 等待渲染
+    await page.wait_for_timeout(wait_after_scroll_ms)
+    return True
+
+
+async def scroll_one_product(
+    page: "Page",
+    *,
+    row_height: int = PRODUCT_ROW_HEIGHT,
+    container_selectors: tuple[str, ...] | None = None,
+    wait_after_scroll_ms: int = 200,
+) -> bool:
+    """
+    向下滚动一个商品的高度。
+
+    用于编辑完一个商品后，滚动到下一个商品。
+
+    Args:
+        page: Playwright 页面对象
+        row_height: 每行商品高度（像素），默认 128px
+        container_selectors: 容器选择器列表
+        wait_after_scroll_ms: 滚动后等待时间（毫秒）
+
+    Returns:
+        是否成功滚动
+    """
+    logger.debug(f"滚动到下一个商品，距离: {row_height}px")
+    success = await scroll_container(page, row_height, container_selectors)
+    if success:
+        await page.wait_for_timeout(wait_after_scroll_ms)
+    return success
 
 
 async def scroll_container(

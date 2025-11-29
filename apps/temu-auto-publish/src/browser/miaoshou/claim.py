@@ -183,24 +183,26 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
         indexes: Sequence[int] | None = None,
         *,
         enable_scroll: bool = True,
-        max_scroll_attempts: int = 15,
+        use_precise_scroll: bool = True,
     ) -> bool:
         """Select the first ``count`` products before starting a claim batch.
 
-        支持滚动查找：当目标商品不在当前可视区域时，会自动向下滚动
-        直到找到目标商品或到达列表底部。
+        支持精确滚动：根据商品行高度（128px）直接计算滚动距离。
 
         Args:
             page: Active Playwright page instance.
             count: Number of products to select.
             indexes: Specific indexes to select (optional).
-            enable_scroll: 是否启用滚动查找（默认启用）
-            max_scroll_attempts: 最大滚动尝试次数
+            enable_scroll: 是否启用滚动（默认启用）
+            use_precise_scroll: 是否使用精确滚动（默认启用，基于128px行高）
 
         Returns:
             True when all target products were selected, otherwise False.
         """
-        logger.info(f"Selecting up to {count} product rows via DOM locators (scroll={enable_scroll})")
+        logger.info(
+            f"Selecting up to {count} product rows via DOM locators "
+            f"(scroll={enable_scroll}, precise={use_precise_scroll})"
+        )
 
         rows = page.locator(self._ROW_SELECTOR)
         if not await self._wait_for_rows(page):
@@ -219,30 +221,53 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
             )
             return False
 
-        # 检查是否需要滚动（目标索引超出当前可见范围）
-        max_target_index = max(target_indexes) if target_indexes else 0
-        need_scroll = enable_scroll and max_target_index >= available
+        # 检查是否需要滚动
+        min_target_index = min(target_indexes) if target_indexes else 0
+        need_scroll = enable_scroll and min_target_index >= 5
 
-        if need_scroll:
-            logger.info(
-                f"目标索引 {max_target_index} 超出当前可见数量 {available}，将启用滚动查找"
+        if need_scroll and use_precise_scroll:
+            # 使用精确滚动：先滚动到起始位置，然后逐个勾选
+            from ...utils.scroll_helper import (
+                scroll_to_product_position,
+                scroll_one_product,
             )
+            
+            logger.info(f"使用精确滚动，起始索引: {min_target_index}")
+            await scroll_to_product_position(page, target_index=min_target_index)
+            
+            selected = 0
+            for i, idx in enumerate(target_indexes):
+                # 重新获取行（滚动后 DOM 会更新）
+                rows = page.locator(self._ROW_SELECTOR)
+                
+                # 滚动后，第一个可见的行就是目标
+                row = rows.first
+                
+                if await self._toggle_row_checkbox(page, row):
+                    selected += 1
+                    logger.debug(f"✓ 勾选商品 #{idx + 1} 成功 ({selected}/{len(target_indexes)})")
+                else:
+                    logger.error(f"Failed to toggle checkbox on row index {idx}")
+                    return False
+                
+                # 如果不是最后一个，滚动到下一个商品
+                if i < len(target_indexes) - 1:
+                    await scroll_one_product(page)
 
+            logger.success(f"Selected {selected}/{len(target_indexes)} rows for claim")
+            return selected == len(target_indexes)
+
+        # 不需要滚动或不使用精确滚动，直接按索引定位
         selected = 0
         for idx in target_indexes:
-            # 重新获取行列表（滚动后 DOM 可能更新）
             rows = page.locator(self._ROW_SELECTOR)
             current_count = await rows.count()
 
-            # 如果当前索引超出范围，尝试滚动查找
-            if idx >= current_count and enable_scroll:
-                logger.info(f"索引 {idx} 超出当前数量 {current_count}，开始滚动查找")
-                row = await self._scroll_to_find_row(page, idx, max_scroll_attempts)
-                if row is None:
-                    logger.error(f"滚动后仍未找到索引 {idx} 的商品行")
-                    return False
-            else:
-                row = rows.nth(idx)
+            if idx >= current_count:
+                logger.error(f"索引 {idx} 超出当前数量 {current_count}")
+                return False
+
+            row = rows.nth(idx)
 
             if await self._toggle_row_checkbox(page, row):
                 selected += 1
@@ -254,33 +279,6 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
             f"Selected {selected}/{len(target_indexes)} rows for claim"
         )
         return selected == len(target_indexes)
-
-    async def _scroll_to_find_row(
-        self,
-        page: Page,
-        target_index: int,
-        max_attempts: int = 15,
-    ) -> Locator | None:
-        """滚动查找指定索引的商品行。
-
-        Args:
-            page: Playwright 页面对象
-            target_index: 目标行索引
-            max_attempts: 最大滚动尝试次数
-
-        Returns:
-            找到的行 Locator，未找到返回 None
-        """
-        from ...utils.scroll_helper import scroll_to_find_element
-
-        return await scroll_to_find_element(
-            page,
-            locator_factory=lambda: page.locator(self._ROW_SELECTOR),
-            target_index=target_index,
-            max_scroll_attempts=max_attempts,
-            scroll_distance=350,
-            wait_after_scroll_ms=600,
-        )
 
     async def _toggle_row_checkbox(self, page: Page, row: Locator) -> bool:
         """Toggle the checkbox contained within ``row`` via the pinned selection column."""
