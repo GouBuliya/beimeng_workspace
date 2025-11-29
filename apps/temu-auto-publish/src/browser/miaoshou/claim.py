@@ -323,12 +323,15 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                     });
                     visibleRows.sort((a, b) => a.y - b.y);
                     
-                    // 按 translateY 精确匹配目标行
+                    // 按 translateY 匹配目标行（允许较大误差，因为可能有表头/padding偏移）
                     let targetRow = null;
+                    let minDiff = Infinity;
                     for (const item of visibleRows) {
-                        if (Math.abs(item.y - targetTranslateY) < 10) {
+                        const diff = Math.abs(item.y - targetTranslateY);
+                        // 增大误差阈值到 64px（半行高度），容忍表头偏移
+                        if (diff < 64 && diff < minDiff) {
+                            minDiff = diff;
                             targetRow = item.row;
-                            break;
                         }
                     }
                     

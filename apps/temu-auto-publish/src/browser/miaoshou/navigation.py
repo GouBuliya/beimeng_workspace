@@ -880,7 +880,9 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                 
                 for (const item of visibleRows) {
                     // 允许一定误差（±10px）
-                    if (Math.abs(item.y - targetTranslateY) < 10) {
+                    // 增大误差阈值到 64px（半行高度），容忍表头/padding偏移
+                    const diff = Math.abs(item.y - targetTranslateY);
+                    if (diff < 64) {
                         targetRow = item.row;
                         matchedY = item.y;
                         break;
