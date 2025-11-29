@@ -55,6 +55,10 @@ from ...utils.batch_edit_helpers import (
     GenericSelectors,
 )
 from ...utils.selector_race import TIMEOUTS
+from ...utils.page_load_decorator import (
+    wait_dom_loaded,
+    wait_network_idle,
+)
 
 
 class BatchEditController:
@@ -205,7 +209,7 @@ class BatchEditController:
         try:
             # TODO: 使用codegen获取选择器
             # await page.click(self.select_all_checkbox)
-            await page.wait_for_load_state("domcontentloaded", timeout=TIMEOUTS.SLOW)
+            await wait_dom_loaded(page, TIMEOUTS.SLOW, context=" [select all products]")
 
             # 验证选中数量
             # selected_count = await page.locator('.selected').count()
@@ -233,7 +237,7 @@ class BatchEditController:
             # await page.click(self.batch_edit_button)
 
             # 等待批量编辑页面加载
-            await page.wait_for_load_state("domcontentloaded", timeout=TIMEOUTS.SLOW)
+            await wait_dom_loaded(page, TIMEOUTS.SLOW, context=" [batch edit mode]")
 
             # 验证是否进入批量编辑
             if "batch" in page.url.lower() or "批量" in await page.title():
@@ -425,7 +429,7 @@ class BatchEditController:
             try:
                 await page.locator(save_selector).first.click(timeout=TIMEOUTS.NORMAL)
                 # 等待保存完成
-                await page.wait_for_load_state("networkidle", timeout=TIMEOUTS.SLOW)
+                await wait_network_idle(page, TIMEOUTS.SLOW, context=" [save main sku]")
                 logger.success("  ✓ 已保存修改")
             except Exception as e:
                 logger.warning(f"  保存按钮点击失败: {e}")
@@ -530,7 +534,7 @@ class BatchEditController:
             try:
                 await page.locator(save_selector).first.click(timeout=TIMEOUTS.NORMAL)
                 # 等待保存完成
-                await page.wait_for_load_state("networkidle", timeout=TIMEOUTS.SLOW)
+                await wait_network_idle(page, TIMEOUTS.SLOW, context=" [save customization]")
                 logger.success("  ✓ 已保存修改")
             except Exception as e:
                 logger.warning(f"  保存按钮点击失败: {e}")
@@ -584,7 +588,7 @@ class BatchEditController:
             try:
                 await page.locator(save_selector).first.click(timeout=TIMEOUTS.NORMAL)
                 # 等待保存完成
-                await page.wait_for_load_state("networkidle", timeout=TIMEOUTS.SLOW)
+                await wait_network_idle(page, TIMEOUTS.SLOW, context=" [save sensitive attrs]")
                 logger.success("  ✓ 已保存修改")
             except Exception as e:
                 logger.warning(f"  保存按钮点击失败: {e}")
@@ -830,7 +834,7 @@ class BatchEditController:
             try:
                 await page.locator(save_selector).first.click(timeout=TIMEOUTS.NORMAL)
                 # 等待保存完成
-                await page.wait_for_load_state("networkidle", timeout=TIMEOUTS.SLOW)
+                await wait_network_idle(page, TIMEOUTS.SLOW, context=" [save package list]")
                 logger.success("  ✓ 已保存修改")
             except Exception as e:
                 logger.warning(f"  保存按钮点击失败: {e}")
@@ -893,7 +897,7 @@ class BatchEditController:
 
             # 等待保存完成
             logger.info("  等待保存完成...")
-            await page.wait_for_load_state("networkidle", timeout=TIMEOUTS.SLOW)
+            await wait_network_idle(page, TIMEOUTS.SLOW, context=" [batch edit save]")
 
             logger.success("✓ 批量编辑已保存")
             return True
@@ -917,7 +921,7 @@ class BatchEditController:
             preview_btn = nav_config.get("preview_button", "button:has-text('预览')")
             try:
                 await page.locator(preview_btn).first.click(timeout=TIMEOUTS.NORMAL)
-                await page.wait_for_load_state("domcontentloaded", timeout=TIMEOUTS.SLOW)
+                await wait_dom_loaded(page, TIMEOUTS.SLOW, context=" [preview]")
                 logger.debug("  已预览")
             except Exception:
                 logger.debug("  未找到预览按钮，跳过")
@@ -926,7 +930,7 @@ class BatchEditController:
             save_btn = nav_config.get("save_button", "button:has-text('保存')")
             try:
                 await page.locator(save_btn).first.click(timeout=TIMEOUTS.NORMAL)
-                await page.wait_for_load_state("networkidle", timeout=TIMEOUTS.SLOW)
+                await wait_network_idle(page, TIMEOUTS.SLOW, context=" [final save]")
                 logger.debug("  已保存")
             except Exception:
                 logger.warning("  未找到保存按钮")

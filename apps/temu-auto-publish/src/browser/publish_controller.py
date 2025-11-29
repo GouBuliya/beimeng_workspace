@@ -28,6 +28,7 @@ from playwright.async_api import Page, TimeoutError as PlaywrightTimeoutError
 
 from ..data_processor.price_calculator import PriceCalculator
 from ..utils.selector_race import TIMEOUTS
+from ..utils.page_load_decorator import wait_dom_loaded
 
 
 class PublishController:
@@ -152,7 +153,7 @@ class PublishController:
         """
         logger.info("全选20条产品...")
         if require_load_state:
-            await page.wait_for_load_state("domcontentloaded")
+            await wait_dom_loaded(page, context=" [select all 20]")
         try:
             # 使用全选按钮
             collection_box_config = self.selectors.get("collection_box", {})

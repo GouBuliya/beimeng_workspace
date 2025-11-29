@@ -24,6 +24,7 @@ from datetime import datetime
 from loguru import logger
 
 from ..models.result import SearchResult
+from ..utils.page_load_decorator import wait_network_idle
 from .browser_manager import BrowserManager
 
 
@@ -200,7 +201,7 @@ class SearchController:
             )
 
             # 等待网络空闲
-            await page.wait_for_load_state("networkidle")
+            await wait_network_idle(page, context=" [search results]")
 
             # 额外等待，确保动态内容加载完成
             await asyncio.sleep(2 + random.random())

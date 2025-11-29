@@ -18,6 +18,10 @@ from loguru import logger
 
 from ...utils.batch_edit_helpers import retry_on_failure
 from ...utils.selector_race import TIMEOUTS
+from ...utils.page_load_decorator import (
+    wait_dom_loaded,
+    wait_network_idle,
+)
 
 
 class BatchEditStepsMixin:
@@ -40,7 +44,7 @@ class BatchEditStepsMixin:
             logger.info("  填写英语标题（输入空格）...")
 
             # 等待页面 DOM 加载
-            await self.page.wait_for_load_state("domcontentloaded", timeout=TIMEOUTS.SLOW)
+            await wait_dom_loaded(self.page, TIMEOUTS.SLOW, context=" [english title]")
 
             # 精准定位：排除disabled/readonly，优先匹配placeholder包含"英"的输入框
             precise_selectors = [
@@ -100,7 +104,7 @@ class BatchEditStepsMixin:
 
         try:
             logger.info("  检查主货号是否需要填写...")
-            await self.page.wait_for_load_state("domcontentloaded", timeout=TIMEOUTS.SLOW)
+            await wait_dom_loaded(self.page, TIMEOUTS.SLOW, context=" [main sku]")
 
             # 精准定位：排除disabled/readonly
             precise_selectors = [
@@ -147,7 +151,7 @@ class BatchEditStepsMixin:
             logger.info("  填写外包装信息...")
 
             # 等待页面 DOM 加载
-            await self.page.wait_for_load_state("domcontentloaded", timeout=TIMEOUTS.SLOW)
+            await wait_dom_loaded(self.page, TIMEOUTS.SLOW, context=" [packaging]")
 
             # 1. 选择外包装形状：长方体（使用下拉选择框）
             logger.info("    - 外包装形状：长方体")
@@ -312,7 +316,7 @@ class BatchEditStepsMixin:
         try:
             logger.info("  填写产地：浙江 -> 中国大陆 / 浙江省...")
 
-            await self.page.wait_for_load_state("domcontentloaded", timeout=TIMEOUTS.SLOW)
+            await wait_dom_loaded(self.page, TIMEOUTS.SLOW, context=" [origin]")
 
             precise_selectors = [
                 "input[placeholder='请选择或输入搜索']:not([readonly]):not([disabled]):not([type='number'])",
@@ -879,7 +883,7 @@ class BatchEditStepsMixin:
                                         timeout=TIMEOUTS.SLOW,
                                     )
                                 except Exception:  # noqa: BLE001
-                                    await self.page.wait_for_load_state("networkidle", timeout=TIMEOUTS.SLOW)
+                                    await wait_network_idle(self.page, TIMEOUTS.SLOW, context=" [upload wait]")
                                 logger.success(f"  ✅ 已上传产品说明书: {file_path.name}")
                                 uploaded = True
                             except Exception as err:  # noqa: BLE001
@@ -918,7 +922,7 @@ class BatchEditStepsMixin:
                                             )
                                             continue
                                         await file_input.set_input_files(str(file_path))
-                                        await self.page.wait_for_load_state("networkidle", timeout=TIMEOUTS.SLOW)
+                                        await wait_network_idle(self.page, TIMEOUTS.SLOW, context=" [file upload]")
                                         logger.success(f"  ✅ 已上传产品说明书: {file_path.name}")
                                         uploaded = True
                                         break
@@ -931,11 +935,11 @@ class BatchEditStepsMixin:
                                 break
                             else:
                                 logger.warning(f"  ⚠️ 第 {attempt} 次尝试仍未上传成功，重试中...")
-                                await self.page.wait_for_load_state("domcontentloaded")
+                                await wait_dom_loaded(self.page, TIMEOUTS.SLOW, context=" [retry wait]")
                         except Exception as err:  # noqa: BLE001
                             last_error = err
                             logger.warning(f"  ⚠️ 上传尝试 {attempt} 失败: {err}")
-                            await self.page.wait_for_load_state("domcontentloaded")
+                            await wait_dom_loaded(self.page, TIMEOUTS.SLOW, context=" [error recovery]")
 
                     if not success_upload:
                         if last_error:

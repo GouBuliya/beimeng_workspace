@@ -10,6 +10,7 @@ from loguru import logger
 from playwright.async_api import Page
 
 from ...utils.selector_race import TIMEOUTS, try_selectors_race
+from ...utils.page_load_decorator import wait_dom_loaded
 from .base import FirstEditBase
 
 
@@ -54,7 +55,7 @@ class FirstEditTitleMixin(FirstEditBase):
                     if attempt < max_retries:
                         logger.warning("第 {} 次尝试未找到标题输入框,准备重试...", attempt)
                         # 智能等待: 等待 DOM 稳定而非固定延迟
-                        await page.wait_for_load_state("domcontentloaded", timeout=TIMEOUTS.NORMAL)
+                        await wait_dom_loaded(page, TIMEOUTS.NORMAL, context=" [retry title]")
                         continue
                     logger.error("未找到标题输入框(已重试 {} 次)", max_retries)
                     return ""
@@ -66,7 +67,7 @@ class FirstEditTitleMixin(FirstEditBase):
                 if attempt < max_retries:
                     logger.warning(f"第 {attempt} 次获取原始标题失败: {exc},准备重试...")
                     # 智能等待: 等待 DOM 稳定而非固定延迟
-                    await page.wait_for_load_state("domcontentloaded", timeout=TIMEOUTS.NORMAL)
+                    await wait_dom_loaded(page, TIMEOUTS.NORMAL, context=" [retry after error]")
                     continue
                 logger.error(f"获取原始标题失败(已重试 {max_retries} 次): {exc}")
                 return ""

@@ -13,6 +13,11 @@ from typing import Any, ClassVar
 from loguru import logger
 from playwright.async_api import Frame, Page
 
+from ..utils.page_load_decorator import (
+    PAGE_TIMEOUTS,
+    wait_dom_loaded,
+    wait_network_idle,
+)
 from .base import MiaoshouControllerBase
 from .navigation_codegen import fallback_apply_user_filter, fallback_switch_tab
 
@@ -73,7 +78,7 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                 logger.debug("Clicking sidebar entry for shared collection box...")
                 await page.locator(collection_box_selector).click()
                 # 激进优化: 5s -> 2s
-                await page.wait_for_load_state("domcontentloaded", timeout=2_000)
+                await wait_dom_loaded(page, 2_000, context=" [sidebar click]")
                 with suppress(Exception):
                     # 激进优化: 15s -> 5s
                     await page.wait_for_url(re.compile("common_collect_box"), timeout=5_000)
@@ -89,7 +94,7 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                     return await self.navigate_to_collection_box(page, use_sidebar=True)
 
             # 激进优化: 5s -> 2s
-            await page.wait_for_load_state("domcontentloaded", timeout=2_000)
+            await wait_dom_loaded(page, 2_000, context=" [navigation complete]")
 
             if "common_collect_box/items" in page.url:
                 logger.success("Navigation to shared collection box succeeded")
@@ -408,8 +413,7 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
 
     async def _wait_for_idle(self, page: Page, timeout_ms: int = 100) -> None:
         """Best-effort wait for the page to reach a steady state. 激进优化: 300 -> 100"""
-        with suppress(Exception):
-            await page.wait_for_load_state("networkidle", timeout=timeout_ms)
+        await wait_network_idle(page, timeout_ms, context=" [idle wait]")
 
     async def get_product_count(self, page: Page) -> dict[str, int]:
         """Retrieve product counts for the different tabs.

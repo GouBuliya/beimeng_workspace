@@ -25,6 +25,7 @@ from loguru import logger
 from .browser_manager import BrowserManager
 from .cookie_manager import CookieManager
 from ..utils.selector_race import TIMEOUTS
+from ..utils.page_load_decorator import wait_dom_loaded
 
 
 class LoginController:
@@ -217,7 +218,7 @@ class LoginController:
             login_url = login_config.get("url", "https://erp.91miaoshou.com/sub_account/users")
             logger.info(f"导航到登录页: {login_url}")
             await page.goto(login_url, timeout=60000)
-            await page.wait_for_load_state("domcontentloaded")
+            await wait_dom_loaded(page, context=" [login page]")
 
             # 使用文本定位器（更稳定）
             username_selector = login_config.get("username_input", "input[type='text']")
@@ -306,7 +307,7 @@ class LoginController:
 
         logger.info("导航到采集箱页面: {}", target_url)
         await page.goto(target_url, timeout=60_000)
-        await page.wait_for_load_state("domcontentloaded")
+        await wait_dom_loaded(page, context=" [collection box]")
         await self._dismiss_overlays_if_any()
         await self._dismiss_newbie_guide(page)
 
@@ -509,7 +510,7 @@ class LoginController:
         clicked_count = 0
 
         # 等待页面稳定
-        await page.wait_for_load_state("domcontentloaded", timeout=TIMEOUTS.SLOW)
+        await wait_dom_loaded(page, TIMEOUTS.SLOW, context=" [dismiss popup]")
 
         try:
             # 使用多种定位方式，点击3次处理可能出现的多个弹窗

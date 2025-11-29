@@ -21,6 +21,12 @@ from loguru import logger
 from playwright.async_api import Frame, Locator, Page
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
+from ..utils.page_load_decorator import (
+    LoadState,
+    PAGE_TIMEOUTS,
+    ensure_page_loaded,
+    with_network_idle,
+)
 from .navigation import MiaoshouNavigationMixin
 from .navigation_codegen import fallback_apply_user_filter, fallback_switch_tab
 
@@ -89,7 +95,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
             )
             await page.goto(self._COLLECTION_BOX_URL, wait_until="domcontentloaded")
             with suppress(Exception):
-                await page.wait_for_load_state("networkidle", timeout=5_000)
+                await page.wait_for_load_state("networkidle", timeout=PAGE_TIMEOUTS.NETWORK)
         except Exception as exc:
             logger.warning(f"Failed to refresh collection box page: {exc}")
 
@@ -929,6 +935,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
         logger.error("认领按钮未在预期时间内变为可见")
         return None
 
+    @ensure_page_loaded(LoadState.DOMCONTENTLOADED, PAGE_TIMEOUTS.FAST)
     async def _click_claim_confirmation_button(self, page: Page) -> bool:
         """Attempt to click the visible confirmation button after the claim dialog appears.
 
@@ -938,11 +945,6 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
         Returns:
             True if a visible confirmation button was clicked successfully, otherwise False.
         """
-
-        try:
-            await page.wait_for_load_state("domcontentloaded", timeout=1_500)
-        except Exception as exc:
-            logger.debug(f"等待认领确认弹窗 DOMContentLoaded 超时或失败，继续执行: {exc}")
 
         confirm_keywords: tuple[str, ...] = (
             "确定",

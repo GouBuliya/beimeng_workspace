@@ -21,6 +21,10 @@ from playwright.async_api import Page, TimeoutError as PlaywrightTimeout
 
 from src.browser.browser_manager import BrowserManager
 from src.utils.selector_race import TIMEOUTS
+from src.utils.page_load_decorator import (
+    wait_dom_loaded,
+    wait_network_idle,
+)
 
 
 class CollectionController:
@@ -151,7 +155,7 @@ class CollectionController:
             await page.locator(visit_btn_selector).first.click()
 
             # 等待页面跳转
-            await page.wait_for_load_state("domcontentloaded", timeout=TIMEOUTS.SLOW)
+            await wait_dom_loaded(page, TIMEOUTS.SLOW, context=" [visit store]")
 
             # 验证是否成功跳转到店铺
             current_url = page.url
@@ -248,7 +252,7 @@ class CollectionController:
                 await page.locator(search_input_selector).first.press("Enter")
 
             # 等待搜索结果加载
-            await page.wait_for_load_state("networkidle", timeout=TIMEOUTS.SLOW)
+            await wait_network_idle(page, TIMEOUTS.SLOW, context=" [search results]")
 
             # 验证是否有搜索结果
             product_config = self.selectors.get("product", {})
@@ -529,7 +533,7 @@ class CollectionController:
                     # 3. 点击采集按钮
                     logger.debug("    点击妙手插件采集按钮...")
                     await plugin_button.click()
-                    await page.wait_for_load_state("networkidle", timeout=TIMEOUTS.SLOW)
+                    await wait_network_idle(page, TIMEOUTS.SLOW, context=" [collect click]")
 
                     # 4. 检测采集成功提示
                     success_indicators = [

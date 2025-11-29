@@ -25,6 +25,7 @@ from loguru import logger
 
 from ..models.result import EditResult
 from ..models.task import TaskProduct
+from ..utils.page_load_decorator import wait_network_idle
 from .browser_manager import BrowserManager
 
 
@@ -244,7 +245,7 @@ class EditController:
         logger.debug("  触发AI生成英文标题...")
         await title_input.press("Space")
         # 等待AI生成完成
-        await page.wait_for_load_state("networkidle", timeout=5000)
+        await wait_network_idle(page, 5000, context=" [AI title generation]")
 
         # 4. 选择类目（简化版，假设只需要输入文本）
         logger.debug("  选择类目...")
@@ -340,7 +341,7 @@ class EditController:
         if await save_button.count() > 0:
             await save_button.click()
             # 等待保存完成
-            await page.wait_for_load_state("networkidle", timeout=5000)
+            await wait_network_idle(page, 5000, context=" [save product]")
 
             # 检查保存结果
             # TODO: 根据实际页面的成功提示调整
