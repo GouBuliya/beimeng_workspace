@@ -34,7 +34,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
     _ROW_SELECTOR: ClassVar[str] = ".pro-virtual-table__row-body"
     # vue-recycle-scroller 虚拟滚动行选择器
     _VIRTUAL_ROW_SELECTOR: ClassVar[str] = ".vue-recycle-scroller__item-view"
-    _ROW_HEIGHT: ClassVar[int] = 124
+    _ROW_HEIGHT: ClassVar[int] = 123
     _ROW_CHECKBOX_SELECTOR: ClassVar[str] = (
         ".is-fixed-left.is-selection-column .jx-checkbox"
     )
@@ -266,7 +266,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
         try:
             js_code = """
             async (indexes) => {
-                const ROW_HEIGHT = 124;
+                const ROW_HEIGHT = 123;
                 
                 // 检查是否为 page-mode（页面级滚动）
                 const recycleScroller = document.querySelector('.vue-recycle-scroller');
@@ -394,7 +394,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
         try:
             js_code = """
             async (index) => {
-                const ROW_HEIGHT = 124;
+                const ROW_HEIGHT = 123;
                 
                 const scroller = document.querySelector('.vue-recycle-scroller') ||
                                 document.querySelector('.vue-recycle-scroller__item-wrapper')?.parentElement;

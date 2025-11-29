@@ -42,7 +42,7 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
     # vue-recycle-scroller 虚拟滚动行选择器（包含 transform 信息）
     _VIRTUAL_ROW_SELECTOR: ClassVar[str] = ".vue-recycle-scroller__item-view"
     # 商品行高度（像素）
-    _ROW_HEIGHT: ClassVar[int] = 124
+    _ROW_HEIGHT: ClassVar[int] = 123
 
     async def navigate_to_collection_box(self, page: Page, use_sidebar: bool = False) -> bool:
         """Navigate to the shared collection box page.
@@ -803,7 +803,7 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
             # JavaScript：滚动到目标位置，然后点击编辑按钮
             js_code = """
             async (index) => {
-                const ROW_HEIGHT = 124;
+                const ROW_HEIGHT = 123;
                 const targetScrollTop = index * ROW_HEIGHT;
                 
                 // 检查是否为 page-mode（页面级滚动）
