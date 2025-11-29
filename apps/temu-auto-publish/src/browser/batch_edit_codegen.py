@@ -1129,91 +1129,147 @@ async def _apply_user_filter(page: Page, filter_owner: str) -> bool:
     Returns:
         是否成功应用筛选。
     """
-    # 定义筛选输入框选择器（优先使用精确选择器）
-    user_filter_selectors = [
-        # Temu 全托管采集箱精确选择器（jx-select combobox 输入框）
-        "input.jx-select__input[role='combobox']",
-        "input.jx-select__input.is-small",
-        # 通过创建人员标签定位
-        "label:has-text('创建人员') ~ .jx-select input.jx-select__input",
-        "label:has-text('创建人') ~ .jx-select input.jx-select__input",
-        # 通用备选选择器
-        "input[placeholder*='创建人']",
-        "input[placeholder*='创建人员']",
-        ".jx-select:has-text('创建人员') input",
-        ".jx-select:has-text('创建人') input",
-    ]
+    # 等待页面加载完成
+    logger.info("等待 Temu 全托管采集箱页面加载...")
+    await page.wait_for_timeout(1000)
+    
+    # 等待表格行出现，确认页面已加载
+    try:
+        await page.locator(".pro-virtual-table__row-body").first.wait_for(
+            state="visible", timeout=5000
+        )
+        logger.debug("页面表格已加载")
+    except Exception:
+        logger.warning("等待表格加载超时，继续尝试筛选")
 
+    # 方案1: 通过"创建人员"标签找到对应的 jx-select 组件
+    logger.info(f"尝试按创建人员筛选: {filter_owner}")
+    
     filter_applied = False
-    for selector in user_filter_selectors:
+    
+    # 策略1: 找到包含"创建人员"文本的 form-item，然后定位其中的输入框
+    try:
+        # 查找包含"创建人员"标签的表单项
+        form_item_selectors = [
+            ".jx-form-item:has-text('创建人员')",
+            ".el-form-item:has-text('创建人员')",
+            ".pro-form-item:has-text('创建人员')",
+            "div:has(> label:has-text('创建人员'))",
+        ]
+        
+        for form_selector in form_item_selectors:
+            form_item = page.locator(form_selector).first
+            if await form_item.count() == 0:
+                continue
+                
+            logger.debug(f"找到创建人员表单项: {form_selector}")
+            
+            # 在该表单项内找到 jx-select 输入框
+            input_element = form_item.locator("input.jx-select__input").first
+            if await input_element.count() == 0:
+                input_element = form_item.locator("input[role='combobox']").first
+            if await input_element.count() == 0:
+                input_element = form_item.locator(".jx-select input").first
+            
+            if await input_element.count() > 0:
+                await input_element.click()
+                await page.wait_for_timeout(300)
+                await input_element.fill("")
+                await input_element.type(filter_owner, delay=80)
+                await page.wait_for_timeout(1000)
+                
+                # 点击匹配的下拉选项
+                option_clicked = await _click_dropdown_option(page, filter_owner)
+                
+                if option_clicked:
+                    await page.wait_for_timeout(300)
+                    await _click_search_button(page)
+                    await page.wait_for_timeout(1500)
+                    filter_applied = True
+                    logger.success(f"✓ 二次编辑人员筛选成功: {filter_owner}")
+                    break
+                    
+    except Exception as exc:
+        logger.debug(f"策略1筛选失败: {exc}")
+
+    # 策略2: 备选方案 - 遍历所有 jx-select，找到第二个（通常是创建人员）
+    if not filter_applied:
         try:
-            element = page.locator(selector).first
-            if await element.count() == 0:
-                continue
-
-            logger.debug(f"尝试使用选择器筛选: {selector}")
-            await element.click()
-            await page.wait_for_timeout(200)
+            logger.debug("使用策略2: 定位第二个 jx-select 输入框")
+            all_selects = page.locator(".jx-select input.jx-select__input")
+            select_count = await all_selects.count()
+            logger.debug(f"页面上共有 {select_count} 个 jx-select 输入框")
             
-            # 清空并输入创建人员名称
-            await element.fill("")
-            await element.type(filter_owner, delay=80)
-            
-            # 等待下拉选项出现
-            await page.wait_for_timeout(800)
-
-            # 尝试多种下拉选项选择器
-            option_selectors = [
-                f"li.el-select-dropdown__item:has-text('{filter_owner}')",
-                f".jx-select-dropdown__item:has-text('{filter_owner}')",
-                f"[role='option']:has-text('{filter_owner}')",
-                f"li[role='option']:has-text('{filter_owner}')",
-                f"li:has-text('{filter_owner}')",
-            ]
-
-            option_clicked = False
-            for opt_selector in option_selectors:
-                option_locator = page.locator(opt_selector).first
-                if await option_locator.count():
-                    await option_locator.click()
-                    option_clicked = True
-                    logger.debug(f"点击用户选项: {opt_selector}")
-                    break
-
-            if not option_clicked:
-                logger.warning(f"未找到用户选项: {filter_owner}")
-                continue
-
-            # 等待下拉关闭
-            await page.wait_for_timeout(300)
-
-            # 点击搜索按钮（优先使用精确选择器）
-            search_btn_selectors = [
-                "button.J_queryFormSearch",  # 精确类名选择器
-                "button[type='submit']:has-text('搜索')",
-                "button.jx-button--primary:has-text('搜索')",
-                "button:has-text('搜索')",
-            ]
-
-            for search_selector in search_btn_selectors:
-                search_btn = page.locator(search_selector).first
-                if await search_btn.count():
-                    await search_btn.click()
-                    logger.debug(f"点击搜索按钮: {search_selector}")
-                    break
-
-            # 等待搜索结果加载
-            await page.wait_for_timeout(1500)
-
-            filter_applied = True
-            logger.success(f"✓ 二次编辑人员筛选成功: {filter_owner}")
-            break
-
+            # 通常第二个是创建人员筛选（第一个可能是其他筛选条件）
+            if select_count >= 2:
+                input_element = all_selects.nth(1)
+                await input_element.click()
+                await page.wait_for_timeout(300)
+                await input_element.fill("")
+                await input_element.type(filter_owner, delay=80)
+                await page.wait_for_timeout(1000)
+                
+                option_clicked = await _click_dropdown_option(page, filter_owner)
+                
+                if option_clicked:
+                    await page.wait_for_timeout(300)
+                    await _click_search_button(page)
+                    await page.wait_for_timeout(1500)
+                    filter_applied = True
+                    logger.success(f"✓ 二次编辑人员筛选成功(策略2): {filter_owner}")
+                    
         except Exception as exc:
-            logger.debug(f"筛选选择器 {selector} 失败: {exc}")
-            continue
+            logger.debug(f"策略2筛选失败: {exc}")
 
     if not filter_applied:
         logger.warning(f"二次编辑人员筛选未成功应用: {filter_owner}，将继续使用全部产品")
 
     return filter_applied
+
+
+async def _click_dropdown_option(page: Page, filter_owner: str) -> bool:
+    """点击下拉菜单中匹配的选项。"""
+    option_selectors = [
+        f"li.el-select-dropdown__item:has-text('{filter_owner}')",
+        f".jx-select-dropdown__item:has-text('{filter_owner}')",
+        f"[role='option']:has-text('{filter_owner}')",
+        f"li[role='option']:has-text('{filter_owner}')",
+        f".el-select-dropdown__wrap li:has-text('{filter_owner}')",
+        f"li:has-text('{filter_owner}')",
+    ]
+    
+    for opt_selector in option_selectors:
+        try:
+            option_locator = page.locator(opt_selector).first
+            if await option_locator.count() > 0:
+                await option_locator.click()
+                logger.debug(f"点击用户选项: {opt_selector}")
+                return True
+        except Exception:
+            continue
+    
+    logger.warning(f"未找到用户选项: {filter_owner}")
+    return False
+
+
+async def _click_search_button(page: Page) -> bool:
+    """点击搜索按钮。"""
+    search_btn_selectors = [
+        "button.J_queryFormSearch",
+        "button[type='submit']:has-text('搜索')",
+        "button.jx-button--primary:has-text('搜索')",
+        "button:has-text('搜索')",
+    ]
+    
+    for search_selector in search_btn_selectors:
+        try:
+            search_btn = page.locator(search_selector).first
+            if await search_btn.count() > 0:
+                await search_btn.click()
+                logger.debug(f"点击搜索按钮: {search_selector}")
+                return True
+        except Exception:
+            continue
+    
+    logger.warning("未找到搜索按钮")
+    return False
