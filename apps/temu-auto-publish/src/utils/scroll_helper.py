@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 
 
 # 商品行高度（像素）- 用于精确滚动计算
-PRODUCT_ROW_HEIGHT = 125
+PRODUCT_ROW_HEIGHT = 124
 
 # 默认商品列表容器选择器（按优先级排序）
 DEFAULT_CONTAINER_SELECTORS = (
