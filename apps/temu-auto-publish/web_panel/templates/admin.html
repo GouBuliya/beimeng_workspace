@@ -1,0 +1,851 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Temu 发布助手 · 用户管理</title>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/@picocss/pico@2.0.6/css/pico.min.css"
+    />
+    <style>
+      :root {
+        --primary: #6366f1;
+        --primary-hover: #4f46e5;
+        --success: #10b981;
+        --warning: #f59e0b;
+        --danger: #ef4444;
+      }
+
+      body {
+        background: #f8fafc;
+        min-height: 100vh;
+      }
+
+      .navbar {
+        background: #fff;
+        border-bottom: 1px solid #e2e8f0;
+        padding: 1rem 2rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        position: sticky;
+        top: 0;
+        z-index: 100;
+      }
+
+      .navbar .brand {
+        font-weight: 600;
+        font-size: 1.25rem;
+        color: #1e293b;
+        text-decoration: none;
+      }
+
+      .navbar .nav-links {
+        display: flex;
+        gap: 1.5rem;
+        align-items: center;
+      }
+
+      .navbar .nav-links a {
+        color: #64748b;
+        text-decoration: none;
+        font-size: 0.9rem;
+      }
+
+      .navbar .nav-links a:hover {
+        color: var(--primary);
+      }
+
+      .navbar .user-info {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+      }
+
+      .navbar .avatar {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        background: var(--primary);
+        color: #fff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 500;
+      }
+
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 2rem;
+      }
+
+      .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 2rem;
+      }
+
+      .page-header h1 {
+        margin: 0;
+        font-size: 1.75rem;
+        color: #1e293b;
+      }
+
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.625rem 1.25rem;
+        border-radius: 0.5rem;
+        font-size: 0.875rem;
+        font-weight: 500;
+        cursor: pointer;
+        border: none;
+        transition: all 0.2s;
+      }
+
+      .btn-primary {
+        background: var(--primary);
+        color: #fff;
+      }
+
+      .btn-primary:hover {
+        background: var(--primary-hover);
+      }
+
+      .btn-danger {
+        background: var(--danger);
+        color: #fff;
+      }
+
+      .btn-danger:hover {
+        background: #dc2626;
+      }
+
+      .btn-outline {
+        background: transparent;
+        border: 1px solid #e2e8f0;
+        color: #64748b;
+      }
+
+      .btn-outline:hover {
+        border-color: var(--primary);
+        color: var(--primary);
+      }
+
+      .btn-sm {
+        padding: 0.375rem 0.75rem;
+        font-size: 0.8rem;
+      }
+
+      .card {
+        background: #fff;
+        border-radius: 1rem;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        overflow: hidden;
+      }
+
+      .card-header {
+        padding: 1rem 1.5rem;
+        border-bottom: 1px solid #e2e8f0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .card-header h2 {
+        margin: 0;
+        font-size: 1rem;
+        font-weight: 600;
+        color: #1e293b;
+      }
+
+      .table-container {
+        overflow-x: auto;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+
+      th,
+      td {
+        padding: 1rem 1.5rem;
+        text-align: left;
+        border-bottom: 1px solid #e2e8f0;
+      }
+
+      th {
+        background: #f8fafc;
+        font-weight: 500;
+        font-size: 0.8rem;
+        color: #64748b;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+
+      td {
+        font-size: 0.9rem;
+        color: #334155;
+      }
+
+      tr:hover {
+        background: #f8fafc;
+      }
+
+      .badge {
+        display: inline-block;
+        padding: 0.25rem 0.75rem;
+        border-radius: 1rem;
+        font-size: 0.75rem;
+        font-weight: 500;
+      }
+
+      .badge-success {
+        background: #dcfce7;
+        color: #16a34a;
+      }
+
+      .badge-warning {
+        background: #fef3c7;
+        color: #d97706;
+      }
+
+      .badge-danger {
+        background: #fee2e2;
+        color: #dc2626;
+      }
+
+      .badge-info {
+        background: #e0e7ff;
+        color: #4f46e5;
+      }
+
+      .actions {
+        display: flex;
+        gap: 0.5rem;
+      }
+
+      /* Modal */
+      .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+      }
+
+      .modal-overlay.active {
+        display: flex;
+      }
+
+      .modal {
+        background: #fff;
+        border-radius: 1rem;
+        width: min(500px, 90vw);
+        max-height: 90vh;
+        overflow-y: auto;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+      }
+
+      .modal-header {
+        padding: 1.5rem;
+        border-bottom: 1px solid #e2e8f0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .modal-header h3 {
+        margin: 0;
+        font-size: 1.25rem;
+        color: #1e293b;
+      }
+
+      .modal-close {
+        background: none;
+        border: none;
+        font-size: 1.5rem;
+        cursor: pointer;
+        color: #94a3b8;
+      }
+
+      .modal-body {
+        padding: 1.5rem;
+      }
+
+      .modal-footer {
+        padding: 1.5rem;
+        border-top: 1px solid #e2e8f0;
+        display: flex;
+        gap: 1rem;
+        justify-content: flex-end;
+      }
+
+      .form-group {
+        margin-bottom: 1.25rem;
+      }
+
+      .form-group label {
+        display: block;
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: #374151;
+        margin-bottom: 0.5rem;
+      }
+
+      .form-group input,
+      .form-group select {
+        width: 100%;
+        padding: 0.625rem 1rem;
+        border: 1px solid #e2e8f0;
+        border-radius: 0.5rem;
+        font-size: 0.9rem;
+      }
+
+      .form-group input:focus,
+      .form-group select:focus {
+        outline: none;
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+      }
+
+      .checkbox-group {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+
+      .checkbox-group input {
+        width: auto;
+      }
+
+      .status-indicator {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+
+      .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+      }
+
+      .status-dot.online {
+        background: var(--success);
+        box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
+      }
+
+      .status-dot.offline {
+        background: #94a3b8;
+      }
+
+      .loading {
+        text-align: center;
+        padding: 3rem;
+        color: #64748b;
+      }
+
+      .empty-state {
+        text-align: center;
+        padding: 3rem;
+        color: #64748b;
+      }
+
+      .toast {
+        position: fixed;
+        bottom: 2rem;
+        right: 2rem;
+        padding: 1rem 1.5rem;
+        border-radius: 0.5rem;
+        color: #fff;
+        font-size: 0.9rem;
+        z-index: 2000;
+        animation: slideIn 0.3s ease;
+      }
+
+      .toast.success {
+        background: var(--success);
+      }
+
+      .toast.error {
+        background: var(--danger);
+      }
+
+      @keyframes slideIn {
+        from {
+          transform: translateX(100%);
+          opacity: 0;
+        }
+        to {
+          transform: translateX(0);
+          opacity: 1;
+        }
+      }
+
+      .server-status {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 1rem;
+        background: #f1f5f9;
+        border-radius: 0.5rem;
+        font-size: 0.8rem;
+      }
+
+      .server-status.healthy {
+        color: var(--success);
+      }
+
+      .server-status.unhealthy {
+        color: var(--danger);
+      }
+    </style>
+  </head>
+  <body>
+    <nav class="navbar">
+      <a href="/" class="brand">Temu 发布助手</a>
+      <div class="nav-links">
+        <a href="/">工作流控制台</a>
+        <a href="/admin" style="color: var(--primary); font-weight: 500"
+          >用户管理</a
+        >
+        <div id="serverStatus" class="server-status">
+          <span class="status-dot"></span>
+          <span>检查中...</span>
+        </div>
+      </div>
+      <div class="user-info">
+        <div class="avatar">{{ username[0] | upper if username else 'U' }}</div>
+        <span>{{ username }}</span>
+        <form action="/logout" method="post" style="margin: 0">
+          <button type="submit" class="btn btn-outline btn-sm">退出</button>
+        </form>
+      </div>
+    </nav>
+
+    <div class="container">
+      <div class="page-header">
+        <h1>用户管理</h1>
+        <button class="btn btn-primary" onclick="openCreateModal()">
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          添加用户
+        </button>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h2>用户列表</h2>
+          <button class="btn btn-outline btn-sm" onclick="loadUsers()">
+            刷新
+          </button>
+        </div>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>用户名</th>
+                <th>邮箱</th>
+                <th>状态</th>
+                <th>角色</th>
+                <th>在线状态</th>
+                <th>创建时间</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="userTableBody">
+              <tr>
+                <td colspan="7" class="loading">加载中...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 创建/编辑用户模态框 -->
+    <div id="userModal" class="modal-overlay">
+      <div class="modal">
+        <div class="modal-header">
+          <h3 id="modalTitle">添加用户</h3>
+          <button class="modal-close" onclick="closeModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+          <form id="userForm">
+            <input type="hidden" id="userId" name="userId" />
+
+            <div class="form-group">
+              <label for="usernameInput">用户名 *</label>
+              <input
+                type="text"
+                id="usernameInput"
+                name="username"
+                required
+                minlength="3"
+                maxlength="50"
+                placeholder="3-50 个字符"
+              />
+            </div>
+
+            <div class="form-group" id="passwordGroup">
+              <label for="passwordInput">密码 <span id="passwordRequired">*</span></label>
+              <input
+                type="password"
+                id="passwordInput"
+                name="password"
+                minlength="6"
+                maxlength="100"
+                placeholder="至少 6 个字符"
+              />
+            </div>
+
+            <div class="form-group">
+              <label for="emailInput">邮箱</label>
+              <input
+                type="email"
+                id="emailInput"
+                name="email"
+                placeholder="可选"
+              />
+            </div>
+
+            <div class="form-group">
+              <div class="checkbox-group">
+                <input type="checkbox" id="isActive" name="is_active" checked />
+                <label for="isActive">启用账号</label>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <div class="checkbox-group">
+                <input type="checkbox" id="isSuperuser" name="is_superuser" />
+                <label for="isSuperuser">管理员权限</label>
+              </div>
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" onclick="closeModal()">
+            取消
+          </button>
+          <button type="button" class="btn btn-primary" onclick="saveUser()">
+            保存
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 确认删除模态框 -->
+    <div id="deleteModal" class="modal-overlay">
+      <div class="modal" style="width: min(400px, 90vw)">
+        <div class="modal-header">
+          <h3>确认删除</h3>
+          <button class="modal-close" onclick="closeDeleteModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p>确定要删除用户 <strong id="deleteUsername"></strong> 吗？</p>
+          <p style="color: var(--danger); font-size: 0.9rem">此操作不可撤销！</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" onclick="closeDeleteModal()">
+            取消
+          </button>
+          <button type="button" class="btn btn-danger" id="confirmDeleteBtn">
+            确认删除
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      let users = [];
+      let editingUserId = null;
+
+      // 加载用户列表
+      async function loadUsers() {
+        const tbody = document.getElementById("userTableBody");
+        tbody.innerHTML = '<tr><td colspan="7" class="loading">加载中...</td></tr>';
+
+        try {
+          const response = await fetch("/api/admin/users");
+          if (response.status === 403) {
+            tbody.innerHTML =
+              '<tr><td colspan="7" class="empty-state">需要管理员权限才能查看用户列表</td></tr>';
+            return;
+          }
+          if (!response.ok) throw new Error("加载失败");
+
+          const data = await response.json();
+          users = data.items || [];
+
+          if (users.length === 0) {
+            tbody.innerHTML =
+              '<tr><td colspan="7" class="empty-state">暂无用户</td></tr>';
+            return;
+          }
+
+          tbody.innerHTML = users.map(renderUserRow).join("");
+        } catch (error) {
+          console.error("加载用户列表失败:", error);
+          tbody.innerHTML =
+            '<tr><td colspan="7" class="empty-state">加载失败，请重试</td></tr>';
+        }
+      }
+
+      // 渲染用户行
+      function renderUserRow(user) {
+        const statusBadge = user.is_active
+          ? '<span class="badge badge-success">启用</span>'
+          : '<span class="badge badge-danger">禁用</span>';
+
+        const roleBadge = user.is_superuser
+          ? '<span class="badge badge-info">管理员</span>'
+          : '<span class="badge badge-warning">普通用户</span>';
+
+        const onlineStatus = user.is_online
+          ? '<div class="status-indicator"><span class="status-dot online"></span>在线</div>'
+          : '<div class="status-indicator"><span class="status-dot offline"></span>离线</div>';
+
+        const createdAt = new Date(user.created_at).toLocaleString("zh-CN");
+
+        return `
+          <tr>
+            <td><strong>${escapeHtml(user.username)}</strong></td>
+            <td>${user.email ? escapeHtml(user.email) : '<span style="color: #94a3b8">未设置</span>'}</td>
+            <td>${statusBadge}</td>
+            <td>${roleBadge}</td>
+            <td>${onlineStatus}</td>
+            <td>${createdAt}</td>
+            <td>
+              <div class="actions">
+                <button class="btn btn-outline btn-sm" onclick="editUser('${user.id}')">编辑</button>
+                ${user.is_online ? `<button class="btn btn-outline btn-sm" style="color: var(--warning)" onclick="forceLogout('${user.id}', '${escapeHtml(user.username)}')">下线</button>` : ""}
+                <button class="btn btn-outline btn-sm" style="color: var(--danger)" onclick="confirmDelete('${user.id}', '${escapeHtml(user.username)}')">删除</button>
+              </div>
+            </td>
+          </tr>
+        `;
+      }
+
+      // 打开创建用户模态框
+      function openCreateModal() {
+        editingUserId = null;
+        document.getElementById("modalTitle").textContent = "添加用户";
+        document.getElementById("userForm").reset();
+        document.getElementById("usernameInput").disabled = false;
+        document.getElementById("passwordInput").required = true;
+        document.getElementById("passwordRequired").style.display = "inline";
+        document.getElementById("isActive").checked = true;
+        document.getElementById("userModal").classList.add("active");
+      }
+
+      // 编辑用户
+      function editUser(userId) {
+        const user = users.find((u) => u.id === userId);
+        if (!user) return;
+
+        editingUserId = userId;
+        document.getElementById("modalTitle").textContent = "编辑用户";
+        document.getElementById("usernameInput").value = user.username;
+        document.getElementById("usernameInput").disabled = true;
+        document.getElementById("emailInput").value = user.email || "";
+        document.getElementById("passwordInput").value = "";
+        document.getElementById("passwordInput").required = false;
+        document.getElementById("passwordRequired").style.display = "none";
+        document.getElementById("isActive").checked = user.is_active;
+        document.getElementById("isSuperuser").checked = user.is_superuser;
+        document.getElementById("userModal").classList.add("active");
+      }
+
+      // 关闭模态框
+      function closeModal() {
+        document.getElementById("userModal").classList.remove("active");
+        editingUserId = null;
+      }
+
+      // 保存用户
+      async function saveUser() {
+        const form = document.getElementById("userForm");
+        const username = document.getElementById("usernameInput").value.trim();
+        const password = document.getElementById("passwordInput").value;
+        const email = document.getElementById("emailInput").value.trim();
+        const isActive = document.getElementById("isActive").checked;
+        const isSuperuser = document.getElementById("isSuperuser").checked;
+
+        if (!username) {
+          showToast("请输入用户名", "error");
+          return;
+        }
+
+        if (!editingUserId && !password) {
+          showToast("请输入密码", "error");
+          return;
+        }
+
+        const userData = {
+          is_active: isActive,
+          is_superuser: isSuperuser,
+        };
+
+        if (email) userData.email = email;
+        if (password) userData.password = password;
+
+        try {
+          let response;
+          if (editingUserId) {
+            // 更新用户
+            response = await fetch(`/api/admin/users/${editingUserId}`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(userData),
+            });
+          } else {
+            // 创建用户
+            userData.username = username;
+            response = await fetch("/api/admin/users", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(userData),
+            });
+          }
+
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || "操作失败");
+          }
+
+          showToast(editingUserId ? "用户更新成功" : "用户创建成功", "success");
+          closeModal();
+          loadUsers();
+        } catch (error) {
+          showToast(error.message, "error");
+        }
+      }
+
+      // 确认删除
+      function confirmDelete(userId, username) {
+        document.getElementById("deleteUsername").textContent = username;
+        document.getElementById("confirmDeleteBtn").onclick = () =>
+          deleteUser(userId);
+        document.getElementById("deleteModal").classList.add("active");
+      }
+
+      // 关闭删除确认框
+      function closeDeleteModal() {
+        document.getElementById("deleteModal").classList.remove("active");
+      }
+
+      // 删除用户
+      async function deleteUser(userId) {
+        try {
+          const response = await fetch(`/api/admin/users/${userId}`, {
+            method: "DELETE",
+          });
+
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || "删除失败");
+          }
+
+          showToast("用户删除成功", "success");
+          closeDeleteModal();
+          loadUsers();
+        } catch (error) {
+          showToast(error.message, "error");
+        }
+      }
+
+      // 强制下线
+      async function forceLogout(userId, username) {
+        if (!confirm(`确定要强制下线用户 ${username} 吗？`)) return;
+
+        try {
+          const response = await fetch(
+            `/api/admin/users/${userId}/force-logout`,
+            {
+              method: "POST",
+            }
+          );
+
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || "操作失败");
+          }
+
+          showToast(`用户 ${username} 已被强制下线`, "success");
+          loadUsers();
+        } catch (error) {
+          showToast(error.message, "error");
+        }
+      }
+
+      // 检查认证服务器状态
+      async function checkServerHealth() {
+        const statusEl = document.getElementById("serverStatus");
+        try {
+          const response = await fetch("/api/admin/auth-server-health");
+          const data = await response.json();
+
+          if (data.healthy) {
+            statusEl.className = "server-status healthy";
+            statusEl.innerHTML =
+              '<span class="status-dot online"></span><span>认证服务器正常</span>';
+          } else {
+            statusEl.className = "server-status unhealthy";
+            statusEl.innerHTML =
+              '<span class="status-dot offline"></span><span>认证服务器异常</span>';
+          }
+        } catch {
+          statusEl.className = "server-status unhealthy";
+          statusEl.innerHTML =
+            '<span class="status-dot offline"></span><span>无法连接</span>';
+        }
+      }
+
+      // 显示提示
+      function showToast(message, type = "success") {
+        const toast = document.createElement("div");
+        toast.className = `toast ${type}`;
+        toast.textContent = message;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 3000);
+      }
+
+      // 转义 HTML
+      function escapeHtml(text) {
+        const div = document.createElement("div");
+        div.textContent = text;
+        return div.innerHTML;
+      }
+
+      // 初始化
+      document.addEventListener("DOMContentLoaded", () => {
+        loadUsers();
+        checkServerHealth();
+        // 每 30 秒刷新一次状态
+        setInterval(checkServerHealth, 30000);
+      });
+    </script>
+  </body>
+</html>
+

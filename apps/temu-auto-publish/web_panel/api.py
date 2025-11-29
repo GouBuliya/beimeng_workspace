@@ -9,6 +9,9 @@
   - /api/fields: 返回表单元数据
   - /health: 环境自检
   - /downloads/sample-selection: 示例选品表下载
+@GOTCHAS:
+  - 认证已集成远程认证服务器，需要配置 AUTH_SERVER_URL 环境变量
+  - 支持本地密码模式（fallback）和远程认证模式
 """
 
 # ruff: noqa: B008
@@ -29,6 +32,7 @@ from pydantic import BaseModel
 from starlette.middleware.sessions import SessionMiddleware
 from loguru import logger
 
+from .auth_client import get_auth_client
 from .env_settings import (
     ENV_FIELDS,
     build_env_payload,
@@ -44,7 +48,9 @@ APP_ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE_DIR = APP_ROOT / "web_panel" / "templates"
 DEFAULT_SELECTION = APP_ROOT / "data" / "input" / "selection.xlsx"
 SELECTOR_FILE = APP_ROOT / "config" / "miaoshou_selectors_v2.json"
-SESSION_KEY = "web_panel_admin"
+SESSION_KEY = "web_panel_user"
+SESSION_TOKEN_KEY = "web_panel_token"
+SESSION_USERNAME_KEY = "web_panel_username"
 DEFAULT_ADMIN_PASSWORD = "bm123456789"
 
 
@@ -70,6 +76,7 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
     load_dotenv(resolve_env_file(), override=False)
     admin_password = os.environ.get("WEB_PANEL_ADMIN_PASSWORD", DEFAULT_ADMIN_PASSWORD)
     session_secret = os.environ.get("WEB_PANEL_SESSION_SECRET", "temu-web-panel-session")
+    use_remote_auth = os.environ.get("USE_REMOTE_AUTH", "true").lower() == "true"
     app.add_middleware(
         SessionMiddleware,
         secret_key=session_secret,
@@ -81,9 +88,32 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
     def _is_authenticated(request: Request) -> bool:
         return bool(request.session.get(SESSION_KEY))
 
-    def admin_guard(request: Request) -> None:
+    def _get_current_user(request: Request) -> dict[str, Any] | None:
+        """获取当前登录用户信息."""
         if not _is_authenticated(request):
-            raise HTTPException(status_code=401, detail="需要管理员密码")
+            return None
+        return {
+            "username": request.session.get(SESSION_USERNAME_KEY, ""),
+            "token": request.session.get(SESSION_TOKEN_KEY, ""),
+        }
+
+    async def admin_guard(request: Request) -> None:
+        if not _is_authenticated(request):
+            raise HTTPException(status_code=401, detail="需要登录")
+
+        # 如果使用远程认证，验证令牌是否仍然有效
+        if use_remote_auth:
+            token = request.session.get(SESSION_TOKEN_KEY)
+            if token:
+                auth_client = get_auth_client()
+                result = await auth_client.verify_token(token)
+                if not result.valid:
+                    # 令牌失效（可能被其他设备登录踢出）
+                    request.session.clear()
+                    raise HTTPException(
+                        status_code=401,
+                        detail=result.message or "会话已失效，请重新登录"
+                    )
 
     def _login_template(request: Request, *, error: str | None = None) -> HTMLResponse:
         return templates.TemplateResponse(
@@ -91,6 +121,7 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
             {
                 "request": request,
                 "error": error,
+                "use_remote_auth": use_remote_auth,
             },
             status_code=401 if error else 200,
         )
@@ -99,12 +130,14 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
     async def index(request: Request) -> HTMLResponse:
         if not _is_authenticated(request):
             return RedirectResponse("/login", status_code=303)
+        username = request.session.get(SESSION_USERNAME_KEY, "用户")
         return templates.TemplateResponse(
             "index.html",
             {
                 "request": request,
                 "fields": FORM_FIELDS,
                 "env_fields": env_metadata,
+                "username": username,
             },
         )
 
@@ -112,18 +145,58 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
     async def login_page(request: Request) -> HTMLResponse:
         if _is_authenticated(request):
             return RedirectResponse("/", status_code=303)
-        return templates.TemplateResponse("login.html", {"request": request})
+        return templates.TemplateResponse(
+            "login.html",
+            {"request": request, "use_remote_auth": use_remote_auth},
+        )
 
     @app.post("/login", response_class=HTMLResponse)
-    async def login_action(request: Request, password: str = Form(...)) -> HTMLResponse:
-        if password.strip() == admin_password:
-            request.session[SESSION_KEY] = True
-            return RedirectResponse("/", status_code=303)
-        return _login_template(request, error="管理员密码错误")
+    async def login_action(
+        request: Request,
+        username: str = Form(default=""),
+        password: str = Form(...),
+    ) -> HTMLResponse:
+        if use_remote_auth:
+            # 使用远程认证服务器
+            auth_client = get_auth_client()
+
+            # 检查认证服务器是否可用
+            if not await auth_client.health_check():
+                logger.warning("认证服务器不可用，尝试本地认证")
+                # 降级到本地认证
+                if password.strip() == admin_password:
+                    request.session[SESSION_KEY] = True
+                    request.session[SESSION_USERNAME_KEY] = "admin"
+                    return RedirectResponse("/", status_code=303)
+                return _login_template(request, error="认证服务器不可用，本地密码错误")
+
+            # 远程登录
+            token_data = await auth_client.login(username.strip(), password.strip())
+            if token_data:
+                request.session[SESSION_KEY] = True
+                request.session[SESSION_TOKEN_KEY] = token_data.access_token
+                request.session[SESSION_USERNAME_KEY] = username.strip()
+                logger.info(f"用户远程登录成功: {username}")
+                return RedirectResponse("/", status_code=303)
+            return _login_template(request, error="用户名或密码错误")
+        else:
+            # 本地密码认证（保持向后兼容）
+            if password.strip() == admin_password:
+                request.session[SESSION_KEY] = True
+                request.session[SESSION_USERNAME_KEY] = "admin"
+                return RedirectResponse("/", status_code=303)
+            return _login_template(request, error="管理员密码错误")
 
     @app.post("/logout")
     async def logout(request: Request) -> RedirectResponse:
-        request.session.pop(SESSION_KEY, None)
+        # 如果使用远程认证，先通知服务器登出
+        if use_remote_auth:
+            token = request.session.get(SESSION_TOKEN_KEY)
+            if token:
+                auth_client = get_auth_client()
+                await auth_client.logout(token)
+
+        request.session.clear()
         return RedirectResponse("/login", status_code=303)
 
     @app.post("/api/run", response_model=RunStatus)
@@ -260,6 +333,183 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
             raise HTTPException(status_code=400, detail=f"以下配置不能为空: {labels}")
         persist_env_settings(payload.entries)
         return {"ok": True}
+
+    # ==================== 管理员后台 API ====================
+
+    @app.get("/admin", response_class=HTMLResponse)
+    async def admin_page(request: Request, _: None = Depends(admin_guard)) -> HTMLResponse:
+        """管理员后台页面."""
+        if not use_remote_auth:
+            raise HTTPException(status_code=404, detail="本地认证模式下不支持后台管理")
+        username = request.session.get(SESSION_USERNAME_KEY, "")
+        return templates.TemplateResponse(
+            "admin.html",
+            {"request": request, "username": username},
+        )
+
+    @app.get("/api/admin/users")
+    async def get_users(
+        request: Request,
+        _: None = Depends(admin_guard),
+        skip: int = Query(default=0, ge=0),
+        limit: int = Query(default=100, ge=1, le=1000),
+    ) -> dict[str, Any]:
+        """获取用户列表（代理到认证服务器）."""
+        if not use_remote_auth:
+            raise HTTPException(status_code=404, detail="本地认证模式下不支持此功能")
+
+        token = request.session.get(SESSION_TOKEN_KEY)
+        if not token:
+            raise HTTPException(status_code=401, detail="未登录")
+
+        import httpx
+        auth_client = get_auth_client()
+        async with httpx.AsyncClient(base_url=auth_client.base_url, timeout=10.0) as client:
+            response = await client.get(
+                "/users",
+                params={"skip": skip, "limit": limit},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            if response.status_code == 403:
+                raise HTTPException(status_code=403, detail="需要管理员权限")
+            if response.status_code != 200:
+                raise HTTPException(status_code=response.status_code, detail="请求失败")
+            return response.json()
+
+    @app.post("/api/admin/users")
+    async def create_user(
+        request: Request,
+        user_data: dict[str, Any],
+        _: None = Depends(admin_guard),
+    ) -> dict[str, Any]:
+        """创建用户（代理到认证服务器）."""
+        if not use_remote_auth:
+            raise HTTPException(status_code=404, detail="本地认证模式下不支持此功能")
+
+        token = request.session.get(SESSION_TOKEN_KEY)
+        if not token:
+            raise HTTPException(status_code=401, detail="未登录")
+
+        import httpx
+        auth_client = get_auth_client()
+        async with httpx.AsyncClient(base_url=auth_client.base_url, timeout=10.0) as client:
+            response = await client.post(
+                "/users",
+                json=user_data,
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            if response.status_code == 403:
+                raise HTTPException(status_code=403, detail="需要管理员权限")
+            if response.status_code == 400:
+                raise HTTPException(status_code=400, detail=response.json().get("detail", "请求失败"))
+            if response.status_code != 201:
+                raise HTTPException(status_code=response.status_code, detail="请求失败")
+            return response.json()
+
+    @app.put("/api/admin/users/{user_id}")
+    async def update_user(
+        request: Request,
+        user_id: str,
+        user_data: dict[str, Any],
+        _: None = Depends(admin_guard),
+    ) -> dict[str, Any]:
+        """更新用户（代理到认证服务器）."""
+        if not use_remote_auth:
+            raise HTTPException(status_code=404, detail="本地认证模式下不支持此功能")
+
+        token = request.session.get(SESSION_TOKEN_KEY)
+        if not token:
+            raise HTTPException(status_code=401, detail="未登录")
+
+        import httpx
+        auth_client = get_auth_client()
+        async with httpx.AsyncClient(base_url=auth_client.base_url, timeout=10.0) as client:
+            response = await client.put(
+                f"/users/{user_id}",
+                json=user_data,
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            if response.status_code == 403:
+                raise HTTPException(status_code=403, detail="需要管理员权限")
+            if response.status_code == 400:
+                raise HTTPException(status_code=400, detail=response.json().get("detail", "请求失败"))
+            if response.status_code == 404:
+                raise HTTPException(status_code=404, detail="用户不存在")
+            if response.status_code != 200:
+                raise HTTPException(status_code=response.status_code, detail="请求失败")
+            return response.json()
+
+    @app.delete("/api/admin/users/{user_id}")
+    async def delete_user(
+        request: Request,
+        user_id: str,
+        _: None = Depends(admin_guard),
+    ) -> dict[str, Any]:
+        """删除用户（代理到认证服务器）."""
+        if not use_remote_auth:
+            raise HTTPException(status_code=404, detail="本地认证模式下不支持此功能")
+
+        token = request.session.get(SESSION_TOKEN_KEY)
+        if not token:
+            raise HTTPException(status_code=401, detail="未登录")
+
+        import httpx
+        auth_client = get_auth_client()
+        async with httpx.AsyncClient(base_url=auth_client.base_url, timeout=10.0) as client:
+            response = await client.delete(
+                f"/users/{user_id}",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            if response.status_code == 403:
+                raise HTTPException(status_code=403, detail="需要管理员权限")
+            if response.status_code == 400:
+                raise HTTPException(status_code=400, detail=response.json().get("detail", "请求失败"))
+            if response.status_code == 404:
+                raise HTTPException(status_code=404, detail="用户不存在")
+            if response.status_code != 200:
+                raise HTTPException(status_code=response.status_code, detail="请求失败")
+            return response.json()
+
+    @app.post("/api/admin/users/{user_id}/force-logout")
+    async def force_logout_user(
+        request: Request,
+        user_id: str,
+        _: None = Depends(admin_guard),
+    ) -> dict[str, Any]:
+        """强制用户下线（代理到认证服务器）."""
+        if not use_remote_auth:
+            raise HTTPException(status_code=404, detail="本地认证模式下不支持此功能")
+
+        token = request.session.get(SESSION_TOKEN_KEY)
+        if not token:
+            raise HTTPException(status_code=401, detail="未登录")
+
+        import httpx
+        auth_client = get_auth_client()
+        async with httpx.AsyncClient(base_url=auth_client.base_url, timeout=10.0) as client:
+            response = await client.post(
+                f"/users/{user_id}/force-logout",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            if response.status_code == 403:
+                raise HTTPException(status_code=403, detail="需要管理员权限")
+            if response.status_code == 404:
+                raise HTTPException(status_code=404, detail="用户不存在")
+            if response.status_code != 200:
+                raise HTTPException(status_code=response.status_code, detail="请求失败")
+            return response.json()
+
+    @app.get("/api/admin/auth-server-health")
+    async def check_auth_server_health(
+        _: None = Depends(admin_guard),
+    ) -> dict[str, Any]:
+        """检查认证服务器健康状态."""
+        auth_client = get_auth_client()
+        is_healthy = await auth_client.health_check()
+        return {
+            "healthy": is_healthy,
+            "server_url": auth_client.base_url,
+        }
 
     return app
 

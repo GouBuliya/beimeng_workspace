@@ -1,0 +1,102 @@
+# Temu Auto Publish Auth Server - Docker Compose 配置
+# 包含 PostgreSQL、Redis 和认证服务
+
+version: '3.8'
+
+services:
+  # PostgreSQL 数据库
+  postgres:
+    image: postgres:15-alpine
+    container_name: temu-auth-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-temu_auth}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-temu_auth_password}
+      POSTGRES_DB: ${POSTGRES_DB:-temu_auth_db}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    networks:
+      - temu-auth-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-temu_auth} -d ${POSTGRES_DB:-temu_auth_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis 缓存（用于会话管理）
+  redis:
+    image: redis:7-alpine
+    container_name: temu-auth-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes ${REDIS_PASSWORD:+--requirepass $REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    networks:
+      - temu-auth-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 认证服务
+  auth-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: temu-auth-server
+    restart: unless-stopped
+    environment:
+      # 数据库配置
+      POSTGRES_USER: ${POSTGRES_USER:-temu_auth}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-temu_auth_password}
+      POSTGRES_DB: ${POSTGRES_DB:-temu_auth_db}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      # Redis 配置
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_DB: 0
+      # JWT 配置
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-your-super-secret-key-change-in-production}
+      JWT_ALGORITHM: HS256
+      JWT_ACCESS_TOKEN_EXPIRE_MINUTES: ${JWT_ACCESS_TOKEN_EXPIRE_MINUTES:-60}
+      JWT_REFRESH_TOKEN_EXPIRE_DAYS: ${JWT_REFRESH_TOKEN_EXPIRE_DAYS:-7}
+      # 服务配置
+      AUTH_SERVER_HOST: 0.0.0.0
+      AUTH_SERVER_PORT: 8001
+      DEBUG: ${DEBUG:-false}
+      # 初始管理员
+      INIT_ADMIN_USERNAME: ${INIT_ADMIN_USERNAME:-admin}
+      INIT_ADMIN_PASSWORD: ${INIT_ADMIN_PASSWORD:-admin123456}
+    ports:
+      - "${AUTH_SERVER_PORT:-8001}:8001"
+    networks:
+      - temu-auth-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+networks:
+  temu-auth-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
