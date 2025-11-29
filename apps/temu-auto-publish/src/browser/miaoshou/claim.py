@@ -34,7 +34,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
     _ROW_SELECTOR: ClassVar[str] = ".pro-virtual-table__row-body"
     # vue-recycle-scroller 虚拟滚动行选择器
     _VIRTUAL_ROW_SELECTOR: ClassVar[str] = ".vue-recycle-scroller__item-view"
-    _ROW_HEIGHT: ClassVar[int] = 128
+    _ROW_HEIGHT: ClassVar[int] = 126
     _ROW_CHECKBOX_SELECTOR: ClassVar[str] = (
         ".is-fixed-left.is-selection-column .jx-checkbox"
     )
@@ -266,7 +266,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
         try:
             js_code = """
             async (indexes) => {
-                const ROW_HEIGHT = 128;
+                const ROW_HEIGHT = 126;
                 
                 // 检查是否为 page-mode（页面级滚动）
                 const recycleScroller = document.querySelector('.vue-recycle-scroller');
@@ -410,7 +410,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
         try:
             js_code = """
             async (index) => {
-                const ROW_HEIGHT = 128;
+                const ROW_HEIGHT = 126;
                 
                 const scroller = document.querySelector('.vue-recycle-scroller') ||
                                 document.querySelector('.vue-recycle-scroller__item-wrapper')?.parentElement;
@@ -452,7 +452,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
     async def _find_row_by_translate_y(self, page: Page, index: int):
         """通过 translateY 值定位 vue-recycle-scroller 中的行。
 
-        vue-recycle-scroller 使用 transform: translateY(N*128px) 来定位行。
+        vue-recycle-scroller 使用 transform: translateY(N*ROW_HEIGHT) 来定位行。
         滚动后，目标行的 translateY 应该接近 0（在视口顶部）。
 
         Args:
