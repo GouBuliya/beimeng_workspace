@@ -803,64 +803,128 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
             js_code = """
             async (index) => {
                 const ROW_HEIGHT = 128;
+                const targetScrollTop = index * ROW_HEIGHT;
                 
-                // 查找滚动容器
-                const scroller = document.querySelector('.vue-recycle-scroller') ||
-                                document.querySelector('.vue-recycle-scroller__item-wrapper')?.parentElement ||
-                                document.querySelector('.pro-virtual-table__body-inner');
+                // 尝试多种滚动容器选择器
+                const scrollerSelectors = [
+                    '.vue-recycle-scroller',
+                    '.pro-virtual-table__body',
+                    '.pro-virtual-table__body-inner',
+                    '.jx-scrollbar__wrap',
+                    '.jx-table__body-wrapper',
+                    '#appScrollContainer'
+                ];
                 
-                if (!scroller) {
-                    return { success: false, error: 'Scroll container not found' };
+                let scroller = null;
+                let scrollerInfo = '';
+                
+                for (const sel of scrollerSelectors) {
+                    const el = document.querySelector(sel);
+                    if (el && el.scrollHeight > el.clientHeight) {
+                        scroller = el;
+                        scrollerInfo = sel;
+                        break;
+                    }
                 }
                 
-                // 滚动到目标位置（让目标行出现在视口顶部）
-                const targetScrollTop = index * ROW_HEIGHT;
-                scroller.scrollTop = targetScrollTop;
+                // 如果没找到可滚动容器，尝试 wrapper 的父元素
+                if (!scroller) {
+                    const wrapper = document.querySelector('.vue-recycle-scroller__item-wrapper');
+                    if (wrapper?.parentElement) {
+                        scroller = wrapper.parentElement;
+                        scrollerInfo = 'wrapper.parentElement';
+                    }
+                }
                 
-                // 等待 DOM 更新（vue-recycle-scroller 需要时间重新渲染）
-                await new Promise(r => setTimeout(r, 300));
+                // 执行滚动
+                if (scroller) {
+                    const beforeScroll = scroller.scrollTop;
+                    scroller.scrollTop = targetScrollTop;
+                    // 等待 DOM 更新
+                    await new Promise(r => setTimeout(r, 500));
+                    const afterScroll = scroller.scrollTop;
+                    
+                    // 如果滚动没生效，尝试使用 scrollTo
+                    if (Math.abs(afterScroll - targetScrollTop) > 10) {
+                        scroller.scrollTo({ top: targetScrollTop, behavior: 'instant' });
+                        await new Promise(r => setTimeout(r, 500));
+                    }
+                }
                 
-                // 获取所有虚拟滚动行
+                // 获取所有虚拟滚动行并按 translateY 排序
                 const rows = document.querySelectorAll('.vue-recycle-scroller__item-view');
-                
-                // 筛选可见行（translateY >= 0）并解析位置
                 const visibleRows = [];
+                
                 rows.forEach(row => {
                     const style = row.getAttribute('style') || '';
                     const match = style.match(/translateY\\((-?\\d+(?:\\.\\d+)?)\\s*(?:px)?\\s*\\)/);
                     if (match) {
                         const y = parseFloat(match[1]);
-                        if (y >= 0) {
-                            visibleRows.push({ row, y });
-                        }
+                        // 计算相对于 scrollTop 的位置
+                        const relativeY = y - (scroller ? scroller.scrollTop : 0);
+                        visibleRows.push({ row, y, relativeY });
                     }
                 });
                 
-                // 按 translateY 排序（视觉顺序）
+                // 按原始 translateY 排序
                 visibleRows.sort((a, b) => a.y - b.y);
                 
-                if (visibleRows.length === 0) {
-                    return { success: false, error: 'No visible rows after scroll' };
+                // 找到目标行：translateY 等于 index * ROW_HEIGHT 的行
+                let targetRow = null;
+                let targetTranslateY = index * ROW_HEIGHT;
+                
+                for (const item of visibleRows) {
+                    // 允许一定误差
+                    if (Math.abs(item.y - targetTranslateY) < 10) {
+                        targetRow = item.row;
+                        break;
+                    }
                 }
                 
-                // 滚动后，目标行应该在第一个位置（translateY 最小的）
-                const targetRow = visibleRows[0].row;
+                // 如果精确匹配失败，取第一个可见行（translateY 最小且 >= 0）
+                if (!targetRow) {
+                    const firstVisible = visibleRows.find(item => item.y >= 0);
+                    if (firstVisible) {
+                        targetRow = firstVisible.row;
+                    }
+                }
+                
+                if (!targetRow) {
+                    return { 
+                        success: false, 
+                        error: 'Target row not found',
+                        scrollerInfo,
+                        targetScrollTop,
+                        actualScrollTop: scroller ? scroller.scrollTop : 'N/A',
+                        rowCount: rows.length,
+                        visibleYs: visibleRows.slice(0, 5).map(r => r.y)
+                    };
+                }
                 
                 // 在行内查找编辑按钮
                 const editBtn = targetRow.querySelector('.J_commonCollectBoxEdit') ||
                                 targetRow.querySelector('.J_collectBoxEdit') ||
-                                targetRow.querySelector('button.jx-button--primary.is-text');
+                                targetRow.querySelector('button.jx-button--primary.is-text') ||
+                                targetRow.querySelector('button:not([disabled])');
                 
                 if (!editBtn) {
-                    return { success: false, error: 'Edit button not found in row', visibleCount: visibleRows.length };
+                    return { 
+                        success: false, 
+                        error: 'Edit button not found in target row',
+                        scrollerInfo,
+                        targetTranslateY
+                    };
                 }
                 
                 // 强制点击
                 editBtn.click();
+                
                 return { 
                     success: true, 
-                    scrollTop: targetScrollTop,
-                    translateY: visibleRows[0].y,
+                    scrollerInfo,
+                    targetScrollTop,
+                    actualScrollTop: scroller ? scroller.scrollTop : 'N/A',
+                    targetTranslateY,
                     visibleCount: visibleRows.length
                 };
             }
@@ -870,16 +934,20 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
 
             if result.get("success"):
                 logger.success(
-                    f"✓ JS 点击编辑按钮成功，索引={index}, scrollTop={result.get('scrollTop')}px, "
-                    f"translateY={result.get('translateY')}px, 可见行数={result.get('visibleCount')}"
+                    f"✓ JS 点击编辑按钮成功，索引={index}, 容器={result.get('scrollerInfo')}, "
+                    f"scrollTop={result.get('actualScrollTop')}px, translateY={result.get('targetTranslateY')}px"
                 )
                 return True
             else:
-                logger.debug(f"JS 点击失败: {result.get('error')}, 可见行数={result.get('visibleCount', 'N/A')}")
+                logger.warning(
+                    f"JS 点击失败: {result.get('error')}, 容器={result.get('scrollerInfo')}, "
+                    f"目标scrollTop={result.get('targetScrollTop')}, 实际scrollTop={result.get('actualScrollTop')}, "
+                    f"行数={result.get('rowCount')}, 可见Y值={result.get('visibleYs')}"
+                )
                 return False
 
         except Exception as exc:
-            logger.debug(f"JS 点击异常: {exc}")
+            logger.warning(f"JS 点击异常: {exc}")
             return False
 
     async def _click_edit_button_in_row(
