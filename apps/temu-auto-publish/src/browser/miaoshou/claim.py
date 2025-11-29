@@ -995,7 +995,8 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
         self,
         page: Page,
         indexes: Sequence[int],
-        repeat: int = 5,
+        *,
+        repeat_per_product: int = 5,
     ) -> tuple[int, int]:
         """使用 JS 定位逻辑逐行认领商品。
 
@@ -1003,48 +1004,56 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
         1. 滚动到目标行
         2. 点击该行的"认领到"按钮
         3. 选择下拉菜单第一项
-        4. 重复 repeat 次
+        4. 重复 repeat_per_product 次
 
         Args:
             page: Playwright 页面对象
             indexes: 要认领的商品索引列表
-            repeat: 每个商品点击认领的次数（默认5次）
+            repeat_per_product: 每个商品点击认领的次数（默认5次）
 
         Returns:
-            (成功数, 失败数) 元组
+            (成功商品数, 失败商品数) 元组
         """
-        total_success = 0
-        total_fail = 0
+        success_count = 0
+        fail_count = 0
 
         for idx in indexes:
+            logger.info(f"正在认领索引 {idx} 的商品（共 {repeat_per_product} 次）...")
             product_success = 0
-            for r in range(repeat):
-                logger.info(f"正在认领索引 {idx} 的商品 (第 {r + 1}/{repeat} 次)...")
+
+            for click_num in range(repeat_per_product):
                 result = await self._click_claim_button_in_row_by_js(page, idx)
 
                 if result.get("success"):
                     product_success += 1
+                    logger.debug(
+                        f"索引 {idx} 第 {click_num + 1}/{repeat_per_product} 次认领成功, "
+                        f"选项={result.get('optionText')}"
+                    )
                     # 等待认领操作完成
                     await page.wait_for_timeout(600)
                 else:
                     logger.warning(
-                        f"索引 {idx} 第 {r + 1} 次认领失败: {result.get('error')}"
+                        f"索引 {idx} 第 {click_num + 1}/{repeat_per_product} 次认领失败: "
+                        f"{result.get('error')}"
                     )
-                    # 失败后稍微等待再重试
+                    # 失败后稍等再重试
                     await page.wait_for_timeout(300)
 
             if product_success > 0:
-                total_success += 1
-                logger.success(f"索引 {idx} 认领完成: {product_success}/{repeat} 次成功")
+                success_count += 1
+                logger.success(
+                    f"✓ 索引 {idx} 认领完成: {product_success}/{repeat_per_product} 次成功"
+                )
             else:
-                total_fail += 1
-                logger.error(f"索引 {idx} 认领完全失败")
+                fail_count += 1
+                logger.error(f"✗ 索引 {idx} 认领全部失败")
 
         logger.info(
-            f"批量认领完成: {total_success}/{len(indexes)} 个商品成功, "
-            f"{total_fail} 个失败"
+            f"批量认领完成: 成功商品={success_count}, 失败商品={fail_count}, "
+            f"每商品点击={repeat_per_product}次"
         )
-        return total_success, total_fail
+        return success_count, fail_count
 
     async def _find_row_by_translate_y(self, page: Page, index: int):
         """通过 translateY 值定位 vue-recycle-scroller 中的行。
