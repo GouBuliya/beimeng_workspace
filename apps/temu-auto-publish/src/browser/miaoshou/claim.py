@@ -21,7 +21,7 @@ from loguru import logger
 from playwright.async_api import Frame, Locator, Page
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
-from ..utils.page_load_decorator import (
+from ...utils.page_load_decorator import (
     LoadState,
     PAGE_TIMEOUTS,
     ensure_page_loaded,

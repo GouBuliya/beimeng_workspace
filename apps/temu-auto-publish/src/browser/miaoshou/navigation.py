@@ -13,7 +13,7 @@ from typing import Any, ClassVar
 from loguru import logger
 from playwright.async_api import Frame, Page
 
-from ..utils.page_load_decorator import (
+from ...utils.page_load_decorator import (
     PAGE_TIMEOUTS,
     wait_dom_loaded,
     wait_network_idle,
