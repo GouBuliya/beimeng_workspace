@@ -185,25 +185,25 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
         count: int = 5,
         indexes: Sequence[int] | None = None,
         *,
-        enable_scroll: bool = True,
+        enable_scroll: bool = False,  # 默认禁用滚动，使用直接定位
     ) -> bool:
         """Select the first ``count`` products before starting a claim batch.
 
-        针对 vue-recycle-scroller 虚拟滚动列表的定位策略：
-        1. DOM 元素会被回收，不可见的行设为 translateY(-9999px)
-        2. 可见行通过 transform: translateY(N*128px) 定位
-        3. 先滚动到目标位置，然后按 translateY 值找到正确的行
+        直接通过 JavaScript 定位并强制点击复选框，无需滚动：
+        1. 获取所有可见行（translateY >= 0）
+        2. 按 translateY 排序得到视觉顺序
+        3. 直接点击目标行的复选框
 
         Args:
             page: Active Playwright page instance.
             count: Number of products to select.
             indexes: Specific indexes to select (optional).
-            enable_scroll: 是否启用滚动（默认启用）
+            enable_scroll: 是否启用滚动（默认禁用）
 
         Returns:
             True when all target products were selected, otherwise False.
         """
-        logger.info(f"Selecting up to {count} product rows (scroll={enable_scroll})")
+        logger.info(f"Selecting up to {count} product rows (direct locate)")
 
         rows = page.locator(self._ROW_SELECTOR)
         if not await self._wait_for_rows(page):
@@ -224,37 +224,120 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
 
         logger.info(f"目标索引: {target_indexes}, 当前可见行数: {available}")
 
-        selected = 0
-        for idx in target_indexes:
-            # 滚动到目标位置
-            if enable_scroll:
+        # 使用 JavaScript 批量勾选
+        selected = await self._select_checkboxes_by_js(page, target_indexes)
+
+        if selected == len(target_indexes):
+            logger.success(f"Selected {selected}/{len(target_indexes)} rows for claim")
+            return True
+
+        # 如果 JS 方式不完全成功且启用了滚动，尝试逐个滚动勾选
+        if enable_scroll and selected < len(target_indexes):
+            logger.info(f"JS 勾选不完整 ({selected}/{len(target_indexes)})，尝试滚动方式")
+            for idx in target_indexes[selected:]:
                 from ...utils.scroll_helper import scroll_to_product_position
 
-                logger.info(f"滚动到商品 #{idx + 1} 的位置")
                 await scroll_to_product_position(page, target_index=idx)
                 await page.wait_for_timeout(500)
 
-            # 核心：通过 translateY 值定位正确的行
-            target_row = await self._find_row_by_translate_y(page, idx)
-            if target_row:
-                if await self._toggle_row_checkbox(page, target_row):
+                # 滚动后用 JS 点击第一个
+                if await self._click_checkbox_by_js(page, 0):
                     selected += 1
-                    logger.debug(f"✓ 勾选商品 #{idx + 1} 成功 ({selected}/{len(target_indexes)})")
-                    continue
-
-            # 回退：找视口内的第一个可见行
-            first_visible_row = await self._find_first_visible_row(page)
-            if first_visible_row:
-                if await self._toggle_row_checkbox(page, first_visible_row):
-                    selected += 1
-                    logger.debug(f"✓ 勾选商品 #{idx + 1} 成功 (回退) ({selected}/{len(target_indexes)})")
-                    continue
-
-            logger.error(f"Failed to toggle checkbox for product #{idx + 1}")
-            return False
+                else:
+                    logger.error(f"Failed to toggle checkbox for product #{idx + 1}")
+                    return False
 
         logger.success(f"Selected {selected}/{len(target_indexes)} rows for claim")
         return selected == len(target_indexes)
+
+    async def _select_checkboxes_by_js(self, page: Page, indexes: list[int]) -> int:
+        """使用 JavaScript 批量勾选复选框。
+
+        Args:
+            page: Playwright 页面对象
+            indexes: 目标索引列表（视觉顺序）
+
+        Returns:
+            成功勾选的数量
+        """
+        try:
+            js_code = """
+            (indexes) => {
+                const rows = document.querySelectorAll('.vue-recycle-scroller__item-view');
+                
+                // 筛选可见行并解析位置
+                const visibleRows = [];
+                rows.forEach(row => {
+                    const style = row.getAttribute('style') || '';
+                    const match = style.match(/translateY\\((-?\\d+(?:\\.\\d+)?)\\s*(?:px)?\\s*\\)/);
+                    if (match) {
+                        const y = parseFloat(match[1]);
+                        if (y >= 0) {
+                            visibleRows.push({ row, y });
+                        }
+                    }
+                });
+                
+                // 按 translateY 排序
+                visibleRows.sort((a, b) => a.y - b.y);
+                
+                let selected = 0;
+                for (const idx of indexes) {
+                    if (idx >= visibleRows.length) continue;
+                    
+                    const targetRow = visibleRows[idx].row;
+                    // 查找复选框
+                    const checkbox = targetRow.querySelector('.jx-checkbox__inner') ||
+                                    targetRow.querySelector('.jx-checkbox') ||
+                                    targetRow.querySelector('input[type="checkbox"]');
+                    
+                    if (checkbox) {
+                        checkbox.click();
+                        selected++;
+                    }
+                }
+                
+                return selected;
+            }
+            """
+            result = await page.evaluate(js_code, indexes)
+            logger.debug(f"JS 批量勾选完成: {result}/{len(indexes)}")
+            return result
+        except Exception as exc:
+            logger.debug(f"JS 批量勾选异常: {exc}")
+            return 0
+
+    async def _click_checkbox_by_js(self, page: Page, index: int) -> bool:
+        """使用 JavaScript 点击第 index 个复选框。"""
+        try:
+            js_code = """
+            (index) => {
+                const rows = document.querySelectorAll('.vue-recycle-scroller__item-view');
+                const visibleRows = [];
+                rows.forEach(row => {
+                    const style = row.getAttribute('style') || '';
+                    const match = style.match(/translateY\\((-?\\d+(?:\\.\\d+)?)\\s*(?:px)?\\s*\\)/);
+                    if (match) {
+                        const y = parseFloat(match[1]);
+                        if (y >= 0) visibleRows.push({ row, y });
+                    }
+                });
+                visibleRows.sort((a, b) => a.y - b.y);
+                
+                if (index >= visibleRows.length) return false;
+                
+                const checkbox = visibleRows[index].row.querySelector('.jx-checkbox__inner') ||
+                                visibleRows[index].row.querySelector('.jx-checkbox');
+                if (checkbox) {
+                    checkbox.click();
+                    return true;
+                }
+                return false;
+            }
+            """
+            return await page.evaluate(js_code, index)
+        except Exception:
+            return False
 
     async def _find_row_by_translate_y(self, page: Page, index: int):
         """通过 translateY 值定位 vue-recycle-scroller 中的行。

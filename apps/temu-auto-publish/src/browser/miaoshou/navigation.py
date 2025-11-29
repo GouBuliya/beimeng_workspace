@@ -749,25 +749,24 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
         page: Page,
         index: int,
         *,
-        enable_scroll: bool = True,
+        enable_scroll: bool = False,  # 默认禁用滚动，使用直接定位
     ) -> bool:
         """Click the edit button of a product at a specific index.
 
-        针对 vue-recycle-scroller 虚拟滚动列表的定位策略：
-        1. DOM 元素会被回收，不可见的行设为 translateY(-9999px)
-        2. 可见行通过 transform: translateY(N*128px) 定位
-        3. DOM 顺序 ≠ 视觉顺序，必须按 translateY 值定位
-        4. 先滚动到目标位置，然后按 translateY 值找到正确的行
+        直接通过 JavaScript 定位并强制点击，无需滚动：
+        1. 获取所有可见行（translateY >= 0）
+        2. 按 translateY 排序得到视觉顺序
+        3. 直接点击第 index 个行的编辑按钮
 
         Args:
             page: Active Playwright page instance.
             index: Zero-based index of the product in the grid (全局索引).
-            enable_scroll: 是否启用滚动到目标行（默认启用）
+            enable_scroll: 是否启用滚动（默认禁用）
 
         Returns:
             True when the edit button was clicked, otherwise False.
         """
-        logger.info("Clicking edit button for product index {} (scroll={})", index, enable_scroll)
+        logger.info("Clicking edit button for product index {} (direct locate)", index)
 
         try:
             await self._ensure_popups_closed(page)
@@ -776,59 +775,23 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                 logger.error("Product index must be non-negative")
                 return False
 
-            # 获取编辑按钮选择器
-            edit_selectors = self._resolve_selectors(
-                self.selectors.get("collection_box", {}).get("edit_button", {}),
-                keys=["edit"],
-                default=self._DEFAULT_EDIT_BUTTON_SELECTORS,
-            )
+            # 方案1：使用 JavaScript 直接定位并点击第 index 个编辑按钮
+            clicked = await self._click_edit_button_by_js(page, index)
+            if clicked:
+                return True
 
-            # 滚动到目标位置
+            # 方案2：如果 JS 方式失败且启用了滚动，尝试滚动后定位
             if enable_scroll:
                 from ...utils.scroll_helper import scroll_to_product_position
 
-                logger.info(f"滚动到商品 #{index + 1} 的位置")
+                logger.info(f"JS 定位失败，尝试滚动到商品 #{index + 1}")
                 await scroll_to_product_position(page, target_index=index)
                 await page.wait_for_timeout(500)
 
-            # 核心：通过 translateY 值定位正确的行
-            target_row = await self._find_row_by_translate_y(page, index)
-            if target_row:
-                clicked = await self._click_edit_button_in_row(
-                    page, target_row, edit_selectors, index
-                )
+                # 滚动后再次尝试 JS 定位（此时目标应该在视口内）
+                clicked = await self._click_edit_button_by_js(page, 0)  # 滚动后点击第一个
                 if clicked:
                     return True
-                logger.debug(f"translateY 定位的行点击失败，尝试其他方法")
-
-            # 回退方案1：找视口内的第一个可见行
-            first_visible_row = await self._find_first_visible_row(page)
-            if first_visible_row:
-                clicked = await self._click_edit_button_in_row(
-                    page, first_visible_row, edit_selectors, index
-                )
-                if clicked:
-                    return True
-
-            # 回退方案2：直接点击第一个可见的编辑按钮
-            logger.debug("基于行定位失败，尝试直接点击可见的编辑按钮")
-            for selector in edit_selectors:
-                try:
-                    buttons = page.locator(selector)
-                    count = await buttons.count()
-                    if count == 0:
-                        continue
-
-                    button = buttons.first
-                    with suppress(Exception):
-                        await button.scroll_into_view_if_needed()
-                    await button.wait_for(state="visible", timeout=2_000)
-                    await button.click()
-                    logger.success("Edit button clicked using fallback selector {}", selector)
-                    return True
-                except Exception as exc:
-                    logger.debug("Fallback edit selector {} failed: {}", selector, exc)
-                    continue
 
             logger.error("No matching edit button found for index {}", index)
             return False
@@ -836,105 +799,76 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
             logger.error(f"Failed to click edit button: {exc}")
             return False
 
-    async def _find_row_by_translate_y(self, page: Page, index: int):
-        """通过 translateY 值定位 vue-recycle-scroller 中的行。
+    async def _click_edit_button_by_js(self, page: Page, index: int) -> bool:
+        """使用 JavaScript 直接定位并点击第 index 个商品的编辑按钮。
 
-        vue-recycle-scroller 使用 transform: translateY(N*128px) 来定位行。
-        滚动后，目标行的 translateY 应该接近 0（在视口顶部）。
+        通过 JS 获取所有可见行，按 translateY 排序后点击目标。
 
         Args:
             page: Playwright 页面对象
-            index: 目标商品索引
+            index: 目标商品索引（视觉顺序，0-based）
 
         Returns:
-            找到的行 Locator，或 None
+            是否成功点击
         """
         try:
-            # 获取所有虚拟滚动行
-            virtual_rows = page.locator(self._VIRTUAL_ROW_SELECTOR)
-            count = await virtual_rows.count()
-            logger.debug(f"虚拟滚动行总数: {count}")
+            # JavaScript：获取所有可见行，按 translateY 排序，点击第 index 个的编辑按钮
+            js_code = """
+            (index) => {
+                // 获取所有虚拟滚动行
+                const rows = document.querySelectorAll('.vue-recycle-scroller__item-view');
+                
+                // 筛选可见行（translateY >= 0）并解析位置
+                const visibleRows = [];
+                rows.forEach(row => {
+                    const style = row.getAttribute('style') || '';
+                    const match = style.match(/translateY\\((-?\\d+(?:\\.\\d+)?)\\s*(?:px)?\\s*\\)/);
+                    if (match) {
+                        const y = parseFloat(match[1]);
+                        if (y >= 0) {
+                            visibleRows.push({ row, y });
+                        }
+                    }
+                });
+                
+                // 按 translateY 排序（视觉顺序）
+                visibleRows.sort((a, b) => a.y - b.y);
+                
+                if (index >= visibleRows.length) {
+                    return { success: false, error: `Index ${index} out of range (${visibleRows.length} visible rows)` };
+                }
+                
+                // 获取目标行
+                const targetRow = visibleRows[index].row;
+                
+                // 在行内查找编辑按钮
+                const editBtn = targetRow.querySelector('.J_commonCollectBoxEdit') ||
+                                targetRow.querySelector('.J_collectBoxEdit') ||
+                                targetRow.querySelector('button:has-text("编辑")') ||
+                                targetRow.querySelector('button');
+                
+                if (!editBtn) {
+                    return { success: false, error: 'Edit button not found in row' };
+                }
+                
+                // 强制点击
+                editBtn.click();
+                return { success: true, translateY: visibleRows[index].y };
+            }
+            """
 
-            if count == 0:
-                return None
+            result = await page.evaluate(js_code, index)
 
-            # 找到 translateY 最小且 >= 0 的行（即视口中的第一行）
-            min_translate_y = float('inf')
-            target_row = None
+            if result.get("success"):
+                logger.success(f"✓ JS 直接点击编辑按钮成功，索引={index}, translateY={result.get('translateY')}px")
+                return True
+            else:
+                logger.debug(f"JS 点击失败: {result.get('error')}")
+                return False
 
-            for i in range(count):
-                row = virtual_rows.nth(i)
-                try:
-                    style = await row.get_attribute("style") or ""
-                    # 解析 translateY 值
-                    translate_y = self._parse_translate_y(style)
-                    
-                    # 跳过被回收的行（translateY = -9999px）
-                    if translate_y < 0:
-                        continue
-
-                    # 找 translateY 最小的行（视口顶部的行）
-                    if translate_y < min_translate_y:
-                        min_translate_y = translate_y
-                        target_row = row
-                except Exception:
-                    continue
-
-            if target_row:
-                logger.debug(f"找到目标行，translateY={min_translate_y}px")
-                # 返回行内的 .pro-virtual-table__row-body
-                return target_row.locator(self._ROW_SELECTOR).first
-
-            return None
         except Exception as exc:
-            logger.debug(f"通过 translateY 定位失败: {exc}")
-            return None
-
-    async def _find_first_visible_row(self, page: Page):
-        """找到视口内的第一个可见行。
-
-        Returns:
-            第一个可见行的 Locator，或 None
-        """
-        try:
-            rows = page.locator(self._ROW_SELECTOR)
-            count = await rows.count()
-
-            for i in range(min(count, 5)):
-                row = rows.nth(i)
-                try:
-                    # 检查行是否可见
-                    is_visible = await row.is_visible()
-                    if is_visible:
-                        # 检查是否在视口内
-                        box = await row.bounding_box()
-                        if box and box["y"] >= 0:
-                            return row
-                except Exception:
-                    continue
-
-            # 如果都不在视口内，返回第一个
-            return rows.first if count > 0 else None
-        except Exception as exc:
-            logger.debug(f"查找可见行失败: {exc}")
-            return None
-
-    @staticmethod
-    def _parse_translate_y(style: str) -> float:
-        """从 style 属性中解析 translateY 值。
-
-        Args:
-            style: 元素的 style 属性字符串
-
-        Returns:
-            translateY 的像素值，解析失败返回 -9999
-        """
-        import re
-        # 匹配 translateY(Npx) 或 translateY(N)
-        match = re.search(r"translateY\((-?\d+(?:\.\d+)?)\s*(?:px)?\s*\)", style)
-        if match:
-            return float(match.group(1))
-        return -9999
+            logger.debug(f"JS 点击异常: {exc}")
+            return False
 
     async def _click_edit_button_in_row(
         self,
