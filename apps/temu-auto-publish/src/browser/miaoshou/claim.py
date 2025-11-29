@@ -1017,11 +1017,39 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
         success_count = 0
         fail_count = 0
 
+        async def _wait_for_virtual_list_ready() -> bool:
+            """等待虚拟滚动列表重新加载完成。"""
+            for _ in range(10):  # 最多等待 5 秒
+                try:
+                    has_rows = await page.evaluate("""
+                        () => {
+                            const rows = document.querySelectorAll('.vue-recycle-scroller__item-view');
+                            let visibleCount = 0;
+                            rows.forEach(row => {
+                                const style = row.getAttribute('style') || '';
+                                const match = style.match(/translateY\\((-?\\d+(?:\\.\\d+)?)\\s*(?:px)?\\s*\\)/);
+                                if (match && parseFloat(match[1]) >= 0) visibleCount++;
+                            });
+                            return visibleCount > 0;
+                        }
+                    """)
+                    if has_rows:
+                        return True
+                except Exception:
+                    pass
+                await page.wait_for_timeout(500)
+            return False
+
         for idx in indexes:
             logger.info(f"正在认领索引 {idx} 的商品（共 {repeat_per_product} 次）...")
             product_success = 0
 
             for click_num in range(repeat_per_product):
+                # 每次点击前确保虚拟列表已加载
+                if click_num > 0:
+                    if not await _wait_for_virtual_list_ready():
+                        logger.warning(f"索引 {idx} 第 {click_num + 1} 次: 虚拟列表未就绪，尝试继续")
+
                 result = await self._click_claim_button_in_row_by_js(page, idx)
 
                 if result.get("success"):
@@ -1030,15 +1058,17 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         f"索引 {idx} 第 {click_num + 1}/{repeat_per_product} 次认领成功, "
                         f"选项={result.get('optionText')}"
                     )
-                    # 等待认领操作完成
-                    await page.wait_for_timeout(600)
+                    # 等待认领操作完成，页面可能会刷新
+                    await page.wait_for_timeout(800)
                 else:
                     logger.warning(
                         f"索引 {idx} 第 {click_num + 1}/{repeat_per_product} 次认领失败: "
                         f"{result.get('error')}"
                     )
-                    # 失败后稍等再重试
-                    await page.wait_for_timeout(300)
+                    # 失败后等待页面恢复
+                    await page.wait_for_timeout(500)
+                    # 尝试等待虚拟列表重新加载
+                    await _wait_for_virtual_list_ready()
 
             if product_success > 0:
                 success_count += 1
@@ -1048,6 +1078,9 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
             else:
                 fail_count += 1
                 logger.error(f"✗ 索引 {idx} 认领全部失败")
+
+            # 每个商品处理完后，等待页面稳定再处理下一个
+            await _wait_for_virtual_list_ready()
 
         logger.info(
             f"批量认领完成: 成功商品={success_count}, 失败商品={fail_count}, "
