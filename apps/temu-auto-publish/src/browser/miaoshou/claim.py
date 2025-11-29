@@ -267,7 +267,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
             js_code = """
             async (indexes) => {
                 const ROW_HEIGHT = 128;
-                const MAX_SCROLL_ATTEMPTS = 5;
+                const MAX_SCROLL_ATTEMPTS = 8;
                 
                 // 检查是否为 page-mode（页面级滚动）
                 const recycleScroller = document.querySelector('.vue-recycle-scroller');
@@ -289,56 +289,69 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                     return visibleRows;
                 };
                 
-                // 获取滚动容器和当前滚动位置
-                let scrollContainer = null;
-                const getScrollContainer = () => {
-                    if (scrollContainer) return scrollContainer;
-                    if (isPageMode) {
-                        let scrollParent = recycleScroller.parentElement;
-                        while (scrollParent && scrollParent !== document.body) {
-                            const style = window.getComputedStyle(scrollParent);
-                            if ((style.overflowY === 'auto' || style.overflowY === 'scroll') && 
-                                scrollParent.scrollHeight > scrollParent.clientHeight) {
-                                scrollContainer = scrollParent;
-                                return scrollContainer;
+                // 查找所有可能的滚动容器
+                const findAllScrollContainers = () => {
+                    const containers = [];
+                    
+                    // 1. 尝试找 .main-container 或类似的容器
+                    const mainContainer = document.querySelector('.main-container') ||
+                                         document.querySelector('.app-main') ||
+                                         document.querySelector('.el-main') ||
+                                         document.querySelector('[class*="main"]');
+                    if (mainContainer && mainContainer.scrollHeight > mainContainer.clientHeight) {
+                        containers.push(mainContainer);
+                    }
+                    
+                    // 2. 从 recycleScroller 向上查找所有可滚动容器
+                    if (recycleScroller) {
+                        let parent = recycleScroller.parentElement;
+                        while (parent && parent !== document.body && parent !== document.documentElement) {
+                            const style = window.getComputedStyle(parent);
+                            const overflowY = style.overflowY;
+                            if ((overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'overlay') && 
+                                parent.scrollHeight > parent.clientHeight) {
+                                if (!containers.includes(parent)) {
+                                    containers.push(parent);
+                                }
                             }
-                            scrollParent = scrollParent.parentElement;
+                            parent = parent.parentElement;
                         }
-                        scrollContainer = window;
-                    } else {
-                        scrollContainer = recycleScroller;
                     }
-                    return scrollContainer;
+                    
+                    return containers;
                 };
                 
-                const getCurrentScrollTop = () => {
-                    const container = getScrollContainer();
-                    return container === window ? window.scrollY : container.scrollTop;
-                };
-                
-                // 滚动方法
-                const scrollBy = async (delta) => {
-                    const container = getScrollContainer();
-                    if (container === window) {
-                        window.scrollBy({ top: delta, behavior: 'instant' });
-                    } else {
+                // 滚动所有可能的容器
+                const scrollAllContainers = async (delta) => {
+                    const containers = findAllScrollContainers();
+                    
+                    // 同时滚动所有容器
+                    for (const container of containers) {
+                        const oldScrollTop = container.scrollTop;
                         container.scrollTop += delta;
+                        // 触发 scroll 事件
+                        container.dispatchEvent(new Event('scroll', { bubbles: true }));
                     }
-                    await new Promise(r => setTimeout(r, 300));
-                };
-                
-                const scrollToPosition = async (targetScrollTop) => {
-                    const container = getScrollContainer();
-                    if (container === window) {
-                        window.scrollTo({ top: targetScrollTop, behavior: 'instant' });
-                    } else {
-                        container.scrollTop = targetScrollTop;
+                    
+                    // 也尝试滚动 window
+                    window.scrollBy({ top: delta, behavior: 'instant' });
+                    
+                    // 模拟 wheel 事件（某些虚拟滚动库依赖此事件）
+                    if (recycleScroller) {
+                        const wheelEvent = new WheelEvent('wheel', {
+                            deltaY: delta,
+                            deltaMode: 0,
+                            bubbles: true
+                        });
+                        recycleScroller.dispatchEvent(wheelEvent);
                     }
-                    await new Promise(r => setTimeout(r, 300));
+                    
+                    await new Promise(r => setTimeout(r, 400));
                 };
                 
                 let selected = 0;
                 const results = [];
+                let debugInfo = { containers: findAllScrollContainers().length };
                 
                 for (const idx of indexes) {
                     const targetTranslateY = idx * ROW_HEIGHT;
@@ -346,6 +359,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                     let matchedY = -1;
                     let attempts = 0;
                     let lastMaxY = -1;
+                    let scrolledTotal = 0;
                     
                     // 循环滚动直到目标行可见
                     while (!targetRow && attempts < MAX_SCROLL_ATTEMPTS) {
@@ -353,7 +367,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         
                         if (visibleRows.length === 0) {
                             attempts++;
-                            await scrollToPosition(targetTranslateY);
+                            await scrollAllContainers(ROW_HEIGHT * 3);
                             continue;
                         }
                         
@@ -375,23 +389,25 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         
                         if (targetTranslateY > maxVisibleY) {
                             // 目标在下方，向下滚动
-                            // 检查是否滚动卡住了（maxVisibleY 没有变化）
+                            let scrollAmount;
                             if (maxVisibleY === lastMaxY) {
                                 // 滚动卡住，尝试更大的滚动量
-                                await scrollBy(ROW_HEIGHT * 3);
+                                scrollAmount = ROW_HEIGHT * 5;
                             } else {
-                                const scrollAmount = targetTranslateY - maxVisibleY + ROW_HEIGHT * 2;
-                                await scrollBy(scrollAmount);
+                                scrollAmount = targetTranslateY - maxVisibleY + ROW_HEIGHT * 3;
                             }
+                            await scrollAllContainers(scrollAmount);
+                            scrolledTotal += scrollAmount;
                             lastMaxY = maxVisibleY;
                         } else if (targetTranslateY < minVisibleY) {
                             // 目标在上方，向上滚动
-                            const scrollAmount = targetTranslateY - minVisibleY - ROW_HEIGHT;
-                            await scrollBy(scrollAmount);
+                            const scrollAmount = targetTranslateY - minVisibleY - ROW_HEIGHT * 2;
+                            await scrollAllContainers(scrollAmount);
+                            scrolledTotal += scrollAmount;
                         } else {
-                            // 目标应该在范围内但没找到，可能是误差问题
-                            // 尝试微调滚动
-                            await scrollBy(ROW_HEIGHT);
+                            // 目标应该在范围内但没找到，微调
+                            await scrollAllContainers(ROW_HEIGHT);
+                            scrolledTotal += ROW_HEIGHT;
                         }
                         
                         attempts++;
@@ -405,7 +421,8 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                             error: 'Target row not found after scroll attempts', 
                             visibleYs: finalVisibleRows.map(r => r.y),
                             targetY: targetTranslateY,
-                            attempts
+                            attempts,
+                            scrolledTotal
                         });
                         continue;
                     }
@@ -424,7 +441,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                     }
                 }
                 
-                return { selected, isPageMode, results };
+                return { selected, isPageMode, results, debugInfo };
             }
             """
             result = await page.evaluate(js_code, indexes)
