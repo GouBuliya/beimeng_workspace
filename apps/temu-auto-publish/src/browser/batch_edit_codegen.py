@@ -1129,20 +1129,19 @@ async def _apply_user_filter(page: Page, filter_owner: str) -> bool:
     Returns:
         是否成功应用筛选。
     """
-    # 定义筛选输入框选择器（Temu 全托管采集箱可能使用的选择器）
+    # 定义筛选输入框选择器（优先使用精确选择器）
     user_filter_selectors = [
+        # Temu 全托管采集箱精确选择器（jx-select combobox 输入框）
+        "input.jx-select__input[role='combobox']",
+        "input.jx-select__input.is-small",
+        # 通过创建人员标签定位
+        "label:has-text('创建人员') ~ .jx-select input.jx-select__input",
+        "label:has-text('创建人') ~ .jx-select input.jx-select__input",
+        # 通用备选选择器
         "input[placeholder*='创建人']",
         "input[placeholder*='创建人员']",
-        "input[placeholder*='请输入创建']",
-        "label:has-text('创建人员') + .jx-select input",
-        "label:has-text('创建人') + .jx-select input",
-        "xpath=//label[contains(text(), '创建人员')]/following-sibling::*//input",
-        "xpath=//label[contains(text(), '创建人')]/following-sibling::*//input",
         ".jx-select:has-text('创建人员') input",
         ".jx-select:has-text('创建人') input",
-        # Temu 全托管采集箱特定选择器
-        ".el-select input[placeholder*='创建']",
-        ".jx-select input[placeholder*='创建']",
     ]
 
     filter_applied = False
@@ -1154,18 +1153,22 @@ async def _apply_user_filter(page: Page, filter_owner: str) -> bool:
 
             logger.debug(f"尝试使用选择器筛选: {selector}")
             await element.click()
+            await page.wait_for_timeout(200)
+            
+            # 清空并输入创建人员名称
             await element.fill("")
             await element.type(filter_owner, delay=80)
             
             # 等待下拉选项出现
-            await page.wait_for_timeout(500)
+            await page.wait_for_timeout(800)
 
             # 尝试多种下拉选项选择器
             option_selectors = [
                 f"li.el-select-dropdown__item:has-text('{filter_owner}')",
                 f".jx-select-dropdown__item:has-text('{filter_owner}')",
+                f"[role='option']:has-text('{filter_owner}')",
+                f"li[role='option']:has-text('{filter_owner}')",
                 f"li:has-text('{filter_owner}')",
-                f".el-select-dropdown__item:has-text('{filter_owner}')",
             ]
 
             option_clicked = False
@@ -1174,6 +1177,7 @@ async def _apply_user_filter(page: Page, filter_owner: str) -> bool:
                 if await option_locator.count():
                     await option_locator.click()
                     option_clicked = True
+                    logger.debug(f"点击用户选项: {opt_selector}")
                     break
 
             if not option_clicked:
@@ -1183,11 +1187,23 @@ async def _apply_user_filter(page: Page, filter_owner: str) -> bool:
             # 等待下拉关闭
             await page.wait_for_timeout(300)
 
-            # 点击搜索按钮
-            search_btn = page.locator("button:has-text('搜索')").first
-            if await search_btn.count():
-                await search_btn.click()
-                await page.wait_for_timeout(1000)  # 等待搜索结果加载
+            # 点击搜索按钮（优先使用精确选择器）
+            search_btn_selectors = [
+                "button.J_queryFormSearch",  # 精确类名选择器
+                "button[type='submit']:has-text('搜索')",
+                "button.jx-button--primary:has-text('搜索')",
+                "button:has-text('搜索')",
+            ]
+
+            for search_selector in search_btn_selectors:
+                search_btn = page.locator(search_selector).first
+                if await search_btn.count():
+                    await search_btn.click()
+                    logger.debug(f"点击搜索按钮: {search_selector}")
+                    break
+
+            # 等待搜索结果加载
+            await page.wait_for_timeout(1500)
 
             filter_applied = True
             logger.success(f"✓ 二次编辑人员筛选成功: {filter_owner}")
