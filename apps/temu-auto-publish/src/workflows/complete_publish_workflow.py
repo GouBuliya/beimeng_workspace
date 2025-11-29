@@ -1105,14 +1105,15 @@ class CompletePublishWorkflow:
         await miaoshou_ctrl.refresh_collection_box(page, filter_owner=filter_owner)
 
         selection_count = min(len(edited_products), 5)
-        target_indexes = [
-            product.index for product in edited_products[:selection_count] if product.index >= 0
-        ]
-        if len(target_indexes) < selection_count:
-            logger.warning(
-                "Incomplete product index mapping detected, fallback to sequential selection",
-            )
-            target_indexes = list(range(selection_count))
+        # 修复：认领阶段使用相对索引（0-based），而不是全局索引
+        # 因为 refresh_collection_box 已经筛选了用户，页面只显示该用户的商品
+        # 筛选后的商品列表从索引 0 开始，所以应该选择前 N 个商品
+        target_indexes = list(range(selection_count))
+        logger.info(
+            "认领阶段: 使用相对索引 %s (筛选后的商品列表，共 %s 条)",
+            target_indexes,
+            selection_count,
+        )
 
         selection_ok = await miaoshou_ctrl.select_products_for_claim(
             page,
