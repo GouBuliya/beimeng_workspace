@@ -749,16 +749,15 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
     ) -> bool:
         """Click the edit button of a product at a specific index.
 
-        使用基于行的定位策略：
-        1. 定位第N个商品行
-        2. 滚动使该行可见
-        3. 在该行内查找并点击编辑按钮
-
-        这种方式比按钮全局索引更可靠，尤其是在虚拟滚动列表中。
+        针对虚拟滚动列表的定位策略：
+        1. 虚拟滚动列表只渲染可见区域的行（如10行）
+        2. DOM 中的 rows.nth(i) 不等于"第 i 个商品"
+        3. 必须先滚动到目标位置，让目标商品出现在视口中
+        4. 滚动后，点击视口中第一行的编辑按钮
 
         Args:
             page: Active Playwright page instance.
-            index: Zero-based index of the product in the grid.
+            index: Zero-based index of the product in the grid (全局索引).
             enable_scroll: 是否启用滚动到目标行（默认启用）
 
         Returns:
@@ -780,58 +779,51 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                 default=self._DEFAULT_EDIT_BUTTON_SELECTORS,
             )
 
-            # 方案1：基于行定位（更可靠）
+            # 关键：虚拟滚动列表中，必须先滚动到目标位置
+            # 即使 index=0，如果之前滚动过，也需要先滚动回顶部
+            if enable_scroll:
+                from ...utils.scroll_helper import scroll_to_product_position
+
+                logger.info(f"滚动到商品 #{index + 1} 的位置")
+                await scroll_to_product_position(page, target_index=index)
+                await page.wait_for_timeout(500)  # 等待 DOM 更新
+
+            # 滚动后，获取当前可见的行
             rows = page.locator(self._ROW_SELECTOR)
             row_count = await rows.count()
-            logger.debug(f"当前可见商品行数: {row_count}, 目标索引: {index}")
+            logger.debug(f"当前可见商品行数: {row_count}")
 
-            if row_count > index:
-                # 直接定位目标行
-                target_row = rows.nth(index)
+            if row_count == 0:
+                logger.error("无可见商品行")
+                return False
+
+            # 虚拟滚动列表中，滚动到目标位置后，目标商品应该在第一行
+            # 但为了保险，我们检查前几行
+            for row_offset in range(min(3, row_count)):
+                target_row = rows.nth(row_offset)
                 clicked = await self._click_edit_button_in_row(
                     page, target_row, edit_selectors, index
                 )
                 if clicked:
                     return True
+                logger.debug(f"行偏移 {row_offset} 的编辑按钮点击失败，尝试下一行")
 
-            # 如果行数不足且启用滚动，使用精确滚动
-            if enable_scroll and index >= 5:
-                logger.info(f"当前行数 {row_count} 不足，使用精确滚动到索引 {index}")
-                from ...utils.scroll_helper import scroll_to_product_position
-
-                await scroll_to_product_position(page, target_index=index)
-
-                # 滚动后重新定位 - 虚拟列表中，滚动后 DOM 会更新
-                # 此时第一个可见行应该就是目标行
-                await page.wait_for_timeout(500)  # 等待 DOM 更新
-                rows = page.locator(self._ROW_SELECTOR)
-                row_count = await rows.count()
-                logger.debug(f"滚动后可见行数: {row_count}")
-
-                if row_count > 0:
-                    # 在虚拟滚动列表中，滚动后第一行就是目标行
-                    target_row = rows.first
-                    clicked = await self._click_edit_button_in_row(
-                        page, target_row, edit_selectors, index
-                    )
-                    if clicked:
-                        return True
-
-            # 方案2：回退到按钮全局索引（兼容旧逻辑）
-            logger.debug("基于行定位失败，回退到按钮全局索引")
+            # 回退：直接点击第一个可见的编辑按钮（兼容非虚拟滚动列表）
+            logger.debug("基于行定位失败，尝试直接点击可见的编辑按钮")
             for selector in edit_selectors:
                 try:
                     buttons = page.locator(selector)
                     count = await buttons.count()
-                    if count <= index:
+                    if count == 0:
                         continue
 
-                    button = buttons.nth(index)
+                    # 点击第一个可见的按钮
+                    button = buttons.first
                     with suppress(Exception):
                         await button.scroll_into_view_if_needed()
                     await button.wait_for(state="visible", timeout=2_000)
                     await button.click()
-                    logger.success("Edit button clicked using fallback selector {}", selector)
+                    logger.success("Edit button clicked using fallback (first visible) selector {}", selector)
                     return True
                 except Exception as exc:
                     logger.debug("Fallback edit selector {} failed: {}", selector, exc)
