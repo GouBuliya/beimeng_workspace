@@ -267,6 +267,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
             js_code = """
             async (indexes) => {
                 const ROW_HEIGHT = 128;
+                const MAX_SCROLL_ATTEMPTS = 5;
                 
                 // 检查是否为 page-mode（页面级滚动）
                 const recycleScroller = document.querySelector('.vue-recycle-scroller');
@@ -288,68 +289,123 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                     return visibleRows;
                 };
                 
-                // 查找滚动方法
-                const scrollToPosition = async (targetScrollTop) => {
+                // 获取滚动容器和当前滚动位置
+                let scrollContainer = null;
+                const getScrollContainer = () => {
+                    if (scrollContainer) return scrollContainer;
                     if (isPageMode) {
                         let scrollParent = recycleScroller.parentElement;
-                        let foundScrollable = false;
-                        
                         while (scrollParent && scrollParent !== document.body) {
                             const style = window.getComputedStyle(scrollParent);
-                            const overflowY = style.overflowY;
-                            if ((overflowY === 'auto' || overflowY === 'scroll') && 
+                            if ((style.overflowY === 'auto' || style.overflowY === 'scroll') && 
                                 scrollParent.scrollHeight > scrollParent.clientHeight) {
-                                scrollParent.scrollTop = targetScrollTop;
-                                foundScrollable = true;
-                                break;
+                                scrollContainer = scrollParent;
+                                return scrollContainer;
                             }
                             scrollParent = scrollParent.parentElement;
                         }
-                        
-                        if (!foundScrollable) {
-                            window.scrollTo({ top: targetScrollTop, behavior: 'instant' });
-                        }
-                    } else if (recycleScroller) {
-                        recycleScroller.scrollTop = targetScrollTop;
+                        scrollContainer = window;
+                    } else {
+                        scrollContainer = recycleScroller;
                     }
-                    await new Promise(r => setTimeout(r, 500));
+                    return scrollContainer;
+                };
+                
+                const getCurrentScrollTop = () => {
+                    const container = getScrollContainer();
+                    return container === window ? window.scrollY : container.scrollTop;
+                };
+                
+                // 滚动方法
+                const scrollBy = async (delta) => {
+                    const container = getScrollContainer();
+                    if (container === window) {
+                        window.scrollBy({ top: delta, behavior: 'instant' });
+                    } else {
+                        container.scrollTop += delta;
+                    }
+                    await new Promise(r => setTimeout(r, 300));
+                };
+                
+                const scrollToPosition = async (targetScrollTop) => {
+                    const container = getScrollContainer();
+                    if (container === window) {
+                        window.scrollTo({ top: targetScrollTop, behavior: 'instant' });
+                    } else {
+                        container.scrollTop = targetScrollTop;
+                    }
+                    await new Promise(r => setTimeout(r, 300));
                 };
                 
                 let selected = 0;
                 const results = [];
                 
                 for (const idx of indexes) {
-                    const targetScrollTop = idx * ROW_HEIGHT;
-                    
-                    // 滚动到目标位置
-                    await scrollToPosition(targetScrollTop);
-                    
-                    // 获取可见行
-                    const visibleRows = getVisibleRows();
-                    
-                    // 直接使用 idx * ROW_HEIGHT 计算目标 translateY（无偏移）
                     const targetTranslateY = idx * ROW_HEIGHT;
-                    
-                    // 按 translateY 匹配目标行
                     let targetRow = null;
                     let matchedY = -1;
-                    for (const item of visibleRows) {
-                        const diff = Math.abs(item.y - targetTranslateY);
-                        // 允许半行高度的误差
-                        if (diff < ROW_HEIGHT / 2) {
-                            targetRow = item.row;
-                            matchedY = item.y;
-                            break;
+                    let attempts = 0;
+                    let lastMaxY = -1;
+                    
+                    // 循环滚动直到目标行可见
+                    while (!targetRow && attempts < MAX_SCROLL_ATTEMPTS) {
+                        const visibleRows = getVisibleRows();
+                        
+                        if (visibleRows.length === 0) {
+                            attempts++;
+                            await scrollToPosition(targetTranslateY);
+                            continue;
                         }
+                        
+                        // 检查目标行是否已经可见
+                        for (const item of visibleRows) {
+                            const diff = Math.abs(item.y - targetTranslateY);
+                            if (diff < ROW_HEIGHT / 2) {
+                                targetRow = item.row;
+                                matchedY = item.y;
+                                break;
+                            }
+                        }
+                        
+                        if (targetRow) break;
+                        
+                        // 目标行不可见，需要滚动
+                        const maxVisibleY = Math.max(...visibleRows.map(r => r.y));
+                        const minVisibleY = Math.min(...visibleRows.map(r => r.y));
+                        
+                        if (targetTranslateY > maxVisibleY) {
+                            // 目标在下方，向下滚动
+                            // 检查是否滚动卡住了（maxVisibleY 没有变化）
+                            if (maxVisibleY === lastMaxY) {
+                                // 滚动卡住，尝试更大的滚动量
+                                await scrollBy(ROW_HEIGHT * 3);
+                            } else {
+                                const scrollAmount = targetTranslateY - maxVisibleY + ROW_HEIGHT * 2;
+                                await scrollBy(scrollAmount);
+                            }
+                            lastMaxY = maxVisibleY;
+                        } else if (targetTranslateY < minVisibleY) {
+                            // 目标在上方，向上滚动
+                            const scrollAmount = targetTranslateY - minVisibleY - ROW_HEIGHT;
+                            await scrollBy(scrollAmount);
+                        } else {
+                            // 目标应该在范围内但没找到，可能是误差问题
+                            // 尝试微调滚动
+                            await scrollBy(ROW_HEIGHT);
+                        }
+                        
+                        attempts++;
                     }
                     
                     if (!targetRow) {
+                        const finalVisibleRows = getVisibleRows();
                         results.push({ 
                             idx, 
                             success: false, 
-                            error: 'Target row not found', 
-                            visibleYs: visibleRows.map(r => r.y),
-                            targetY: targetTranslateY
+                            error: 'Target row not found after scroll attempts', 
+                            visibleYs: finalVisibleRows.map(r => r.y),
+                            targetY: targetTranslateY,
+                            attempts
                         });
                         continue;
                     }
@@ -362,9 +418,9 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                     if (checkbox) {
                         checkbox.click();
                         selected++;
-                        results.push({ idx, success: true, matchedY });
+                        results.push({ idx, success: true, matchedY, attempts });
                     } else {
-                        results.push({ idx, success: false, error: 'Checkbox not found', matchedY });
+                        results.push({ idx, success: false, error: 'Checkbox not found', matchedY, attempts });
                     }
                 }
                 
