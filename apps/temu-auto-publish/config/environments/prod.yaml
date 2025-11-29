@@ -63,3 +63,8 @@ workflow:
   auto_resume: true  # 生产环境自动恢复
   checkpoint_interval: 5
 
+# 认证服务配置
+auth:
+  server_url: "http://121.199.32.74:8001"
+  timeout: 10.0
+

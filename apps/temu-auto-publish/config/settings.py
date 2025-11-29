@@ -165,6 +165,20 @@ class WorkflowConfig(BaseSettings):
     checkpoint_interval: int = Field(default=5, ge=1, description="检查点间隔")
 
 
+class AuthConfig(BaseSettings):
+    """认证服务配置.
+    
+    Attributes:
+        server_url: 认证服务器地址
+        timeout: 请求超时时间（秒）
+    """
+    server_url: str = Field(
+        default="http://121.199.32.74:8001",
+        description="认证服务器地址"
+    )
+    timeout: float = Field(default=10.0, description="请求超时时间（秒）")
+
+
 # ========== 主配置类 ==========
 
 class Settings(BaseSettings):
@@ -227,6 +241,7 @@ class Settings(BaseSettings):
     metrics: MetricsConfig = Field(default_factory=MetricsConfig)
     business: BusinessConfig = Field(default_factory=BusinessConfig)
     workflow: WorkflowConfig = Field(default_factory=WorkflowConfig)
+    auth: AuthConfig = Field(default_factory=AuthConfig)
     
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -352,6 +367,7 @@ def create_settings(env: Optional[str] = None) -> Settings:
         metrics=MetricsConfig(**yaml_config.get("metrics", {})),
         business=BusinessConfig(**yaml_config.get("business", {})),
         workflow=WorkflowConfig(**yaml_config.get("workflow", {})),
+        auth=AuthConfig(**yaml_config.get("auth", {})),
     )
     
     # 确保目录存在

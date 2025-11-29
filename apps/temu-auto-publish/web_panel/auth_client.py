@@ -8,20 +8,22 @@
     - refresh_token(): 刷新令牌
     - get_user_info(): 获取用户信息
 @GOTCHAS:
-  - 需要配置 AUTH_SERVER_URL 环境变量指向认证服务器
+  - 认证服务器地址通过 config/settings.py 的 auth.server_url 配置
   - 令牌存储在内存中，重启后需要重新登录
 @DEPENDENCIES:
+  - 内部: config.settings
   - 外部: httpx, pydantic
 """
 
 from __future__ import annotations
 
-import os
 from typing import Any
 
 import httpx
 from loguru import logger
 from pydantic import BaseModel
+
+from config.settings import settings
 
 
 class TokenData(BaseModel):
@@ -54,17 +56,15 @@ class VerifyResult(BaseModel):
 class AuthClient:
     """认证服务客户端."""
 
-    def __init__(self, base_url: str | None = None, timeout: float = 10.0) -> None:
+    def __init__(self, base_url: str | None = None, timeout: float | None = None) -> None:
         """初始化认证客户端.
 
         Args:
-            base_url: 认证服务器地址，默认从环境变量读取
-            timeout: 请求超时时间（秒）
+            base_url: 认证服务器地址，默认从配置文件读取
+            timeout: 请求超时时间（秒），默认从配置文件读取
         """
-        self.base_url = base_url or os.environ.get(
-            "AUTH_SERVER_URL", "http://localhost:8001"
-        )
-        self.timeout = timeout
+        self.base_url = base_url or settings.auth.server_url
+        self.timeout = timeout or settings.auth.timeout
         self._client: httpx.AsyncClient | None = None
 
     async def _get_client(self) -> httpx.AsyncClient:
