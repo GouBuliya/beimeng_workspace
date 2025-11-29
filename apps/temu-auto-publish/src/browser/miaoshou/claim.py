@@ -895,11 +895,19 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                 // 获取按钮关联的下拉菜单 ID（通过 aria-controls 属性）
                 const ariaControls = claimBtn.getAttribute('aria-controls');
                 
-                // 点击认领按钮
-                claimBtn.click();
+                // 模拟鼠标悬浮在"认领到"按钮上（hover 触发下拉菜单）
+                const hoverEvents = ['mouseenter', 'mouseover', 'pointerenter'];
+                for (const eventType of hoverEvents) {
+                    const event = new MouseEvent(eventType, {
+                        bubbles: true,
+                        cancelable: true,
+                        view: window
+                    });
+                    claimBtn.dispatchEvent(event);
+                }
                 
-                // 等待下拉菜单出现
-                await new Promise(r => setTimeout(r, 500));
+                // 等待下拉菜单出现（hover 触发需要时间）
+                await new Promise(r => setTimeout(r, 600));
                 
                 // 优先通过 aria-controls 关联的 ID 查找下拉菜单
                 let dropdown = null;
@@ -908,8 +916,8 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                     // 通过 ID 精确定位关联的下拉菜单
                     dropdown = document.getElementById(ariaControls);
                     if (dropdown && dropdown.offsetParent === null) {
-                        // 菜单存在但不可见，尝试等待
-                        await new Promise(r => setTimeout(r, 300));
+                        // 菜单存在但不可见，再等待一下
+                        await new Promise(r => setTimeout(r, 400));
                         dropdown = document.getElementById(ariaControls);
                     }
                 }
