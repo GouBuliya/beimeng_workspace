@@ -1142,19 +1142,23 @@ async def _apply_user_filter(page: Page, filter_owner: str) -> bool:
     except Exception:
         logger.warning("等待表格加载超时，继续尝试筛选")
 
-    # 方案1: 通过"创建人员"标签找到对应的 jx-select 组件
-    logger.info(f"尝试按创建人员筛选: {filter_owner}")
+    # 方案1: 通过"所属人员"标签找到对应的 jx-select 组件
+    logger.info(f"尝试按所属人员筛选: {filter_owner}")
     
     filter_applied = False
     
-    # 策略1: 找到包含"创建人员"文本的 form-item，然后定位其中的输入框
+    # 策略1: 找到包含"所属人员"文本的 form-item，然后定位其中的输入框
+    # 注意：Temu 全托管采集箱使用"所属人员"而不是"创建人员"
     try:
-        # 查找包含"创建人员"标签的表单项
+        # 查找包含"所属人员"标签的表单项
         form_item_selectors = [
+            ".jx-form-item:has(label:has-text('所属人员'))",
+            ".jx-form-item:has-text('所属人员')",
+            ".pro-form-item-wrapper:has(label:has-text('所属人员'))",
+            "div:has(> label:has-text('所属人员'))",
+            # 备选：创建人员
+            ".jx-form-item:has(label:has-text('创建人员'))",
             ".jx-form-item:has-text('创建人员')",
-            ".el-form-item:has-text('创建人员')",
-            ".pro-form-item:has-text('创建人员')",
-            "div:has(> label:has-text('创建人员'))",
         ]
         
         for form_selector in form_item_selectors:
@@ -1162,18 +1166,33 @@ async def _apply_user_filter(page: Page, filter_owner: str) -> bool:
             if await form_item.count() == 0:
                 continue
                 
-            logger.debug(f"找到创建人员表单项: {form_selector}")
+            logger.debug(f"找到人员筛选表单项: {form_selector}")
             
-            # 在该表单项内找到 jx-select 输入框
+            # 点击整个 jx-select 容器（而不是 input），避免被其他元素拦截
+            select_wrapper = form_item.locator(".jx-select__wrapper").first
+            if await select_wrapper.count() > 0:
+                await select_wrapper.click()
+                logger.debug("点击 jx-select__wrapper")
+            else:
+                # 备选：点击 jx-select 容器
+                select_container = form_item.locator(".jx-select").first
+                if await select_container.count() > 0:
+                    await select_container.click()
+                    logger.debug("点击 jx-select 容器")
+                else:
+                    # 最后备选：强制点击 input
+                    input_element = form_item.locator("input.jx-select__input").first
+                    if await input_element.count() > 0:
+                        await input_element.click(force=True)
+                        logger.debug("强制点击 input")
+                    else:
+                        continue
+            
+            await page.wait_for_timeout(300)
+            
+            # 在输入框中输入筛选内容
             input_element = form_item.locator("input.jx-select__input").first
-            if await input_element.count() == 0:
-                input_element = form_item.locator("input[role='combobox']").first
-            if await input_element.count() == 0:
-                input_element = form_item.locator(".jx-select input").first
-            
             if await input_element.count() > 0:
-                await input_element.click()
-                await page.wait_for_timeout(300)
                 await input_element.fill("")
                 await input_element.type(filter_owner, delay=80)
                 await page.wait_for_timeout(1000)
@@ -1192,31 +1211,34 @@ async def _apply_user_filter(page: Page, filter_owner: str) -> bool:
     except Exception as exc:
         logger.debug(f"策略1筛选失败: {exc}")
 
-    # 策略2: 备选方案 - 遍历所有 jx-select，找到第二个（通常是创建人员）
+    # 策略2: 备选方案 - 通过 label 文本直接定位
     if not filter_applied:
         try:
-            logger.debug("使用策略2: 定位第二个 jx-select 输入框")
-            all_selects = page.locator(".jx-select input.jx-select__input")
-            select_count = await all_selects.count()
-            logger.debug(f"页面上共有 {select_count} 个 jx-select 输入框")
+            logger.debug("使用策略2: 通过 label 文本直接定位所属人员")
             
-            # 通常第二个是创建人员筛选（第一个可能是其他筛选条件）
-            if select_count >= 2:
-                input_element = all_selects.nth(1)
-                await input_element.click()
-                await page.wait_for_timeout(300)
-                await input_element.fill("")
-                await input_element.type(filter_owner, delay=80)
-                await page.wait_for_timeout(1000)
-                
-                option_clicked = await _click_dropdown_option(page, filter_owner)
-                
-                if option_clicked:
-                    await page.wait_for_timeout(300)
-                    await _click_search_button(page)
-                    await page.wait_for_timeout(1500)
-                    filter_applied = True
-                    logger.success(f"✓ 二次编辑人员筛选成功(策略2): {filter_owner}")
+            # 找到"所属人员"标签，然后定位其父元素中的 jx-select
+            label = page.locator("label:has-text('所属人员')").first
+            if await label.count() > 0:
+                # 获取 label 的 for 属性，找到对应的 input
+                label_for = await label.get_attribute("for")
+                if label_for:
+                    input_element = page.locator(f"#{label_for}")
+                    if await input_element.count() > 0:
+                        # 点击 input 的父级 wrapper
+                        await input_element.click(force=True)
+                        await page.wait_for_timeout(300)
+                        await input_element.fill("")
+                        await input_element.type(filter_owner, delay=80)
+                        await page.wait_for_timeout(1000)
+                        
+                        option_clicked = await _click_dropdown_option(page, filter_owner)
+                        
+                        if option_clicked:
+                            await page.wait_for_timeout(300)
+                            await _click_search_button(page)
+                            await page.wait_for_timeout(1500)
+                            filter_applied = True
+                            logger.success(f"✓ 二次编辑人员筛选成功(策略2): {filter_owner}")
                     
         except Exception as exc:
             logger.debug(f"策略2筛选失败: {exc}")
