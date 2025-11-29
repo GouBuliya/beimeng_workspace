@@ -873,16 +873,18 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                 // 按 translateY 排序
                 visibleRows.sort((a, b) => a.y - b.y);
                 
-                // 找到目标行：translateY 等于 index * ROW_HEIGHT 的行
+                // 检测实际行高偏移：第一行的 Y 值对 ROW_HEIGHT 取模
+                const rowOffset = visibleRows.length > 0 ? (visibleRows[0].y % ROW_HEIGHT) : 0;
+                
+                // 使用检测到的偏移计算目标 translateY
                 let targetRow = null;
-                let targetTranslateY = index * ROW_HEIGHT;
+                let targetTranslateY = index * ROW_HEIGHT + rowOffset;
                 let matchedY = -1;
                 
                 for (const item of visibleRows) {
-                    // 允许一定误差（±10px）
-                    // 增大误差阈值到 64px（半行高度），容忍表头/padding偏移
+                    // 允许半行高度的误差
                     const diff = Math.abs(item.y - targetTranslateY);
-                    if (diff < 64) {
+                    if (diff < ROW_HEIGHT / 2) {
                         targetRow = item.row;
                         matchedY = item.y;
                         break;
@@ -899,7 +901,8 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                         targetScrollTop,
                         actualScrollTop,
                         rowCount: rows.length,
-                        visibleYs: visibleRows.map(r => r.y)
+                        visibleYs: visibleRows.map(r => r.y),
+                        detectedOffset: rowOffset
                     };
                 }
                 
@@ -926,7 +929,8 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                     actualScrollTop,
                     targetTranslateY,
                     matchedY,
-                    visibleCount: visibleRows.length
+                    visibleCount: visibleRows.length,
+                    detectedOffset: rowOffset
                 };
             }
             """
@@ -937,7 +941,7 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                 logger.success(
                     f"✓ JS 点击编辑按钮成功，索引={index}, 容器={result.get('scrollerInfo')}, "
                     f"page-mode={result.get('isPageMode')}, scrollTop={result.get('actualScrollTop')}px, "
-                    f"匹配Y={result.get('matchedY')}px"
+                    f"匹配Y={result.get('matchedY')}px, 偏移={result.get('detectedOffset')}px"
                 )
                 return True
             else:
@@ -945,7 +949,7 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                     f"JS 点击失败: {result.get('error')}, 容器={result.get('scrollerInfo')}, "
                     f"page-mode={result.get('isPageMode')}, 目标scrollTop={result.get('targetScrollTop')}, "
                     f"实际scrollTop={result.get('actualScrollTop')}, 行数={result.get('rowCount')}, "
-                    f"可见Y值={result.get('visibleYs')}"
+                    f"偏移={result.get('detectedOffset')}px, 可见Y值={result.get('visibleYs')}"
                 )
                 return False
 

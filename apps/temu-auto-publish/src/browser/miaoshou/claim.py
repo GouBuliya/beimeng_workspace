@@ -254,7 +254,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
         """使用 JavaScript 批量勾选复选框（带自动滚动）。
 
         支持 page-mode（页面级滚动）和容器级滚动两种模式。
-        按 translateY = index * 128 精确匹配目标行。
+        通过动态检测行高偏移来精确定位目标行。
 
         Args:
             page: Playwright 页面对象
@@ -272,10 +272,32 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                 const recycleScroller = document.querySelector('.vue-recycle-scroller');
                 const isPageMode = recycleScroller && recycleScroller.classList.contains('page-mode');
                 
+                // 获取所有可见行并检测实际行高偏移
+                const detectRowOffset = () => {
+                    const rows = document.querySelectorAll('.vue-recycle-scroller__item-view');
+                    const visibleRows = [];
+                    rows.forEach(row => {
+                        const style = row.getAttribute('style') || '';
+                        const match = style.match(/translateY\\((-?\\d+(?:\\.\\d+)?)\\s*(?:px)?\\s*\\)/);
+                        if (match) {
+                            const y = parseFloat(match[1]);
+                            if (y >= 0) visibleRows.push({ row, y });
+                        }
+                    });
+                    visibleRows.sort((a, b) => a.y - b.y);
+                    
+                    // 检测偏移：第一行的 Y 值对 ROW_HEIGHT 取模
+                    if (visibleRows.length > 0) {
+                        const firstY = visibleRows[0].y;
+                        const rowOffset = firstY % ROW_HEIGHT;
+                        return { visibleRows, rowOffset };
+                    }
+                    return { visibleRows, rowOffset: 0 };
+                };
+                
                 // 查找滚动方法
                 const scrollToPosition = async (targetScrollTop) => {
                     if (isPageMode) {
-                        // page-mode：尝试找有 overflow 的父容器
                         let scrollParent = recycleScroller.parentElement;
                         let foundScrollable = false;
                         
@@ -302,41 +324,45 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                 
                 let selected = 0;
                 const results = [];
+                let detectedOffset = null;
                 
                 for (const idx of indexes) {
                     const targetScrollTop = idx * ROW_HEIGHT;
-                    const targetTranslateY = idx * ROW_HEIGHT;
                     
                     // 滚动到目标位置
                     await scrollToPosition(targetScrollTop);
                     
-                    // 获取可见行
-                    const rows = document.querySelectorAll('.vue-recycle-scroller__item-view');
-                    const visibleRows = [];
-                    rows.forEach(row => {
-                        const style = row.getAttribute('style') || '';
-                        const match = style.match(/translateY\\((-?\\d+(?:\\.\\d+)?)\\s*(?:px)?\\s*\\)/);
-                        if (match) {
-                            const y = parseFloat(match[1]);
-                            if (y >= 0) visibleRows.push({ row, y });
-                        }
-                    });
-                    visibleRows.sort((a, b) => a.y - b.y);
+                    // 获取可见行并检测偏移
+                    const { visibleRows, rowOffset } = detectRowOffset();
+                    if (detectedOffset === null) {
+                        detectedOffset = rowOffset;
+                    }
                     
-                    // 按 translateY 匹配目标行（允许较大误差，因为可能有表头/padding偏移）
+                    // 使用检测到的偏移计算目标 translateY
+                    const targetTranslateY = idx * ROW_HEIGHT + detectedOffset;
+                    
+                    // 按 translateY 匹配目标行
                     let targetRow = null;
-                    let minDiff = Infinity;
+                    let matchedY = -1;
                     for (const item of visibleRows) {
                         const diff = Math.abs(item.y - targetTranslateY);
-                        // 增大误差阈值到 64px（半行高度），容忍表头偏移
-                        if (diff < 64 && diff < minDiff) {
-                            minDiff = diff;
+                        // 允许半行高度的误差
+                        if (diff < ROW_HEIGHT / 2) {
                             targetRow = item.row;
+                            matchedY = item.y;
+                            break;
                         }
                     }
                     
                     if (!targetRow) {
-                        results.push({ idx, success: false, error: 'Target row not found', visibleYs: visibleRows.map(r => r.y) });
+                        results.push({ 
+                            idx, 
+                            success: false, 
+                            error: 'Target row not found', 
+                            visibleYs: visibleRows.map(r => r.y),
+                            targetY: targetTranslateY,
+                            offset: detectedOffset
+                        });
                         continue;
                     }
                     
@@ -348,24 +374,31 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                     if (checkbox) {
                         checkbox.click();
                         selected++;
-                        results.push({ idx, success: true });
+                        results.push({ idx, success: true, matchedY });
                     } else {
-                        results.push({ idx, success: false, error: 'Checkbox not found' });
+                        results.push({ idx, success: false, error: 'Checkbox not found', matchedY });
                     }
                 }
                 
-                return { selected, isPageMode, results };
+                return { selected, isPageMode, detectedOffset, results };
             }
             """
             result = await page.evaluate(js_code, indexes)
             selected = result.get("selected", 0)
             is_page_mode = result.get("isPageMode", False)
-            logger.debug(f"JS 批量勾选完成: {selected}/{len(indexes)}, page-mode={is_page_mode}")
+            detected_offset = result.get("detectedOffset", 0)
+            logger.debug(
+                f"JS 批量勾选完成: {selected}/{len(indexes)}, page-mode={is_page_mode}, "
+                f"检测到偏移={detected_offset}px"
+            )
             
             # 输出失败项的详细信息
             for r in result.get("results", []):
                 if not r.get("success"):
-                    logger.debug(f"  索引 {r.get('idx')} 失败: {r.get('error')}, 可见Y={r.get('visibleYs')}")
+                    logger.debug(
+                        f"  索引 {r.get('idx')} 失败: {r.get('error')}, "
+                        f"目标Y={r.get('targetY')}, 可见Y={r.get('visibleYs')}"
+                    )
             
             return selected
         except Exception as exc:
