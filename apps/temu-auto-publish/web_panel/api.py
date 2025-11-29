@@ -46,7 +46,7 @@ from .service import SelectionFileStore, WorkflowTaskManager, create_task_manage
 
 APP_ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE_DIR = APP_ROOT / "web_panel" / "templates"
-DEFAULT_SELECTION = APP_ROOT / "data" / "input" / "selection.xlsx"
+DEFAULT_SELECTION = APP_ROOT / "data" / "input" / "10月新品可上架.csv"
 SELECTOR_FILE = APP_ROOT / "config" / "miaoshou_selectors_v2.json"
 SESSION_KEY = "web_panel_user"
 SESSION_TOKEN_KEY = "web_panel_token"
@@ -296,8 +296,8 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail="示例文件缺失, 请联系开发者")
         return FileResponse(
             path=DEFAULT_SELECTION,
-            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            filename="Temu选品表示例.xlsx",
+            media_type="text/csv",
+            filename="10月新品可上架.csv",
         )
 
     @app.get("/api/env-settings")
