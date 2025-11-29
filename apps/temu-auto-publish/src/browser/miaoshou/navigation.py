@@ -749,24 +749,24 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
         page: Page,
         index: int,
         *,
-        enable_scroll: bool = False,  # 默认禁用滚动，使用直接定位
+        enable_scroll: bool = True,  # 默认启用（JS 内部处理滚动）
     ) -> bool:
         """Click the edit button of a product at a specific index.
 
-        直接通过 JavaScript 定位并强制点击，无需滚动：
-        1. 获取所有可见行（translateY >= 0）
-        2. 按 translateY 排序得到视觉顺序
-        3. 直接点击第 index 个行的编辑按钮
+        通过 JavaScript 自动滚动到目标位置并点击编辑按钮：
+        1. JS 滚动容器到 index * 128px 位置
+        2. 等待 DOM 更新（vue-recycle-scroller 重新渲染）
+        3. 点击视口中第一行的编辑按钮
 
         Args:
             page: Active Playwright page instance.
             index: Zero-based index of the product in the grid (全局索引).
-            enable_scroll: 是否启用滚动（默认禁用）
+            enable_scroll: 保留参数，但 JS 内部会自动处理滚动
 
         Returns:
             True when the edit button was clicked, otherwise False.
         """
-        logger.info("Clicking edit button for product index {} (direct locate)", index)
+        logger.info("Clicking edit button for product index {} (JS auto-scroll)", index)
 
         try:
             await self._ensure_popups_closed(page)
@@ -775,23 +775,10 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                 logger.error("Product index must be non-negative")
                 return False
 
-            # 方案1：使用 JavaScript 直接定位并点击第 index 个编辑按钮
+            # 使用 JavaScript 自动滚动到目标位置并点击
             clicked = await self._click_edit_button_by_js(page, index)
             if clicked:
                 return True
-
-            # 方案2：如果 JS 方式失败且启用了滚动，尝试滚动后定位
-            if enable_scroll:
-                from ...utils.scroll_helper import scroll_to_product_position
-
-                logger.info(f"JS 定位失败，尝试滚动到商品 #{index + 1}")
-                await scroll_to_product_position(page, target_index=index)
-                await page.wait_for_timeout(500)
-
-                # 滚动后再次尝试 JS 定位（此时目标应该在视口内）
-                clicked = await self._click_edit_button_by_js(page, 0)  # 滚动后点击第一个
-                if clicked:
-                    return True
 
             logger.error("No matching edit button found for index {}", index)
             return False
@@ -802,19 +789,37 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
     async def _click_edit_button_by_js(self, page: Page, index: int) -> bool:
         """使用 JavaScript 直接定位并点击第 index 个商品的编辑按钮。
 
-        通过 JS 获取所有可见行，按 translateY 排序后点击目标。
+        通过 JS 滚动容器到目标位置，然后点击编辑按钮。
 
         Args:
             page: Playwright 页面对象
-            index: 目标商品索引（视觉顺序，0-based）
+            index: 目标商品索引（全局索引，0-based）
 
         Returns:
             是否成功点击
         """
         try:
-            # JavaScript：获取所有可见行，按 translateY 排序，点击第 index 个的编辑按钮
+            # JavaScript：滚动到目标位置，然后点击编辑按钮
             js_code = """
-            (index) => {
+            async (index) => {
+                const ROW_HEIGHT = 128;
+                
+                // 查找滚动容器
+                const scroller = document.querySelector('.vue-recycle-scroller') ||
+                                document.querySelector('.vue-recycle-scroller__item-wrapper')?.parentElement ||
+                                document.querySelector('.pro-virtual-table__body-inner');
+                
+                if (!scroller) {
+                    return { success: false, error: 'Scroll container not found' };
+                }
+                
+                // 滚动到目标位置（让目标行出现在视口顶部）
+                const targetScrollTop = index * ROW_HEIGHT;
+                scroller.scrollTop = targetScrollTop;
+                
+                // 等待 DOM 更新（vue-recycle-scroller 需要时间重新渲染）
+                await new Promise(r => setTimeout(r, 300));
+                
                 // 获取所有虚拟滚动行
                 const rows = document.querySelectorAll('.vue-recycle-scroller__item-view');
                 
@@ -834,36 +839,43 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                 // 按 translateY 排序（视觉顺序）
                 visibleRows.sort((a, b) => a.y - b.y);
                 
-                if (index >= visibleRows.length) {
-                    return { success: false, error: `Index ${index} out of range (${visibleRows.length} visible rows)` };
+                if (visibleRows.length === 0) {
+                    return { success: false, error: 'No visible rows after scroll' };
                 }
                 
-                // 获取目标行
-                const targetRow = visibleRows[index].row;
+                // 滚动后，目标行应该在第一个位置（translateY 最小的）
+                const targetRow = visibleRows[0].row;
                 
                 // 在行内查找编辑按钮
                 const editBtn = targetRow.querySelector('.J_commonCollectBoxEdit') ||
                                 targetRow.querySelector('.J_collectBoxEdit') ||
-                                targetRow.querySelector('button:has-text("编辑")') ||
-                                targetRow.querySelector('button');
+                                targetRow.querySelector('button.jx-button--primary.is-text');
                 
                 if (!editBtn) {
-                    return { success: false, error: 'Edit button not found in row' };
+                    return { success: false, error: 'Edit button not found in row', visibleCount: visibleRows.length };
                 }
                 
                 // 强制点击
                 editBtn.click();
-                return { success: true, translateY: visibleRows[index].y };
+                return { 
+                    success: true, 
+                    scrollTop: targetScrollTop,
+                    translateY: visibleRows[0].y,
+                    visibleCount: visibleRows.length
+                };
             }
             """
 
             result = await page.evaluate(js_code, index)
 
             if result.get("success"):
-                logger.success(f"✓ JS 直接点击编辑按钮成功，索引={index}, translateY={result.get('translateY')}px")
+                logger.success(
+                    f"✓ JS 点击编辑按钮成功，索引={index}, scrollTop={result.get('scrollTop')}px, "
+                    f"translateY={result.get('translateY')}px, 可见行数={result.get('visibleCount')}"
+                )
                 return True
             else:
-                logger.debug(f"JS 点击失败: {result.get('error')}")
+                logger.debug(f"JS 点击失败: {result.get('error')}, 可见行数={result.get('visibleCount', 'N/A')}")
                 return False
 
         except Exception as exc:

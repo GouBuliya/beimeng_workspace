@@ -251,42 +251,55 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
         return selected == len(target_indexes)
 
     async def _select_checkboxes_by_js(self, page: Page, indexes: list[int]) -> int:
-        """使用 JavaScript 批量勾选复选框。
+        """使用 JavaScript 批量勾选复选框（带自动滚动）。
 
         Args:
             page: Playwright 页面对象
-            indexes: 目标索引列表（视觉顺序）
+            indexes: 目标索引列表（全局索引）
 
         Returns:
             成功勾选的数量
         """
         try:
             js_code = """
-            (indexes) => {
-                const rows = document.querySelectorAll('.vue-recycle-scroller__item-view');
+            async (indexes) => {
+                const ROW_HEIGHT = 128;
                 
-                // 筛选可见行并解析位置
-                const visibleRows = [];
-                rows.forEach(row => {
-                    const style = row.getAttribute('style') || '';
-                    const match = style.match(/translateY\\((-?\\d+(?:\\.\\d+)?)\\s*(?:px)?\\s*\\)/);
-                    if (match) {
-                        const y = parseFloat(match[1]);
-                        if (y >= 0) {
-                            visibleRows.push({ row, y });
-                        }
-                    }
-                });
+                // 查找滚动容器
+                const scroller = document.querySelector('.vue-recycle-scroller') ||
+                                document.querySelector('.vue-recycle-scroller__item-wrapper')?.parentElement ||
+                                document.querySelector('.pro-virtual-table__body-inner');
                 
-                // 按 translateY 排序
-                visibleRows.sort((a, b) => a.y - b.y);
+                if (!scroller) {
+                    return { selected: 0, error: 'Scroll container not found' };
+                }
                 
                 let selected = 0;
+                
                 for (const idx of indexes) {
-                    if (idx >= visibleRows.length) continue;
+                    // 滚动到目标位置
+                    scroller.scrollTop = idx * ROW_HEIGHT;
                     
-                    const targetRow = visibleRows[idx].row;
-                    // 查找复选框
+                    // 等待 DOM 更新
+                    await new Promise(r => setTimeout(r, 200));
+                    
+                    // 获取可见行
+                    const rows = document.querySelectorAll('.vue-recycle-scroller__item-view');
+                    const visibleRows = [];
+                    rows.forEach(row => {
+                        const style = row.getAttribute('style') || '';
+                        const match = style.match(/translateY\\((-?\\d+(?:\\.\\d+)?)\\s*(?:px)?\\s*\\)/);
+                        if (match) {
+                            const y = parseFloat(match[1]);
+                            if (y >= 0) visibleRows.push({ row, y });
+                        }
+                    });
+                    visibleRows.sort((a, b) => a.y - b.y);
+                    
+                    if (visibleRows.length === 0) continue;
+                    
+                    // 滚动后目标在第一个位置
+                    const targetRow = visibleRows[0].row;
                     const checkbox = targetRow.querySelector('.jx-checkbox__inner') ||
                                     targetRow.querySelector('.jx-checkbox') ||
                                     targetRow.querySelector('input[type="checkbox"]');
@@ -297,21 +310,34 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                     }
                 }
                 
-                return selected;
+                return { selected };
             }
             """
             result = await page.evaluate(js_code, indexes)
-            logger.debug(f"JS 批量勾选完成: {result}/{len(indexes)}")
-            return result
+            selected = result.get("selected", 0)
+            logger.debug(f"JS 批量勾选完成: {selected}/{len(indexes)}")
+            return selected
         except Exception as exc:
             logger.debug(f"JS 批量勾选异常: {exc}")
             return 0
 
     async def _click_checkbox_by_js(self, page: Page, index: int) -> bool:
-        """使用 JavaScript 点击第 index 个复选框。"""
+        """使用 JavaScript 滚动到目标位置并点击复选框。"""
         try:
             js_code = """
-            (index) => {
+            async (index) => {
+                const ROW_HEIGHT = 128;
+                
+                const scroller = document.querySelector('.vue-recycle-scroller') ||
+                                document.querySelector('.vue-recycle-scroller__item-wrapper')?.parentElement;
+                
+                if (!scroller) return false;
+                
+                // 滚动到目标位置
+                scroller.scrollTop = index * ROW_HEIGHT;
+                await new Promise(r => setTimeout(r, 200));
+                
+                // 获取可见行
                 const rows = document.querySelectorAll('.vue-recycle-scroller__item-view');
                 const visibleRows = [];
                 rows.forEach(row => {
@@ -324,10 +350,10 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                 });
                 visibleRows.sort((a, b) => a.y - b.y);
                 
-                if (index >= visibleRows.length) return false;
+                if (visibleRows.length === 0) return false;
                 
-                const checkbox = visibleRows[index].row.querySelector('.jx-checkbox__inner') ||
-                                visibleRows[index].row.querySelector('.jx-checkbox');
+                const checkbox = visibleRows[0].row.querySelector('.jx-checkbox__inner') ||
+                                visibleRows[0].row.querySelector('.jx-checkbox');
                 if (checkbox) {
                     checkbox.click();
                     return true;
