@@ -892,27 +892,44 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                     };
                 }
                 
+                // 获取按钮关联的下拉菜单 ID（通过 aria-controls 属性）
+                const ariaControls = claimBtn.getAttribute('aria-controls');
+                
                 // 点击认领按钮
                 claimBtn.click();
                 
                 // 等待下拉菜单出现
                 await new Promise(r => setTimeout(r, 500));
                 
-                // 查找下拉菜单并点击第一个选项
-                const dropdownSelectors = [
-                    '.el-dropdown-menu',
-                    '.jx-dropdown-menu', 
-                    '.pro-dropdown__menu',
-                    '[role="menu"]',
-                    '.jx-popper[aria-hidden="false"]',
-                ];
-                
+                // 优先通过 aria-controls 关联的 ID 查找下拉菜单
                 let dropdown = null;
-                for (const selector of dropdownSelectors) {
-                    const found = document.querySelector(selector);
-                    if (found && found.offsetParent !== null) {
-                        dropdown = found;
-                        break;
+                
+                if (ariaControls) {
+                    // 通过 ID 精确定位关联的下拉菜单
+                    dropdown = document.getElementById(ariaControls);
+                    if (dropdown && dropdown.offsetParent === null) {
+                        // 菜单存在但不可见，尝试等待
+                        await new Promise(r => setTimeout(r, 300));
+                        dropdown = document.getElementById(ariaControls);
+                    }
+                }
+                
+                // 如果通过 aria-controls 找不到，使用备用选择器
+                if (!dropdown || dropdown.offsetParent === null) {
+                    const dropdownSelectors = [
+                        '.el-dropdown-menu:not([style*="display: none"])',
+                        '.jx-dropdown-menu:not([style*="display: none"])', 
+                        '.pro-dropdown__menu:not([style*="display: none"])',
+                        '[role="menu"][aria-hidden="false"]',
+                        '.jx-popper[aria-hidden="false"]',
+                    ];
+                    
+                    for (const selector of dropdownSelectors) {
+                        const found = document.querySelector(selector);
+                        if (found && found.offsetParent !== null) {
+                            dropdown = found;
+                            break;
+                        }
                     }
                 }
                 
@@ -922,11 +939,12 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         error: 'Dropdown menu not found after clicking claim button',
                         scrollerInfo,
                         matchedY,
-                        claimBtnClicked: true
+                        claimBtnClicked: true,
+                        ariaControls: ariaControls || 'none'
                     };
                 }
                 
-                // 点击下拉菜单的第一个选项
+                // 点击下拉菜单的第一个选项（应该是 "Temu全托管" 之类的）
                 const optionSelectors = [
                     '.el-dropdown-menu__item',
                     '.jx-dropdown-menu__item',
@@ -950,7 +968,8 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         scrollerInfo,
                         matchedY,
                         claimBtnClicked: true,
-                        dropdownFound: true
+                        dropdownFound: true,
+                        dropdownId: dropdown.id || 'unknown'
                     };
                 }
                 
