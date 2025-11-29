@@ -668,7 +668,8 @@ async def _step_09_weight(page: Page) -> None:
     Args:
         page: Playwright 页面对象。
     """
-    await page.get_by_text("重量").click()
+    # 使用类选择器精确定位菜单项，避免匹配产品标题中的"重量"文本
+    await page.locator(".J_batchWeight").click()
     await page.get_by_role("spinbutton").nth(2).click()
     await page.get_by_role("spinbutton").nth(2).fill("6000.00")
     await page.get_by_role("button", name="预览").click()
