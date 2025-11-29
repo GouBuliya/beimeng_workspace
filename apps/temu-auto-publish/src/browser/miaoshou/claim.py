@@ -251,7 +251,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                     continue
 
             logger.error(f"Failed to toggle checkbox for product #{idx + 1}")
-                return False
+            return False
 
         logger.success(f"Selected {selected}/{len(target_indexes)} rows for claim")
         return selected == len(target_indexes)
