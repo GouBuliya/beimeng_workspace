@@ -253,6 +253,9 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
     async def _select_checkboxes_by_js(self, page: Page, indexes: list[int]) -> int:
         """使用 JavaScript 批量勾选复选框（带自动滚动）。
 
+        支持 page-mode（页面级滚动）和容器级滚动两种模式。
+        按 translateY = index * 128 精确匹配目标行。
+
         Args:
             page: Playwright 页面对象
             indexes: 目标索引列表（全局索引）
@@ -265,23 +268,47 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
             async (indexes) => {
                 const ROW_HEIGHT = 128;
                 
-                // 查找滚动容器
-                const scroller = document.querySelector('.vue-recycle-scroller') ||
-                                document.querySelector('.vue-recycle-scroller__item-wrapper')?.parentElement ||
-                                document.querySelector('.pro-virtual-table__body-inner');
+                // 检查是否为 page-mode（页面级滚动）
+                const recycleScroller = document.querySelector('.vue-recycle-scroller');
+                const isPageMode = recycleScroller && recycleScroller.classList.contains('page-mode');
                 
-                if (!scroller) {
-                    return { selected: 0, error: 'Scroll container not found' };
-                }
+                // 查找滚动方法
+                const scrollToPosition = async (targetScrollTop) => {
+                    if (isPageMode) {
+                        // page-mode：尝试找有 overflow 的父容器
+                        let scrollParent = recycleScroller.parentElement;
+                        let foundScrollable = false;
+                        
+                        while (scrollParent && scrollParent !== document.body) {
+                            const style = window.getComputedStyle(scrollParent);
+                            const overflowY = style.overflowY;
+                            if ((overflowY === 'auto' || overflowY === 'scroll') && 
+                                scrollParent.scrollHeight > scrollParent.clientHeight) {
+                                scrollParent.scrollTop = targetScrollTop;
+                                foundScrollable = true;
+                                break;
+                            }
+                            scrollParent = scrollParent.parentElement;
+                        }
+                        
+                        if (!foundScrollable) {
+                            window.scrollTo({ top: targetScrollTop, behavior: 'instant' });
+                        }
+                    } else if (recycleScroller) {
+                        recycleScroller.scrollTop = targetScrollTop;
+                    }
+                    await new Promise(r => setTimeout(r, 500));
+                };
                 
                 let selected = 0;
+                const results = [];
                 
                 for (const idx of indexes) {
-                    // 滚动到目标位置
-                    scroller.scrollTop = idx * ROW_HEIGHT;
+                    const targetScrollTop = idx * ROW_HEIGHT;
+                    const targetTranslateY = idx * ROW_HEIGHT;
                     
-                    // 等待 DOM 更新
-                    await new Promise(r => setTimeout(r, 200));
+                    // 滚动到目标位置
+                    await scrollToPosition(targetScrollTop);
                     
                     // 获取可见行
                     const rows = document.querySelectorAll('.vue-recycle-scroller__item-view');
@@ -296,26 +323,47 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                     });
                     visibleRows.sort((a, b) => a.y - b.y);
                     
-                    if (visibleRows.length === 0) continue;
+                    // 按 translateY 精确匹配目标行
+                    let targetRow = null;
+                    for (const item of visibleRows) {
+                        if (Math.abs(item.y - targetTranslateY) < 10) {
+                            targetRow = item.row;
+                            break;
+                        }
+                    }
                     
-                    // 滚动后目标在第一个位置
-                    const targetRow = visibleRows[0].row;
-                    const checkbox = targetRow.querySelector('.jx-checkbox__inner') ||
-                                    targetRow.querySelector('.jx-checkbox') ||
-                                    targetRow.querySelector('input[type="checkbox"]');
+                    if (!targetRow) {
+                        results.push({ idx, success: false, error: 'Target row not found', visibleYs: visibleRows.map(r => r.y) });
+                        continue;
+                    }
+                    
+                    // 在行内精确查找复选框（固定左侧选择列）
+                    const checkbox = targetRow.querySelector('.is-selection-column .jx-checkbox__inner') ||
+                                    targetRow.querySelector('.is-selection-column .jx-checkbox') ||
+                                    targetRow.querySelector('.jx-checkbox__inner');
                     
                     if (checkbox) {
                         checkbox.click();
                         selected++;
+                        results.push({ idx, success: true });
+                    } else {
+                        results.push({ idx, success: false, error: 'Checkbox not found' });
                     }
                 }
                 
-                return { selected };
+                return { selected, isPageMode, results };
             }
             """
             result = await page.evaluate(js_code, indexes)
             selected = result.get("selected", 0)
-            logger.debug(f"JS 批量勾选完成: {selected}/{len(indexes)}")
+            is_page_mode = result.get("isPageMode", False)
+            logger.debug(f"JS 批量勾选完成: {selected}/{len(indexes)}, page-mode={is_page_mode}")
+            
+            # 输出失败项的详细信息
+            for r in result.get("results", []):
+                if not r.get("success"):
+                    logger.debug(f"  索引 {r.get('idx')} 失败: {r.get('error')}, 可见Y={r.get('visibleYs')}")
+            
             return selected
         except Exception as exc:
             logger.debug(f"JS 批量勾选异常: {exc}")

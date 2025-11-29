@@ -789,7 +789,8 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
     async def _click_edit_button_by_js(self, page: Page, index: int) -> bool:
         """使用 JavaScript 直接定位并点击第 index 个商品的编辑按钮。
 
-        通过 JS 滚动容器到目标位置，然后点击编辑按钮。
+        通过 JS 滚动页面/容器到目标位置，然后点击编辑按钮。
+        支持 page-mode（页面级滚动）和容器级滚动两种模式。
 
         Args:
             page: Playwright 页面对象
@@ -805,53 +806,55 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                 const ROW_HEIGHT = 128;
                 const targetScrollTop = index * ROW_HEIGHT;
                 
-                // 尝试多种滚动容器选择器
-                const scrollerSelectors = [
-                    '.vue-recycle-scroller',
-                    '.pro-virtual-table__body',
-                    '.pro-virtual-table__body-inner',
-                    '.jx-scrollbar__wrap',
-                    '.jx-table__body-wrapper',
-                    '#appScrollContainer'
-                ];
+                // 检查是否为 page-mode（页面级滚动）
+                const recycleScroller = document.querySelector('.vue-recycle-scroller');
+                const isPageMode = recycleScroller && recycleScroller.classList.contains('page-mode');
                 
-                let scroller = null;
                 let scrollerInfo = '';
+                let actualScrollTop = 0;
                 
-                for (const sel of scrollerSelectors) {
-                    const el = document.querySelector(sel);
-                    if (el && el.scrollHeight > el.clientHeight) {
-                        scroller = el;
-                        scrollerInfo = sel;
-                        break;
-                    }
-                }
-                
-                // 如果没找到可滚动容器，尝试 wrapper 的父元素
-                if (!scroller) {
-                    const wrapper = document.querySelector('.vue-recycle-scroller__item-wrapper');
-                    if (wrapper?.parentElement) {
-                        scroller = wrapper.parentElement;
-                        scrollerInfo = 'wrapper.parentElement';
-                    }
-                }
-                
-                // 执行滚动
-                if (scroller) {
-                    const beforeScroll = scroller.scrollTop;
-                    scroller.scrollTop = targetScrollTop;
-                    // 等待 DOM 更新
-                    await new Promise(r => setTimeout(r, 500));
-                    const afterScroll = scroller.scrollTop;
+                if (isPageMode) {
+                    // page-mode：滚动整个页面或找到真正的滚动父容器
+                    scrollerInfo = 'page-mode';
                     
-                    // 如果滚动没生效，尝试使用 scrollTo
-                    if (Math.abs(afterScroll - targetScrollTop) > 10) {
-                        scroller.scrollTo({ top: targetScrollTop, behavior: 'instant' });
+                    // 尝试找到有 overflow 的父容器
+                    let scrollParent = recycleScroller.parentElement;
+                    let foundScrollable = false;
+                    
+                    while (scrollParent && scrollParent !== document.body) {
+                        const style = window.getComputedStyle(scrollParent);
+                        const overflowY = style.overflowY;
+                        if ((overflowY === 'auto' || overflowY === 'scroll') && 
+                            scrollParent.scrollHeight > scrollParent.clientHeight) {
+                            // 找到可滚动的父容器
+                            scrollParent.scrollTop = targetScrollTop;
+                            await new Promise(r => setTimeout(r, 500));
+                            actualScrollTop = scrollParent.scrollTop;
+                            scrollerInfo = `parent: ${scrollParent.className.split(' ')[0] || scrollParent.tagName}`;
+                            foundScrollable = true;
+                            break;
+                        }
+                        scrollParent = scrollParent.parentElement;
+                    }
+                    
+                    // 如果没找到滚动父容器，滚动整个页面
+                    if (!foundScrollable) {
+                        window.scrollTo({ top: targetScrollTop, behavior: 'instant' });
                         await new Promise(r => setTimeout(r, 500));
+                        actualScrollTop = window.scrollY || document.documentElement.scrollTop;
+                        scrollerInfo = 'window';
+                    }
+                } else {
+                    // 非 page-mode：滚动容器本身
+                    if (recycleScroller) {
+                        recycleScroller.scrollTop = targetScrollTop;
+                        await new Promise(r => setTimeout(r, 500));
+                        actualScrollTop = recycleScroller.scrollTop;
+                        scrollerInfo = 'vue-recycle-scroller';
                     }
                 }
                 
-                // 获取所有虚拟滚动行并按 translateY 排序
+                // 获取所有虚拟滚动行
                 const rows = document.querySelectorAll('.vue-recycle-scroller__item-view');
                 const visibleRows = [];
                 
@@ -860,59 +863,53 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                     const match = style.match(/translateY\\((-?\\d+(?:\\.\\d+)?)\\s*(?:px)?\\s*\\)/);
                     if (match) {
                         const y = parseFloat(match[1]);
-                        // 计算相对于 scrollTop 的位置
-                        const relativeY = y - (scroller ? scroller.scrollTop : 0);
-                        visibleRows.push({ row, y, relativeY });
+                        // 只收集可见行（translateY >= 0，排除 -9999px 的隐藏行）
+                        if (y >= 0) {
+                            visibleRows.push({ row, y });
+                        }
                     }
                 });
                 
-                // 按原始 translateY 排序
+                // 按 translateY 排序
                 visibleRows.sort((a, b) => a.y - b.y);
                 
                 // 找到目标行：translateY 等于 index * ROW_HEIGHT 的行
                 let targetRow = null;
                 let targetTranslateY = index * ROW_HEIGHT;
+                let matchedY = -1;
                 
                 for (const item of visibleRows) {
-                    // 允许一定误差
+                    // 允许一定误差（±10px）
                     if (Math.abs(item.y - targetTranslateY) < 10) {
                         targetRow = item.row;
+                        matchedY = item.y;
                         break;
                     }
                 }
                 
-                // 如果精确匹配失败，取第一个可见行（translateY 最小且 >= 0）
-                if (!targetRow) {
-                    const firstVisible = visibleRows.find(item => item.y >= 0);
-                    if (firstVisible) {
-                        targetRow = firstVisible.row;
-                    }
-                }
-                
+                // 如果精确匹配失败，记录所有可见行的 Y 值用于调试
                 if (!targetRow) {
                     return { 
                         success: false, 
-                        error: 'Target row not found',
+                        error: `Target Y=${targetTranslateY} not found in visible rows`,
                         scrollerInfo,
+                        isPageMode,
                         targetScrollTop,
-                        actualScrollTop: scroller ? scroller.scrollTop : 'N/A',
+                        actualScrollTop,
                         rowCount: rows.length,
-                        visibleYs: visibleRows.slice(0, 5).map(r => r.y)
+                        visibleYs: visibleRows.map(r => r.y)
                     };
                 }
                 
-                // 在行内查找编辑按钮
-                const editBtn = targetRow.querySelector('.J_commonCollectBoxEdit') ||
-                                targetRow.querySelector('.J_collectBoxEdit') ||
-                                targetRow.querySelector('button.jx-button--primary.is-text') ||
-                                targetRow.querySelector('button:not([disabled])');
+                // 在行内查找编辑按钮（精确匹配 J_commonCollectBoxEdit）
+                const editBtn = targetRow.querySelector('.J_commonCollectBoxEdit');
                 
                 if (!editBtn) {
                     return { 
                         success: false, 
-                        error: 'Edit button not found in target row',
+                        error: 'Edit button (.J_commonCollectBoxEdit) not found in target row',
                         scrollerInfo,
-                        targetTranslateY
+                        matchedY
                     };
                 }
                 
@@ -922,9 +919,11 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                 return { 
                     success: true, 
                     scrollerInfo,
+                    isPageMode,
                     targetScrollTop,
-                    actualScrollTop: scroller ? scroller.scrollTop : 'N/A',
+                    actualScrollTop,
                     targetTranslateY,
+                    matchedY,
                     visibleCount: visibleRows.length
                 };
             }
@@ -935,14 +934,16 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
             if result.get("success"):
                 logger.success(
                     f"✓ JS 点击编辑按钮成功，索引={index}, 容器={result.get('scrollerInfo')}, "
-                    f"scrollTop={result.get('actualScrollTop')}px, translateY={result.get('targetTranslateY')}px"
+                    f"page-mode={result.get('isPageMode')}, scrollTop={result.get('actualScrollTop')}px, "
+                    f"匹配Y={result.get('matchedY')}px"
                 )
                 return True
             else:
                 logger.warning(
                     f"JS 点击失败: {result.get('error')}, 容器={result.get('scrollerInfo')}, "
-                    f"目标scrollTop={result.get('targetScrollTop')}, 实际scrollTop={result.get('actualScrollTop')}, "
-                    f"行数={result.get('rowCount')}, 可见Y值={result.get('visibleYs')}"
+                    f"page-mode={result.get('isPageMode')}, 目标scrollTop={result.get('targetScrollTop')}, "
+                    f"实际scrollTop={result.get('actualScrollTop')}, 行数={result.get('rowCount')}, "
+                    f"可见Y值={result.get('visibleYs')}"
                 )
                 return False
 
