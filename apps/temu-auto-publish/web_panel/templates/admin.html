@@ -1,596 +1,242 @@
-<!doctype html>
-<html lang="zh-CN" data-theme="light">
+<!DOCTYPE html>
+<html lang="zh-CN">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Temu 发布助手 · 用户管理</title>
-    <link
-      rel="stylesheet"
-      href="https://unpkg.com/@picocss/pico@2.0.6/css/pico.min.css"
-    />
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Inter Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+            },
+            colors: {
+              primary: {
+                50: '#eef2ff',
+                100: '#e0e7ff',
+                500: '#6366f1',
+                600: '#4f46e5',
+                700: '#4338ca',
+              }
+            }
+          }
+        }
+      }
+    </script>
     <style>
-      :root {
-        --primary: #6366f1;
-        --primary-hover: #4f46e5;
-        --success: #10b981;
-        --warning: #f59e0b;
-        --danger: #ef4444;
-      }
-
-      body {
-        background: #f8fafc;
-        min-height: 100vh;
-      }
-
-      .navbar {
-        background: #fff;
-        border-bottom: 1px solid #e2e8f0;
-        padding: 1rem 2rem;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        position: sticky;
-        top: 0;
-        z-index: 100;
-      }
-
-      .navbar .brand {
-        font-weight: 600;
-        font-size: 1.25rem;
-        color: #1e293b;
-        text-decoration: none;
-      }
-
-      .navbar .nav-links {
-        display: flex;
-        gap: 1.5rem;
-        align-items: center;
-      }
-
-      .navbar .nav-links a {
-        color: #64748b;
-        text-decoration: none;
-        font-size: 0.9rem;
-      }
-
-      .navbar .nav-links a:hover {
-        color: var(--primary);
-      }
-
-      .navbar .user-info {
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-      }
-
-      .navbar .avatar {
-        width: 36px;
-        height: 36px;
-        border-radius: 50%;
-        background: var(--primary);
-        color: #fff;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-weight: 500;
-      }
-
-      .container {
-        max-width: 1200px;
-        margin: 0 auto;
-        padding: 2rem;
-      }
-
-      .page-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 2rem;
-      }
-
-      .page-header h1 {
-        margin: 0;
-        font-size: 1.75rem;
-        color: #1e293b;
-      }
-
-      .btn {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.5rem;
-        padding: 0.625rem 1.25rem;
-        border-radius: 0.5rem;
-        font-size: 0.875rem;
-        font-weight: 500;
-        cursor: pointer;
-        border: none;
-        transition: all 0.2s;
-      }
-
-      .btn-primary {
-        background: var(--primary);
-        color: #fff;
-      }
-
-      .btn-primary:hover {
-        background: var(--primary-hover);
-      }
-
-      .btn-danger {
-        background: var(--danger);
-        color: #fff;
-      }
-
-      .btn-danger:hover {
-        background: #dc2626;
-      }
-
-      .btn-outline {
-        background: transparent;
-        border: 1px solid #e2e8f0;
-        color: #64748b;
-      }
-
-      .btn-outline:hover {
-        border-color: var(--primary);
-        color: var(--primary);
-      }
-
-      .btn-sm {
-        padding: 0.375rem 0.75rem;
-        font-size: 0.8rem;
-      }
-
-      .card {
-        background: #fff;
-        border-radius: 1rem;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-        overflow: hidden;
-      }
-
-      .card-header {
-        padding: 1rem 1.5rem;
-        border-bottom: 1px solid #e2e8f0;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-      }
-
-      .card-header h2 {
-        margin: 0;
-        font-size: 1rem;
-        font-weight: 600;
-        color: #1e293b;
-      }
-
-      .table-container {
-        overflow-x: auto;
-      }
-
-      table {
-        width: 100%;
-        border-collapse: collapse;
-      }
-
-      th,
-      td {
-        padding: 1rem 1.5rem;
-        text-align: left;
-        border-bottom: 1px solid #e2e8f0;
-      }
-
-      th {
-        background: #f8fafc;
-        font-weight: 500;
-        font-size: 0.8rem;
-        color: #64748b;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-      }
-
-      td {
-        font-size: 0.9rem;
-        color: #334155;
-      }
-
-      tr:hover {
-        background: #f8fafc;
-      }
-
-      .badge {
-        display: inline-block;
-        padding: 0.25rem 0.75rem;
-        border-radius: 1rem;
-        font-size: 0.75rem;
-        font-weight: 500;
-      }
-
-      .badge-success {
-        background: #dcfce7;
-        color: #16a34a;
-      }
-
-      .badge-warning {
-        background: #fef3c7;
-        color: #d97706;
-      }
-
-      .badge-danger {
-        background: #fee2e2;
-        color: #dc2626;
-      }
-
-      .badge-info {
-        background: #e0e7ff;
-        color: #4f46e5;
-      }
-
-      .actions {
-        display: flex;
-        gap: 0.5rem;
-      }
-
-      /* Modal */
-      .modal-overlay {
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(0, 0, 0, 0.5);
-        display: none;
-        align-items: center;
-        justify-content: center;
-        z-index: 1000;
-      }
-
-      .modal-overlay.active {
-        display: flex;
-      }
-
+      /* Modal Transition */
       .modal {
-        background: #fff;
-        border-radius: 1rem;
-        width: min(500px, 90vw);
-        max-height: 90vh;
-        overflow-y: auto;
-        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+        transition: opacity 0.25s ease;
       }
-
-      .modal-header {
-        padding: 1.5rem;
-        border-bottom: 1px solid #e2e8f0;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-      }
-
-      .modal-header h3 {
-        margin: 0;
-        font-size: 1.25rem;
-        color: #1e293b;
-      }
-
-      .modal-close {
-        background: none;
-        border: none;
-        font-size: 1.5rem;
-        cursor: pointer;
-        color: #94a3b8;
-      }
-
-      .modal-body {
-        padding: 1.5rem;
-      }
-
-      .modal-footer {
-        padding: 1.5rem;
-        border-top: 1px solid #e2e8f0;
-        display: flex;
-        gap: 1rem;
-        justify-content: flex-end;
-      }
-
-      .form-group {
-        margin-bottom: 1.25rem;
-      }
-
-      .form-group label {
-        display: block;
-        font-size: 0.875rem;
-        font-weight: 500;
-        color: #374151;
-        margin-bottom: 0.5rem;
-      }
-
-      .form-group input,
-      .form-group select {
-        width: 100%;
-        padding: 0.625rem 1rem;
-        border: 1px solid #e2e8f0;
-        border-radius: 0.5rem;
-        font-size: 0.9rem;
-      }
-
-      .form-group input:focus,
-      .form-group select:focus {
-        outline: none;
-        border-color: var(--primary);
-        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
-      }
-
-      .checkbox-group {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-      }
-
-      .checkbox-group input {
-        width: auto;
-      }
-
-      .status-indicator {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-      }
-
-      .status-dot {
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-      }
-
-      .status-dot.online {
-        background: var(--success);
-        box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
-      }
-
-      .status-dot.offline {
-        background: #94a3b8;
-      }
-
-      .loading {
-        text-align: center;
-        padding: 3rem;
-        color: #64748b;
-      }
-
-      .empty-state {
-        text-align: center;
-        padding: 3rem;
-        color: #64748b;
-      }
-
-      .toast {
-        position: fixed;
-        bottom: 2rem;
-        right: 2rem;
-        padding: 1rem 1.5rem;
-        border-radius: 0.5rem;
-        color: #fff;
-        font-size: 0.9rem;
-        z-index: 2000;
-        animation: slideIn 0.3s ease;
-      }
-
-      .toast.success {
-        background: var(--success);
-      }
-
-      .toast.error {
-        background: var(--danger);
-      }
-
-      @keyframes slideIn {
-        from {
-          transform: translateX(100%);
-          opacity: 0;
-        }
-        to {
-          transform: translateX(0);
-          opacity: 1;
-        }
-      }
-
-      .server-status {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        padding: 0.5rem 1rem;
-        background: #f1f5f9;
-        border-radius: 0.5rem;
-        font-size: 0.8rem;
-      }
-
-      .server-status.healthy {
-        color: var(--success);
-      }
-
-      .server-status.unhealthy {
-        color: var(--danger);
+      body.modal-active {
+        overflow: hidden;
       }
     </style>
   </head>
-  <body>
-    <nav class="navbar">
-      <a href="/" class="brand">Temu 发布助手</a>
-      <div class="nav-links">
-        <a href="/">工作流控制台</a>
-        <a href="/admin" style="color: var(--primary); font-weight: 500"
-          >用户管理</a
-        >
-        <div id="serverStatus" class="server-status">
-          <span class="status-dot"></span>
-          <span>检查中...</span>
+  <body class="bg-gray-100 text-gray-800 font-sans min-h-screen flex flex-col">
+    
+    <!-- Top Navigation (Consistent with index.html) -->
+    <nav class="bg-white border-b border-gray-200 sticky top-0 z-50">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex justify-between h-16">
+          <div class="flex items-center gap-4">
+            <a href="/" class="flex-shrink-0 flex items-center gap-3">
+              <div class="bg-indigo-600 p-1.5 rounded-lg">
+                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+                </svg>
+              </div>
+              <span class="font-bold text-xl text-gray-900 tracking-tight">Temu 发布助手</span>
+            </a>
+            <div class="hidden md:flex ml-10 space-x-8">
+              <a href="/" class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">控制台</a>
+              <a href="/admin" class="border-indigo-500 text-gray-900 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">用户管理</a>
+              <a href="/downloads/sample-selection" class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">下载模板</a>
+            </div>
+          </div>
+          <div class="flex items-center gap-4">
+            <div id="serverStatus" class="hidden md:flex items-center px-3 py-1 bg-gray-100 rounded-full text-xs font-medium text-gray-500">
+                <span class="w-2 h-2 rounded-full bg-gray-400 mr-2"></span>
+                检查中...
+            </div>
+            <div class="flex items-center gap-3 pl-4 border-l border-gray-200">
+                <div class="h-8 w-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-sm">
+                    {{ username[0] | upper if username else 'U' }}
+                </div>
+                <span class="text-sm font-medium text-gray-700 hidden sm:block">{{ username }}</span>
+            </div>
+            <form method="post" action="/logout">
+              <button type="submit" class="ml-2 px-3 py-1.5 border border-gray-300 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 rounded-md transition-colors">
+                退出
+              </button>
+            </form>
+          </div>
         </div>
-      </div>
-      <div class="user-info">
-        <div class="avatar">{{ username[0] | upper if username else 'U' }}</div>
-        <span>{{ username }}</span>
-        <form action="/logout" method="post" style="margin: 0">
-          <button type="submit" class="btn btn-outline btn-sm">退出</button>
-        </form>
       </div>
     </nav>
 
-    <div class="container">
-      <div class="page-header">
-        <h1>用户管理</h1>
-        <button class="btn btn-primary" onclick="openCreateModal()">
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-          >
-            <line x1="12" y1="5" x2="12" y2="19"></line>
-            <line x1="5" y1="12" x2="19" y2="12"></line>
-          </svg>
-          添加用户
+    <main class="flex-grow max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
+      <div class="flex justify-between items-center mb-8">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-900">用户管理</h1>
+            <p class="mt-1 text-sm text-gray-600">管理系统访问权限与用户账号。</p>
+        </div>
+        <button onclick="openCreateModal()" class="inline-flex items-center px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all transform hover:scale-105">
+            <svg class="-ml-1 mr-2 h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd" />
+            </svg>
+            添加用户
         </button>
       </div>
 
-      <div class="card">
-        <div class="card-header">
-          <h2>用户列表</h2>
-          <button class="btn btn-outline btn-sm" onclick="loadUsers()">
-            刷新
-          </button>
+      <div class="bg-white overflow-hidden shadow-sm rounded-xl border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+            <h2 class="text-lg font-medium text-gray-900">用户列表</h2>
+            <button onclick="loadUsers()" class="text-indigo-600 hover:text-indigo-800 text-sm font-medium flex items-center gap-1">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                刷新
+            </button>
         </div>
-        <div class="table-container">
-          <table>
-            <thead>
+        <div class="overflow-x-auto">
+          <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
               <tr>
-                <th>用户名</th>
-                <th>邮箱</th>
-                <th>状态</th>
-                <th>角色</th>
-                <th>在线状态</th>
-                <th>创建时间</th>
-                <th>操作</th>
+                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">用户名</th>
+                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">邮箱</th>
+                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">状态</th>
+                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">角色</th>
+                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">在线状态</th>
+                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">创建时间</th>
+                <th scope="col" class="relative px-6 py-3"><span class="sr-only">操作</span></th>
               </tr>
             </thead>
-            <tbody id="userTableBody">
+            <tbody id="userTableBody" class="bg-white divide-y divide-gray-200">
               <tr>
-                <td colspan="7" class="loading">加载中...</td>
+                <td colspan="7" class="px-6 py-12 text-center text-gray-500">
+                    <svg class="animate-spin h-6 w-6 text-indigo-500 mx-auto mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    加载中...
+                </td>
               </tr>
             </tbody>
           </table>
         </div>
       </div>
+    </main>
+
+    <!-- Create/Edit Modal -->
+    <div id="userModal" class="fixed inset-0 z-50 overflow-y-auto hidden" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+        <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true" onclick="closeModal()"></div>
+            <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+            <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg w-full">
+                <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                    <div class="sm:flex sm:items-start">
+                        <div class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-indigo-100 sm:mx-0 sm:h-10 sm:w-10">
+                            <svg class="h-6 w-6 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                            </svg>
+                        </div>
+                        <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
+                            <h3 class="text-lg leading-6 font-medium text-gray-900" id="modalTitle">添加用户</h3>
+                            <div class="mt-4">
+                                <form id="userForm" class="space-y-4">
+                                    <input type="hidden" id="userId" name="userId" />
+                                    <div>
+                                        <label for="usernameInput" class="block text-sm font-medium text-gray-700">用户名 <span class="text-red-500">*</span></label>
+                                        <input type="text" id="usernameInput" name="username" class="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md border p-2" required placeholder="3-50 个字符">
+                                    </div>
+                                    <div id="passwordGroup">
+                                        <label for="passwordInput" class="block text-sm font-medium text-gray-700">密码 <span id="passwordRequired" class="text-red-500">*</span></label>
+                                        <input type="password" id="passwordInput" name="password" class="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md border p-2" placeholder="至少 6 个字符">
+                                    </div>
+                                    <div>
+                                        <label for="emailInput" class="block text-sm font-medium text-gray-700">邮箱</label>
+                                        <input type="email" id="emailInput" name="email" class="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md border p-2" placeholder="可选">
+                                    </div>
+                                    <div class="flex items-center gap-6 pt-2">
+                                        <div class="flex items-center">
+                                            <input id="isActive" name="is_active" type="checkbox" class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded" checked>
+                                            <label for="isActive" class="ml-2 block text-sm text-gray-900">启用账号</label>
+                                        </div>
+                                        <div class="flex items-center">
+                                            <input id="isSuperuser" name="is_superuser" type="checkbox" class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded">
+                                            <label for="isSuperuser" class="ml-2 block text-sm text-gray-900">管理员权限</label>
+                                        </div>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                    <button type="button" onclick="saveUser()" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-indigo-600 text-base font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:ml-3 sm:w-auto sm:text-sm">
+                        保存
+                    </button>
+                    <button type="button" onclick="closeModal()" class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">
+                        取消
+                    </button>
+                </div>
+            </div>
+        </div>
     </div>
 
-    <!-- 创建/编辑用户模态框 -->
-    <div id="userModal" class="modal-overlay">
-      <div class="modal">
-        <div class="modal-header">
-          <h3 id="modalTitle">添加用户</h3>
-          <button class="modal-close" onclick="closeModal()">&times;</button>
+    <!-- Delete Modal -->
+    <div id="deleteModal" class="fixed inset-0 z-50 overflow-y-auto hidden" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+        <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true" onclick="closeDeleteModal()"></div>
+            <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+            <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg w-full">
+                <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                    <div class="sm:flex sm:items-start">
+                        <div class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-100 sm:mx-0 sm:h-10 sm:w-10">
+                            <svg class="h-6 w-6 text-red-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                            </svg>
+                        </div>
+                        <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
+                            <h3 class="text-lg leading-6 font-medium text-gray-900">确认删除</h3>
+                            <div class="mt-2">
+                                <p class="text-sm text-gray-500">确定要删除用户 <strong id="deleteUsername" class="text-gray-900"></strong> 吗？此操作不可撤销。</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                    <button type="button" id="confirmDeleteBtn" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:ml-3 sm:w-auto sm:text-sm">
+                        确认删除
+                    </button>
+                    <button type="button" onclick="closeDeleteModal()" class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">
+                        取消
+                    </button>
+                </div>
+            </div>
         </div>
-        <div class="modal-body">
-          <form id="userForm">
-            <input type="hidden" id="userId" name="userId" />
-
-            <div class="form-group">
-              <label for="usernameInput">用户名 *</label>
-              <input
-                type="text"
-                id="usernameInput"
-                name="username"
-                required
-                minlength="3"
-                maxlength="50"
-                placeholder="3-50 个字符"
-              />
-            </div>
-
-            <div class="form-group" id="passwordGroup">
-              <label for="passwordInput">密码 <span id="passwordRequired">*</span></label>
-              <input
-                type="password"
-                id="passwordInput"
-                name="password"
-                minlength="6"
-                maxlength="100"
-                placeholder="至少 6 个字符"
-              />
-            </div>
-
-            <div class="form-group">
-              <label for="emailInput">邮箱</label>
-              <input
-                type="email"
-                id="emailInput"
-                name="email"
-                placeholder="可选"
-              />
-            </div>
-
-            <div class="form-group">
-              <div class="checkbox-group">
-                <input type="checkbox" id="isActive" name="is_active" checked />
-                <label for="isActive">启用账号</label>
-              </div>
-            </div>
-
-            <div class="form-group">
-              <div class="checkbox-group">
-                <input type="checkbox" id="isSuperuser" name="is_superuser" />
-                <label for="isSuperuser">管理员权限</label>
-              </div>
-            </div>
-          </form>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-outline" onclick="closeModal()">
-            取消
-          </button>
-          <button type="button" class="btn btn-primary" onclick="saveUser()">
-            保存
-          </button>
-        </div>
-      </div>
     </div>
 
-    <!-- 确认删除模态框 -->
-    <div id="deleteModal" class="modal-overlay">
-      <div class="modal" style="width: min(400px, 90vw)">
-        <div class="modal-header">
-          <h3>确认删除</h3>
-          <button class="modal-close" onclick="closeDeleteModal()">&times;</button>
-        </div>
-        <div class="modal-body">
-          <p>确定要删除用户 <strong id="deleteUsername"></strong> 吗？</p>
-          <p style="color: var(--danger); font-size: 0.9rem">此操作不可撤销！</p>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-outline" onclick="closeDeleteModal()">
-            取消
-          </button>
-          <button type="button" class="btn btn-danger" id="confirmDeleteBtn">
-            确认删除
-          </button>
-        </div>
-      </div>
-    </div>
+    <!-- Toast Container -->
+    <div id="toast-container" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2"></div>
 
     <script>
       let users = [];
       let editingUserId = null;
 
-      // 加载用户列表
+      // Load Users
       async function loadUsers() {
         const tbody = document.getElementById("userTableBody");
-        tbody.innerHTML = '<tr><td colspan="7" class="loading">加载中...</td></tr>';
-
+        // Keep loading state HTML
+        
         try {
           const response = await fetch("/api/admin/users");
           if (response.status === 403) {
-            tbody.innerHTML =
-              '<tr><td colspan="7" class="empty-state">需要管理员权限才能查看用户列表</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" class="px-6 py-12 text-center text-gray-500">需要管理员权限才能查看用户列表</td></tr>';
             return;
           }
           if (!response.ok) throw new Error("加载失败");
@@ -599,55 +245,50 @@
           users = data.items || [];
 
           if (users.length === 0) {
-            tbody.innerHTML =
-              '<tr><td colspan="7" class="empty-state">暂无用户</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" class="px-6 py-12 text-center text-gray-500">暂无用户</td></tr>';
             return;
           }
 
           tbody.innerHTML = users.map(renderUserRow).join("");
         } catch (error) {
           console.error("加载用户列表失败:", error);
-          tbody.innerHTML =
-            '<tr><td colspan="7" class="empty-state">加载失败，请重试</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="7" class="px-6 py-12 text-center text-red-500">加载失败，请重试</td></tr>';
         }
       }
 
-      // 渲染用户行
       function renderUserRow(user) {
         const statusBadge = user.is_active
-          ? '<span class="badge badge-success">启用</span>'
-          : '<span class="badge badge-danger">禁用</span>';
+          ? '<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">启用</span>'
+          : '<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">禁用</span>';
 
         const roleBadge = user.is_superuser
-          ? '<span class="badge badge-info">管理员</span>'
-          : '<span class="badge badge-warning">普通用户</span>';
+          ? '<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-indigo-100 text-indigo-800">管理员</span>'
+          : '<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">普通用户</span>';
 
         const onlineStatus = user.is_online
-          ? '<div class="status-indicator"><span class="status-dot online"></span>在线</div>'
-          : '<div class="status-indicator"><span class="status-dot offline"></span>离线</div>';
+          ? '<div class="flex items-center"><span class="h-2.5 w-2.5 rounded-full bg-green-400 mr-2"></span><span class="text-sm text-gray-700">在线</span></div>'
+          : '<div class="flex items-center"><span class="h-2.5 w-2.5 rounded-full bg-gray-300 mr-2"></span><span class="text-sm text-gray-500">离线</span></div>';
 
         const createdAt = new Date(user.created_at).toLocaleString("zh-CN");
 
         return `
-          <tr>
-            <td><strong>${escapeHtml(user.username)}</strong></td>
-            <td>${user.email ? escapeHtml(user.email) : '<span style="color: #94a3b8">未设置</span>'}</td>
-            <td>${statusBadge}</td>
-            <td>${roleBadge}</td>
-            <td>${onlineStatus}</td>
-            <td>${createdAt}</td>
-            <td>
-              <div class="actions">
-                <button class="btn btn-outline btn-sm" onclick="editUser('${user.id}')">编辑</button>
-                ${user.is_online ? `<button class="btn btn-outline btn-sm" style="color: var(--warning)" onclick="forceLogout('${user.id}', '${escapeHtml(user.username)}')">下线</button>` : ""}
-                <button class="btn btn-outline btn-sm" style="color: var(--danger)" onclick="confirmDelete('${user.id}', '${escapeHtml(user.username)}')">删除</button>
-              </div>
+          <tr class="hover:bg-gray-50 transition-colors">
+            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${escapeHtml(user.username)}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${user.email ? escapeHtml(user.email) : '<span class="text-gray-300">未设置</span>'}</td>
+            <td class="px-6 py-4 whitespace-nowrap">${statusBadge}</td>
+            <td class="px-6 py-4 whitespace-nowrap">${roleBadge}</td>
+            <td class="px-6 py-4 whitespace-nowrap">${onlineStatus}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${createdAt}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+              <button onclick="editUser('${user.id}')" class="text-indigo-600 hover:text-indigo-900 mr-3 transition-colors">编辑</button>
+              ${user.is_online ? `<button onclick="forceLogout('${user.id}', '${escapeHtml(user.username)}')" class="text-yellow-600 hover:text-yellow-900 mr-3 transition-colors">下线</button>` : ""}
+              <button onclick="confirmDelete('${user.id}', '${escapeHtml(user.username)}')" class="text-red-600 hover:text-red-900 transition-colors">删除</button>
             </td>
           </tr>
         `;
       }
 
-      // 打开创建用户模态框
+      // Open Modal
       function openCreateModal() {
         editingUserId = null;
         document.getElementById("modalTitle").textContent = "添加用户";
@@ -656,10 +297,12 @@
         document.getElementById("passwordInput").required = true;
         document.getElementById("passwordRequired").style.display = "inline";
         document.getElementById("isActive").checked = true;
-        document.getElementById("userModal").classList.add("active");
+        
+        const modal = document.getElementById("userModal");
+        modal.classList.remove("hidden");
+        document.body.classList.add("modal-active");
       }
 
-      // 编辑用户
       function editUser(userId) {
         const user = users.find((u) => u.id === userId);
         if (!user) return;
@@ -674,16 +317,18 @@
         document.getElementById("passwordRequired").style.display = "none";
         document.getElementById("isActive").checked = user.is_active;
         document.getElementById("isSuperuser").checked = user.is_superuser;
-        document.getElementById("userModal").classList.add("active");
+        
+        const modal = document.getElementById("userModal");
+        modal.classList.remove("hidden");
+        document.body.classList.add("modal-active");
       }
 
-      // 关闭模态框
       function closeModal() {
-        document.getElementById("userModal").classList.remove("active");
+        document.getElementById("userModal").classList.add("hidden");
+        document.body.classList.remove("modal-active");
         editingUserId = null;
       }
 
-      // 保存用户
       async function saveUser() {
         const form = document.getElementById("userForm");
         const username = document.getElementById("usernameInput").value.trim();
@@ -713,14 +358,12 @@
         try {
           let response;
           if (editingUserId) {
-            // 更新用户
             response = await fetch(`/api/admin/users/${editingUserId}`, {
               method: "PUT",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify(userData),
             });
           } else {
-            // 创建用户
             userData.username = username;
             response = await fetch("/api/admin/users", {
               method: "POST",
@@ -742,20 +385,18 @@
         }
       }
 
-      // 确认删除
       function confirmDelete(userId, username) {
         document.getElementById("deleteUsername").textContent = username;
-        document.getElementById("confirmDeleteBtn").onclick = () =>
-          deleteUser(userId);
-        document.getElementById("deleteModal").classList.add("active");
+        document.getElementById("confirmDeleteBtn").onclick = () => deleteUser(userId);
+        document.getElementById("deleteModal").classList.remove("hidden");
+        document.body.classList.add("modal-active");
       }
 
-      // 关闭删除确认框
       function closeDeleteModal() {
-        document.getElementById("deleteModal").classList.remove("active");
+        document.getElementById("deleteModal").classList.add("hidden");
+        document.body.classList.remove("modal-active");
       }
 
-      // 删除用户
       async function deleteUser(userId) {
         try {
           const response = await fetch(`/api/admin/users/${userId}`, {
@@ -775,7 +416,6 @@
         }
       }
 
-      // 强制下线
       async function forceLogout(userId, username) {
         if (!confirm(`确定要强制下线用户 ${username} 吗？`)) return;
 
@@ -799,53 +439,62 @@
         }
       }
 
-      // 检查认证服务器状态
       async function checkServerHealth() {
         const statusEl = document.getElementById("serverStatus");
+        if(!statusEl) return;
+        
         try {
           const response = await fetch("/api/admin/auth-server-health");
           const data = await response.json();
 
           if (data.healthy) {
-            statusEl.className = "server-status healthy";
-            statusEl.innerHTML =
-              '<span class="status-dot online"></span><span>认证服务器正常</span>';
+            statusEl.innerHTML = '<span class="w-2 h-2 rounded-full bg-green-500 mr-2"></span><span class="text-green-700">服务正常</span>';
+            statusEl.className = "hidden md:flex items-center px-3 py-1 bg-green-50 rounded-full text-xs font-medium";
           } else {
-            statusEl.className = "server-status unhealthy";
-            statusEl.innerHTML =
-              '<span class="status-dot offline"></span><span>认证服务器异常</span>';
+            statusEl.innerHTML = '<span class="w-2 h-2 rounded-full bg-red-500 mr-2"></span><span class="text-red-700">服务异常</span>';
+            statusEl.className = "hidden md:flex items-center px-3 py-1 bg-red-50 rounded-full text-xs font-medium";
           }
         } catch {
-          statusEl.className = "server-status unhealthy";
-          statusEl.innerHTML =
-            '<span class="status-dot offline"></span><span>无法连接</span>';
+            statusEl.innerHTML = '<span class="w-2 h-2 rounded-full bg-gray-500 mr-2"></span><span class="text-gray-700">无法连接</span>';
+            statusEl.className = "hidden md:flex items-center px-3 py-1 bg-gray-100 rounded-full text-xs font-medium";
         }
       }
 
-      // 显示提示
       function showToast(message, type = "success") {
         const toast = document.createElement("div");
-        toast.className = `toast ${type}`;
-        toast.textContent = message;
-        document.body.appendChild(toast);
-        setTimeout(() => toast.remove(), 3000);
+        const bgColor = type === "success" ? "bg-green-600" : "bg-red-600";
+        toast.className = `${bgColor} text-white px-6 py-3 rounded-lg shadow-lg flex items-center transform transition-all duration-300 translate-y-2 opacity-0`;
+        
+        const icon = type === "success" 
+            ? '<svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>'
+            : '<svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>';
+            
+        toast.innerHTML = `${icon}<span>${message}</span>`;
+        
+        document.getElementById("toast-container").appendChild(toast);
+        
+        // Trigger animation
+        requestAnimationFrame(() => {
+            toast.classList.remove("translate-y-2", "opacity-0");
+        });
+
+        setTimeout(() => {
+            toast.classList.add("translate-y-2", "opacity-0");
+            setTimeout(() => toast.remove(), 300);
+        }, 3000);
       }
 
-      // 转义 HTML
       function escapeHtml(text) {
         const div = document.createElement("div");
         div.textContent = text;
         return div.innerHTML;
       }
 
-      // 初始化
       document.addEventListener("DOMContentLoaded", () => {
         loadUsers();
         checkServerHealth();
-        // 每 30 秒刷新一次状态
         setInterval(checkServerHealth, 30000);
       });
     </script>
   </body>
 </html>
-

@@ -1,350 +1,473 @@
-<!doctype html>
-<html lang="zh-CN" data-theme="light">
+<!DOCTYPE html>
+<html lang="zh-CN">
   <head>
     <meta charset="utf-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1, user-scalable=no"
-    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Temu 发布助手 · Web Panel</title>
-    <link
-      rel="stylesheet"
-      href="https://unpkg.com/@picocss/pico@2.0.6/css/pico.min.css"
-    />
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Inter Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+              mono: ['JetBrains Mono', 'monospace'],
+            },
+            colors: {
+              primary: {
+                50: '#eef2ff',
+                100: '#e0e7ff',
+                500: '#6366f1',
+                600: '#4f46e5',
+                700: '#4338ca',
+              }
+            }
+          }
+        }
+      }
+    </script>
     <style>
-      body {
-        background: #f5f7fb;
+      /* Custom Scrollbar for Logs */
+      .custom-scrollbar::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
       }
-      .required-mark {
-        color: #dc2626;
-        margin-left: 0.25rem;
+      .custom-scrollbar::-webkit-scrollbar-track {
+        background: #1f2937;
       }
-      .env-status {
-        font-size: 0.9rem;
-        color: #059669;
+      .custom-scrollbar::-webkit-scrollbar-thumb {
+        background: #374151;
+        border-radius: 4px;
       }
-      .env-status.error {
-        color: #dc2626;
+      .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+        background: #4b5563;
       }
-      header {
-        margin-top: 2rem;
-        text-align: center;
+      
+      /* Progress Steps Animation */
+      .step-dot { transition: all 0.3s ease; }
+      .step-line { transition: all 0.5s ease; }
+      
+      /* Status Pill Animations */
+      @keyframes pulse-ring {
+        0% { transform: scale(0.33); }
+        80%, 100% { opacity: 0; }
       }
-      .grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-        gap: 1rem;
+      .ring-container {
+        position: relative;
       }
-      .log-box {
-        background: #111827;
-        color: #e5e7eb;
-        padding: 1rem;
-        border-radius: 0.75rem;
-        min-height: 260px;
-        max-height: 360px;
-        overflow-y: auto;
-        font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
-        font-size: 0.85rem;
-        line-height: 1.4;
-        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
-      }
-      .status-pill {
-        display: inline-flex;
-        align-items: center;
-        padding: 0.25rem 0.75rem;
-        border-radius: 999px;
-        font-size: 0.85rem;
-        font-weight: 600;
-        background: #dbeafe;
-        color: #1d4ed8;
-      }
-      .status-pill.running {
-        background: #fef3c7;
-        color: #b45309;
-      }
-      .status-pill.failed {
-        background: #fee2e2;
-        color: #b91c1c;
-      }
-      .status-pill.success {
-        background: #dcfce7;
-        color: #15803d;
-      }
-      .progress-track {
-        display: flex;
-        gap: 0.5rem;
-        margin-top: 0.5rem;
-      }
-      .progress-step {
-        flex: 1;
-        height: 6px;
-        border-radius: 999px;
-        background: #e5e7eb;
-      }
-      .progress-step.active {
-        background: linear-gradient(90deg, #6366f1, #22d3ee);
-      }
-      .tooltip {
-        font-size: 0.9rem;
-        color: #6b7280;
-      }
-      .form-card {
-        padding: 1.5rem;
-        border-radius: 1rem;
-        background: #fff;
-        box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
-      }
-      .helper-card {
-        background: #fef9c3;
-        border-radius: 0.75rem;
-        padding: 1rem;
-        border: 1px solid #fde047;
-      }
-      .step-list {
-        list-style: none;
-        padding: 0;
-        display: flex;
-        flex-direction: column;
-        gap: 0.5rem;
-      }
-      .step-list li {
-        background: #fff;
-        border-radius: 0.75rem;
-        padding: 0.75rem 1rem;
-        box-shadow: 0 1px 4px rgba(15, 23, 42, 0.08);
-        display: flex;
-        gap: 0.75rem;
-        align-items: center;
-      }
-      .step-number {
-        width: 32px;
-        height: 32px;
+      .circle {
+        width: 8px;
+        height: 8px;
         border-radius: 50%;
-        background: #eef2ff;
-        color: #4338ca;
-        font-weight: 600;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
       }
-      .danger-note {
-        color: #b91c1c;
-        font-weight: 600;
-      }
-      .file-hint {
-        font-size: 0.85rem;
-        margin-top: 0.25rem;
-        color: #4b5563;
-      }
-      .actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.75rem;
-        margin-top: 1rem;
-      }
-      .actions a {
-        text-decoration: none;
+      .ringring {
+        border: 3px solid #6366f1;
+        border-radius: 30px;
+        height: 20px;
+        width: 20px;
+        position: absolute;
+        left: -6px;
+        top: -6px;
+        animation: pulse-ring 1.25s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
       }
     </style>
   </head>
-  <body>
-    <main class="container">
-      <div class="logout-bar" style="display: flex; justify-content: flex-end">
-        <form method="post" action="/logout">
-          <button type="submit" class="secondary">退出登录</button>
-        </form>
+  <body class="bg-gray-100 text-gray-800 font-sans min-h-screen flex flex-col">
+    
+    <!-- Top Navigation -->
+    <nav class="bg-white border-b border-gray-200 sticky top-0 z-50">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex justify-between h-16">
+          <div class="flex items-center gap-4">
+            <div class="flex-shrink-0 flex items-center gap-3">
+              <div class="bg-indigo-600 p-1.5 rounded-lg">
+                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+                </svg>
+              </div>
+              <span class="font-bold text-xl text-gray-900 tracking-tight">Temu 发布助手</span>
+            </div>
+            <div class="hidden md:flex ml-10 space-x-8">
+              <a href="#" class="border-indigo-500 text-gray-900 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">控制台</a>
+              <a href="/admin" class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">用户管理</a>
+              <a href="/downloads/sample-selection" class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">下载模板</a>
+            </div>
+          </div>
+          <div class="flex items-center">
+            <form method="post" action="/logout">
+              <button type="submit" class="ml-4 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-md transition-colors">
+                退出登录
+              </button>
+            </form>
+          </div>
+        </div>
       </div>
-      <header>
-        <p>Temu 自动发布助手 · Web 管理控制台</p>
-        <h1>请依照步骤完成文件准备、配置与任务执行</h1>
-        <p>该页面提供文件上传、参数设置、运行监控与问题提示</p>
+    </nav>
+
+    <main class="flex-grow max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
+      <header class="mb-8">
+        <h1 class="text-3xl font-bold text-gray-900">工作台</h1>
+        <p class="mt-2 text-sm text-gray-600">管理您的发布任务，监控实时进度与日志。</p>
       </header>
 
-      <section class="grid" style="margin-top: 2rem">
-        <article class="form-card">
-          <h3>Step 1 · 准备文件</h3>
-          <ul class="step-list">
-            <li>
-              <span class="step-number">1</span>
-              先点击“选品表文件”上传最新 Excel/CSV
-            </li>
-            <li>
-              <span class="step-number">2</span>
-              或者把已经存在电脑里的完整路径复制到“已有文件路径”
-            </li>
-            <li>
-              <span class="step-number">3</span>
-              资料准备完成后直接进入 Step 2 并提交运行任务
-            </li>
-          </ul>
-          <div class="helper-card" style="margin-top: 1rem">
-            <p>
-              如需参考格式，可下载标准选品表模板：<br />
-              <a href="/downloads/sample-selection">下载示例文件</a>
-            </p>
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        
+        <!-- Left Column: Configuration -->
+        <div class="lg:col-span-7 space-y-6">
+          
+          <!-- Quick Actions / File Prep -->
+          <div class="bg-white overflow-hidden shadow-sm rounded-xl border border-gray-200">
+            <div class="px-6 py-5 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
+              <h3 class="text-lg font-medium leading-6 text-gray-900">准备工作</h3>
+              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">Step 1</span>
+            </div>
+            <div class="px-6 py-5">
+              <div class="rounded-lg bg-blue-50 p-4 mb-4">
+                <div class="flex">
+                  <div class="flex-shrink-0">
+                    <svg class="h-5 w-5 text-blue-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                      <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+                    </svg>
+                  </div>
+                  <div class="ml-3 flex-1 md:flex md:justify-between">
+                    <p class="text-sm text-blue-700">请确保选品表文件包含完整的商品信息。</p>
+                    <p class="mt-3 text-sm md:mt-0 md:ml-6">
+                      <a href="/downloads/sample-selection" class="whitespace-nowrap font-medium text-blue-700 hover:text-blue-600">下载示例文件 &rarr;</a>
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <ul class="space-y-3 text-sm text-gray-600">
+                <li class="flex items-start gap-3">
+                  <span class="flex-shrink-0 flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 text-gray-600 font-bold text-xs">1</span>
+                  <span>准备好您的选品表 Excel/CSV 文件。</span>
+                </li>
+                <li class="flex items-start gap-3">
+                  <span class="flex-shrink-0 flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 text-gray-600 font-bold text-xs">2</span>
+                  <span>在下方表单中上传文件或填写路径。</span>
+                </li>
+                <li class="flex items-start gap-3">
+                  <span class="flex-shrink-0 flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 text-gray-600 font-bold text-xs">3</span>
+                  <span>点击“开始执行”并监控右侧日志。</span>
+                </li>
+              </ul>
+            </div>
           </div>
-        </article>
 
-        <article class="form-card">
-          <h3>Step 2 · 选择运行方式</h3>
-          <form id="control-form" enctype="multipart/form-data">
-            {% for field in fields %}
-            {% if field.kind == "file" %}
-            <label>
-              {{ field.label }}
-              <input
-                type="file"
-                name="{{ field.name }}"
-                {% if field.accept %}accept="{{ field.accept }}"{% endif %}
-                {% if field.required %}required{% endif %}
-              />
-            </label>
-            <p class="file-hint">{{ field.help_text }}</p>
-            {% elif field.kind == "path" %}
-            <label>
-              <span>
-                {{ field.label }}
-                {% if field.required %}
-                <span class="required-mark">*</span>
-                {% endif %}
-              </span>
-              <input
-                type="text"
-                name="{{ field.name }}"
-                placeholder="{{ field.placeholder }}"
-                value="{{ field.default or '' }}"
-                {% if field.required %}required{% endif %}
-              />
-            </label>
-            <p class="tooltip">{{ field.help_text }}</p>
-            {% elif field.kind == "choice" %}
-            <label>
-              {{ field.label }}
-              <select name="{{ field.name }}">
-                {% for value, label in field.options %}
-                <option
-                  value="{{ value }}"
-                  {% if field.default == value %}selected{% endif %}
-                >
-                  {{ label }}
-                </option>
+          <!-- Run Configuration Form -->
+          <div class="bg-white overflow-hidden shadow-sm rounded-xl border border-gray-200">
+            <div class="px-6 py-5 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
+              <h3 class="text-lg font-medium leading-6 text-gray-900">运行配置</h3>
+              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">Step 2</span>
+            </div>
+            <div class="px-6 py-6">
+              <form id="control-form" enctype="multipart/form-data" class="space-y-6">
+                {% for field in fields %}
+                  {% if field.kind == "file" %}
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">
+                      {{ field.label }}
+                      {% if field.required %}<span class="text-red-500">*</span>{% endif %}
+                    </label>
+                    <div class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-lg hover:border-indigo-400 transition-colors cursor-pointer relative bg-gray-50 hover:bg-white">
+                      <div class="space-y-1 text-center pointer-events-none">
+                        <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48">
+                          <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                        </svg>
+                        <div class="flex text-sm text-gray-600 justify-center">
+                          <span class="relative cursor-pointer bg-white rounded-md font-medium text-indigo-600 hover:text-indigo-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-indigo-500">
+                            <span>点击上传文件</span>
+                          </span>
+                        </div>
+                        <p class="text-xs text-gray-500">{{ field.help_text }}</p>
+                      </div>
+                      <input 
+                        type="file" 
+                        name="{{ field.name }}" 
+                        class="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                        {% if field.accept %}accept="{{ field.accept }}"{% endif %}
+                        {% if field.required %}required{% endif %}
+                      />
+                    </div>
+                  </div>
+
+                  {% elif field.kind == "path" %}
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">
+                      {{ field.label }}
+                      {% if field.required %}<span class="text-red-500">*</span>{% endif %}
+                    </label>
+                    <div class="mt-1 relative rounded-md shadow-sm">
+                      <input
+                        type="text"
+                        name="{{ field.name }}"
+                        class="focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-lg p-2.5 border"
+                        placeholder="{{ field.placeholder }}"
+                        value="{{ field.default or '' }}"
+                        {% if field.required %}required{% endif %}
+                      />
+                    </div>
+                    <p class="mt-1 text-xs text-gray-500">{{ field.help_text }}</p>
+                  </div>
+
+                  {% elif field.kind == "choice" %}
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">{{ field.label }}</label>
+                    <select
+                      name="{{ field.name }}"
+                      class="mt-1 block w-full pl-3 pr-10 py-2.5 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-lg border"
+                    >
+                      {% for value, label in field.options %}
+                      <option value="{{ value }}" {% if field.default == value %}selected{% endif %}>
+                        {{ label }}
+                      </option>
+                      {% endfor %}
+                    </select>
+                    <p class="mt-1 text-xs text-gray-500">{{ field.help_text }}</p>
+                  </div>
+
+                  {% else %}
+                  <div class="relative flex items-start py-2">
+                    <div class="flex items-center h-5">
+                      <input
+                        type="checkbox"
+                        name="{{ field.name }}"
+                        class="focus:ring-indigo-500 h-4 w-4 text-indigo-600 border-gray-300 rounded"
+                        {% if field.default %}checked{% endif %}
+                      />
+                    </div>
+                    <div class="ml-3 text-sm">
+                      <label class="font-medium text-gray-700">{{ field.label }}</label>
+                      <p class="text-gray-500">{{ field.help_text }}</p>
+                    </div>
+                  </div>
+                  {% endif %}
                 {% endfor %}
-              </select>
-            </label>
-            <p class="tooltip">{{ field.help_text }}</p>
-            {% else %}
-            <label style="display: flex; justify-content: space-between; gap: 1rem">
-              <span>
-                {{ field.label }}<br />
-                <small class="tooltip">{{ field.help_text }}</small>
-              </span>
-              <input
-                type="checkbox"
-                role="switch"
-                name="{{ field.name }}"
-                {% if field.default %}checked{% endif %}
-              />
-            </label>
-            {% endif %}
-            {% endfor %}
-            <div class="actions">
-              <button type="submit" id="run-btn">开始执行</button>
-              <button type="button" id="health-btn" class="secondary">
-                环境自检
-              </button>
-            </div>
-            <p class="danger-note" id="form-error" hidden></p>
-          </form>
-        </article>
-      </section>
 
-      <section class="grid" style="margin-top: 2rem">
-        <article class="form-card">
-          <h3>系统设置 (.env)</h3>
-          <p>填写必要的账号与 API Key，保存后立即生效。</p>
-          <form id="env-form">
-            {% for field in env_fields %}
-            <label>
-              <span>
-                {{ field.label }}
-                {% if field.required %}
-                <span class="required-mark">*</span>
-                {% endif %}
-              </span>
-              <input
-                type="{% if field.secret %}password{% else %}text{% endif %}"
-                name="{{ field.key }}"
-                placeholder="{{ field.placeholder or '' }}"
-                {% if field.required %}required{% endif %}
-              />
-            </label>
-            <p class="tooltip">{{ field.help_text }}</p>
-            {% endfor %}
-            <div class="actions">
-              <button type="submit">保存设置</button>
-              <span id="env-save-status" class="env-status"></span>
+                <div class="pt-4 flex items-center gap-4">
+                  <button
+                    type="submit"
+                    id="run-btn"
+                    class="flex-1 flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed group"
+                  >
+                    <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white hidden group-aria-[busy=true]:block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    开始执行任务
+                  </button>
+                  
+                  <button
+                    type="button"
+                    id="health-btn"
+                    class="flex-none px-4 py-3 border border-gray-300 shadow-sm text-sm font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors"
+                  >
+                    环境自检
+                  </button>
+                </div>
+                
+                <div id="form-error" class="hidden rounded-md bg-red-50 p-4">
+                  <div class="flex">
+                    <div class="flex-shrink-0">
+                      <svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+                      </svg>
+                    </div>
+                    <div class="ml-3">
+                      <h3 class="text-sm font-medium text-red-800">提交错误</h3>
+                      <div class="mt-2 text-sm text-red-700">
+                        <p id="form-error-text"></p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </form>
             </div>
-          </form>
-        </article>
-      </section>
-
-      <section class="grid" style="margin-top: 2rem">
-        <article class="form-card">
-          <h3>Step 3 · 实时进度</h3>
-          <div>
-            <span class="status-pill" id="status-pill">闲置</span>
-            <p id="status-message" style="margin-top: 0.5rem">
-              等待开始 ...
-            </p>
-            <div class="progress-track" aria-label="进度条">
-              <div class="progress-step" id="step-1"></div>
-              <div class="progress-step" id="step-2"></div>
-              <div class="progress-step" id="step-3"></div>
-              <div class="progress-step" id="step-4"></div>
-            </div>
-            <dl style="margin-top: 1rem">
-              <dt>Workflow ID</dt>
-              <dd id="workflow-id">-</dd>
-              <dt>最近提示</dt>
-              <dd id="status-error">-</dd>
-            </dl>
           </div>
-        </article>
 
-        <article class="form-card">
-          <h3>实时日志</h3>
-          <div class="log-box" id="log-box"></div>
-        </article>
-      </section>
+          <!-- System Settings Collapsible -->
+          <div class="bg-white overflow-hidden shadow-sm rounded-xl border border-gray-200">
+            <details class="group">
+              <summary class="flex justify-between items-center font-medium cursor-pointer list-none px-6 py-5 bg-gray-50 hover:bg-gray-100 transition-colors">
+                <span class="flex items-center gap-2 text-gray-900">
+                  <svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                  </svg>
+                  系统设置 (.env)
+                </span>
+                <span class="transition group-open:rotate-180">
+                  <svg fill="none" height="24" shape-rendering="geometricPrecision" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" viewBox="0 0 24 24" width="24"><path d="M6 9l6 6 6-6"></path></svg>
+                </span>
+              </summary>
+              <div class="px-6 py-6 border-t border-gray-100">
+                <p class="text-sm text-gray-500 mb-4">填写必要的账号与 API Key，保存后立即生效。</p>
+                <form id="env-form" class="space-y-4">
+                  {% for field in env_fields %}
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">
+                      {{ field.label }}
+                      {% if field.required %}<span class="text-red-500">*</span>{% endif %}
+                    </label>
+                    <input
+                      type="{% if field.secret %}password{% else %}text{% endif %}"
+                      name="{{ field.key }}"
+                      class="focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-lg p-2.5 border"
+                      placeholder="{{ field.placeholder or '' }}"
+                      {% if field.required %}required{% endif %}
+                    />
+                    <p class="mt-1 text-xs text-gray-500">{{ field.help_text }}</p>
+                  </div>
+                  {% endfor %}
+                  <div class="flex items-center gap-4 pt-2">
+                    <button type="submit" class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors">
+                      保存设置
+                    </button>
+                    <span id="env-save-status" class="text-sm font-medium transition-opacity opacity-0"></span>
+                  </div>
+                </form>
+              </div>
+            </details>
+          </div>
+        </div>
 
-      <section style="margin: 2rem 0">
-        <article class="form-card">
-          <h3>常见问题</h3>
-          <ul>
-            <li>“显示窗口”选项可在需要人工观察时启用，默认无头模式以提升效率。</li>
-            <li>勾选“仅执行认领”可在低风险场景下验证账号有效性。</li>
-            <li>若日志出现异常信息，请复制完整内容交由技术同事处理。</li>
-          </ul>
-        </article>
-      </section>
+        <!-- Right Column: Monitoring -->
+        <div class="lg:col-span-5 space-y-6">
+          
+          <!-- Status Card -->
+          <div class="bg-white overflow-hidden shadow-sm rounded-xl border border-gray-200">
+            <div class="px-6 py-5 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
+              <h3 class="text-lg font-medium leading-6 text-gray-900">实时监控</h3>
+              <div class="flex items-center gap-2">
+                <span id="status-pill-container" class="relative flex h-3 w-3">
+                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-gray-400 opacity-75"></span>
+                  <span class="relative inline-flex rounded-full h-3 w-3 bg-gray-500"></span>
+                </span>
+                <span id="status-pill" class="text-sm font-medium text-gray-500">闲置</span>
+              </div>
+            </div>
+            <div class="px-6 py-6">
+              
+              <!-- Progress Track -->
+              <div class="relative py-4">
+                <div class="overflow-hidden h-2 mb-4 text-xs flex rounded bg-gray-100">
+                  <div id="progress-bar-fill" style="width: 0%" class="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-indigo-500 transition-all duration-500"></div>
+                </div>
+                <div class="flex justify-between text-xs text-gray-500">
+                  <div class="text-center w-1/4 transition-colors duration-300" id="step-label-1">准备</div>
+                  <div class="text-center w-1/4 transition-colors duration-300" id="step-label-2">运行</div>
+                  <div class="text-center w-1/4 transition-colors duration-300" id="step-label-3">处理</div>
+                  <div class="text-center w-1/4 transition-colors duration-300" id="step-label-4">完成</div>
+                </div>
+                
+                <!-- Hidden original steps for JS compatibility -->
+                <div class="hidden">
+                  <div id="step-1"></div>
+                  <div id="step-2"></div>
+                  <div id="step-3"></div>
+                  <div id="step-4"></div>
+                </div>
+              </div>
+
+              <div class="mt-6 space-y-4">
+                <div class="bg-gray-50 rounded-lg p-4 border border-gray-100">
+                  <p class="text-sm text-gray-500 mb-1">当前状态</p>
+                  <p id="status-message" class="text-base font-medium text-gray-900">等待开始 ...</p>
+                </div>
+                
+                <div class="grid grid-cols-2 gap-4">
+                  <div class="bg-gray-50 rounded-lg p-3 border border-gray-100">
+                    <p class="text-xs text-gray-500 mb-1">Workflow ID</p>
+                    <p id="workflow-id" class="text-sm font-mono font-medium text-gray-900 truncate">-</p>
+                  </div>
+                  <div class="bg-gray-50 rounded-lg p-3 border border-gray-100">
+                    <p class="text-xs text-gray-500 mb-1">最近错误</p>
+                    <p id="status-error" class="text-sm font-medium text-red-600 truncate">-</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Logs Card -->
+          <div class="bg-[#1e1e1e] overflow-hidden shadow-lg rounded-xl border border-gray-800 flex flex-col h-[500px]">
+            <div class="px-4 py-3 border-b border-gray-800 bg-[#252526] flex justify-between items-center">
+              <div class="flex items-center gap-2">
+                <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                </svg>
+                <span class="text-sm font-mono text-gray-300">Terminal Output</span>
+              </div>
+              <div class="flex gap-1.5">
+                <div class="w-2.5 h-2.5 rounded-full bg-red-500"></div>
+                <div class="w-2.5 h-2.5 rounded-full bg-yellow-500"></div>
+                <div class="w-2.5 h-2.5 rounded-full bg-green-500"></div>
+              </div>
+            </div>
+            <div class="flex-grow p-4 overflow-y-auto custom-scrollbar font-mono text-xs leading-relaxed" id="log-box">
+              <div class="text-gray-500 mb-2">System initialized. Waiting for commands...</div>
+            </div>
+          </div>
+          
+          <!-- Help/FAQ -->
+           <div class="bg-blue-50 border border-blue-100 rounded-xl p-4">
+            <h4 class="text-sm font-bold text-blue-900 mb-2">💡 常见提示</h4>
+             <ul class="text-xs text-blue-800 space-y-1.5 list-disc list-inside">
+              <li>“显示窗口”可启用有头模式进行人工观察。</li>
+              <li>勾选“仅执行认领”可快速验证账号有效性。</li>
+              <li>若遇到未知错误，请截图日志联系技术支持。</li>
+            </ul>
+           </div>
+
+        </div>
+      </div>
     </main>
 
+    <footer class="bg-white border-t border-gray-200 mt-auto">
+      <div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+        <p class="text-center text-sm text-gray-500">
+          &copy; 2024 Temu Auto Publish. All rights reserved.
+        </p>
+      </div>
+    </footer>
+
+    <!-- Scripts (Preserving Logic) -->
     <script>
       const form = document.getElementById("control-form");
       const runBtn = document.getElementById("run-btn");
       const healthBtn = document.getElementById("health-btn");
       const statusPill = document.getElementById("status-pill");
+      const statusPillContainer = document.getElementById("status-pill-container");
       const statusMessage = document.getElementById("status-message");
       const statusError = document.getElementById("status-error");
       const workflowId = document.getElementById("workflow-id");
       const logBox = document.getElementById("log-box");
       const formError = document.getElementById("form-error");
+      const formErrorText = document.getElementById("form-error-text"); // New Text Element
+      
+      // Original Step Elements (Hidden)
       const steps = [
         document.getElementById("step-1"),
         document.getElementById("step-2"),
         document.getElementById("step-3"),
         document.getElementById("step-4"),
       ];
+      // New Visual Step Elements
+      const stepLabels = [
+        document.getElementById("step-label-1"),
+        document.getElementById("step-label-2"),
+        document.getElementById("step-label-3"),
+        document.getElementById("step-label-4"),
+      ];
+      const progressBarFill = document.getElementById("progress-bar-fill");
+
       const envForm = document.getElementById("env-form");
       const envSaveStatus = document.getElementById("env-save-status");
       let envSettingsCache = [];
@@ -353,17 +476,22 @@
 
       form.addEventListener("submit", async (event) => {
         event.preventDefault();
-        formError.hidden = true;
+        formError.classList.add("hidden");
         const data = new FormData(form);
         if (!data.has("single_run")) {
           data.append("single_run", "off");
         }
+        
         runBtn.setAttribute("aria-busy", "true");
         runBtn.disabled = true;
+        // Update UI for busy state
+        runBtn.classList.add("opacity-75", "cursor-wait");
+        
         if (usesDefaultMiaoshouAccount()) {
           alert("检测到妙手账号或密码仍为默认值 tester，请在“系统设置”中修改后再运行。");
           runBtn.removeAttribute("aria-busy");
           runBtn.disabled = false;
+          runBtn.classList.remove("opacity-75", "cursor-wait");
           return;
         }
         try {
@@ -376,20 +504,24 @@
             throw new Error(payload.detail || "提交失败, 请重试");
           }
           logCursor = -1;
-          logBox.textContent = "";
+          logBox.innerHTML = ""; // Clear logs
           await refreshStatus();
           await refreshLogs();
         } catch (error) {
-          formError.textContent = error.message;
-          formError.hidden = false;
+          if(formErrorText) formErrorText.textContent = error.message;
+          formError.classList.remove("hidden");
         } finally {
           runBtn.removeAttribute("aria-busy");
           runBtn.disabled = false;
+          runBtn.classList.remove("opacity-75", "cursor-wait");
         }
       });
 
       healthBtn.addEventListener("click", async () => {
-        healthBtn.setAttribute("aria-busy", "true");
+        const originalText = healthBtn.textContent;
+        healthBtn.textContent = "检查中...";
+        healthBtn.disabled = true;
+        
         try {
           const response = await fetch("/health");
           const payload = await response.json();
@@ -397,62 +529,135 @@
             payload.ok === false
               ? "环境异常, 请检查依赖后重试"
               : `环境正常 · 使用路径 ${payload.selection_dir}`;
+          
+          // Flash success
+          healthBtn.classList.add("bg-green-50", "text-green-700", "border-green-300");
+          setTimeout(() => {
+             healthBtn.classList.remove("bg-green-50", "text-green-700", "border-green-300");
+          }, 2000);
+          
         } catch (error) {
           statusMessage.textContent = "自检失败, 请稍后再试";
         } finally {
-          healthBtn.removeAttribute("aria-busy");
+          healthBtn.textContent = originalText;
+          healthBtn.disabled = false;
         }
       });
 
       function updatePill(state) {
-        statusPill.className = "status-pill";
+        // Reset styles
+        statusPill.className = "text-sm font-medium";
+        const dot = statusPillContainer.querySelector(".animate-ping");
+        const dotStatic = statusPillContainer.querySelector(".relative");
+        
         if (state === "running") {
-          statusPill.classList.add("running");
+          statusPill.classList.add("text-indigo-600");
           statusPill.textContent = "运行中";
+          dot.className = "animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75";
+          dotStatic.className = "relative inline-flex rounded-full h-3 w-3 bg-indigo-500";
         } else if (state === "success") {
-          statusPill.classList.add("success");
+          statusPill.classList.add("text-green-600");
           statusPill.textContent = "已完成";
+          dot.className = "hidden";
+          dotStatic.className = "relative inline-flex rounded-full h-3 w-3 bg-green-500";
         } else if (state === "failed") {
-          statusPill.classList.add("failed");
+          statusPill.classList.add("text-red-600");
           statusPill.textContent = "失败";
+          dot.className = "hidden";
+          dotStatic.className = "relative inline-flex rounded-full h-3 w-3 bg-red-500";
         } else {
+          statusPill.classList.add("text-gray-500");
           statusPill.textContent = "闲置";
+          dot.className = "hidden";
+          dotStatic.className = "relative inline-flex rounded-full h-3 w-3 bg-gray-500";
         }
       }
 
       function updateProgress(state) {
-        const activeCount = state === "running" ? 2 : state === "success" ? 4 : 0;
-        steps.forEach((step, index) => {
-          if (index < activeCount) {
-            step.classList.add("active");
-          } else {
-            step.classList.remove("active");
-          }
+        // Map states to progress bar width and label colors
+        let progress = 0;
+        let activeIndex = 0;
+        
+        if (state === "running") {
+          progress = 50; // Step 2/3 roughly
+          activeIndex = 1;
+        } else if (state === "success") {
+          progress = 100;
+          activeIndex = 3;
+        } else if (state === "failed") {
+          progress = 100; // Complete but red
+          activeIndex = 3; 
+        } else {
+          progress = 0;
+          activeIndex = 0;
+        }
+
+        progressBarFill.style.width = `${progress}%`;
+        
+        // Color logic for progress bar
+        if (state === "failed") {
+            progressBarFill.classList.remove("bg-indigo-500", "bg-green-500");
+            progressBarFill.classList.add("bg-red-500");
+        } else if (state === "success") {
+            progressBarFill.classList.remove("bg-indigo-500", "bg-red-500");
+            progressBarFill.classList.add("bg-green-500");
+        } else {
+            progressBarFill.classList.remove("bg-green-500", "bg-red-500");
+            progressBarFill.classList.add("bg-indigo-500");
+        }
+
+        // Update Labels
+        stepLabels.forEach((label, index) => {
+            if (index <= activeIndex) {
+                label.classList.add("text-indigo-600", "font-medium");
+                label.classList.remove("text-gray-500");
+            } else {
+                label.classList.remove("text-indigo-600", "font-medium");
+                label.classList.add("text-gray-500");
+            }
         });
       }
 
       async function refreshStatus() {
-        const response = await fetch("/api/status");
-        const payload = await response.json();
-        updatePill(payload.state);
-        updateProgress(payload.state);
-        statusMessage.textContent = payload.message;
-        workflowId.textContent = payload.workflow_id || "-";
-        statusError.textContent = payload.last_error || "暂无";
+        try {
+            const response = await fetch("/api/status");
+            const payload = await response.json();
+            updatePill(payload.state);
+            updateProgress(payload.state);
+            statusMessage.textContent = payload.message;
+            workflowId.textContent = payload.workflow_id || "-";
+            statusError.textContent = payload.last_error || "暂无";
+        } catch(e) {
+            console.error("Status refresh failed", e);
+        }
       }
 
       async function refreshLogs() {
-        const response = await fetch(`/api/logs?after=${logCursor}`);
-        const payload = await response.json();
-        if (Array.isArray(payload) && payload.length > 0) {
-          payload.forEach((log) => {
-            const line = `[${new Date(log.timestamp * 1000).toLocaleTimeString()}][${
-              log.level
-            }] ${log.message}\n`;
-            logBox.textContent += line;
-            logCursor = log.index;
-          });
-          logBox.scrollTop = logBox.scrollHeight;
+        try {
+            const response = await fetch(`/api/logs?after=${logCursor}`);
+            const payload = await response.json();
+            if (Array.isArray(payload) && payload.length > 0) {
+            payload.forEach((log) => {
+                // Colorize logs based on level
+                let colorClass = "text-gray-300";
+                if (log.level === "ERROR") colorClass = "text-red-400";
+                else if (log.level === "WARNING") colorClass = "text-yellow-400";
+                else if (log.level === "INFO") colorClass = "text-blue-300";
+                else if (log.level === "SUCCESS") colorClass = "text-green-400";
+
+                const time = new Date(log.timestamp * 1000).toLocaleTimeString();
+                const lineHtml = `<div class="font-mono text-xs hover:bg-[#2a2a2c] py-0.5 px-1 rounded transition-colors">
+                                    <span class="text-gray-500">[${time}]</span>
+                                    <span class="${colorClass} font-bold">[${log.level}]</span>
+                                    <span class="text-gray-300">${log.message}</span>
+                                </div>`;
+                logBox.insertAdjacentHTML('beforeend', lineHtml);
+                logCursor = log.index;
+            });
+            logBox.scrollTop = logBox.scrollHeight;
+            }
+        } catch(e) {
+            console.error("Log refresh failed", e);
         }
       }
 
@@ -480,14 +685,15 @@
           });
         } catch (error) {
           envSaveStatus.textContent = "无法加载设置";
-          envSaveStatus.classList.add("error");
+          envSaveStatus.className = "text-sm font-medium text-red-600 opacity-100";
         }
       }
 
       async function submitEnvForm(event) {
         event.preventDefault();
-        envSaveStatus.textContent = "";
-        envSaveStatus.classList.remove("error");
+        envSaveStatus.textContent = "保存中...";
+        envSaveStatus.className = "text-sm font-medium text-gray-500 opacity-100";
+        
         const formData = new FormData(envForm);
         const entries = {};
         formData.forEach((value, key) => {
@@ -504,10 +710,13 @@
             throw new Error(payload.detail || "保存失败");
           }
           envSaveStatus.textContent = "保存成功";
+          envSaveStatus.className = "text-sm font-medium text-green-600 opacity-100";
+          setTimeout(() => { envSaveStatus.classList.add("opacity-0"); }, 3000);
+          
           await loadEnvSettings();
         } catch (error) {
           envSaveStatus.textContent = error.message || "保存失败";
-          envSaveStatus.classList.add("error");
+          envSaveStatus.className = "text-sm font-medium text-red-600 opacity-100";
         }
       }
 
