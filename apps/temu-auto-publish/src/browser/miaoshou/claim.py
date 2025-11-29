@@ -995,14 +995,11 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
         self,
         page: Page,
         indexes: Sequence[int],
-        *,
         repeat: int = 5,
-        wait_after_claim_ms: int = 600,
     ) -> tuple[int, int]:
         """使用 JS 定位逻辑逐行认领商品。
 
-        复用首次编辑的定位逻辑，对每个索引重复点击认领按钮。
-        流程：
+        复用首次编辑的定位逻辑，对每个索引：
         1. 滚动到目标行
         2. 点击该行的"认领到"按钮
         3. 选择下拉菜单第一项
@@ -1011,49 +1008,41 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
         Args:
             page: Playwright 页面对象
             indexes: 要认领的商品索引列表
-            repeat: 每个商品点击认领按钮的次数（默认5次）
-            wait_after_claim_ms: 每次认领后等待时间（毫秒）
+            repeat: 每个商品点击认领的次数（默认5次）
 
         Returns:
-            (成功总数, 失败总数) 元组
+            (成功数, 失败数) 元组
         """
         total_success = 0
         total_fail = 0
 
         for idx in indexes:
-            logger.info(f"正在认领索引 {idx} 的商品，重复 {repeat} 次...")
             product_success = 0
-            product_fail = 0
-
-            for click_round in range(repeat):
+            for r in range(repeat):
+                logger.info(f"正在认领索引 {idx} 的商品 (第 {r + 1}/{repeat} 次)...")
                 result = await self._click_claim_button_in_row_by_js(page, idx)
 
                 if result.get("success"):
                     product_success += 1
-                    logger.debug(
-                        f"  索引 {idx} 第 {click_round + 1}/{repeat} 次认领成功, "
-                        f"选项={result.get('optionText')}"
-                    )
                     # 等待认领操作完成
-                    await page.wait_for_timeout(wait_after_claim_ms)
+                    await page.wait_for_timeout(600)
                 else:
-                    product_fail += 1
                     logger.warning(
-                        f"  索引 {idx} 第 {click_round + 1}/{repeat} 次认领失败: "
-                        f"{result.get('error')}"
+                        f"索引 {idx} 第 {r + 1} 次认领失败: {result.get('error')}"
                     )
-                    # 失败后稍微多等一下再重试
+                    # 失败后稍微等待再重试
                     await page.wait_for_timeout(300)
 
-            total_success += product_success
-            total_fail += product_fail
-            logger.info(
-                f"索引 {idx} 认领完成: 成功 {product_success}/{repeat}, 失败 {product_fail}"
-            )
+            if product_success > 0:
+                total_success += 1
+                logger.success(f"索引 {idx} 认领完成: {product_success}/{repeat} 次成功")
+            else:
+                total_fail += 1
+                logger.error(f"索引 {idx} 认领完全失败")
 
         logger.info(
-            f"批量认领完成: 总成功={total_success}, 总失败={total_fail}, "
-            f"商品数={len(indexes)}, 每品点击={repeat}次"
+            f"批量认领完成: {total_success}/{len(indexes)} 个商品成功, "
+            f"{total_fail} 个失败"
         )
         return total_success, total_fail
 

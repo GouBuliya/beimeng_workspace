@@ -1085,12 +1085,12 @@ class CompletePublishWorkflow:
         miaoshou_ctrl: MiaoshouController,
         edited_products: Sequence[EditedProduct],
     ) -> StageOutcome:
-        """阶段 2: 逐行点击认领按钮，每个商品点击5次。
-
-        使用 JS 定位逻辑（复用首次编辑定位）直接点击每行的"认领到"按钮，
-        选择下拉第一项，每个商品重复5次。
+        """阶段 2: 逐行点击认领按钮，每个商品认领5次。
+        
+        使用 JS 定位逻辑（复用首次编辑的动态行高检测），
+        直接点击每行的"认领到"按钮并选择下拉第一项。
         """
-        CLAIM_REPEAT_PER_PRODUCT = 5  # 每个商品点击认领按钮的次数
+        claim_repeat = 5  # 每个商品点击5次
 
         if self.skip_first_edit:
             message = "首次编辑被跳过, 认领阶段随之跳过"
@@ -1133,48 +1133,31 @@ class CompletePublishWorkflow:
                 "Incomplete product index mapping detected, fallback to sequential selection",
             )
             target_indexes = list(range(selection_count))
-
+        
         logger.info(
-            "认领阶段: 目标索引 %s (共 %s 条商品，每品点击 %s 次)",
+            "认领阶段: 目标索引 %s (筛选后的商品列表，共 %s 条), 每个商品认领 %s 次",
             target_indexes,
             selection_count,
-            CLAIM_REPEAT_PER_PRODUCT,
+            claim_repeat,
         )
 
-        # 使用 JS 定位逻辑逐行认领（不需要勾选，不需要点击顶部按钮）
+        # 使用新的 JS 定位方式逐行认领（不需要先勾选）
         success_count, fail_count = await miaoshou_ctrl.claim_products_by_row_js(
             page,
             indexes=target_indexes,
-            repeat=CLAIM_REPEAT_PER_PRODUCT,
+            repeat=claim_repeat,
         )
 
-        # 计算成功率
-        expected_total = selection_count * CLAIM_REPEAT_PER_PRODUCT
-        actual_total = success_count + fail_count
-        success_rate = success_count / actual_total if actual_total > 0 else 0
+        claim_success = success_count > 0
+        if fail_count > 0:
+            logger.warning(f"部分商品认领失败: {fail_count}/{len(target_indexes)}")
 
-        # 认领成功的判断：成功率 >= 80% 或者每个商品至少成功1次
-        min_success_per_product = selection_count  # 每个商品至少成功1次
-        claim_success = success_count >= min_success_per_product or success_rate >= 0.8
-
-        if not claim_success:
-            message = f"认领失败: 成功 {success_count}/{expected_total} 次"
-            logger.error(message)
-            return StageOutcome(
-                name="stage2_claim",
-                success=False,
-                message=message,
-                details={
-                    "selected_count": selection_count,
-                    "success_count": success_count,
-                    "fail_count": fail_count,
-                    "expected_total": expected_total,
-                    "success_rate": f"{success_rate:.1%}",
-                },
-            )
-
-        # 验证认领结果
+        # 期望认领总次数
+        expected_total = selection_count * claim_repeat
+        # 去重后的阈值
         unique_threshold = selection_count
+        
+        # 验证认领结果
         verify_success = await miaoshou_ctrl.verify_claim_success(
             page,
             expected_count=unique_threshold,
@@ -1187,19 +1170,19 @@ class CompletePublishWorkflow:
                 unique_threshold,
             )
 
-        overall_success = claim_success and verify_success
+        overall_success = claim_success and (fail_count == 0 or verify_success)
         message = (
-            f"认领成功 {success_count}/{expected_total} 次 (去重后 {unique_threshold} 条)"
+            f"认领成功 {success_count}/{selection_count} 个商品, 每个 {claim_repeat} 次"
             if overall_success
-            else "认领结果存在异常, 详见 details"
+            else f"认领结果存在异常: 成功 {success_count}, 失败 {fail_count}"
         )
 
         details = {
-            "selected_count": selection_count,
+            "selection_count": selection_count,
             "success_count": success_count,
             "fail_count": fail_count,
+            "claim_repeat": claim_repeat,
             "expected_total": expected_total,
-            "success_rate": f"{success_rate:.1%}",
             "unique_threshold": unique_threshold,
             "verify_success": verify_success,
         }
