@@ -37,6 +37,8 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
         "text='首次编辑'",
         "text='编辑'",
     )
+    # 商品行选择器（用于基于行定位编辑按钮）
+    _ROW_SELECTOR: ClassVar[str] = ".pro-virtual-table__row-body"
 
     async def navigate_to_collection_box(self, page: Page, use_sidebar: bool = False) -> bool:
         """Navigate to the shared collection box page.
@@ -744,26 +746,25 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
         index: int,
         *,
         enable_scroll: bool = True,
-        use_precise_scroll: bool = True,
     ) -> bool:
         """Click the edit button of a product at a specific index.
 
-        支持精确滚动：根据商品行高度（128px）直接计算滚动距离，
-        比循环查找更高效。
+        使用基于行的定位策略：
+        1. 定位第N个商品行
+        2. 滚动使该行可见
+        3. 在该行内查找并点击编辑按钮
+
+        这种方式比按钮全局索引更可靠，尤其是在虚拟滚动列表中。
 
         Args:
             page: Active Playwright page instance.
             index: Zero-based index of the product in the grid.
-            enable_scroll: 是否启用滚动（默认启用）
-            use_precise_scroll: 是否使用精确滚动（默认启用，基于128px行高）
+            enable_scroll: 是否启用滚动到目标行（默认启用）
 
         Returns:
             True when the edit button was clicked, otherwise False.
         """
-        logger.info(
-            "Clicking edit button for product index {} (scroll={}, precise={})",
-            index, enable_scroll, use_precise_scroll
-        )
+        logger.info("Clicking edit button for product index {} (scroll={})", index, enable_scroll)
 
         try:
             await self._ensure_popups_closed(page)
@@ -772,45 +773,53 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                 logger.error("Product index must be non-negative")
                 return False
 
-            selectors = self._resolve_selectors(
+            # 获取编辑按钮选择器（用于在行内查找）
+            edit_selectors = self._resolve_selectors(
                 self.selectors.get("collection_box", {}).get("edit_button", {}),
                 keys=["edit"],
                 default=self._DEFAULT_EDIT_BUTTON_SELECTORS,
             )
 
-            # 如果需要滚动且目标索引较大，先精确滚动到目标位置
-            if enable_scroll and use_precise_scroll and index >= 5:
+            # 方案1：基于行定位（更可靠）
+            rows = page.locator(self._ROW_SELECTOR)
+            row_count = await rows.count()
+            logger.debug(f"当前可见商品行数: {row_count}, 目标索引: {index}")
+
+            if row_count > index:
+                # 直接定位目标行
+                target_row = rows.nth(index)
+                clicked = await self._click_edit_button_in_row(
+                    page, target_row, edit_selectors, index
+                )
+                if clicked:
+                    return True
+
+            # 如果行数不足且启用滚动，使用精确滚动
+            if enable_scroll and index >= 5:
+                logger.info(f"当前行数 {row_count} 不足，使用精确滚动到索引 {index}")
                 from ...utils.scroll_helper import scroll_to_product_position
-                
-                logger.info("使用精确滚动，目标索引: {}", index)
+
                 await scroll_to_product_position(page, target_index=index)
-                
-                # 滚动后，目标商品应该在视口顶部附近，尝试点击第一个可见的编辑按钮
-                for selector in selectors:
-                    try:
-                        # 获取可见的编辑按钮
-                        buttons = page.locator(selector)
-                        count = await buttons.count()
-                        if count == 0:
-                            continue
 
-                        # 点击第一个可见的按钮（滚动后它就是目标）
-                        button = buttons.first
-                        with suppress(Exception):
-                            await button.scroll_into_view_if_needed()
-                        await button.wait_for(state="visible", timeout=2_000)
-                        await button.click()
-                        logger.success(
-                            "✓ 精确滚动后成功点击编辑按钮，索引: {}, 选择器: {}",
-                            index, selector
-                        )
+                # 滚动后重新定位 - 虚拟列表中，滚动后 DOM 会更新
+                # 此时第一个可见行应该就是目标行
+                await page.wait_for_timeout(500)  # 等待 DOM 更新
+                rows = page.locator(self._ROW_SELECTOR)
+                row_count = await rows.count()
+                logger.debug(f"滚动后可见行数: {row_count}")
+
+                if row_count > 0:
+                    # 在虚拟滚动列表中，滚动后第一行就是目标行
+                    target_row = rows.first
+                    clicked = await self._click_edit_button_in_row(
+                        page, target_row, edit_selectors, index
+                    )
+                    if clicked:
                         return True
-                    except Exception as exc:
-                        logger.debug("精确滚动后点击失败 {}: {}", selector, exc)
-                        continue
 
-            # 直接定位（不滚动或索引较小）
-            for selector in selectors:
+            # 方案2：回退到按钮全局索引（兼容旧逻辑）
+            logger.debug("基于行定位失败，回退到按钮全局索引")
+            for selector in edit_selectors:
                 try:
                     buttons = page.locator(selector)
                     count = await buttons.count()
@@ -822,15 +831,64 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                         await button.scroll_into_view_if_needed()
                     await button.wait_for(state="visible", timeout=2_000)
                     await button.click()
-                    logger.success("Edit button clicked using selector {}", selector)
+                    logger.success("Edit button clicked using fallback selector {}", selector)
                     return True
                 except Exception as exc:
-                    logger.debug("Edit selector {} failed: {}", selector, exc)
+                    logger.debug("Fallback edit selector {} failed: {}", selector, exc)
                     continue
 
             logger.error("No matching edit button found for index {}", index)
             return False
         except Exception as exc:
             logger.error(f"Failed to click edit button: {exc}")
+            return False
+
+    async def _click_edit_button_in_row(
+        self,
+        page: Page,
+        row,
+        edit_selectors: tuple[str, ...],
+        index: int,
+    ) -> bool:
+        """在指定的商品行内查找并点击编辑按钮。
+
+        Args:
+            page: Playwright 页面对象
+            row: 商品行 Locator
+            edit_selectors: 编辑按钮选择器列表
+            index: 商品索引（用于日志）
+
+        Returns:
+            是否成功点击
+        """
+        try:
+            # 先滚动到行可见
+            with suppress(Exception):
+                await row.scroll_into_view_if_needed()
+            await page.wait_for_timeout(200)
+
+            # 在行内查找编辑按钮
+            for selector in edit_selectors:
+                try:
+                    # 在行内定位编辑按钮
+                    button = row.locator(selector).first
+                    if await button.count() == 0:
+                        continue
+
+                    await button.wait_for(state="visible", timeout=2_000)
+                    await button.click()
+                    logger.success(
+                        "✓ 基于行定位成功点击编辑按钮，索引: {}, 选择器: {}",
+                        index, selector
+                    )
+                    return True
+                except Exception as exc:
+                    logger.debug(f"行内编辑按钮 {selector} 点击失败: {exc}")
+                    continue
+
+            logger.debug(f"在行内未找到编辑按钮，索引: {index}")
+            return False
+        except Exception as exc:
+            logger.debug(f"行内点击编辑按钮异常: {exc}")
             return False
 
