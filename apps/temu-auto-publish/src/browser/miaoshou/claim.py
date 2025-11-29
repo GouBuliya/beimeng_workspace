@@ -179,6 +179,48 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
             resolved.append(idx)
         return resolved
 
+    _PAGE_SIZE: ClassVar[int] = 20  # 每页显示商品数量
+
+    async def _jump_to_page_for_claim(self, page: Page, target_page: int) -> bool:
+        """跳转到指定页码（用于认领流程）。
+
+        Args:
+            page: Playwright 页面对象
+            target_page: 目标页码（从1开始）
+
+        Returns:
+            是否成功跳转
+        """
+        if target_page <= 1:
+            return True
+
+        selectors = [
+            'input.jx-input__inner[type="number"][aria-label="页"]',
+            'input.jx-input__inner[type="number"][aria-label]',
+            'input[type="number"][aria-label="页"]',
+            'input[type="number"][aria-label]',
+            '.jx-pagination__goto input[type="number"]',
+        ]
+        for selector in selectors:
+            locator = page.locator(selector).first
+            try:
+                if await locator.count() == 0:
+                    continue
+                await locator.click()
+                await locator.fill(str(target_page))
+                with suppress(Exception):
+                    await locator.press('Enter')
+                await page.wait_for_timeout(800)
+                with suppress(Exception):
+                    await self._wait_for_rows(page)
+                logger.info('认领流程：已跳转到第 {} 页', target_page)
+                return True
+            except Exception as exc:
+                logger.debug('翻页失败 selector={}: {}', selector, exc)
+
+        logger.warning('认领流程：无法跳转到第 {} 页', target_page)
+        return False
+
     async def select_products_for_claim(
         self,
         page: Page,
@@ -189,15 +231,17 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
     ) -> bool:
         """Select the first ``count`` products before starting a claim batch.
 
-        直接通过 JavaScript 定位并强制点击复选框，无需滚动：
-        1. 获取所有可见行（translateY >= 0）
-        2. 按 translateY 排序得到视觉顺序
-        3. 直接点击目标行的复选框
+        支持跨页勾选：当索引超过每页容量（20条）时自动翻页。
+        1. 按页码分组目标索引
+        2. 对每页：先翻页，再用页内相对索引勾选
+        3. 获取所有可见行（translateY >= 0）
+        4. 按 translateY 排序得到视觉顺序
+        5. 直接点击目标行的复选框
 
         Args:
             page: Active Playwright page instance.
             count: Number of products to select.
-            indexes: Specific indexes to select (optional).
+            indexes: Specific indexes to select (optional, 绝对索引).
             enable_scroll: 是否启用滚动（默认禁用）
 
         Returns:
@@ -224,30 +268,58 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
 
         logger.info(f"目标索引: {target_indexes}, 当前可见行数: {available}")
 
-        # 使用 JavaScript 批量勾选
-        selected = await self._select_checkboxes_by_js(page, target_indexes)
+        # 按页码分组索引
+        page_groups: dict[int, list[int]] = {}
+        for idx in target_indexes:
+            target_page = idx // self._PAGE_SIZE + 1
+            page_relative_idx = idx % self._PAGE_SIZE
+            if target_page not in page_groups:
+                page_groups[target_page] = []
+            page_groups[target_page].append(page_relative_idx)
+
+        logger.info(f"索引按页分组: {page_groups}")
+
+        current_page = 1
+        selected = 0
+
+        # 按页码顺序处理
+        for target_page in sorted(page_groups.keys()):
+            page_relative_indexes = page_groups[target_page]
+
+            # 如果需要翻页
+            if target_page != current_page:
+                logger.info(f"需要跳转到第 {target_page} 页（当前第 {current_page} 页）")
+                if await self._jump_to_page_for_claim(page, target_page):
+                    current_page = target_page
+                else:
+                    logger.error(f"翻页到第 {target_page} 页失败")
+                    return False
+
+            # 使用页内相对索引勾选
+            logger.info(f"第 {target_page} 页，勾选页内索引: {page_relative_indexes}")
+            page_selected = await self._select_checkboxes_by_js(page, page_relative_indexes)
+            selected += page_selected
+
+            if page_selected != len(page_relative_indexes):
+                logger.warning(
+                    f"第 {target_page} 页勾选不完整: {page_selected}/{len(page_relative_indexes)}"
+                )
+                # 如果启用滚动，尝试滚动方式补充勾选
+                if enable_scroll:
+                    for rel_idx in page_relative_indexes[page_selected:]:
+                        from ...utils.scroll_helper import scroll_to_product_position
+                        await scroll_to_product_position(page, target_index=rel_idx)
+                        await page.wait_for_timeout(500)
+                        if await self._click_checkbox_by_js(page, 0):
+                            selected += 1
+                        else:
+                            logger.error(f"Failed to toggle checkbox for page-relative index {rel_idx}")
 
         if selected == len(target_indexes):
             logger.success(f"Selected {selected}/{len(target_indexes)} rows for claim")
             return True
 
-        # 如果 JS 方式不完全成功且启用了滚动，尝试逐个滚动勾选
-        if enable_scroll and selected < len(target_indexes):
-            logger.info(f"JS 勾选不完整 ({selected}/{len(target_indexes)})，尝试滚动方式")
-            for idx in target_indexes[selected:]:
-                from ...utils.scroll_helper import scroll_to_product_position
-
-                await scroll_to_product_position(page, target_index=idx)
-                await page.wait_for_timeout(500)
-
-                # 滚动后用 JS 点击第一个
-                if await self._click_checkbox_by_js(page, 0):
-                    selected += 1
-                else:
-                    logger.error(f"Failed to toggle checkbox for product #{idx + 1}")
-                    return False
-
-        logger.success(f"Selected {selected}/{len(target_indexes)} rows for claim")
+        logger.warning(f"勾选不完整: {selected}/{len(target_indexes)}")
         return selected == len(target_indexes)
 
     async def _select_checkboxes_by_js(self, page: Page, indexes: list[int]) -> int:

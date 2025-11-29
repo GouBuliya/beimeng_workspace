@@ -781,17 +781,31 @@ class CompletePublishWorkflow:
             processed_products: list[EditedProduct] = []
             per_item_max_retry = 3
 
+            # 计算起始页码并翻页（每页20条）
+            initial_page = start_offset // page_size + 1
+            if initial_page > 1:
+                logger.info(f"起始偏移 {start_offset} 超过单页容量，跳转到第 {initial_page} 页")
+                await _jump_to_page(initial_page)
+
             for index, selection in enumerate(working_selections):
                 absolute_index = start_offset + index
+                # 计算目标页码和页内相对索引
+                target_page = absolute_index // page_size + 1
+                page_relative_index = absolute_index % page_size
+
+                # 如果需要翻页（商品跨页）
+                if target_page != current_page:
+                    logger.info(f"商品 {absolute_index + 1} 在第 {target_page} 页，当前在第 {current_page} 页，执行翻页")
+                    await _jump_to_page(target_page)
 
                 # 为每个商品的编辑添加重试
-                logger.info(f"编辑商品 {absolute_index + 1} (批次内第 {index + 1}/{len(working_selections)} 个)")
+                logger.info(f"编辑商品 {absolute_index + 1} (批次内第 {index + 1}/{len(working_selections)} 个，页内索引 {page_relative_index})")
                 attempt_success = False
                 for attempt in range(1, per_item_max_retry + 1):
                     opened = False
                     try:
-                        # 使用绝对索引定位商品，click_edit_product_by_index 内部处理滚动
-                        opened = await open_edit_dialog(absolute_index)
+                        # 使用页内相对索引定位商品
+                        opened = await open_edit_dialog(page_relative_index)
                         if not opened:
                             raise RuntimeError("编辑弹窗打开失败")
 
