@@ -873,12 +873,9 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                 // 按 translateY 排序
                 visibleRows.sort((a, b) => a.y - b.y);
                 
-                // 检测实际行高偏移：第一行的 Y 值对 ROW_HEIGHT 取模
-                const rowOffset = visibleRows.length > 0 ? (visibleRows[0].y % ROW_HEIGHT) : 0;
-                
-                // 使用检测到的偏移计算目标 translateY
+                // 直接使用 index * ROW_HEIGHT 计算目标 translateY（无偏移）
                 let targetRow = null;
-                let targetTranslateY = index * ROW_HEIGHT + rowOffset;
+                let targetTranslateY = index * ROW_HEIGHT;
                 let matchedY = -1;
                 
                 for (const item of visibleRows) {
@@ -901,8 +898,7 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                         targetScrollTop,
                         actualScrollTop,
                         rowCount: rows.length,
-                        visibleYs: visibleRows.map(r => r.y),
-                        detectedOffset: rowOffset
+                        visibleYs: visibleRows.map(r => r.y)
                     };
                 }
                 
@@ -929,8 +925,7 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                     actualScrollTop,
                     targetTranslateY,
                     matchedY,
-                    visibleCount: visibleRows.length,
-                    detectedOffset: rowOffset
+                    visibleCount: visibleRows.length
                 };
             }
             """
@@ -941,7 +936,7 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                 logger.success(
                     f"✓ JS 点击编辑按钮成功，索引={index}, 容器={result.get('scrollerInfo')}, "
                     f"page-mode={result.get('isPageMode')}, scrollTop={result.get('actualScrollTop')}px, "
-                    f"匹配Y={result.get('matchedY')}px, 偏移={result.get('detectedOffset')}px"
+                    f"匹配Y={result.get('matchedY')}px"
                 )
                 return True
             else:
@@ -949,7 +944,7 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                     f"JS 点击失败: {result.get('error')}, 容器={result.get('scrollerInfo')}, "
                     f"page-mode={result.get('isPageMode')}, 目标scrollTop={result.get('targetScrollTop')}, "
                     f"实际scrollTop={result.get('actualScrollTop')}, 行数={result.get('rowCount')}, "
-                    f"偏移={result.get('detectedOffset')}px, 可见Y值={result.get('visibleYs')}"
+                    f"可见Y值={result.get('visibleYs')}"
                 )
                 return False
 

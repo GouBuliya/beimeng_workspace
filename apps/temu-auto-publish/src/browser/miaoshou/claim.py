@@ -272,8 +272,8 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                 const recycleScroller = document.querySelector('.vue-recycle-scroller');
                 const isPageMode = recycleScroller && recycleScroller.classList.contains('page-mode');
                 
-                // 获取所有可见行并检测实际行高偏移
-                const detectRowOffset = () => {
+                // 获取所有可见行
+                const getVisibleRows = () => {
                     const rows = document.querySelectorAll('.vue-recycle-scroller__item-view');
                     const visibleRows = [];
                     rows.forEach(row => {
@@ -285,14 +285,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         }
                     });
                     visibleRows.sort((a, b) => a.y - b.y);
-                    
-                    // 检测偏移：第一行的 Y 值对 ROW_HEIGHT 取模
-                    if (visibleRows.length > 0) {
-                        const firstY = visibleRows[0].y;
-                        const rowOffset = firstY % ROW_HEIGHT;
-                        return { visibleRows, rowOffset };
-                    }
-                    return { visibleRows, rowOffset: 0 };
+                    return visibleRows;
                 };
                 
                 // 查找滚动方法
@@ -324,7 +317,6 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                 
                 let selected = 0;
                 const results = [];
-                let detectedOffset = null;
                 
                 for (const idx of indexes) {
                     const targetScrollTop = idx * ROW_HEIGHT;
@@ -332,14 +324,11 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                     // 滚动到目标位置
                     await scrollToPosition(targetScrollTop);
                     
-                    // 获取可见行并检测偏移
-                    const { visibleRows, rowOffset } = detectRowOffset();
-                    if (detectedOffset === null) {
-                        detectedOffset = rowOffset;
-                    }
+                    // 获取可见行
+                    const visibleRows = getVisibleRows();
                     
-                    // 使用检测到的偏移计算目标 translateY
-                    const targetTranslateY = idx * ROW_HEIGHT + detectedOffset;
+                    // 直接使用 idx * ROW_HEIGHT 计算目标 translateY（无偏移）
+                    const targetTranslateY = idx * ROW_HEIGHT;
                     
                     // 按 translateY 匹配目标行
                     let targetRow = null;
@@ -360,8 +349,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                             success: false, 
                             error: 'Target row not found', 
                             visibleYs: visibleRows.map(r => r.y),
-                            targetY: targetTranslateY,
-                            offset: detectedOffset
+                            targetY: targetTranslateY
                         });
                         continue;
                     }
@@ -380,17 +368,13 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                     }
                 }
                 
-                return { selected, isPageMode, detectedOffset, results };
+                return { selected, isPageMode, results };
             }
             """
             result = await page.evaluate(js_code, indexes)
             selected = result.get("selected", 0)
             is_page_mode = result.get("isPageMode", False)
-            detected_offset = result.get("detectedOffset", 0)
-            logger.debug(
-                f"JS 批量勾选完成: {selected}/{len(indexes)}, page-mode={is_page_mode}, "
-                f"检测到偏移={detected_offset}px"
-            )
+            logger.debug(f"JS 批量勾选完成: {selected}/{len(indexes)}, page-mode={is_page_mode}")
             
             # 输出失败项的详细信息
             for r in result.get("results", []):
