@@ -1,7 +1,7 @@
 """
 @PURPOSE: 提供滚动查找元素的工具函数，用于处理商品列表中元素不在可视区域的情况
 @OUTLINE:
-  - PRODUCT_ROW_HEIGHT: 商品行高度常量（126px）
+  - PRODUCT_ROW_HEIGHT: 商品行高度常量（125px）
   - async def scroll_to_top(): 滚动到容器顶部
   - async def scroll_to_product_position(): 精确滚动到指定商品位置
   - async def scroll_container(): 滚动容器指定距离
@@ -10,7 +10,7 @@
 @GOTCHAS:
   - 商品列表可能使用虚拟滚动，滚动时DOM会动态更新
   - 需要在滚动后等待DOM更新
-  - 商品行高度固定为 126px，可通过精确计算滚动距离
+  - 商品行高度固定为 125px，可通过精确计算滚动距离
 @DEPENDENCIES:
   - 外部: playwright
 """
@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 
 
 # 商品行高度（像素）- 用于精确滚动计算
-PRODUCT_ROW_HEIGHT = 126
+PRODUCT_ROW_HEIGHT = 125
 
 # 默认商品列表容器选择器（按优先级排序）
 DEFAULT_CONTAINER_SELECTORS = (
@@ -97,7 +97,7 @@ async def scroll_to_product_position(
     Args:
         page: Playwright 页面对象
         target_index: 目标商品索引（0-based）
-        row_height: 每行商品高度（像素），默认 126px
+        row_height: 每行商品高度（像素），默认 125px
         container_selectors: 容器选择器列表
         wait_after_scroll_ms: 滚动后等待时间（毫秒）
 
@@ -107,7 +107,7 @@ async def scroll_to_product_position(
     Examples:
         >>> # 滚动到第 6 个商品（索引 5）
         >>> await scroll_to_product_position(page, target_index=5)
-        >>> # 滚动距离 = 5 × 126 = 630px
+        >>> # 滚动距离 = 5 × 125 = 625px
     """
     if target_index < 0:
         logger.warning(f"无效的目标索引: {target_index}")
@@ -148,7 +148,7 @@ async def scroll_one_product(
 
     Args:
         page: Playwright 页面对象
-        row_height: 每行商品高度（像素），默认 126px
+        row_height: 每行商品高度（像素），默认 125px
         container_selectors: 容器选择器列表
         wait_after_scroll_ms: 滚动后等待时间（毫秒）
 
