@@ -1266,6 +1266,17 @@ class CompletePublishWorkflow:
         reference = edited_products[0]
         max_attempts = 3
 
+        # 获取 owner 信息用于筛选（与首次编辑和认领阶段保持一致）
+        filter_owner: str | None = None
+        if edited_products:
+            owner_candidate = getattr(edited_products[0].selection, "owner", "") or ""
+            try:
+                filter_owner = self._resolve_collection_owner(owner_candidate)
+                logger.info("二次编辑阶段将按人员筛选: {}", filter_owner)
+            except RuntimeError as exc:
+                logger.warning("无法解析二次编辑阶段的创建人员: {}", exc)
+                filter_owner = None
+
         def _build_codegen_payload() -> dict[str, object]:
             manual_source = self.manual_file_override or self.default_manual_file
             manual_path_str = ""
@@ -1292,7 +1303,7 @@ class CompletePublishWorkflow:
 
         async def _run_codegen_stage(tag: str) -> StageOutcome:
             payload = _build_codegen_payload()
-            batch_result = await run_batch_edit(page, payload)
+            batch_result = await run_batch_edit(page, payload, filter_owner=filter_owner)
 
             total = batch_result.get("total_steps", 18)
             success_steps = batch_result.get("completed_steps", 0)

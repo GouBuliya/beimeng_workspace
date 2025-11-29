@@ -95,7 +95,12 @@ def smart_retry(max_attempts: int = 2, delay: float = 0.5, exceptions: tuple = (
 
 
 @profile()
-async def run_batch_edit(page: Page, payload: dict[str, Any]) -> dict[str, Any]:
+async def run_batch_edit(
+    page: Page,
+    payload: dict[str, Any],
+    *,
+    filter_owner: str | None = None,
+) -> dict[str, Any]:
     """执行批量编辑 18 步完整流程。
 
     Args:
@@ -105,6 +110,7 @@ async def run_batch_edit(page: Page, payload: dict[str, Any]) -> dict[str, Any]:
             - category_attrs: dict - 类目属性,包含 product_use, shape, material, closure_type, style
             - outer_package_image: str - 外包装图片文件路径(绝对路径)
             - manual_file: str - 产品说明书 PDF 文件路径(绝对路径)
+        filter_owner: 按创建人员筛选的用户名（与首次编辑、认领阶段保持一致）。
 
     Returns:
         执行结果字典:
@@ -131,7 +137,7 @@ async def run_batch_edit(page: Page, payload: dict[str, Any]) -> dict[str, Any]:
         ...     "outer_package_image": "/path/to/package.jpg",
         ...     "manual_file": "/path/to/manual.pdf"
         ... }
-        >>> result = await run_batch_edit(page, payload)
+        >>> result = await run_batch_edit(page, payload, filter_owner="张三")
         >>> print(result["success"])
         True
     """
@@ -161,6 +167,11 @@ async def run_batch_edit(page: Page, payload: dict[str, Any]) -> dict[str, Any]:
 
         # 1. 检测并关闭弹窗
         await _close_popups(page)
+
+        # 1.5 按创建人员筛选（与首次编辑、认领阶段保持一致）
+        if filter_owner:
+            logger.info(f"二次编辑：按创建人员筛选: {filter_owner}")
+            await _apply_user_filter(page, filter_owner)
 
         # 2. 全选产品 - 使用弹性选择器
         logger.info("全选产品...")
@@ -1104,3 +1115,89 @@ async def _close_edit_dialog(page: Page) -> None:
         return
     except Exception:
         logger.warning("无法关闭编辑对话框，继续执行")
+
+
+async def _apply_user_filter(page: Page, filter_owner: str) -> bool:
+    """在 Temu 全托管采集箱页面按创建人员筛选。
+
+    与首次编辑、认领阶段的筛选逻辑保持一致。
+
+    Args:
+        page: Playwright 页面对象。
+        filter_owner: 要筛选的创建人员名称。
+
+    Returns:
+        是否成功应用筛选。
+    """
+    # 定义筛选输入框选择器（Temu 全托管采集箱可能使用的选择器）
+    user_filter_selectors = [
+        "input[placeholder*='创建人']",
+        "input[placeholder*='创建人员']",
+        "input[placeholder*='请输入创建']",
+        "label:has-text('创建人员') + .jx-select input",
+        "label:has-text('创建人') + .jx-select input",
+        "xpath=//label[contains(text(), '创建人员')]/following-sibling::*//input",
+        "xpath=//label[contains(text(), '创建人')]/following-sibling::*//input",
+        ".jx-select:has-text('创建人员') input",
+        ".jx-select:has-text('创建人') input",
+        # Temu 全托管采集箱特定选择器
+        ".el-select input[placeholder*='创建']",
+        ".jx-select input[placeholder*='创建']",
+    ]
+
+    filter_applied = False
+    for selector in user_filter_selectors:
+        try:
+            element = page.locator(selector).first
+            if await element.count() == 0:
+                continue
+
+            logger.debug(f"尝试使用选择器筛选: {selector}")
+            await element.click()
+            await element.fill("")
+            await element.type(filter_owner, delay=80)
+            
+            # 等待下拉选项出现
+            await page.wait_for_timeout(500)
+
+            # 尝试多种下拉选项选择器
+            option_selectors = [
+                f"li.el-select-dropdown__item:has-text('{filter_owner}')",
+                f".jx-select-dropdown__item:has-text('{filter_owner}')",
+                f"li:has-text('{filter_owner}')",
+                f".el-select-dropdown__item:has-text('{filter_owner}')",
+            ]
+
+            option_clicked = False
+            for opt_selector in option_selectors:
+                option_locator = page.locator(opt_selector).first
+                if await option_locator.count():
+                    await option_locator.click()
+                    option_clicked = True
+                    break
+
+            if not option_clicked:
+                logger.warning(f"未找到用户选项: {filter_owner}")
+                continue
+
+            # 等待下拉关闭
+            await page.wait_for_timeout(300)
+
+            # 点击搜索按钮
+            search_btn = page.locator("button:has-text('搜索')").first
+            if await search_btn.count():
+                await search_btn.click()
+                await page.wait_for_timeout(1000)  # 等待搜索结果加载
+
+            filter_applied = True
+            logger.success(f"✓ 二次编辑人员筛选成功: {filter_owner}")
+            break
+
+        except Exception as exc:
+            logger.debug(f"筛选选择器 {selector} 失败: {exc}")
+            continue
+
+    if not filter_applied:
+        logger.warning(f"二次编辑人员筛选未成功应用: {filter_owner}，将继续使用全部产品")
+
+    return filter_applied
