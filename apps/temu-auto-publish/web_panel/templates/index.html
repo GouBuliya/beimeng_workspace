@@ -176,8 +176,9 @@
                       {{ field.label }}
                       {% if field.required %}<span class="text-red-500">*</span>{% endif %}
                     </label>
-                    <div class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-lg hover:border-indigo-400 transition-colors cursor-pointer relative bg-gray-50 hover:bg-white">
-                      <div class="space-y-1 text-center pointer-events-none">
+                    <div class="file-upload-area mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-lg hover:border-indigo-400 transition-colors cursor-pointer relative bg-gray-50 hover:bg-white" data-field="{{ field.name }}">
+                      <!-- 默认上传提示 -->
+                      <div class="upload-placeholder space-y-1 text-center pointer-events-none">
                         <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48">
                           <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
                         </svg>
@@ -188,10 +189,19 @@
                         </div>
                         <p class="text-xs text-gray-500">{{ field.help_text }}</p>
                       </div>
+                      <!-- 已选择文件显示 -->
+                      <div class="file-selected hidden space-y-2 text-center pointer-events-none">
+                        <svg class="mx-auto h-12 w-12 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <p class="file-name text-sm font-medium text-gray-900 truncate max-w-xs"></p>
+                        <p class="file-size text-xs text-gray-500"></p>
+                        <p class="text-xs text-indigo-600">点击更换文件</p>
+                      </div>
                       <input 
                         type="file" 
                         name="{{ field.name }}" 
-                        class="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                        class="file-input absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                         {% if field.accept %}accept="{{ field.accept }}"{% endif %}
                         {% if field.required %}required{% endif %}
                       />
@@ -473,6 +483,48 @@
       let envSettingsCache = [];
 
       let logCursor = -1;
+
+      // 文件上传状态处理
+      function initFileUploadAreas() {
+        document.querySelectorAll('.file-upload-area').forEach(area => {
+          const input = area.querySelector('.file-input');
+          const placeholder = area.querySelector('.upload-placeholder');
+          const selected = area.querySelector('.file-selected');
+          const fileName = area.querySelector('.file-name');
+          const fileSize = area.querySelector('.file-size');
+          
+          input.addEventListener('change', function() {
+            if (this.files && this.files[0]) {
+              const file = this.files[0];
+              // 显示已选择状态
+              placeholder.classList.add('hidden');
+              selected.classList.remove('hidden');
+              fileName.textContent = file.name;
+              fileSize.textContent = formatFileSize(file.size);
+              // 改变边框颜色
+              area.classList.remove('border-gray-300', 'bg-gray-50');
+              area.classList.add('border-green-400', 'bg-green-50');
+            } else {
+              // 重置为默认状态
+              placeholder.classList.remove('hidden');
+              selected.classList.add('hidden');
+              area.classList.add('border-gray-300', 'bg-gray-50');
+              area.classList.remove('border-green-400', 'bg-green-50');
+            }
+          });
+        });
+      }
+      
+      function formatFileSize(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+      }
+      
+      // 初始化文件上传区域
+      initFileUploadAreas();
 
       form.addEventListener("submit", async (event) => {
         event.preventDefault();
