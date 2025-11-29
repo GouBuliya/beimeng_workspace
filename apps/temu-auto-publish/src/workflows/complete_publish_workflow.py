@@ -632,10 +632,17 @@ class CompletePublishWorkflow:
         # 数据已在 _finalize_selection_rows 中根据 execution_round 截取，这里直接使用
         working_selections = list(selections)
         # start_offset 用于计算采集箱中的商品位置（基于原始数据的绝对索引）
-        if use_override_rows:
-            start_offset = 0
-        else:
-            start_offset = max(0, (self.execution_round - 1) * self.collect_count)
+        # 修复：不管是否有 override，都应该根据 execution_round 计算偏移
+        # 因为页面上的商品列表是完整的，需要根据轮次定位到正确的商品
+        start_offset = max(0, (self.execution_round - 1) * self.collect_count)
+        
+        logger.info(
+            "首次编辑起始偏移: start_offset=%s (execution_round=%s, collect_count=%s, use_override=%s)",
+            start_offset,
+            self.execution_round,
+            self.collect_count,
+            use_override_rows,
+        )
 
         if not working_selections:
             message = f"执行轮位 {self.execution_round} 超出可编辑范围，跳过首次编辑"
