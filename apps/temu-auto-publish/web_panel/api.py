@@ -51,7 +51,6 @@ SELECTOR_FILE = APP_ROOT / "config" / "miaoshou_selectors_v2.json"
 SESSION_KEY = "web_panel_user"
 SESSION_TOKEN_KEY = "web_panel_token"
 SESSION_USERNAME_KEY = "web_panel_username"
-DEFAULT_ADMIN_PASSWORD = "bm123456789"
 
 
 def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
@@ -74,9 +73,7 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
     ]
 
     load_dotenv(resolve_env_file(), override=False)
-    admin_password = os.environ.get("WEB_PANEL_ADMIN_PASSWORD", DEFAULT_ADMIN_PASSWORD)
     session_secret = os.environ.get("WEB_PANEL_SESSION_SECRET", "temu-web-panel-session")
-    use_remote_auth = os.environ.get("USE_REMOTE_AUTH", "true").lower() == "true"
     app.add_middleware(
         SessionMiddleware,
         secret_key=session_secret,
@@ -101,19 +98,18 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
         if not _is_authenticated(request):
             raise HTTPException(status_code=401, detail="需要登录")
 
-        # 如果使用远程认证，验证令牌是否仍然有效
-        if use_remote_auth:
-            token = request.session.get(SESSION_TOKEN_KEY)
-            if token:
-                auth_client = get_auth_client()
-                result = await auth_client.verify_token(token)
-                if not result.valid:
-                    # 令牌失效（可能被其他设备登录踢出）
-                    request.session.clear()
-                    raise HTTPException(
-                        status_code=401,
-                        detail=result.message or "会话已失效，请重新登录"
-                    )
+        # 验证令牌是否仍然有效
+        token = request.session.get(SESSION_TOKEN_KEY)
+        if token:
+            auth_client = get_auth_client()
+            result = await auth_client.verify_token(token)
+            if not result.valid:
+                # 令牌失效（可能被其他设备登录踢出）
+                request.session.clear()
+                raise HTTPException(
+                    status_code=401,
+                    detail=result.message or "会话已失效，请重新登录"
+                )
 
     def _login_template(request: Request, *, error: str | None = None) -> HTMLResponse:
         return templates.TemplateResponse(
@@ -121,7 +117,7 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
             {
                 "request": request,
                 "error": error,
-                "use_remote_auth": use_remote_auth,
+                "use_remote_auth": True,
             },
             status_code=401 if error else 200,
         )
@@ -147,7 +143,7 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
             return RedirectResponse("/", status_code=303)
         return templates.TemplateResponse(
             "login.html",
-            {"request": request, "use_remote_auth": use_remote_auth},
+            {"request": request, "use_remote_auth": True},
         )
 
     @app.post("/login", response_class=HTMLResponse)
@@ -156,45 +152,31 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
         username: str = Form(default=""),
         password: str = Form(...),
     ) -> HTMLResponse:
-        if use_remote_auth:
-            # 使用远程认证服务器
-            auth_client = get_auth_client()
+        # 使用远程认证服务器
+        auth_client = get_auth_client()
 
-            # 检查认证服务器是否可用
-            if not await auth_client.health_check():
-                logger.warning("认证服务器不可用，尝试本地认证")
-                # 降级到本地认证
-                if password.strip() == admin_password:
-                    request.session[SESSION_KEY] = True
-                    request.session[SESSION_USERNAME_KEY] = "admin"
-                    return RedirectResponse("/", status_code=303)
-                return _login_template(request, error="认证服务器不可用，本地密码错误")
+        # 检查认证服务器是否可用
+        if not await auth_client.health_check():
+            logger.error("认证服务器不可用")
+            return _login_template(request, error="认证服务器不可用，请联系管理员")
 
-            # 远程登录
-            token_data = await auth_client.login(username.strip(), password.strip())
-            if token_data:
-                request.session[SESSION_KEY] = True
-                request.session[SESSION_TOKEN_KEY] = token_data.access_token
-                request.session[SESSION_USERNAME_KEY] = username.strip()
-                logger.info(f"用户远程登录成功: {username}")
-                return RedirectResponse("/", status_code=303)
-            return _login_template(request, error="用户名或密码错误")
-        else:
-            # 本地密码认证（保持向后兼容）
-            if password.strip() == admin_password:
-                request.session[SESSION_KEY] = True
-                request.session[SESSION_USERNAME_KEY] = "admin"
-                return RedirectResponse("/", status_code=303)
-            return _login_template(request, error="管理员密码错误")
+        # 远程登录
+        token_data = await auth_client.login(username.strip(), password.strip())
+        if token_data:
+            request.session[SESSION_KEY] = True
+            request.session[SESSION_TOKEN_KEY] = token_data.access_token
+            request.session[SESSION_USERNAME_KEY] = username.strip()
+            logger.info(f"用户远程登录成功: {username}")
+            return RedirectResponse("/", status_code=303)
+        return _login_template(request, error="用户名或密码错误")
 
     @app.post("/logout")
     async def logout(request: Request) -> RedirectResponse:
-        # 如果使用远程认证，先通知服务器登出
-        if use_remote_auth:
-            token = request.session.get(SESSION_TOKEN_KEY)
-            if token:
-                auth_client = get_auth_client()
-                await auth_client.logout(token)
+        # 通知认证服务器登出
+        token = request.session.get(SESSION_TOKEN_KEY)
+        if token:
+            auth_client = get_auth_client()
+            await auth_client.logout(token)
 
         request.session.clear()
         return RedirectResponse("/login", status_code=303)
@@ -339,8 +321,6 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
     @app.get("/admin", response_class=HTMLResponse)
     async def admin_page(request: Request, _: None = Depends(admin_guard)) -> HTMLResponse:
         """管理员后台页面."""
-        if not use_remote_auth:
-            raise HTTPException(status_code=404, detail="本地认证模式下不支持后台管理")
         username = request.session.get(SESSION_USERNAME_KEY, "")
         return templates.TemplateResponse(
             "admin.html",
@@ -355,9 +335,6 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
         limit: int = Query(default=100, ge=1, le=1000),
     ) -> dict[str, Any]:
         """获取用户列表（代理到认证服务器）."""
-        if not use_remote_auth:
-            raise HTTPException(status_code=404, detail="本地认证模式下不支持此功能")
-
         token = request.session.get(SESSION_TOKEN_KEY)
         if not token:
             raise HTTPException(status_code=401, detail="未登录")
@@ -383,9 +360,6 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
         _: None = Depends(admin_guard),
     ) -> dict[str, Any]:
         """创建用户（代理到认证服务器）."""
-        if not use_remote_auth:
-            raise HTTPException(status_code=404, detail="本地认证模式下不支持此功能")
-
         token = request.session.get(SESSION_TOKEN_KEY)
         if not token:
             raise HTTPException(status_code=401, detail="未登录")
@@ -414,9 +388,6 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
         _: None = Depends(admin_guard),
     ) -> dict[str, Any]:
         """更新用户（代理到认证服务器）."""
-        if not use_remote_auth:
-            raise HTTPException(status_code=404, detail="本地认证模式下不支持此功能")
-
         token = request.session.get(SESSION_TOKEN_KEY)
         if not token:
             raise HTTPException(status_code=401, detail="未登录")
@@ -446,9 +417,6 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
         _: None = Depends(admin_guard),
     ) -> dict[str, Any]:
         """删除用户（代理到认证服务器）."""
-        if not use_remote_auth:
-            raise HTTPException(status_code=404, detail="本地认证模式下不支持此功能")
-
         token = request.session.get(SESSION_TOKEN_KEY)
         if not token:
             raise HTTPException(status_code=401, detail="未登录")
@@ -477,9 +445,6 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
         _: None = Depends(admin_guard),
     ) -> dict[str, Any]:
         """强制用户下线（代理到认证服务器）."""
-        if not use_remote_auth:
-            raise HTTPException(status_code=404, detail="本地认证模式下不支持此功能")
-
         token = request.session.get(SESSION_TOKEN_KEY)
         if not token:
             raise HTTPException(status_code=401, detail="未登录")
