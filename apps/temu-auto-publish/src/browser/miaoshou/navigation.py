@@ -39,6 +39,10 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
     )
     # 商品行选择器（用于基于行定位编辑按钮）
     _ROW_SELECTOR: ClassVar[str] = ".pro-virtual-table__row-body"
+    # vue-recycle-scroller 虚拟滚动行选择器（包含 transform 信息）
+    _VIRTUAL_ROW_SELECTOR: ClassVar[str] = ".vue-recycle-scroller__item-view"
+    # 商品行高度（像素）
+    _ROW_HEIGHT: ClassVar[int] = 128
 
     async def navigate_to_collection_box(self, page: Page, use_sidebar: bool = False) -> bool:
         """Navigate to the shared collection box page.
@@ -749,11 +753,11 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
     ) -> bool:
         """Click the edit button of a product at a specific index.
 
-        针对虚拟滚动列表的定位策略：
-        1. 虚拟滚动列表只渲染可见区域的行（如10行）
-        2. DOM 中的 rows.nth(i) 不等于"第 i 个商品"
-        3. 必须先滚动到目标位置，让目标商品出现在视口中
-        4. 滚动后，点击视口中第一行的编辑按钮
+        针对 vue-recycle-scroller 虚拟滚动列表的定位策略：
+        1. DOM 元素会被回收，不可见的行设为 translateY(-9999px)
+        2. 可见行通过 transform: translateY(N*128px) 定位
+        3. DOM 顺序 ≠ 视觉顺序，必须按 translateY 值定位
+        4. 先滚动到目标位置，然后按 translateY 值找到正确的行
 
         Args:
             page: Active Playwright page instance.
@@ -772,43 +776,41 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                 logger.error("Product index must be non-negative")
                 return False
 
-            # 获取编辑按钮选择器（用于在行内查找）
+            # 获取编辑按钮选择器
             edit_selectors = self._resolve_selectors(
                 self.selectors.get("collection_box", {}).get("edit_button", {}),
                 keys=["edit"],
                 default=self._DEFAULT_EDIT_BUTTON_SELECTORS,
             )
 
-            # 关键：虚拟滚动列表中，必须先滚动到目标位置
-            # 即使 index=0，如果之前滚动过，也需要先滚动回顶部
+            # 滚动到目标位置
             if enable_scroll:
                 from ...utils.scroll_helper import scroll_to_product_position
 
                 logger.info(f"滚动到商品 #{index + 1} 的位置")
                 await scroll_to_product_position(page, target_index=index)
-                await page.wait_for_timeout(500)  # 等待 DOM 更新
+                await page.wait_for_timeout(500)
 
-            # 滚动后，获取当前可见的行
-            rows = page.locator(self._ROW_SELECTOR)
-            row_count = await rows.count()
-            logger.debug(f"当前可见商品行数: {row_count}")
-
-            if row_count == 0:
-                logger.error("无可见商品行")
-                return False
-
-            # 虚拟滚动列表中，滚动到目标位置后，目标商品应该在第一行
-            # 但为了保险，我们检查前几行
-            for row_offset in range(min(3, row_count)):
-                target_row = rows.nth(row_offset)
+            # 核心：通过 translateY 值定位正确的行
+            target_row = await self._find_row_by_translate_y(page, index)
+            if target_row:
                 clicked = await self._click_edit_button_in_row(
                     page, target_row, edit_selectors, index
                 )
                 if clicked:
                     return True
-                logger.debug(f"行偏移 {row_offset} 的编辑按钮点击失败，尝试下一行")
+                logger.debug(f"translateY 定位的行点击失败，尝试其他方法")
 
-            # 回退：直接点击第一个可见的编辑按钮（兼容非虚拟滚动列表）
+            # 回退方案1：找视口内的第一个可见行
+            first_visible_row = await self._find_first_visible_row(page)
+            if first_visible_row:
+                clicked = await self._click_edit_button_in_row(
+                    page, first_visible_row, edit_selectors, index
+                )
+                if clicked:
+                    return True
+
+            # 回退方案2：直接点击第一个可见的编辑按钮
             logger.debug("基于行定位失败，尝试直接点击可见的编辑按钮")
             for selector in edit_selectors:
                 try:
@@ -817,13 +819,12 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                     if count == 0:
                         continue
 
-                    # 点击第一个可见的按钮
                     button = buttons.first
                     with suppress(Exception):
                         await button.scroll_into_view_if_needed()
                     await button.wait_for(state="visible", timeout=2_000)
                     await button.click()
-                    logger.success("Edit button clicked using fallback (first visible) selector {}", selector)
+                    logger.success("Edit button clicked using fallback selector {}", selector)
                     return True
                 except Exception as exc:
                     logger.debug("Fallback edit selector {} failed: {}", selector, exc)
@@ -834,6 +835,106 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
         except Exception as exc:
             logger.error(f"Failed to click edit button: {exc}")
             return False
+
+    async def _find_row_by_translate_y(self, page: Page, index: int):
+        """通过 translateY 值定位 vue-recycle-scroller 中的行。
+
+        vue-recycle-scroller 使用 transform: translateY(N*128px) 来定位行。
+        滚动后，目标行的 translateY 应该接近 0（在视口顶部）。
+
+        Args:
+            page: Playwright 页面对象
+            index: 目标商品索引
+
+        Returns:
+            找到的行 Locator，或 None
+        """
+        try:
+            # 获取所有虚拟滚动行
+            virtual_rows = page.locator(self._VIRTUAL_ROW_SELECTOR)
+            count = await virtual_rows.count()
+            logger.debug(f"虚拟滚动行总数: {count}")
+
+            if count == 0:
+                return None
+
+            # 找到 translateY 最小且 >= 0 的行（即视口中的第一行）
+            min_translate_y = float('inf')
+            target_row = None
+
+            for i in range(count):
+                row = virtual_rows.nth(i)
+                try:
+                    style = await row.get_attribute("style") or ""
+                    # 解析 translateY 值
+                    translate_y = self._parse_translate_y(style)
+                    
+                    # 跳过被回收的行（translateY = -9999px）
+                    if translate_y < 0:
+                        continue
+
+                    # 找 translateY 最小的行（视口顶部的行）
+                    if translate_y < min_translate_y:
+                        min_translate_y = translate_y
+                        target_row = row
+                except Exception:
+                    continue
+
+            if target_row:
+                logger.debug(f"找到目标行，translateY={min_translate_y}px")
+                # 返回行内的 .pro-virtual-table__row-body
+                return target_row.locator(self._ROW_SELECTOR).first
+
+            return None
+        except Exception as exc:
+            logger.debug(f"通过 translateY 定位失败: {exc}")
+            return None
+
+    async def _find_first_visible_row(self, page: Page):
+        """找到视口内的第一个可见行。
+
+        Returns:
+            第一个可见行的 Locator，或 None
+        """
+        try:
+            rows = page.locator(self._ROW_SELECTOR)
+            count = await rows.count()
+
+            for i in range(min(count, 5)):
+                row = rows.nth(i)
+                try:
+                    # 检查行是否可见
+                    is_visible = await row.is_visible()
+                    if is_visible:
+                        # 检查是否在视口内
+                        box = await row.bounding_box()
+                        if box and box["y"] >= 0:
+                            return row
+                except Exception:
+                    continue
+
+            # 如果都不在视口内，返回第一个
+            return rows.first if count > 0 else None
+        except Exception as exc:
+            logger.debug(f"查找可见行失败: {exc}")
+            return None
+
+    @staticmethod
+    def _parse_translate_y(style: str) -> float:
+        """从 style 属性中解析 translateY 值。
+
+        Args:
+            style: 元素的 style 属性字符串
+
+        Returns:
+            translateY 的像素值，解析失败返回 -9999
+        """
+        import re
+        # 匹配 translateY(Npx) 或 translateY(N)
+        match = re.search(r"translateY\((-?\d+(?:\.\d+)?)\s*(?:px)?\s*\)", style)
+        if match:
+            return float(match.group(1))
+        return -9999
 
     async def _click_edit_button_in_row(
         self,
