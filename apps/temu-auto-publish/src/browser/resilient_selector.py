@@ -132,6 +132,9 @@ class ResilientLocator:
         ...     await element.click()
     """
     
+    ALLOWED_WAIT_STATES = {"attached", "detached", "visible", "hidden"}
+    MIN_TIMEOUT_PER_SELECTOR_MS = 120
+
     # 预定义的选择器链
     DEFAULT_CHAINS: dict[str, SelectorChain] = {
         # 认领相关
@@ -283,6 +286,65 @@ class ResilientLocator:
         self._chains: dict[str, SelectorChain] = self.DEFAULT_CHAINS.copy()
         self._metrics: dict[str, SelectorHitMetrics] = {}
     
+    @classmethod
+    def _normalize_wait_state(cls, requested: str | None, default_state: str) -> str:
+        """确保等待状态合法，非法值回退到可见状态."""
+        candidate = requested or default_state
+        if candidate in cls.ALLOWED_WAIT_STATES:
+            return candidate
+        logger.debug(f"非法 wait_state={candidate!r}，回退为 visible")
+        return "visible"
+
+    @classmethod
+    def _compute_timeout_per_selector(cls, total_timeout: int, selector_count: int) -> int:
+        """计算单个选择器的等待时间，避免过小导致瞬时超时."""
+        if selector_count <= 0:
+            return total_timeout
+        per_selector = max(total_timeout // selector_count, 1)
+        if per_selector < cls.MIN_TIMEOUT_PER_SELECTOR_MS:
+            logger.debug(
+                "分配给单个选择器的超时过低({}ms)，提升至安全下限 {}ms",
+                per_selector,
+                cls.MIN_TIMEOUT_PER_SELECTOR_MS,
+            )
+            per_selector = min(cls.MIN_TIMEOUT_PER_SELECTOR_MS, total_timeout)
+        return per_selector
+
+    @staticmethod
+    def _is_target_closed(page: Page | Frame) -> bool:
+        """检测 Page/Frame 是否已关闭或分离."""
+        try:
+            if hasattr(page, "is_closed") and callable(page.is_closed) and page.is_closed():
+                return True
+            if hasattr(page, "is_detached") and callable(page.is_detached) and page.is_detached():
+                return True
+        except Exception:
+            return False
+        return False
+
+    @staticmethod
+    def _build_text_option_locator(page: Page | Frame, option_text: str):
+        """构建基于文本的下拉选项定位器."""
+        safe_text = option_text.replace('"', '\\"').replace("'", "\\'")
+        selector = f'.el-select-dropdown__item:has-text("{safe_text}")'
+        return page.locator(selector).first
+
+    @staticmethod
+    def _log_failure_context(
+        chain: SelectorChain, timeout_per: int, failures: list[str]
+    ) -> None:
+        """输出失败上下文，便于调试."""
+        if not failures:
+            logger.error(f"所有选择器均失败: {chain.description}")
+            return
+        failure_detail = "; ".join(failures[:5])
+        logger.error(
+            "所有选择器均失败: {} | 单项超时: {}ms | 尝试: {}",
+            chain.description,
+            timeout_per,
+            failure_detail,
+        )
+
     def register_chain(self, chain: SelectorChain) -> None:
         """注册新的选择器链
         
@@ -328,15 +390,21 @@ class ResilientLocator:
             return None
         
         effective_timeout = timeout or (chain.timeout_per_selector * len(chain.all_selectors))
-        effective_state = wait_state or chain.wait_state
-        timeout_per = effective_timeout // len(chain.all_selectors)
-        
+        effective_state = self._normalize_wait_state(wait_state, chain.wait_state)
+        timeout_per = self._compute_timeout_per_selector(
+            effective_timeout, len(chain.all_selectors)
+        )
+    
         start_time = time.perf_counter()
         
         # 初始化或获取指标
         if key not in self._metrics:
             self._metrics[key] = SelectorHitMetrics(chain_key=key)
         metrics = self._metrics[key]
+        if self._is_target_closed(page):
+            logger.error("页面已关闭/分离，无法定位 {}", chain.description)
+            return None
+        failures: list[str] = []
         
         for idx, selector in enumerate(chain.all_selectors):
             try:
@@ -356,16 +424,18 @@ class ResilientLocator:
                 return locator
                 
             except PlaywrightTimeoutError:
+                failures.append(f"#{idx} timeout {selector}")
                 logger.debug(f"选择器超时 [{idx}] {chain.description}: {selector}")
                 continue
             except Exception as exc:
+                failures.append(f"#{idx} {type(exc).__name__}: {exc}")
                 logger.debug(f"选择器异常 [{idx}] {chain.description}: {exc}")
                 continue
         
         # 所有选择器都失败
         elapsed_ms = (time.perf_counter() - start_time) * 1000
         metrics.record_miss(elapsed_ms)
-        logger.error(f"所有选择器均失败: {chain.description}")
+        self._log_failure_context(chain, timeout_per, failures)
         
         return None
     
@@ -427,12 +497,19 @@ class ResilientLocator:
             return []
         
         effective_timeout = timeout or chain.timeout_per_selector
+        timeout_per = self._compute_timeout_per_selector(
+            effective_timeout, len(chain.all_selectors)
+        )
+        failures: list[str] = []
+        if self._is_target_closed(page):
+            logger.error("页面已关闭/分离，无法批量定位 {}", chain.description)
+            return []
         
         for selector in chain.all_selectors:
             try:
                 locator = page.locator(selector)
                 # 等待至少一个元素
-                await locator.first.wait_for(state="attached", timeout=effective_timeout)
+                await locator.first.wait_for(state="attached", timeout=timeout_per)
                 
                 count = await locator.count()
                 if count > 0:
@@ -440,11 +517,13 @@ class ResilientLocator:
                     return [locator.nth(i) for i in range(count)]
                     
             except PlaywrightTimeoutError:
+                failures.append(f"timeout {selector}")
                 continue
             except Exception:
+                failures.append(f"exception {selector}")
                 continue
         
-        logger.warning(f"未定位到任何 {chain.description}")
+        logger.warning(f"未定位到任何 {chain.description} | 尝试: {'; '.join(failures[:5])}")
         return []
     
     async def click(
@@ -518,6 +597,7 @@ class ResilientLocator:
         option_text: str,
         *,
         timeout: int | None = None,
+        option_chain_key: str | None = "select_option",
     ) -> bool:
         """定位下拉框并选择选项
         
@@ -526,10 +606,16 @@ class ResilientLocator:
             key: 选择器链的键
             option_text: 选项文本
             timeout: 超时时间(毫秒)
+            option_chain_key: 选项列表的选择器链键，None 时仅使用文本匹配
             
         Returns:
             是否成功选择
         """
+        if self._is_target_closed(page):
+            logger.error("页面已关闭/分离，无法选择选项 {}", option_text)
+            return False
+
+        option_timeout = timeout or 3000
         # 先定位并点击下拉框
         dropdown = await self.locate(page, key, timeout=timeout)
         if dropdown is None:
@@ -539,12 +625,24 @@ class ResilientLocator:
             await dropdown.click()
             
             # 等待下拉菜单出现
-            await asyncio.sleep(0.3)
+            dropdown_container = await self.locate(
+                page, "select_dropdown", timeout=option_timeout, wait_state="visible"
+            )
+            if dropdown_container is None:
+                await asyncio.sleep(0.2)
             
             # 定位并点击选项
-            option = page.locator(f".el-select-dropdown__item:has-text('{option_text}')").first
-            await option.wait_for(state="visible", timeout=2000)
-            await option.click()
+            option_locator = None
+            if option_chain_key:
+                option_locator = await self.locate(
+                    page, option_chain_key, timeout=option_timeout, wait_state="visible"
+                )
+            
+            if option_locator is None:
+                option_locator = self._build_text_option_locator(page, option_text)
+                await option_locator.wait_for(state="visible", timeout=option_timeout)
+            
+            await option_locator.click()
             
             return True
         except Exception as exc:
