@@ -1,0 +1,153 @@
+# Temu Auto Publish - Docker Compose 配置
+# 
+# @PURPOSE: 服务编排和环境配置
+# @USAGE:
+#   启动: docker-compose up -d
+#   停止: docker-compose down
+#   查看日志: docker-compose logs -f
+#   进入容器: docker-compose exec temu-app bash
+
+version: '3.8'
+
+services:
+  # 主应用服务
+  temu-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    image: temu-auto-publish:latest
+    container_name: temu-auto-publish
+    
+    # 环境变量
+    environment:
+      - TEMU_WEB_PANEL_ENV=production
+      - WEB_PANEL_HOST=0.0.0.0
+      - WEB_PANEL_PORT=8000
+      # Playwright 配置
+      - PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+      # 时区设置
+      - TZ=Asia/Shanghai
+    
+    # 端口映射
+    ports:
+      - "8000:8000"
+    
+    # 数据卷挂载 - 持久化重要数据
+    volumes:
+      # 输入数据（Excel、图片等）
+      - ./data/input:/app/data/input
+      # 输出结果
+      - ./data/output:/app/data/output
+      # 日志文件
+      - ./data/logs:/app/data/logs
+      # 工作流状态（断点续传）
+      - ./data/workflow_states:/app/data/workflow_states
+      # 调试文件（可选）
+      - ./data/debug:/app/data/debug
+      # 配置文件（可选，如需覆盖）
+      - ./config:/app/config:ro
+      # 浏览器用户数据（保持登录状态）
+      - temu-browser-data:/app/data/browser_data
+    
+    # 资源限制
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 8G
+        reservations:
+          cpus: '2'
+          memory: 4G
+    
+    # 重启策略
+    restart: unless-stopped
+    
+    # 健康检查
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    
+    # 网络
+    networks:
+      - temu-network
+
+  # 开发/调试服务（可选，支持 VNC 查看浏览器）
+  temu-app-debug:
+    build:
+      context: .
+      dockerfile: Dockerfile.debug
+    image: temu-auto-publish:debug
+    container_name: temu-auto-publish-debug
+    profiles:
+      - debug  # 只在 --profile debug 时启动
+    
+    environment:
+      - TEMU_WEB_PANEL_ENV=development
+      - DISPLAY=:99
+      - TZ=Asia/Shanghai
+    
+    ports:
+      - "8001:8000"   # Web Panel
+      - "5900:5900"   # VNC
+      - "6080:6080"   # noVNC (浏览器访问)
+    
+    volumes:
+      - ./data:/app/data
+      - ./config:/app/config:ro
+      - ./src:/app/src:ro
+      - temu-browser-data-debug:/app/data/browser_data
+    
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 8G
+    
+    restart: unless-stopped
+    networks:
+      - temu-network
+
+  # 本地打包服务（使用本地 Python 环境）
+  temu-builder:
+    image: python:3.12-slim
+    container_name: temu-builder
+    profiles:
+      - build  # 只在 --profile build 时启动
+    
+    working_dir: /app
+    
+    volumes:
+      - .:/app
+      - temu-pip-cache:/root/.cache/pip
+    
+    environment:
+      - PYTHONUNBUFFERED=1
+    
+    # 安装依赖并打包（注意：Linux 容器只能打包 Linux 可执行文件）
+    command: >
+      bash -c "
+        pip install -r requirements.txt pyinstaller &&
+        python build_windows_exe.py --name TemuWebPanel-Linux
+      "
+    
+    networks:
+      - temu-network
+
+# 持久化卷
+volumes:
+  temu-browser-data:
+    name: temu-browser-data
+  temu-browser-data-debug:
+    name: temu-browser-data-debug
+  temu-pip-cache:
+    name: temu-pip-cache
+
+# 网络配置
+networks:
+  temu-network:
+    name: temu-network
+    driver: bridge

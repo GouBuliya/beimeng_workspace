@@ -1,0 +1,78 @@
+# Temu Auto Publish - Debug/Development Container
+# 支持 VNC 远程查看浏览器界面
+#
+# @PURPOSE: 开发调试环境，支持图形界面和 VNC 远程访问
+# @USAGE:
+#   构建: docker build -f Dockerfile.debug -t temu-auto-publish:debug .
+#   运行: docker-compose --profile debug up -d
+#   VNC访问: vnc://localhost:5900 或 http://localhost:6080
+
+FROM mcr.microsoft.com/playwright/python:v1.49.0-noble
+
+WORKDIR /app
+
+# 安装 VNC 和桌面环境
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # VNC 服务器
+    x11vnc \
+    xvfb \
+    # noVNC (浏览器访问 VNC)
+    novnc \
+    websockify \
+    # 轻量级窗口管理器
+    fluxbox \
+    # 中文字体
+    fonts-wqy-zenhei \
+    fonts-wqy-microhei \
+    # 调试工具
+    vim \
+    curl \
+    htop \
+    net-tools \
+    procps \
+    # 清理
+    && rm -rf /var/lib/apt/lists/* \
+    && fc-cache -fv
+
+# 复制依赖文件并安装
+COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+# 设置环境变量
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONIOENCODING=utf-8 \
+    LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8 \
+    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+    TEMU_WEB_PANEL_ENV=development \
+    # 显示设置
+    DISPLAY=:99 \
+    SCREEN_WIDTH=1920 \
+    SCREEN_HEIGHT=1080 \
+    SCREEN_DEPTH=24
+
+# 复制应用代码
+COPY . .
+
+# 创建数据目录
+RUN mkdir -p /app/data/input \
+             /app/data/output \
+             /app/data/logs \
+             /app/data/temp \
+             /app/data/debug \
+             /app/data/browser_data
+
+# 复制启动脚本
+COPY docker/entrypoint-debug.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# 暴露端口
+EXPOSE 8000 5900 6080
+
+# 启动脚本
+ENTRYPOINT ["/entrypoint.sh"]
+
+
+

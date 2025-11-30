@@ -1,0 +1,36 @@
+# Temu Auto Publish - Windows 打包容器
+# 用于在 Windows 容器中打包 exe
+#
+# @PURPOSE: Windows 环境下使用 PyInstaller 打包 exe
+# @USAGE:
+#   需要 Windows 容器模式：
+#   1. Docker Desktop -> Settings -> Docker Engine -> 切换到 Windows containers
+#   2. docker build -f Dockerfile.windows -t temu-builder:windows .
+#   3. docker run -v ${PWD}/dist:/app/dist temu-builder:windows
+
+# 使用 Windows Server Core with Python
+FROM python:3.12-windowsservercore-ltsc2022
+
+SHELL ["powershell", "-Command", "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue';"]
+
+WORKDIR C:/app
+
+# 复制依赖文件
+COPY requirements.txt .
+
+# 安装依赖
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel; `
+    pip install --no-cache-dir -r requirements.txt; `
+    pip install --no-cache-dir pyinstaller
+
+# 复制应用代码
+COPY . .
+
+# 设置环境变量
+ENV PYTHONUNBUFFERED=1
+
+# 默认执行打包命令
+CMD ["python", "build_windows_exe.py"]
+
+
+

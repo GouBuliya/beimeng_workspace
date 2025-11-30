@@ -1,0 +1,87 @@
+# Docker 构建忽略文件
+# 排除不需要进入镜像的文件，减小镜像体积
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Python 缓存
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+*.egg
+.eggs/
+*.manifest
+*.spec
+
+# 虚拟环境
+venv/
+env/
+.venv/
+.env.local
+.env.development
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# 测试相关
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+
+# 文档
+docs/
+*.md
+!README.md
+
+# 构建输出
+build/
+dist/
+*.exe
+*.whl
+
+# 数据文件（通过 volume 挂载）
+data/input/*
+data/output/*
+data/logs/*
+data/debug/*
+data/temp/*
+data/metrics/*
+data/workflow_states/*
+data/video/*
+!data/.gitkeep
+
+# Playwright 录制
+playwright-recordings/
+
+# 调试文件
+debug/
+*.html
+!web_panel/templates/*.html
+
+# 其他
+*.log
+*.bak
+*.tmp
+Thumbs.db
+.DS_Store
+
+# Docker 相关
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+
+

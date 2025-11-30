@@ -203,7 +203,7 @@ python run_until_empty.py \
 
 ## 🖥️ Web 管理面板 (零指令入口)
 
-面向运营/质检等非技术角色，提供“上传文件 → 点击开始”的完整引导。
+面向运营/质检等非技术角色，提供"上传文件 → 点击开始"的完整引导。
 
 - **首次安装**：  
   - Windows：双击 `apps/temu-auto-publish/install_web_panel.bat`  
@@ -218,22 +218,129 @@ python run_until_empty.py \
 
 启动后浏览器会自动打开 Web UI，界面包含参数提示、进度状态、实时日志、环境自检按钮以及示例选品表下载链接，真正做到电脑小白也能独立操作。
 
-- “仅运行一次流程” 开关默认开启，表示执行单轮完整 SOP。
+- "仅运行一次流程" 开关默认开启，表示执行单轮完整 SOP。
 - 关闭后 Web Panel 会进入守护模式：配合 `SelectionTableQueue` 自动循环取数、出错回滚、选品表归档，直到 Excel 空/格式异常。
+
+## 🐳 Docker 容器化部署
+
+使用 Docker 容器可以**固定配置和环境**，确保在任何机器上都能稳定运行。
+
+### 环境要求
+
+- Docker 20.10+
+- Docker Compose 2.0+
+- 至少 8GB 内存
+- 至少 10GB 磁盘空间
+
+### 快速启动
+
+#### Windows
+
+```batch
+# 1. 构建镜像
+docker\docker-start.bat build
+
+# 2. 启动生产环境
+docker\docker-start.bat prod
+
+# 3. 访问 Web Panel
+# http://localhost:8000
+```
+
+#### Linux / macOS
+
+```bash
+# 给脚本执行权限
+chmod +x docker/docker-start.sh
+
+# 构建并启动
+./docker/docker-start.sh build
+./docker/docker-start.sh prod
+```
+
+### 运行模式
+
+| 模式 | 命令 | 说明 |
+|------|------|------|
+| 生产模式 | `docker-start prod` | 无界面，适合后台运行 |
+| 调试模式 | `docker-start debug` | 带 VNC，可远程查看浏览器 |
+| 停止服务 | `docker-start stop` | 停止所有容器 |
+
+### 调试模式（VNC 可视化）
+
+调试模式支持通过 VNC 远程查看浏览器界面：
+
+```batch
+docker\docker-start.bat debug
+```
+
+访问方式：
+- **Web Panel**: http://localhost:8001
+- **VNC (浏览器)**: http://localhost:6080/vnc.html
+- **VNC (客户端)**: vnc://localhost:5900
+
+### 常用 Docker 命令
+
+```bash
+# 查看日志
+docker-compose logs -f
+
+# 进入容器
+docker-compose exec temu-app bash
+
+# 在容器中运行工作流
+docker-compose exec temu-app python main.py --input data/input/test.xlsx
+
+# 重启服务
+docker-compose restart
+```
+
+### 数据持久化
+
+以下目录会自动挂载到主机，数据不会丢失：
+
+| 主机目录 | 容器目录 | 用途 |
+|---------|---------|------|
+| `./data/input` | `/app/data/input` | 输入文件（Excel、图片） |
+| `./data/output` | `/app/data/output` | 输出结果 |
+| `./data/logs` | `/app/data/logs` | 日志文件 |
+| `./data/workflow_states` | `/app/data/workflow_states` | 工作流状态 |
+| `./config` | `/app/config` | 配置文件 |
+
+> 📖 详细文档请参考 [Docker 部署指南](docs/DOCKER.md)
 
 ### Windows 下载即用打包
 
-> ⚠️ PyInstaller 需要在 Windows 环境下运行才能生成 `.exe`，以下命令默认在 Windows PowerShell 中执行。
+提供两种打包方式：
 
-```bash
-# 1. 安装打包工具
-uv pip install pyinstaller
+#### 方式一：单文件安装程序（推荐给用户）
 
-# 2. 运行打包 CLI（会产物输出 dist/TemuWebPanel.exe）
-uv run python apps/temu-auto-publish/build_windows_exe.py build
+创建包含所有依赖的单个 exe 安装程序，用户无需安装任何东西：
+
+```batch
+cd apps\temu-auto-publish
+
+# 一键打包（生成 ~300MB 安装程序）
+installer\build_all.bat
 ```
 
-打包后的 `TemuWebPanel.exe` 支持双击即用：首次运行会自动打开浏览器指向 `http://127.0.0.1:8899`。若需要自定义端口/自动安装 Playwright，可在打包前编辑 `start_web_panel_entry.py`。
+输出：
+- `dist/TemuWebPanel_Setup_x.x.x.exe` - 安装程序
+- `dist/TemuWebPanel_Portable.7z` - 便携版压缩包
+
+> 详细说明请参考 [安装包构建指南](installer/README.md)
+
+#### 方式二：轻量打包（需要用户有 Python 环境）
+
+```bash
+# 安装打包工具
+uv pip install pyinstaller
+
+# 运行打包
+uv run python apps/temu-auto-publish/build_windows_exe.py
+```
+
+打包后的 `TemuWebPanel.exe` 支持双击即用：首次运行会自动打开浏览器指向 `http://127.0.0.1:8899`。
 
 ## 📁 项目结构
 
@@ -266,9 +373,19 @@ apps/temu-auto-publish/
 │   └── utils/                     # 通用工具模块
 ├── config/                        # Pydantic Settings、浏览器与选择器配置
 ├── data/                          # 输入 CSV/Excel、媒体样本、调试产物
+├── docker/                        # Docker 容器化相关文件
+│   ├── docker-start.bat             # Windows 启动脚本
+│   ├── docker-start.sh              # Linux/Mac 启动脚本
+│   ├── build-exe.bat                # Windows exe 打包脚本
+│   └── entrypoint-debug.sh          # 调试容器入口
 ├── docs/                          # 对外文档（使用指南、调试说明）
 ├── scripts/                       # 辅助脚本（如 update_ai_context、下载媒体）
 ├── tests/                         # pytest 用例（待对齐新版接口）
+├── web_panel/                     # FastAPI Web 管理面板
+├── Dockerfile                     # 生产环境镜像
+├── Dockerfile.debug               # 调试环境镜像（含 VNC）
+├── Dockerfile.windows             # Windows 打包镜像
+├── docker-compose.yml             # 服务编排配置
 ├── .env.example                   # 环境变量模板
 └── README.md                      # 本文件
 ```

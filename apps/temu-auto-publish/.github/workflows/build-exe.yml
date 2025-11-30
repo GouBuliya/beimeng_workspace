@@ -1,0 +1,83 @@
+# GitHub Actions: 自动打包 Windows exe
+#
+# @PURPOSE: 在 Windows runner 上使用 PyInstaller 打包 exe
+# @TRIGGER: 手动触发 或 推送 tag (v*)
+
+name: Build Windows EXE
+
+on:
+  # 手动触发
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '版本号 (如 1.0.0)'
+        required: false
+        default: 'dev'
+  
+  # 推送 tag 时自动触发
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    
+    defaults:
+      run:
+        working-directory: apps/temu-auto-publish
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: apps/temu-auto-publish/requirements.txt
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          pip install -r requirements.txt
+          pip install pyinstaller
+      
+      - name: Install Playwright browsers
+        run: |
+          playwright install chromium
+      
+      - name: Build exe
+        run: |
+          python build_windows_exe.py --name TemuWebPanel
+      
+      - name: Get version
+        id: version
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" == "push" ]; then
+            echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${{ github.event.inputs.version || 'dev' }}" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TemuWebPanel-${{ steps.version.outputs.version }}-windows
+          path: apps/temu-auto-publish/dist/TemuWebPanel.exe
+          retention-days: 30
+      
+      - name: Create Release (on tag)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: apps/temu-auto-publish/dist/TemuWebPanel.exe
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+
+
