@@ -59,6 +59,8 @@ class RetryOutcome(str, Enum):
     EXHAUSTED = "exhausted"  # 重试次数耗尽
     NON_RETRYABLE = "non_retryable"  # 遇到不可重试错误
     CANCELLED = "cancelled"  # 被取消
+    STATE_CHECK_FAILED = "state_check_failed"  # 状态检查失败
+    RECOVERY_FAILED = "recovery_failed"  # 恢复验证失败
 
 
 @dataclass
@@ -116,6 +118,15 @@ class RetryPolicy:
 
     # 是否在最后一次失败后仍执行恢复动作
     recovery_on_final_failure: bool = False
+
+    # 恢复验证器：验证恢复动作是否成功（返回 True 表示可继续重试）
+    recovery_validator: Callable[[], Awaitable[bool]] | None = None
+
+    # 恢复验证失败时的处理策略
+    skip_retry_on_validation_failure: bool = True  # True=跳过本次重试，False=仍然重试
+
+    # 状态检查器：每次重试前检查系统是否处于可重试状态
+    state_checker: Callable[[], Awaitable[bool]] | None = None
 
     def get_delay(self, attempt: int) -> float:
         """计算第N次重试的延迟时间（秒）
@@ -311,13 +322,58 @@ class EnhancedRetryHandler:
                 )
                 logger.info(f"  等待 {delay:.2f}秒 后重试...")
 
+                # 状态检查：重试前验证系统是否处于可重试状态
+                if self.policy.state_checker is not None:
+                    try:
+                        state_ok = await self.policy.state_checker()
+                        if not state_ok:
+                            logger.warning("状态检查失败，系统不处于可重试状态")
+                            result.errors.append(
+                                {
+                                    "attempt": attempt,
+                                    "error_type": "StateCheckFailed",
+                                    "error_message": "状态检查失败，系统不处于可重试状态",
+                                    "timestamp": datetime.now().isoformat(),
+                                }
+                            )
+                            break  # 终止重试
+                    except Exception as state_error:
+                        logger.warning(f"状态检查器执行失败: {state_error}")
+
                 # 执行恢复动作
+                recovery_success = True
                 if self.policy.pre_retry_action is not None:
                     try:
                         logger.debug("执行重试前恢复动作...")
                         await self.policy.pre_retry_action()
+
+                        # 恢复验证：验证恢复动作是否成功
+                        if self.policy.recovery_validator is not None:
+                            try:
+                                recovery_success = await self.policy.recovery_validator()
+                                if not recovery_success:
+                                    logger.warning("恢复验证失败，恢复动作未能恢复系统状态")
+                                    self._metrics["recovery_validation_failures"] = (
+                                        self._metrics.get("recovery_validation_failures", 0) + 1
+                                    )
+                                    if self.policy.skip_retry_on_validation_failure:
+                                        result.errors.append(
+                                            {
+                                                "attempt": attempt,
+                                                "error_type": "RecoveryValidationFailed",
+                                                "error_message": "恢复验证失败，跳过本次重试",
+                                                "timestamp": datetime.now().isoformat(),
+                                            }
+                                        )
+                                        continue  # 跳过本次重试，进入下一次
+                                else:
+                                    logger.debug("恢复验证通过，系统状态已恢复")
+                            except Exception as validation_error:
+                                logger.warning(f"恢复验证器执行失败: {validation_error}")
+                                recovery_success = False
                     except Exception as recovery_error:
                         logger.warning(f"恢复动作失败: {recovery_error}")
+                        recovery_success = False
 
                 await asyncio.sleep(delay)
 
