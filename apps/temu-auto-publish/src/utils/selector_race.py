@@ -36,9 +36,9 @@ class SelectorTimeouts:
     - SELECTOR_TIMEOUT_SLOW: 慢速超时
     """
 
-    FAST: int = int(os.environ.get("SELECTOR_TIMEOUT_FAST", "300"))
-    NORMAL: int = int(os.environ.get("SELECTOR_TIMEOUT_NORMAL", "500"))
-    SLOW: int = int(os.environ.get("SELECTOR_TIMEOUT_SLOW", "1000"))
+    FAST: int = int(os.environ.get("SELECTOR_TIMEOUT_FAST", str(min(300 * 10, 5000))))
+    NORMAL: int = int(os.environ.get("SELECTOR_TIMEOUT_NORMAL", str(min(500 * 10, 5000))))
+    SLOW: int = int(os.environ.get("SELECTOR_TIMEOUT_SLOW", str(min(1000 * 10, 5000))))
 
 
 # 全局超时配置实例

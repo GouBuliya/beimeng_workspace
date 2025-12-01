@@ -19,6 +19,7 @@ class FirstEditMediaMixin(FirstEditBase):
     async def upload_size_chart(self, page: Page, image_url: str) -> bool:
         """上传尺寸图(SOP 步骤 4.5 补充)."""
         logger.info("SOP 4.5: 上传尺寸图 -> {}...", image_url[:50])
+        await page.wait_for_load_state("domcontentloaded")
 
         try:
             success = await upload_size_chart_via_url(page, image_url)
@@ -34,7 +35,7 @@ class FirstEditMediaMixin(FirstEditBase):
     async def upload_product_video(self, page: Page, video_url: str) -> bool:
         """上传产品视频(SOP 步骤 4.5 补充)."""
         logger.info("SOP 4.5: 上传产品视频 -> {}...", video_url[:50])
-
+        await page.wait_for_load_state("domcontentloaded")
         try:
             result = await upload_product_video_via_url(page, video_url)
             if result is True:
@@ -44,6 +45,7 @@ class FirstEditMediaMixin(FirstEditBase):
                 logger.info("检测到已有视频并已处理,跳过上传")
                 return True
             logger.warning("产品视频上传失败或被跳过")
+            
             return False
         except Exception as exc:
             logger.error(f"上传产品视频失败: {exc}")

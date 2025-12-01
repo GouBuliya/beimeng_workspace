@@ -49,10 +49,12 @@ class PageLoadTimeouts:
     - PAGE_LOAD_TIMEOUT_NETWORK: 网络空闲超时 (默认 5000ms)
     """
 
-    FAST: int = int(os.environ.get("PAGE_LOAD_TIMEOUT_FAST", "1500"))
-    NORMAL: int = int(os.environ.get("PAGE_LOAD_TIMEOUT_NORMAL", "3000"))
-    SLOW: int = int(os.environ.get("PAGE_LOAD_TIMEOUT_SLOW", "5000"))
-    NETWORK: int = int(os.environ.get("PAGE_LOAD_TIMEOUT_NETWORK", "5000"))
+    FAST: int = int(os.environ.get("PAGE_LOAD_TIMEOUT_FAST", str(min(1500 * 10, 5000))))
+    NORMAL: int = int(os.environ.get("PAGE_LOAD_TIMEOUT_NORMAL", str(min(3000 * 10, 5000))))
+    SLOW: int = int(os.environ.get("PAGE_LOAD_TIMEOUT_SLOW", str(min(5000 * 10, 5000))))
+    NETWORK: int = int(
+        os.environ.get("PAGE_LOAD_TIMEOUT_NETWORK", str(min(5000 * 10, 5000)))
+    )
 
 
 # 全局超时配置实例

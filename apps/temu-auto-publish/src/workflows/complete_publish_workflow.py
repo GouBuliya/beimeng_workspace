@@ -188,7 +188,7 @@ class CompletePublishWorkflow:
 
         Args:
             headless: 浏览器是否使用无头模式; None 时读取配置文件.
-            selection_table: 选品表路径, 默认读取 data/input/selection.xlsx.
+            selection_table: 选品表路径，必须由外部提供（Web 上传或 CLI 参数）。
             use_ai_titles: 是否启用 AI 生成标题 (失败时自动回退).
             use_codegen_batch_edit: 是否使用 codegen 录制的批量编辑模块 (默认 False, 推荐使用优化后的 BatchEditController).
             skip_first_edit: 是否直接跳过首次编辑阶段.
@@ -226,16 +226,9 @@ class CompletePublishWorkflow:
 
         # 归一化相对路径(以应用根目录为基准，适配 Windows)
         self._app_root = Path(__file__).resolve().parents[2]
-        self._data_input_dir = Path(self.settings.data_input_dir)
-        if not self._data_input_dir.is_absolute():
-            self._data_input_dir = (self._app_root / self._data_input_dir).resolve()
-
         # 图片基础目录(从环境变量或配置读取, 默认为 data/input/10月新品可推)
         self.image_base_dir = self._resolve_image_base_dir()
 
-        self.default_manual_file = (
-            self._data_input_dir.parent / "manual" / "超多小语种版说明书.pdf"
-        ).resolve()
         self.manual_file_override = self._resolve_optional_path(manual_file, "说明书文件")
         self.outer_package_image_override = self._resolve_optional_path(
             outer_package_image, "外包装图片"
@@ -365,7 +358,7 @@ class CompletePublishWorkflow:
             # 初始化控制器
             miaoshou_ctrl = MiaoshouController()
             first_edit_ctrl = FirstEditController()
-            legacy_manual = self.manual_file_override or self.default_manual_file
+            legacy_manual = self.manual_file_override
             try:
                 batch_edit_ctrl = BatchEditController(
                     page,
@@ -961,6 +954,7 @@ class CompletePublishWorkflow:
         weight_g = self._resolve_weight(selection)
         dimensions = self._resolve_dimensions(selection)
         stock = max(selection.collect_count * 20, 50)
+        spec_unit_name = selection.spec_unit or "规格"
 
         specs: list[dict[str, Any]] = []
         variants_payload: list[dict[str, Any]] = []
@@ -970,7 +964,7 @@ class CompletePublishWorkflow:
             if options:
                 specs.append(
                     {
-                        "name": selection.spec_unit or "规格",
+                        "name": spec_unit_name,
                         "options": options,
                     }
                 )
@@ -1013,6 +1007,7 @@ class CompletePublishWorkflow:
             "specs": specs,
             "variants": variants_payload,
             "spec_array": spec_array,  # SKU 规格替换数组
+            "spec_unit": spec_unit_name,
         }
 
         if selection.size_chart_image_url:
@@ -1122,16 +1117,23 @@ class CompletePublishWorkflow:
 
         await miaoshou_ctrl.refresh_collection_box(page, filter_owner=filter_owner)
 
-        selection_count = min(len(edited_products), 5)
-        # 使用编辑阶段记录的索引（筛选后列表中的位置）
-        target_indexes = [
-            product.index for product in edited_products[:selection_count] if product.index >= 0
-        ]
+        # 按 execution_round 计算偏移，若不足则强制使用顺序索引占位
+        start_offset = max(0, (self.execution_round - 1) * self.collect_count)
+        end_offset = start_offset + self.collect_count
+        working_products = edited_products[start_offset:end_offset]
+
+        selection_count = min(max(len(working_products), self.collect_count), 5)
+        if working_products:
+            target_indexes = [
+                product.index for product in working_products[:selection_count] if product.index >= 0
+            ]
+        else:
+            target_indexes = list(range(start_offset, start_offset + selection_count))
         if len(target_indexes) < selection_count:
             logger.warning(
                 "Incomplete product index mapping detected, fallback to sequential selection",
             )
-            target_indexes = list(range(selection_count))
+            target_indexes = list(range(start_offset, start_offset + selection_count))
 
         logger.info(
             "认领阶段: 目标索引 %s (筛选后的商品列表，共 %s 条), 每商品点击 %s 次",
@@ -1140,35 +1142,60 @@ class CompletePublishWorkflow:
             self.claim_times,
         )
 
-        # 使用 JS 定位逻辑逐行认领（直接点击行内"认领到"按钮，无需勾选复选框）
-        success_count, fail_count = await miaoshou_ctrl.claim_products_by_row_js(
-            page,
-            indexes=target_indexes,
-            repeat_per_product=self.claim_times,
-        )
+        # 分批按索引认领（仿首次编辑的批次逻辑，每批最多5个）
+        batch_size = min(5, max(1, self.collect_count))
+        total_expected = 0
+        batch_failures: list[str] = []
+        batch_success = 0
 
-        claim_success = success_count > 0
-        if fail_count > 0:
-            logger.warning(f"部分商品认领失败: 成功={success_count}, 失败={fail_count}")
-
-        if not claim_success:
-            message = f"认领脚本执行失败: 成功={success_count}, 失败={fail_count}"
-            logger.error(message)
-            return StageOutcome(
-                name="stage2_claim",
-                success=False,
-                message=message,
-                details={
-                    "selected": selection_count,
-                    "success_count": success_count,
-                    "fail_count": fail_count,
-                },
+        abs_indexes = target_indexes + list(
+            range(
+                target_indexes[-1] + 1 if target_indexes else start_offset,
+                start_offset + selection_count,
             )
+        )
+        for batch_start in range(0, len(abs_indexes), batch_size):
+            batch_indexes = abs_indexes[batch_start : batch_start + batch_size]
+            if not batch_indexes:
+                batch_failures.append(f"批次 {batch_start//batch_size+1} 无有效索引")
+                break
 
-        # 期望认领总次数 (每商品 claim_times 次)
-        expected_total = selection_count * self.claim_times
-        # 去重后的阈值: 同一产品多次认领只会在 "已认领" 列表中显示一次
-        unique_threshold = selection_count
+            logger.info(
+                "批次 %s (执行轮次 %s): 勾选索引 %s",
+                batch_start // batch_size + 1,
+                self.execution_round,
+                batch_indexes,
+            )
+            selected_ok, selected_fail = await miaoshou_ctrl.select_products_by_row_js(
+                page,
+                indexes=batch_indexes,
+            )
+            if selected_ok < len(batch_indexes):
+                msg = (
+                    f"批次 {batch_start//batch_size+1} 勾选失败: "
+                    f"成功 {selected_ok}/{len(batch_indexes)}, 失败 {selected_fail}"
+                )
+                batch_failures.append(msg)
+                logger.error(msg)
+                break
+
+            if not await miaoshou_ctrl.claim_selected_products_to_temu(
+                page, repeat=self.claim_times
+            ):
+                msg = f"批次 {batch_start//batch_size+1} 批量认领失败"
+                batch_failures.append(msg)
+                logger.error(msg)
+                break
+
+            batch_success += 1
+            total_expected += len(batch_indexes) * self.claim_times
+            await page.wait_for_timeout(500)
+
+        claim_success = batch_success > 0 and not batch_failures
+
+        # 去重后的阈值：批次总期望 = 每批勾选数 × claim_times
+        expected_total = total_expected or (selection_count * self.claim_times)
+        unique_threshold = expected_total
         verify_success = await miaoshou_ctrl.verify_claim_success(
             page,
             expected_count=unique_threshold,
@@ -1183,15 +1210,15 @@ class CompletePublishWorkflow:
 
         overall_success = claim_success and verify_success
         message = (
-            f"认领成功 {success_count} 个商品，每商品 {self.claim_times} 次 (共 {expected_total} 次)"
+            f"认领成功 {selection_count} 个商品，每商品 {self.claim_times} 次 (共 {expected_total} 次)"
             if overall_success
             else "认领结果存在异常, 详见 details"
         )
 
         details = {
             "selected_count": selection_count,
-            "success_count": success_count,
-            "fail_count": fail_count,
+            "batches_success": batch_success,
+            "batch_failures": batch_failures,
             "claim_success": claim_success,
             "expected_total": expected_total,
             "unique_threshold": unique_threshold,
@@ -1278,7 +1305,7 @@ class CompletePublishWorkflow:
                 filter_owner = None
 
         def _build_codegen_payload() -> dict[str, object]:
-            manual_source = self.manual_file_override or self.default_manual_file
+            manual_source = self.manual_file_override
             manual_path_str = ""
             if manual_source:
                 if manual_source.exists():
@@ -1419,7 +1446,6 @@ class CompletePublishWorkflow:
             )
 
         shop_name = self._resolve_shop_name(edited_products)
-        costs = [{"cost": product.cost_price} for product in edited_products]
 
         # 选择店铺
         selection_ok = await publish_ctrl.select_shop(page, shop_name)
@@ -1431,8 +1457,8 @@ class CompletePublishWorkflow:
                 details={},
             )
 
-        # 设置供货价
-        set_price_ok = await publish_ctrl.set_supply_price(page, costs)
+        # 供货价逻辑已停用，直接视为成功
+        set_price_ok = True
         # 批量发布
         publish_ok = await publish_ctrl.batch_publish(page)
 

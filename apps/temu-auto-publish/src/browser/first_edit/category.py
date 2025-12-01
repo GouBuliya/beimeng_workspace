@@ -1,7 +1,7 @@
 """
 @PURPOSE: 首次编辑类目核对逻辑.
 @OUTLINE:
-  - class FirstEditCategoryMixin: 核对类目合规性
+  - class FirstEditCategoryMixin: 核对类目合规
 """
 
 from __future__ import annotations
@@ -9,12 +9,11 @@ from __future__ import annotations
 from loguru import logger
 from playwright.async_api import Page
 
-from ...utils.selector_race import TIMEOUTS, try_selectors_race
-from .base import FirstEditBase
+from .base import TIMEOUTS, FirstEditBase
 
 
 class FirstEditCategoryMixin(FirstEditBase):
-    """提供首次编辑时的类目核对逻辑."""
+    """提供首次编辑时的类目核对逻辑。"""
 
     async def check_category(self, page: Page) -> tuple[bool, str]:
         """核对商品类目是否合规(SOP 步骤 4.3).
@@ -42,17 +41,19 @@ class FirstEditCategoryMixin(FirstEditBase):
         try:
             category_selectors = [
                 "xpath=//label[contains(text(), '类目')]/following-sibling::*/descendant::input[1]",
-                "xpath=//label[contains(text(), '类目')]/following-sibling::*//div[contains(@class, 'jx-input')]",
+                (
+                    "xpath=//label[contains(text(), '类目')]/following-sibling::*//"
+                    "div[contains(@class, 'jx-input')]"
+                ),
                 ".jx-overlay-dialog .jx-select input[placeholder*='类目']",
                 ".jx-overlay-dialog input[placeholder*='选择类目']",
             ]
 
-            # 使用并行竞速策略查找类目元素
-            category_element = await try_selectors_race(
+            category_element = await self.find_visible_element(
                 page,
                 category_selectors,
                 timeout_ms=TIMEOUTS.NORMAL,
-                context_name="类目选择器",
+                context_name="类目选择",
             )
 
             category_text = ""
@@ -79,4 +80,3 @@ class FirstEditCategoryMixin(FirstEditBase):
             logger.error(f"核对类目失败: {exc}")
             logger.warning("默认认为类目合规(建议人工确认)")
             return True, "检查失败"
-

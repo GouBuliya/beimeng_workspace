@@ -1,0 +1,145 @@
+{
+  "workflow_id": "temu_publish_20251201_004947",
+  "workflow_type": "complete_publish",
+  "current_stage": "stage3_batch_edit",
+  "stages": {
+    "stage1_first_edit": {
+      "name": "stage1_first_edit",
+      "status": "completed",
+      "start_time": "2025-12-01T00:54:35.865892",
+      "end_time": "2025-12-01T00:54:35.865892",
+      "data": {
+        "products": [
+          {
+            "index": 5,
+            "product_name": "注水式提壶哑铃",
+            "model_number": "A064",
+            "owner": "未指定",
+            "title": "双手柄可调节配重水壶壶铃：最高12磅/6公斤，适合家庭健身——专注手部、臀部、腰部及背部训练（深蹲、硬拉、摆动、举重），男女通用初学者适用，支持增肌与减脂, 全身锻炼,运动装备,多功能壶铃,轻量壶铃,健身壶铃,加重壶铃,男女皆宜的锻炼,健身爱好者 A064",
+            "cost_price": 30.0,
+            "suggested_price": 300.0,
+            "supply_price": 225.0,
+            "real_supply_price": 75.0,
+            "weight_g": 8300,
+            "dimensions_cm": {
+              "length": 80,
+              "width": 73,
+              "height": 61
+            }
+          },
+          {
+            "index": 6,
+            "product_name": "太空人垃圾桶",
+            "model_number": "A065",
+            "owner": "未指定",
+            "title": "一件创意卡通太空宇航员垃圾桶，家用高颜值双桶可站立带盖垃圾桶 A065",
+            "cost_price": 36.0,
+            "suggested_price": 360.0,
+            "supply_price": 270.0,
+            "real_supply_price": 90.0,
+            "weight_g": 9930,
+            "dimensions_cm": {
+              "length": 93,
+              "width": 78,
+              "height": 63
+            }
+          },
+          {
+            "index": 7,
+            "product_name": "车载储物箱",
+            "model_number": "A066",
+            "owner": "未指定",
+            "title": "4个季节 可用 容量黑色汽车储物箱，车载户外露营收纳箱，多功能衣物，带靠背可坐人，大容量收纳箱，汽车装备用品, 公路旅行必备品,旅行收纳袋,多功能收纳盒,多功能存储,耐用存储,汽车后备箱收纳箱,户外爱好者,常旅客 A066",
+            "cost_price": 93.0,
+            "suggested_price": 930.0,
+            "supply_price": 697.5,
+            "real_supply_price": 232.5,
+            "weight_g": 8257,
+            "dimensions_cm": {
+              "length": 81,
+              "width": 74,
+              "height": 59
+            }
+          },
+          {
+            "index": 8,
+            "product_name": "车载储水箱",
+            "model_number": "A067",
+            "owner": "未指定",
+            "title": "便携式折叠水容器 龙头防漏设计 高容量耐用户外露营徒步必备 应急救灾饮水方案 房车旅行水箱补充 车载家用双场景适用 A110 A067",
+            "cost_price": 72.0,
+            "suggested_price": 720.0,
+            "supply_price": 540.0,
+            "real_supply_price": 180.0,
+            "weight_g": 6383,
+            "dimensions_cm": {
+              "length": 82,
+              "width": 76,
+              "height": 63
+            }
+          }
+        ]
+      },
+      "error": null,
+      "retry_count": 0
+    },
+    "stage2_claim": {
+      "name": "stage2_claim",
+      "status": "completed",
+      "start_time": "2025-12-01T00:54:56.137639",
+      "end_time": "2025-12-01T00:54:56.137639",
+      "data": {
+        "selected_count": 5,
+        "batches_success": 1,
+        "batch_failures": [],
+        "claim_success": true,
+        "expected_total": 20,
+        "unique_threshold": 20,
+        "verify_success": true
+      },
+      "error": null,
+      "retry_count": 0
+    },
+    "stage3_batch_edit": {
+      "name": "stage3_batch_edit",
+      "status": "completed",
+      "start_time": "2025-12-01T00:56:52.086728",
+      "end_time": "2025-12-01T00:56:52.086728",
+      "data": {
+        "success": true,
+        "completed_steps": 18,
+        "total_steps": 18,
+        "error": null,
+        "step_errors": [],
+        "timing": {
+          "标题": 3532.37,
+          "英语标题": 5363.69,
+          "类目属性": 3564.55,
+          "主货号": 4506.48,
+          "外包装": 5808.1,
+          "产地": 6873.96,
+          "定制品": 3072.52,
+          "敏感属性": 3869.53,
+          "重量": 4518.01,
+          "尺寸": 4590.8,
+          "平台SKU": 4542.51,
+          "SKU分类": 7998.17,
+          "尺码表": 998.01,
+          "建议售价": 4609.64,
+          "包装清单": 4349.85,
+          "轮播图": 996.51,
+          "颜色图": 1583.22,
+          "产品说明书": 4845.06,
+          "total": 115945.72
+        }
+      },
+      "error": null,
+      "retry_count": 0
+    }
+  },
+  "global_data": {},
+  "retry_count": 0,
+  "last_error": "批量发布存在失败, 请检查执行日志",
+  "created_at": "2025-12-01T00:54:35.865892",
+  "updated_at": "2025-12-01T00:56:52.086728"
+}

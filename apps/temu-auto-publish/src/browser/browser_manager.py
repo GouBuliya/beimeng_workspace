@@ -1,13 +1,14 @@
 """
-@PURPOSE: 浏览器管理器, 使用 Playwright 管理浏览器实例, 支持反检测和 Cookie 管理
+@PURPOSE: 浏览器管理器, 使用 Playwright 管理浏览器实例, 支持反检测、Cookie 管理与版本一致性校验
 @OUTLINE:
   - class BrowserManager: 浏览器管理器主类
-  - async def start(): 启动浏览器
+  - async def start(): 启动浏览器, 应用统一配置并校验版本
   - async def close(): 关闭浏览器
   - async def save_cookies(): 保存 Cookie
   - async def load_cookies(): 加载 Cookie
   - async def screenshot(): 截图
   - async def _launch_chromium(): 优先使用具备编解码器的 Chromium 渠道
+  - def _assert_version_consistency(): 校验 Playwright 与浏览器版本
   - def _build_wait_strategy(): 构建统一等待策略
   - def _patch_page_wait(): 注入智能等待逻辑
   - def prepare_page(): 对外暴露的页面初始化
@@ -20,6 +21,9 @@
 @RELATED: login_controller.py, cookie_manager.py
 """
 
+
+
+import importlib.metadata as importlib_metadata
 import json
 import os
 import random
@@ -36,6 +40,7 @@ from playwright.async_api import (
     async_playwright,
 )
 
+from .browser_settings import BrowserSettings
 from ..utils.page_waiter import PageWaiter, WaitStrategy
 
 
@@ -63,9 +68,11 @@ class BrowserManager:
         Args:
             config_path: 配置文件路径
         """
+        self.settings = BrowserSettings()
         self._raw_config_path = Path(config_path)
         self.config_path = self._resolve_config_path(self._raw_config_path)
         self.load_config()
+        self._override_settings_from_config()
 
         self.playwright: Playwright | None = None
         self.browser: Browser | None = None
@@ -88,6 +95,10 @@ class BrowserManager:
         if config_path.is_absolute():
             return config_path
 
+        resolved_via_settings = self.settings.resolve_path(config_path)
+        if resolved_via_settings.exists():
+            return resolved_via_settings
+
         current_file = Path(__file__).resolve()
         for parent in current_file.parents:
             candidate = parent / config_path
@@ -95,7 +106,7 @@ class BrowserManager:
                 return candidate
 
         # Fallback: 退回到项目根目录的推断路径，便于日志定位
-        return current_file.parent.parent.parent / config_path
+        return resolved_via_settings
 
     def load_config(self) -> None:
         """加载配置."""
@@ -135,28 +146,40 @@ class BrowserManager:
         self.network_idle_trigger_ms = int(self.timing_config.get("network_idle_trigger_ms", 1200))
         self.wait_strategy = self._build_wait_strategy(self.timing_config)
 
+    def _override_settings_from_config(self) -> None:
+        """基于配置文件覆盖浏览器设置, 确保打包后也能使用固定参数."""
+
+        overrides = self.config.get("browser_settings", {})
+        if overrides:
+            self.settings = BrowserSettings(**overrides)
+
     async def start(self, headless: bool | None = None) -> None:
         """启动浏览器.
 
         Args:
-            headless: 是否无头模式, None 则使用配置文件设置
+            headless: 是否无头模式, None 则使用配置文件设置.
         """
-        logger.info("启动 Playwright 浏览器...")
+        settings = self.settings
+        settings.apply_environment()
+        settings.ensure_directories()
+
+        logger.info("启动 Playwright 浏览器, 校验环境一致性..")
 
         self.playwright = await async_playwright().start()
 
-        # 浏览器选项
         browser_config = self.config.get("browser", {})
-        browser_type = browser_config.get("type", "chromium")
+        browser_type = browser_config.get("type", settings.browser_name)
 
-        # 是否使用无头模式
         if headless is None:
-            headless = browser_config.get("headless", False)
+            headless = (
+                settings.headless
+                if settings.headless is not None
+                else browser_config.get("headless", False)
+            )
 
         timing_config = self.timing_config or self.config.get("timing", {})
         slow_mo_ms = timing_config.get("slow_mo_ms")
         if slow_mo_ms is None:
-            # 兼容历史行为: 有头模式默认 300ms, 其他情况 0ms
             slow_mo_ms = 0 if headless else 300
 
         window_width = int(browser_config.get("window_width", 2564))
@@ -164,16 +187,15 @@ class BrowserManager:
         device_scale_factor = float(browser_config.get("device_scale_factor", 1.0))
         os.environ["TEMU_PIXEL_REFERENCE_DPR"] = f"{device_scale_factor:.16g}"
 
-        # 启动参数 (添加性能优化选项)
         launch_options = {
             "headless": headless,
             "args": [
                 "--disable-blink-features=AutomationControlled",
                 "--disable-dev-shm-usage",
-                "--disable-gpu",  # 禁用GPU加速
+                "--disable-gpu",
                 "--no-sandbox",
                 "--disable-setuid-sandbox",
-                "--disable-web-security",  # 跨域问题
+                "--disable-web-security",
                 "--disable-features=IsolateOrigins,site-per-process",
             ],
             "slow_mo": max(int(slow_mo_ms), 0),
@@ -195,7 +217,8 @@ class BrowserManager:
                 "--mute-audio",
             ],
         )
-        locale_arg = f"--lang={browser_config.get('locale', 'zh-CN')}"
+        locale = browser_config.get("locale", settings.locale)
+        locale_arg = f"--lang={locale}"
         extra_args.append(locale_arg)
         launch_options["args"] = self._merge_launch_args(launch_options["args"], extra_args)
         window_size_arg = f"--window-size={window_width},{window_height}"
@@ -216,7 +239,11 @@ class BrowserManager:
                 scale_args,
             )
 
-        # 启动浏览器
+        launch_options["args"] = self._merge_launch_args(
+            launch_options["args"],
+            settings.launch_args,
+        )
+
         if browser_type == "chromium":
             self.browser = await self._launch_chromium(launch_options, browser_config)
         elif browser_type == "firefox":
@@ -226,7 +253,7 @@ class BrowserManager:
         else:
             raise ValueError(f"不支持的浏览器类型: {browser_type}")
 
-        # 创建上下文
+        timezone_id = browser_config.get("timezone", settings.timezone_id)
         context_options = {
             "viewport": {
                 "width": window_width,
@@ -237,24 +264,31 @@ class BrowserManager:
                 "height": window_height,
             },
             "device_scale_factor": device_scale_factor,
-            "locale": browser_config.get("locale", "zh-CN"),
-            "timezone_id": browser_config.get("timezone", "Asia/Shanghai"),
+            "locale": locale,
+            "timezone_id": timezone_id,
+            "accept_downloads": True,
         }
 
-        # 设置 User-Agent
         picked_user_agent = self._pick_user_agent(browser_config)
         if picked_user_agent:
             context_options["user_agent"] = picked_user_agent
 
+        storage_state_path = settings.resolve_path(
+            browser_config.get("storage_state_path", settings.storage_state_path)
+        )
+        if storage_state_path.exists():
+            context_options["storage_state"] = str(storage_state_path)
+        else:
+            logger.debug("Storage state 文件不存在, 跳过预加载")
+
         self.context = await self.browser.new_context(**context_options)
 
-        # 应用反检测补丁
         if stealth_config.get("enabled", True):
             await self._apply_stealth()
-            await self._apply_additional_stealth(browser_config.get("locale", "zh-CN"))
+            await self._apply_additional_stealth(locale)
 
-        # 添加禁用动画的初始化脚本 (性能优化)
-        await self.context.add_init_script("""
+        await self.context.add_init_script(
+            """
             // 禁用CSS动画和过渡效果, 加速页面交互
             const style = document.createElement('style');
             style.innerHTML = `
@@ -266,18 +300,18 @@ class BrowserManager:
                 }
             `;
             document.head.appendChild(style);
-        """)
+            """
+        )
 
-        # 创建页面
         self.page = await self.context.new_page()
         self._patch_page_wait(self.page)
 
-        # 设置默认超时
         default_timeout = self.config.get("timeouts", {}).get("default", 30000)
         self.page.set_default_timeout(default_timeout)
         setattr(self.page, "_bemg_default_timeout_ms", default_timeout)
 
-        logger.success(f"✓ 浏览器已启动 (headless={headless})")
+        self._assert_version_consistency(settings)
+        logger.success(f"浏览器已启动 (headless={headless})")
 
     async def _apply_stealth(self) -> None:
         """应用反检测补丁."""
@@ -444,6 +478,58 @@ class BrowserManager:
             )
 
         return await self.playwright.chromium.launch(**launch_options)
+
+    def _assert_version_consistency(self, settings: BrowserSettings) -> None:
+        """校验 Playwright 包与浏览器版本一致性.
+
+        Args:
+            settings: 浏览器设置实例.
+
+        Raises:
+            RuntimeError: 当 Playwright 包或浏览器版本不符合预期时抛出.
+        """
+
+        try:
+            package_version = importlib_metadata.version("playwright")
+        except importlib_metadata.PackageNotFoundError as exc:
+            raise RuntimeError(
+                "未找到 Playwright 包元数据, 请确认环境已正确安装依赖或在 PyInstaller 打包"
+                " 时添加 --copy-metadata=playwright/--collect-all=playwright."
+            ) from exc
+        if settings.expected_playwright_version and (
+            package_version != settings.expected_playwright_version
+        ):
+            raise RuntimeError(
+                "Playwright 包版本不一致, 请执行 `uv sync --frozen` 重新安装依赖并运行 "
+                "`uv run playwright install chromium` 确认浏览器版本同步."
+                f" 当前={package_version}, 期望={settings.expected_playwright_version}"
+            )
+
+        browser_version: str | None = None
+        executable_path: str | None = None
+        if self.browser:
+            try:
+                browser_version = self.browser.version
+            except Exception as exc:  # pragma: no cover - 仅在 Playwright 低版本异常时触发
+                logger.debug(f"获取浏览器版本失败: {exc}")
+        if self.playwright:
+            try:
+                executable_path = self.playwright.chromium.executable_path()
+            except Exception as exc:  # pragma: no cover - 兼容 API 变动
+                logger.debug(f"获取浏览器可执行路径失败: {exc}")
+
+        if settings.expected_browser_version and browser_version:
+            if settings.expected_browser_version not in browser_version:
+                raise RuntimeError(
+                    "浏览器版本不一致, 请重新执行 `uv run playwright install chromium` "
+                    f"或清理 {settings.resolve_path(settings.browsers_path)} 重新安装."
+                    f" 当前={browser_version}, 期望包含={settings.expected_browser_version}"
+                )
+
+        logger.info(
+            f"Playwright 包版本: {package_version}, 浏览器版本: {browser_version or '未知'}, "
+            f"可执行路径: {executable_path or '未知'}"
+        )
 
     @staticmethod
     def _merge_launch_args(base: list[str], extra: list[str]) -> list[str]:

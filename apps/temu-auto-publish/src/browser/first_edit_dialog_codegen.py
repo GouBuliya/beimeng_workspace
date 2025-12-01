@@ -3,7 +3,7 @@
 @OUTLINE:
   - def smart_retry(): 智能重试装饰器,用于关键操作的自动重试
   - async def fill_first_edit_dialog_codegen(): 主函数,填写弹窗内所有字段
-  - (步骤0) SKU规格替换: 通过 payload.spec_array 或 payload.sku_spec_array 传入规格数组
+  - (步骤0) 规格名称填写 + SKU规格替换: 通过 payload.spec_unit 与 payload.spec_array 传入
   - async def _fill_title(): 填写产品标题
   - async def _fill_basic_specs(): 填写价格/库存/重量/尺寸等基础字段
   - async def _upload_size_chart_via_url(): 使用网络图片URL上传尺寸图
@@ -34,7 +34,8 @@ from loguru import logger
 from playwright.async_api import Locator, Page
 
 from ..core.performance import profile
-from .first_edit.sku_spec_replace import replace_sku_spec_options
+from .first_edit.sku_spec_replace import fill_first_spec_unit, replace_sku_spec_options
+from .first_edit.retry import first_edit_step_retry
 
 # 激进优化: 进一步最小化超时时间
 DEFAULT_PRIMARY_TIMEOUT_MS = 200     # 激进: 300 -> 200
@@ -166,6 +167,19 @@ async def fill_first_edit_dialog_codegen(page: Page, payload: dict[str, Any]) ->
         await page.wait_for_selector(".jx-overlay-dialog", state="visible", timeout=3000)
         logger.success("✓ 编辑弹窗已加载")
 
+        # 0. 填写规格名称/规格单位（如果提供了 spec_unit）
+        spec_unit = (payload.get("spec_unit") or "").strip()
+        if not spec_unit:
+            specs_payload = payload.get("specs") or []
+            if specs_payload and isinstance(specs_payload, list):
+                first_spec = specs_payload[0] or {}
+                spec_unit = str(first_spec.get("name") or "").strip()
+
+        if spec_unit:
+            unit_success = await fill_first_spec_unit(page, spec_unit)
+            if not unit_success:
+                logger.warning("⚠️ 规格单位填写失败，继续后续流程")
+
         # 0. 替换 SKU 规格选项（如果提供了 spec_array）
         spec_array = payload.get("spec_array") or payload.get("sku_spec_array")
         if spec_array:
@@ -234,6 +248,7 @@ async def fill_first_edit_dialog_codegen(page: Page, payload: dict[str, Any]) ->
         return False
 
 
+@first_edit_step_retry(max_attempts=3)
 async def _fill_title(page: Page, title: str) -> bool:
     """填写产品标题.
 
@@ -273,6 +288,7 @@ async def _fill_title(page: Page, title: str) -> bool:
         return False
 
 
+@first_edit_step_retry(max_attempts=3)
 async def _fill_basic_specs(page: Page, payload: dict[str, Any]) -> bool:
     """填写价格、库存、重量、尺寸等基础字段."""
 
@@ -312,6 +328,7 @@ async def _fill_single_value_fields(dialog: Locator, payload: dict[str, Any]) ->
     await _assign_values_by_keywords(candidates, field_values)
 
 
+@first_edit_step_retry(max_attempts=3)
 async def _fill_variant_rows(
     dialog: Locator, payload: dict[str, Any], variants: list[dict[str, Any]], page: Page
 ) -> bool:
@@ -348,6 +365,7 @@ async def _fill_variant_rows(
     return True
 
 
+@first_edit_step_retry(max_attempts=2, retry_on_false=False)
 async def _fill_dimension_fields(dialog: Locator, payload: dict[str, Any]) -> None:
     """批量填写重量与三维尺寸字段."""
 
@@ -404,6 +422,7 @@ async def _fill_dimension_fields(dialog: Locator, payload: dict[str, Any]) -> No
             logger.debug("字段 {} 未能写入任何输入", field)
 
 
+@first_edit_step_retry(max_attempts=3)
 async def _click_save(page: Page) -> bool:
     """点击保存修改按钮.
 
@@ -458,6 +477,7 @@ async def _click_save(page: Page) -> bool:
         return False
 
 
+@first_edit_step_retry(max_attempts=3)
 async def _fill_supplier_link(page: Page, supplier_link: str) -> bool:
     """填写供货商链接."""
 
@@ -514,28 +534,45 @@ async def _upload_size_chart_via_url(page: Page, image_url: str) -> bool:
             logger.debug("点击尺寸图缩略图失败: {}", exc)
 
         upload_btn = page.get_by_text("使用网络图片", exact=True)
-        await upload_btn.wait_for(state="visible", timeout=150)  # 激进: 250 -> 150
+        await upload_btn.wait_for(state="visible", timeout=1500)
         await upload_btn.click()
 
         url_input = page.get_by_role(
             "textbox", name="请输入图片链接，若要输入多个链接，请以回车换行", exact=True
         )
-        await url_input.wait_for(state="visible", timeout=150)  # 激进: 250 -> 150
+        await url_input.wait_for(state="visible", timeout=1500) 
         await url_input.click()
         await url_input.press("ControlOrMeta+a")
         await url_input.fill(normalized_url)
 
-        # 勾选"同时保存图片到妙手图片空间"
+        # 确保「同时保存图片到妙手图片空间」保持未勾选状态
         try:
-            save_to_space_checkbox = page.get_by_text("同时保存图片到妙手图片空间", exact=False)
+            save_to_space_checkbox = page.get_by_role(
+                "checkbox", name=re.compile("同时保存图片到妙手图片空间")
+            )
+            if not await save_to_space_checkbox.count():
+                save_to_space_checkbox = page.get_by_text(
+                    "同时保存图片到妙手图片空间", exact=False
+                ).locator("input[type='checkbox'], [role='checkbox']")
+
             if await save_to_space_checkbox.count():
-                await save_to_space_checkbox.click()
-                logger.debug("已勾选『同时保存图片到妙手图片空间』")
+                checkbox = save_to_space_checkbox.first
+                try:
+                    is_checked = await checkbox.is_checked()
+                except Exception:
+                    aria_checked = (await checkbox.get_attribute("aria-checked") or "").lower()
+                    is_checked = aria_checked == "true"
+
+                if is_checked:
+                    await checkbox.click()
+                    logger.debug("已取消勾选『同时保存图片到妙手图片空间』")
+                else:
+                    logger.debug("复选框已处于未勾选状态")
         except Exception as exc:
-            logger.debug("勾选保存到图片空间失败（可能已勾选）: {}", exc)
+            logger.debug("处理图片空间复选框状态失败: {}", exc)
 
         confirm_btn = page.get_by_role("button", name="确定")
-        await confirm_btn.wait_for(state="visible", timeout=150)  # 激进: 250 -> 150
+        await confirm_btn.wait_for(state="visible", timeout=1500) 
         await confirm_btn.click()
 
         await _ensure_dialog_closed(
@@ -592,7 +629,7 @@ async def _upload_product_video_via_url(page: Page, video_url: str) -> bool | No
         if await video_wrapper.count():
             try:
                 has_existing_video = await video_wrapper.evaluate(
-                    """
+                    r"""
                     (node) => {
                         if (!node) return false;
                         const classList = Array.from(node.classList || []);
@@ -655,7 +692,7 @@ async def _upload_product_video_via_url(page: Page, video_url: str) -> bool | No
 
         explicit_network_option = page.get_by_text("网络上传", exact=True)
         try:
-            await explicit_network_option.wait_for(state="visible", timeout=200)  # 极速: 500 -> 200
+            await explicit_network_option.wait_for(state="visible", timeout=2000) 
             await explicit_network_option.click()
             logger.debug("已通过显式文本点击『网络上传』")
         except Exception:
@@ -685,7 +722,7 @@ async def _upload_product_video_via_url(page: Page, video_url: str) -> bool | No
             ]
         )
 
-        target_input = await _first_visible(video_input_candidates, timeout=250)  # 极速: 600 -> 250
+        target_input = await _first_visible(video_input_candidates, timeout=2500) 
         if target_input is None:
             logger.warning("未找到视频URL输入框")
             await _capture_html(page, "data/debug/html/video_missing_input.html")
@@ -695,15 +732,15 @@ async def _upload_product_video_via_url(page: Page, video_url: str) -> bool | No
         await target_input.press("ControlOrMeta+a")
         await target_input.fill(normalized_url)
 
-        # 勾选"同时保存图片到妙手图片空间"（视频上传弹窗）
+        # 取消勾选"同时保存图片到妙手图片空间"（视频上传弹窗）
         try:
             scope = video_dialog if video_dialog is not None else page
-            save_to_space_checkbox = scope.get_by_text("同时保存图片到妙手图片空间", exact=False)
+            save_to_space_checkbox = scope.get_by_text("同时保存图片到妙手图片空间", exact=True)
             if await save_to_space_checkbox.count():
                 await save_to_space_checkbox.click()
-                logger.debug("已勾选『同时保存图片到妙手图片空间』")
+                logger.debug("已取消勾选『同时保存图片到妙手图片空间』")
         except Exception as exc:
-            logger.debug("勾选保存到图片空间失败（可能已勾选）: {}", exc)
+            logger.debug("取消勾选保存到图片空间失败（可能已取消勾选）: {}", exc)
 
         confirm_btn = (
             video_dialog.get_by_role("button", name="确定")
@@ -757,12 +794,12 @@ async def _dismiss_scroll_overlay(page: Page) -> None:
 
     try:
         await page.keyboard.press("Escape")
-        await overlay.first.wait_for(state="hidden", timeout=150)  # 极速: 400 -> 150
+        await overlay.first.wait_for(state="hidden", timeout=1500) 
         logger.debug("已通过 Escape 关闭浮层")
     except Exception:
         try:
             await page.mouse.click(5, 5)
-            await overlay.first.wait_for(state="hidden", timeout=100)  # 极速: 200 -> 100
+            await overlay.first.wait_for(state="hidden", timeout=1000) 
             logger.debug("已通过点击页面关闭浮层")
         except Exception:
             logger.debug("浮层未完全关闭, 将继续尝试填写")
@@ -975,12 +1012,15 @@ async def _first_visible(candidates: list[Locator | None], timeout: int = 1_000)
                 task.cancel()
 
 
+
+
 def _normalize_input_url(raw_text: str) -> str:
-    """去除多余的标签和空行，确保为单个有效 URL，并进行URL编码."""
+    """清理输入文本并确保返回可用 URL（必要时对路径做编码）。"""
     from urllib.parse import quote, urlparse, urlunparse
 
     if not raw_text:
         return ""
+
     parts = [line.strip() for line in raw_text.splitlines() if line.strip()]
     cleaned = ""
     for part in parts:
@@ -989,37 +1029,35 @@ def _normalize_input_url(raw_text: str) -> str:
         cleaned = part
         break
     cleaned = cleaned or raw_text.strip()
-    
-    # 检查路径是否包含非ASCII字符（中文等），只有包含时才进行编码
+
     try:
         parsed = urlparse(cleaned)
         path = parsed.path
-        
-        # 检查路径是否只包含 ASCII 字符（已编码的 URL 只含 ASCII）
+
         if path.isascii():
-            # 路径已是纯 ASCII（可能已编码或本身无中文），无需再编码
-            logger.debug(f"URL无需编码（纯ASCII）: {cleaned}")
+            logger.debug("URL 路径已符合 ASCII: {}", cleaned)
             return cleaned
-        
-        # 路径包含非 ASCII 字符，需要编码
-        encoded_path = quote(path, safe='/:@!$&\'()*+,;=')
-        encoded_url = urlunparse((
-            parsed.scheme,
-            parsed.netloc,
-            encoded_path,
-            parsed.params,
-            parsed.query,
-            parsed.fragment
-        ))
-        logger.debug(f"URL编码: {cleaned} -> {encoded_url}")
+
+        encoded_path = quote(path, safe="/:@!$&'()*+,;=")
+        encoded_url = urlunparse(
+            (
+                parsed.scheme,
+                parsed.netloc,
+                encoded_path,
+                parsed.params,
+                parsed.query,
+                parsed.fragment,
+            )
+        )
+        logger.debug("URL 路径已编码: {} -> {}", cleaned, encoded_url)
         return encoded_url
-    except Exception as e:
-        logger.warning(f"URL编码失败，使用原始URL: {e}")
+    except Exception as exc:
+        logger.warning("URL 清洗失败, 使用原始值: {}", exc)
         return cleaned
 
 
 def _sanitize_media_identifier(raw: str) -> str:
-    """将型号编号转为可用于媒体文件名的安全字符串."""
+    """将型号标识转为可用于媒体文件名的安全字符串。"""
 
     safe = re.sub(r"[^A-Za-z0-9._-]+", "_", raw.strip())
     return safe.strip("_")

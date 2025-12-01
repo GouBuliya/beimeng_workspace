@@ -1,0 +1,25 @@
+{
+  "default_selection_csv": {
+    "path": "data/input/10月新品可上架.csv",
+    "description": "默认选品表（CSV），用于正常运行时的商品列表导入。"
+  },
+  "backup_selection_csv": {
+    "path": "data/input/副本10月.csv",
+    "description": "选品表备用副本，结构与默认文件一致。"
+  },
+  "debug_selection_csv": {
+    "path": "data/debug/10月新品可上架.csv",
+    "description": "调试用选品表（CSV），供问题复现与数据校验。"
+  },
+  "debug_selection_html_csv": {
+    "path": "data/debug/html/10月新品可上架.csv",
+    "description": "调试 HTML 导出的选品表副本。"
+  },
+  "required_columns": [
+    "产品名称",
+    "标题后缀",
+    "产品颜色/规格",
+    "采集数量",
+    "规格单位"
+  ]
+}

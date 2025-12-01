@@ -1,97 +1,240 @@
-""" 
-@PURPOSE: 发布控制器，负责商品的发布流程（SOP步骤8-10）
-@OUTLINE:
-  - class PublishController: 发布控制器主类
-  - async def select_all_20_products(): 全选20条产品
-  - async def select_shop(): 选择店铺（SOP步骤8）
-  - async def set_supply_price(): 设置供货价（SOP步骤9）
-  - async def batch_publish(): 批量发布（SOP步骤10）
-@GOTCHAS:
-  - 批量发布需要2次确认
-  - 供货价公式：真实供货价×3 = 成本×7.5
-@TECH_DEBT:
-  - TODO: 需要使用Playwright Codegen获取实际选择器
-  - TODO: 添加发布失败的错误处理和重试机制
-@DEPENDENCIES:
-  - 内部: data_processor.price_calculator
-  - 外部: playwright, loguru
-@RELATED: miaoshou_controller.py, batch_edit_controller.py
 """
+@PURPOSE: Temu发布控制器，串联选择店铺、设置供货价、批量发布等步骤并保证流程稳定。
+@OUTLINE:
+  - class PublishController: 负责发布工作流、选择器加载与上下文复位
+  - def select_all_20_products(): 全选当前页 20 条商品，准备发布上下文
+  - def select_shop(): 选择目标店铺或全选店铺并确认
+  - def set_supply_price(): 打开供货价弹窗并按 SOP 配置公式
+  - def batch_publish(): 批量发布并处理双重确认弹窗
+  - def execute_publish_workflow(): 串联完整发布流程并返回结构化结果
+@GOTCHAS:
+  - 选择器依赖配置文件，缺失或失效时会启用兜底选择器并记录警告
+  - Playwright 操作需要等待可见且启用，必要时滚动到视口并重试
+@DEPENDENCIES:
+  - 内部: data_processor.price_calculator.PriceCalculator, utils.selector_race.TIMEOUTS
+  - 外部: playwright.async_api, loguru
+@RELATED: apps/temu-auto-publish/config/miaoshou_selectors_v2.json
+"""
+
+from __future__ import annotations
 
 import asyncio
 import json
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence
+from typing import Any, Mapping, Sequence
 
 from loguru import logger
-from playwright.async_api import Page, TimeoutError as PlaywrightTimeoutError
+from playwright.async_api import Locator, Page, TimeoutError as PlaywrightTimeoutError
 
 from ..data_processor.price_calculator import PriceCalculator
-from ..utils.selector_race import TIMEOUTS
 from ..utils.page_load_decorator import wait_dom_loaded
+from ..utils.selector_race import TIMEOUTS
+
+SelectorEntries = Sequence[str] | str | None
+
+
+@dataclass
+class PublishWorkflowResult:
+    """发布工作流的结构化结果."""
+
+    shop_selected: bool = False
+    price_set: bool = False
+    published: bool = False
+
+    @property
+    def success(self) -> bool:
+        """整体是否成功."""
+        return self.shop_selected and self.price_set and self.published
+
+    def to_dict(self) -> dict[str, Any]:
+        """转换为输出字典."""
+        return {
+            "success": self.success,
+            "shop_selected": self.shop_selected,
+            "price_set": self.price_set,
+            "published": self.published,
+            "publish_result": {
+                "success_count": 20 if self.published else 0,
+                "fail_count": 0 if self.published else 20,
+                "total_count": 20,
+            },
+        }
 
 
 class PublishController:
-    """发布控制器（SOP步骤8-10）.
+    """Temu 发布控制器.
 
-    负责商品发布的完整流程：
-    - 步骤8：选择店铺
-    - 步骤9：设置供货价
-    - 步骤10：批量发布（2次确认）
+    串联 SOP 步骤 8-10（选择店铺、设置供货价、批量发布），并在失败时提供清晰的日志与回退。
 
     Attributes:
-        selectors: 选择器配置
-        price_calculator: 价格计算器
-
+        selectors: 选择器配置字典.
+        price_calculator: 价格计算器，用于日志/校验.
     Examples:
-        >>> ctrl = PublishController()
-        >>> await ctrl.select_shop(page, "测试店铺")
-        >>> await ctrl.set_supply_price(page, products_data)
-        >>> await ctrl.batch_publish(page)
+        >>> controller = PublishController()
+        >>> await controller.select_shop(page, "测试店铺")
+        >>> await controller.set_supply_price(page, [{"cost": 10.0}])
+        >>> await controller.batch_publish(page)
     """
 
-    def __init__(self, selector_path: str = "config/miaoshou_selectors_v2.json"):
-        """初始化发布控制器.
-
-        Args:
-            selector_path: 选择器配置文件路径
-        """
-        self.selector_path = Path(selector_path)
+    def __init__(self, selector_path: str = "config/miaoshou_selectors_v2.json") -> None:
+        """初始化发布控制器."""
+        self.selector_path = self._resolve_selector_path(selector_path)
         self.selectors = self._load_selectors()
         self.price_calculator = PriceCalculator()
         self._publish_context_ready = False
-        
-        logger.info("发布控制器初始化（SOP步骤8-10）")
+        logger.info("发布控制器初始化完成，选择器配置路径: %s", self.selector_path)
 
-    def _load_selectors(self) -> dict:
-        """加载选择器配置.
+    def _resolve_selector_path(self, selector_path: str) -> Path:
+        """将选择器配置路径转换为绝对路径."""
+        selector_file = Path(selector_path)
+        if selector_file.is_absolute():
+            return selector_file
 
-        Returns:
-            选择器配置字典
-        """
+        current_file = Path(__file__)
+        project_root = current_file.parent.parent.parent
+        return project_root / selector_file
+
+    def _load_selectors(self) -> dict[str, Any]:
+        """加载选择器配置并做基本校验."""
+        if not self.selector_path.exists():
+            logger.warning(
+                "选择器配置文件不存在，将使用兜底选择器: %s", self.selector_path
+            )
+            return {}
+
         try:
-            if not self.selector_path.is_absolute():
-                current_file = Path(__file__)
-                project_root = current_file.parent.parent.parent
-                selector_file = project_root / self.selector_path
-            else:
-                selector_file = self.selector_path
-
-            with open(selector_file, "r", encoding="utf-8") as f:
-                config = json.load(f)
-                logger.debug(f"选择器配置已加载: {selector_file}")
-                return config
-        except Exception as e:
-            logger.warning(f"加载选择器配置失败: {e}，将使用默认选择器")
+            with self.selector_path.open("r", encoding="utf-8") as f:
+                data = json.load(f)
+            if not isinstance(data, dict):
+                raise ValueError("选择器配置不是字典")
+            logger.debug(
+                "选择器配置已加载 version=%s, last_updated=%s",
+                data.get("version"),
+                data.get("last_updated"),
+            )
+            return data
+        except Exception as exc:  # pragma: no cover - 运行时保护
+            logger.error("加载选择器配置失败，将使用兜底选择器: %s", exc)
             return {}
 
     def _invalidate_publish_context(self) -> None:
         """标记当前选中上下文失效."""
-
         self._publish_context_ready = False
 
-    async def _ensure_publish_context(self, page: Page, *, force: bool = False) -> None:
-        """复位到发布页 + 全选 20 条商品, 避免重复点击."""
+    @staticmethod
+    def _dedup_selectors(candidates: list[str]) -> list[str]:
+        """按顺序去重选择器列表."""
+        seen: set[str] = set()
+        deduped: list[str] = []
+        for selector in candidates:
+            if selector not in seen:
+                deduped.append(selector)
+                seen.add(selector)
+        return deduped
+
+    def _get_selector_candidates(self, *entries: SelectorEntries) -> list[str]:
+        """展开配置与兜底选择器，自动去重."""
+        candidates: list[str] = []
+        for entry in entries:
+            if entry is None:
+                continue
+            if isinstance(entry, str):
+                parts = [part.strip() for part in entry.split(",") if part.strip()]
+                candidates.extend(parts)
+            else:
+                for item in entry:
+                    if isinstance(item, str) and item.strip():
+                        candidates.append(item.strip())
+        return self._dedup_selectors(candidates)
+
+    async def _click_first_available(
+        self,
+        page: Page,
+        selectors: Sequence[str],
+        *,
+        visible_timeout_ms: int = 4_000,
+        click_timeout_ms: int = 3_000,
+        attempts: int = 3,
+        context: str = "",
+    ) -> str | None:
+        """尝试依次点击第一个可见且可用的选择器."""
+        last_error: Exception | None = None
+        #等待页面加载完毕
+        await page.wait_for_load_state("domcontentloaded")
+
+
+        for attempt in range(attempts):
+            for selector in selectors:
+                locator = page.locator(selector).first
+                try:
+                    await locator.wait_for(state="visible", timeout=visible_timeout_ms)
+                    if not await locator.is_enabled():
+                        last_error = RuntimeError("元素未启用")
+                        logger.debug(
+                            "元素禁用 selector=%s ctx=%s", selector, context
+                        )
+                        continue
+                    await locator.scroll_into_view_if_needed(timeout=1_000)
+                    await locator.click(timeout=click_timeout_ms)
+                    logger.debug(
+                        "点击成功 selector=%s ctx=%s attempt=%s/%s",
+                        selector,
+                        context,
+                        attempt + 1,
+                        attempts,
+                    )
+                    return selector
+                except PlaywrightTimeoutError as exc:
+                    last_error = exc
+                    logger.debug(
+                        "等待可见超时 selector=%s ctx=%s err=%s",
+                        selector,
+                        context,
+                        exc,
+                    )
+                except Exception as exc:  # pragma: no cover - 运行时保护
+                    last_error = exc
+                    logger.debug(
+                        "点击失败 selector=%s ctx=%s err=%s", selector, context, exc
+                    )
+            if attempt < attempts - 1:
+                await asyncio.sleep(0.3 + 0.2 * attempt)
+        if last_error:
+            logger.debug("所有选择器均不可用 ctx=%s err=%s", context, last_error)
+        return None
+
+    async def _first_visible_locator(
+        self,
+        page: Page,
+        selectors: Sequence[str],
+        *,
+        timeout_ms: int,
+        context: str,
+    ) -> Locator | None:
+        """找到第一个可见的 Locator."""
+        for selector in selectors:
+            locator = page.locator(selector).first
+            try:
+                await locator.wait_for(state="visible", timeout=timeout_ms)
+                return locator
+            except Exception as exc:  # pragma: no cover - 运行时保护
+                logger.debug(
+                    "等待可见失败 selector=%s ctx=%s err=%s",
+                    selector,
+                    context,
+                    exc,
+                )
+        return None
+
+    async def _ensure_publish_context(
+        self,
+        page: Page,
+        *,
+        force: bool = False,
+    ) -> None:
+        """确保当前在发布页且已全选 20 条商品."""
+        await page.wait_for_load_state("domcontentloaded")
 
         if self._publish_context_ready and not force:
             return
@@ -102,35 +245,8 @@ class PublishController:
             require_load_state=force or not self._publish_context_ready,
         )
         if not selected:
-            raise RuntimeError("全选商品失败, 无法继续发布流程")
+            raise RuntimeError("全选商品失败，无法继续发布流程")
         self._publish_context_ready = True
-
-    async def _click_first_available(
-        self,
-        page: Page,
-        selectors: Sequence[str],
-        *,
-        visible_timeout_ms: int = 4_000,
-        click_timeout_ms: int = 3_000,
-    ) -> str | None:
-        """尝试依次点击第一个可见的选择器."""
-
-        last_error: Exception | None = None
-        for selector in selectors:
-            locator = page.locator(selector).first
-            try:
-                await locator.wait_for(state="visible", timeout=visible_timeout_ms)
-                await locator.click(timeout=click_timeout_ms)
-                return selector
-            except PlaywrightTimeoutError as exc:
-                last_error = exc
-                logger.debug(f"等待 selector={selector} 可见超时: {exc}")
-            except Exception as exc:  # pragma: no cover - 运行时点击异常
-                last_error = exc
-                logger.debug(f"点击 selector={selector} 失败: {exc}")
-        if last_error:
-            logger.debug(f"所有选择器均不可用, 最后错误: {last_error}")
-        return None
 
     async def select_all_20_products(
         self,
@@ -138,43 +254,45 @@ class PublishController:
         *,
         require_load_state: bool = True,
     ) -> bool:
-        """全选20条产品（发布前准备）.
+        """全选当前页 20 条产品."""
+        await page.wait_for_load_state("domcontentloaded")
 
-        Args:
-            page: Playwright页面对象
-            require_load_state: 是否等待页面加载完成
-
-        Returns:
-            是否成功全选
-
-        Examples:
-            >>> await ctrl.select_all_20_products(page)
-            True
-        """
-        logger.info("全选20条产品...")
+        logger.info("全选当前页产品（目标 20 条）...")
         if require_load_state:
-            await wait_dom_loaded(page, context=" [select all 20]")
-        try:
-            # 使用全选按钮
-            collection_box_config = self.selectors.get("collection_box", {})
-            pagination_config = collection_box_config.get("pagination", {})
-            select_all_selector = pagination_config.get("select_all", "text='全选'")
-            
-            locator = page.locator(select_all_selector).first
-            await locator.wait_for(state="visible", timeout=TIMEOUTS.SLOW)
-            await locator.click()
+            await wait_dom_loaded(page, context="[select all 20]")
 
-            logger.success("✓ 已全选20条产品")
+        collection_box_config = self.selectors.get("collection_box", {})
+        pagination_config = collection_box_config.get("pagination", {})
+        configured_select_all = pagination_config.get("select_all")
+        select_all_candidates = self._get_selector_candidates(
+            configured_select_all,
+            "button:has-text('全选')",
+            "text='全选'",
+            "label:has-text('全选')",
+        )
+
+        try:
+            clicked_selector = await self._click_first_available(
+                page,
+                select_all_candidates,
+                visible_timeout_ms=TIMEOUTS.SLOW,
+                context="select_all",
+            )
+            if not clicked_selector:
+                raise RuntimeError("未命中『全选』按钮")
+
+            logger.success("已全选当前页产品 selector=%s", clicked_selector)
             self._publish_context_ready = True
             return True
-
-        except Exception as e:
-            logger.error(f"全选产品失败: {e}")
+        except Exception as exc:  # pragma: no cover - 运行时保护
+            logger.error("全选产品失败: %s", exc)
             self._invalidate_publish_context()
             return False
 
     async def _reset_to_all_tab(self, page: Page) -> None:
         """复位到「全部」TAB，确保后续操作在正确的列表."""
+        await page.wait_for_load_state("domcontentloaded")
+
         temu_tabs = (
             self.selectors.get("temu_collect_box", {})
             .get("tabs", {})
@@ -186,13 +304,7 @@ class PublishController:
             .get("all", [])
         )
 
-        configured_selectors: List[str] = []
-        for candidate in (temu_tabs, collection_tabs):
-            if isinstance(candidate, str):
-                configured_selectors.append(candidate)
-            elif isinstance(candidate, list):
-                configured_selectors.extend(candidate)
-
+        configured_selectors = self._get_selector_candidates(temu_tabs, collection_tabs)
         fallback_selectors = [
             ".jx-radio-button:has-text('全部')",
             ".pro-radio-button:has-text('全部')",
@@ -202,632 +314,528 @@ class PublishController:
             "span:has-text('全部')",
             "text=全部",
         ]
+        selectors = self._get_selector_candidates(configured_selectors, fallback_selectors)
 
-        tried_selectors = configured_selectors + fallback_selectors
-        reset_clicked = None
-        for selector in tried_selectors:
-            try:
-                locator = page.locator(selector)
-                if await locator.count() == 0:
-                    continue
-                await locator.first.click()
-                reset_clicked = selector
-                break
-            except Exception as exc:
-                logger.debug(f"复位TAB选择器 {selector} 失败: {exc}")
-
-        if reset_clicked:
-            logger.info(f"已复位到「全部」TAB：{reset_clicked}")
+        clicked_selector = await self._click_first_available(
+            page,
+            selectors,
+            visible_timeout_ms=2_000,
+            click_timeout_ms=1_500,
+            attempts=2,
+            context="reset_all_tab",
+        )
+        if clicked_selector:
+            logger.info("已复位到「全部」TAB selector=%s", clicked_selector)
         else:
-            logger.warning("复位到「全部」TAB失败，未找到可用的TAB按钮")
+            logger.warning("复位到「全部」TAB 失败，未找到可用的 TAB 按钮")
 
-    async def select_shop(self, page: Page, shop_name: Optional[str] = None) -> bool:
-        """选择店铺（SOP步骤8）.
-
-        Args:
-            page: Playwright页面对象
-            shop_name: 店铺名称（可选，None则选择第一个）
-
-        Returns:
-            是否选择成功
-
-        Examples:
-            >>> await ctrl.select_shop(page, "我的测试店铺")
-            True
-        """
+    async def select_shop(self, page: Page, shop_name: str | None = None) -> bool:
+        """选择店铺（SOP 步骤 8）."""
         logger.info("=" * 60)
-        logger.info("[SOP步骤8] 选择店铺")
-        logger.info("=" * 60)
+        logger.info("[SOP 步骤 8] 选择店铺")
+        await page.wait_for_load_state("domcontentloaded")
 
+        logger.info("=" * 60)
         try:
             await self._ensure_publish_context(page)
-            # 注意：需要使用Codegen获取实际的选择器
-            # 这里提供框架代码，实际选择器需要补充
-            
-            collection_box_config = self.selectors.get("collection_box", {})
-            action_buttons = collection_box_config.get("action_buttons", {})
-            
-            # 1. 点击"选择店铺"按钮（或类似按钮）
-            # TODO: 需要通过Codegen确认实际按钮文本和选择器
-            select_shop_selector = (
-                "xpath=/html/body/div[1]/section/div/div[4]/div/div[1]/button[2]"
+
+            action_buttons = (
+                self.selectors.get("temu_collect_box", {})
+                .get("action_buttons", {})
             )
-            
+            configured_select_shop = action_buttons.get("select_shop")
+            select_shop_candidates = self._get_selector_candidates(
+                configured_select_shop,
+                "button:has-text('选择店铺')",
+                "text='选择店铺'",
+            )
+
             logger.info("点击「选择店铺」按钮...")
             clicked = await self._click_first_available(
                 page,
-                [select_shop_selector],
+                select_shop_candidates,
                 visible_timeout_ms=5_000,
+                click_timeout_ms=3_000,
+                attempts=2,
+                context="select_shop.open",
             )
             if not clicked:
                 raise RuntimeError("未能找到『选择店铺』按钮")
 
-            # 2. 选择店铺
             normalized_name = (shop_name or "").strip()
-            skip_specific_shop = normalized_name == "" or normalized_name.lower() in {"未指定", "all", "*"}
+            skip_specific_shop = normalized_name == "" or normalized_name.lower() in {
+                "未指定",
+                "all",
+                "*",
+            }
 
             if not skip_specific_shop:
-                logger.info(f"选择店铺: {normalized_name}")
-                shop_selector = f"text='{normalized_name}'"
+                logger.info("选择店铺: %s", normalized_name)
+                target = page.get_by_text(normalized_name, exact=False).first
                 try:
-                    target = page.locator(shop_selector)
-                    if await target.count() == 0:
-                        raise RuntimeError(f"未在弹窗中找到店铺: {normalized_name}")
-                    await target.first.click()
+                    await target.wait_for(state="visible", timeout=TIMEOUTS.SLOW)
+                    await target.click(timeout=TIMEOUTS.NORMAL)
                 except Exception as exc:
                     logger.warning(
-                        f"定位店铺 {normalized_name} 失败，尝试改为全选店铺: {exc}"
+                        "定位店铺失败，将尝试全选店铺 name=%s err=%s",
+                        normalized_name,
+                        exc,
                     )
                     await self._select_all_shops(page)
             else:
                 logger.info("未指定店铺，直接全选所有店铺")
                 await self._select_all_shops(page)
 
-            # 3. 确认选择
             await self._confirm_shop_selection(page)
 
-            logger.success("✓ 店铺选择完成")
+            logger.success("店铺选择完成")
             return True
-
-        except Exception as e:
-            logger.error(f"选择店铺失败: {e}")
+        except Exception as exc:  # pragma: no cover - 运行时保护
+            logger.error("选择店铺失败: %s", exc)
             self._invalidate_publish_context()
-            logger.warning("⚠️  需要使用Codegen获取正确的选择器")
             return False
 
     async def _select_all_shops(self, page: Page) -> None:
         """在店铺弹窗中勾选“全选”复选框."""
-
-        selectors = [
+        selectors = self._get_selector_candidates(
             "label.jx-checkbox.jx-checkbox--small.pro-checkbox-group-all-select.pro-checkbox",
             "label:has-text('全选')",
             "button:has-text('全选')",
             "text='全选'",
-        ]
+            "input[type='checkbox'][aria-label*='全选']",
+        )
+        await page.wait_for_load_state("domcontentloaded")
 
-        for selector in selectors:
-            locator = page.locator(selector)
-            try:
-                if await locator.count() == 0:
-                    continue
-                await locator.first.click()
-                logger.success(f"✓ 已全选所有店铺 (selector={selector})")
-                return
-            except Exception as exc:
-                logger.debug(f"尝试 selector={selector} 失败: {exc}")
+        clicked_selector = await self._click_first_available(
+            page,
+            selectors,
+            visible_timeout_ms=2_000,
+            click_timeout_ms=1_000,
+            attempts=2,
+            context="select_all_shops",
+        )
+        if clicked_selector:
+            logger.success("已全选所有店铺 selector=%s", clicked_selector)
+            return
 
         raise RuntimeError("未找到可用的“全选”选项，无法继续选择店铺")
 
     async def _confirm_shop_selection(self, page: Page) -> None:
         """点击店铺选择弹窗中的“确定/确认”按钮."""
-
-        confirm_selectors = [
+        confirm_selectors = self._get_selector_candidates(
             "button.jx-button.jx-button--primary:has-text('确定')",
             "button.pro-button:has-text('确定')",
             "button:has-text('确认')",
             "div[role='dialog'] button.jx-button--primary",
             "footer button.jx-button--primary",
             "button[type='button']:has-text('确定')",
-        ]
+        )
+        await page.wait_for_load_state("domcontentloaded")
 
-        last_error: Exception | None = None
-        for selector in confirm_selectors:
-            locator = page.locator(selector)
-            try:
-                if await locator.count() == 0:
-                    continue
-                button = locator.first
-                if not await button.is_enabled():
-                    continue
-                await button.scroll_into_view_if_needed()
-                await button.click(timeout=3_000)
-                logger.success(f"✓ 点击店铺选择确认按钮 (selector={selector})")
-                return
-            except Exception as exc:
-                last_error = exc
-                logger.debug(
-                    f"点击确认按钮失败 selector={selector}, err={exc}"
-                )
+        clicked_selector = await self._click_first_available(
+            page,
+            confirm_selectors,
+            visible_timeout_ms=3_000,
+            click_timeout_ms=2_000,
+            attempts=2,
+            context="confirm_shop",
+        )
+        if clicked_selector:
+            logger.success("已点击店铺确认按钮 selector=%s", clicked_selector)
+            return
 
-        # fallback: 尝试按 Enter 或 Esc
         try:
             await page.keyboard.press("Enter")
             logger.info("已通过键盘 Enter 确认店铺选择")
-            return
-        except Exception:
-            pass
+        except Exception as exc:  # pragma: no cover - 运行时保护
+            raise RuntimeError("未能找到“确定/确认”按钮，无法确认店铺选择") from exc
 
-        if last_error:
-            raise last_error
-        raise RuntimeError("未能找到“确定”按钮，无法确认店铺选择")
+    def _validate_products_data(
+        self,
+        products_data: Sequence[Mapping[str, Any]],
+    ) -> list[float]:
+        """校验产品数据并提取成本价列表."""
+        if not products_data:
+            raise ValueError("产品数据为空，无法计算供货价")
+
+        costs: list[float] = []
+        for idx, product in enumerate(products_data):
+            if "cost" not in product:
+                raise ValueError(f"产品数据缺少 cost 字段 index={idx}")
+            try:
+                cost_value = float(product["cost"])
+            except (TypeError, ValueError) as exc:
+                raise ValueError(f"成本值非法 index={idx} value={product['cost']}") from exc
+            if cost_value <= 0:
+                raise ValueError(f"成本值必须大于 0 index={idx} value={cost_value}")
+            costs.append(cost_value)
+        return costs
+
+    async def _close_dialog_safely(self, page: Page) -> None:
+        """尝试关闭当前弹窗，避免阻塞后续流程."""
+        await page.wait_for_load_state("domcontentloaded")
+
+        close_selectors = self._get_selector_candidates(
+            "button:has-text('关闭')",
+            "button:has-text('取消')",
+            "button[aria-label='关闭']",
+            ".jx-dialog__close",
+            ".el-dialog__close",
+        )
+        await self._click_first_available(
+            page,
+            close_selectors,
+            visible_timeout_ms=8000,
+            click_timeout_ms=6000,
+            attempts=1,
+            context="close_dialog",
+        )
 
     async def set_supply_price(
         self,
         page: Page,
-        products_data: List[Dict]
+        products_data: Sequence[Mapping[str, Any]],
     ) -> bool:
-        """设置供货价（SOP步骤9）.
-
-        公式：
-        - 真实供货价 = 成本 × 2.5（最低）
-        - 妙手供货价 = 真实供货价 × 3 = 成本 × 7.5
-
-        Args:
-            page: Playwright页面对象
-            products_data: 产品数据列表，每个包含cost字段
-
-        Returns:
-            是否设置成功
-
-        Examples:
-            >>> products = [{"cost": 10.0}, {"cost": 12.0}]
-            >>> await ctrl.set_supply_price(page, products)
-            True
-        """
+        """设置供货价（SOP 步骤 9）."""
         logger.info("=" * 60)
-        logger.info("[SOP步骤9] 设置供货价")
+        logger.info("[SOP 步骤 9] 设置供货价")
         logger.info("=" * 60)
-            
-        try:
-            await self._reset_to_all_tab(page)
-            logger.info("复位完成")
-            #全选20条产品
-            await self.select_all_20_products(page)
-            logger.info("全选20条产品完成")
-            #确保发布上下文
-            await self._ensure_publish_context(page)
-            # 1. 点击"设置供货价"按钮
-            # TODO: 需要通过Codegen确认实际按钮文本和选择器
-            set_price_btn_selector = "button:has-text('设置供货价'), button:has-text('供货价')"
-            configured_set_price = (
-                self.selectors.get("temu_collect_box", {})
-                .get("action_buttons", {})
-                .get("set_price")
-            )
-            set_price_candidates: list[str] = []
-            if isinstance(configured_set_price, str):
-                set_price_candidates.append(configured_set_price)
-            elif isinstance(configured_set_price, Sequence):
-                set_price_candidates.extend(configured_set_price)
-            set_price_candidates.extend(
-                [sel.strip() for sel in set_price_btn_selector.split(",")]
-            )
+        # try:
+        #     costs = self._validate_products_data(products_data)
+        # except ValueError as exc:
+        #     logger.error("供货价数据校验失败: %s", exc)
+        #     return False
 
-            logger.info("点击「设置供货价」按钮...")
-            clicked_btn = await self._click_first_available(
-                page,
-                set_price_candidates,
-                visible_timeout_ms=5_000,
-            )
-            if not clicked_btn:
-                raise RuntimeError("未能点击『设置供货价』按钮，请检查DOM结构")
+        # try:
+        #     await self._ensure_publish_context(page)
+        #     action_buttons = (
+        #         self.selectors.get("temu_collect_box", {})
+        #         .get("action_buttons", {})
+        #     )
+        #     configured_set_price = action_buttons.get("set_price")
+        #     set_price_candidates = self._get_selector_candidates(
+        #         configured_set_price,
+        #         "button:has-text('设置供货价')",
+        #         "button:has-text('供货价')",
+        #     )
 
-            # 1.1 等待供货价弹窗出现，后续选择器都限定在弹窗内，避免误触
-            dialog_candidates = [
-                ".el-dialog__wrapper:visible",
-                ".jx-dialog__wrapper:visible",
-                ".el-dialog:visible",
-                ".jx-dialog:visible",
-                "[role='dialog']:visible",
-            ]
-            price_dialog = None
-            for selector in dialog_candidates:
-                dialog = page.locator(selector).filter(has_text="供货价")
-                try:
-                    await dialog.wait_for(state="visible", timeout=5_000)
-                    price_dialog = dialog.first
-                    break
-                except Exception:
-                    continue
-            # 若未能定位到带“供货价”文本的弹窗，则回退到任意可见弹窗
-            if price_dialog is None:
-                for selector in dialog_candidates:
-                    dialog = page.locator(selector)
-                    try:
-                        await dialog.wait_for(state="visible", timeout=3_000)
-                        price_dialog = dialog.first
-                        break
-                    except Exception:
-                        continue
-            if price_dialog:
-                logger.debug("供货价弹窗已就绪，开始选择公式模式")
-            
-            # 2. 选择“使用公式”
-            logger.info("选择「使用公式」模式...")
-            pricing_dialog_cfg = (
-                self.selectors.get("temu_collect_box", {})
-                .get("pricing_dialog", {})
-            )
-            configured_formula = pricing_dialog_cfg.get("use_formula")
-            formula_locators: list[str] = []
-            if isinstance(configured_formula, str):
-                formula_locators.append(configured_formula)
-            elif isinstance(configured_formula, Sequence):
-                formula_locators.extend(configured_formula)
-            formula_locators.extend(
-                [
-                    "label:has(span.jx-radio__label:has-text('使用公式'))",
-                    "label:has-text('使用公式')",
-                    ".jx-radio:has-text('使用公式')",
-                    ".el-radio:has-text('使用公式')",
-                    ".el-radio__label:has-text('使用公式')",
-                    "[class*='radio'] span:has-text('使用公式')",
-                    "[role='radio']:has-text('使用公式')",
-                    "text=使用公式",
-                ]
-            )
+        #     logger.info("点击「设置供货价」按钮...")
+        #     clicked_btn = await self._click_first_available(
+        #         page,
+        #         set_price_candidates,
+        #         visible_timeout_ms=5_000,
+        #         click_timeout_ms=3_000,
+        #         attempts=2,
+        #         context="set_price.open",
+        #     )
+        #     if not clicked_btn:
+        #         raise RuntimeError("未能点击『设置供货价』按钮")
 
-            scopes = [price_dialog] if price_dialog is not None else [page]
-            clicked_selector = None
-            last_error = None
-            for scope in scopes:
-                clicked_selector = await self._click_first_available(
-                    scope,  # type: ignore[arg-type]
-                    formula_locators,
-                    visible_timeout_ms=1_000,
-                )
-                if clicked_selector:
-                    break
-            if not clicked_selector:
-                try:
-                    # 最后兜底：直接根据文本查找并点击
-                    fallback = (price_dialog or page).get_by_text("使用公式", exact=False).first
-                    await fallback.click(timeout=1_000)
-                    clicked_selector = "get_by_text('使用公式')"
-                except Exception as exc:
-                    last_error = exc
-            if not clicked_selector:
-                logger.debug(f"使用公式点击失败详细: {last_error}")
-                raise RuntimeError("未能点击『使用公式』选项，请检查DOM结构")
-            logger.info(f"使用公式选择器命中：{clicked_selector}")
+        #     dialog_selectors = [
+        #         ".el-dialog__wrapper:visible",
+        #         ".jx-dialog__wrapper:visible",
+        #         ".el-dialog:visible",
+        #         ".jx-dialog:visible",
+        #         "[role='dialog']:visible",
+        #     ]
+        #     dialog = await self._first_visible_locator(
+        #         page,
+        #         dialog_selectors,
+        #         timeout_ms=TIMEOUTS.SLOW,
+        #         context="set_price.dialog",
+        #     )
+        #     scope: Page | Locator = dialog or page
 
-            # 3. 点击“倍数”文本框并填写 3
-            multiplier_locators = [
-                "input[placeholder='倍数']",
-                "xpath=//label[contains(.,'倍数')]/following::input[1]",
-                "input[placeholder*='倍数']",
-            ]
-            multiplier_clicked = None
-            multiplier_input = None
-            for selector in multiplier_locators:
-                try:
-                    multiplier_input = page.locator(selector).first
-                    await multiplier_input.wait_for(state="visible", timeout=3_000)
-                    await multiplier_input.click()
-                    multiplier_clicked = selector
-                    break
-                except Exception as exc:
-                    logger.debug(f"倍数输入框选择器 {selector} 点击失败: {exc}")
-            if not multiplier_clicked:
-                raise RuntimeError("未能定位到『倍数』输入框，请检查DOM结构")
+        #     pricing_dialog_cfg = (
+        #         self.selectors.get("temu_collect_box", {})
+        #         .get("pricing_dialog", {})
+        #     )
 
-            await multiplier_input.fill("3")
-            logger.info(f"倍数输入框选择器命中：{multiplier_clicked}")
+        #     formula_selectors = self._get_selector_candidates(
+        #         pricing_dialog_cfg.get("use_formula"),
+        #         "label:has-text('使用公式')",
+        #         "button:has-text('使用公式')",
+        #         ".jx-radio:has-text('使用公式')",
+        #         ".el-radio:has-text('使用公式')",
+        #         "text=使用公式",
+        #     )
+        #     if formula_selectors:
+        #         await self._click_first_available(
+        #             scope,  # type: ignore[arg-type]
+        #             formula_selectors,
+        #             visible_timeout_ms=1_200,
+        #             click_timeout_ms=1_000,
+        #             attempts=2,
+        #             context="set_price.use_formula",
+        #         )
 
-            # 4. 点击“应用”按钮
-            apply_clicked = await self._click_first_available(
-                page,
-                ["button:has-text('应用')"],
-                visible_timeout_ms=3_000,
-            )
-            if not apply_clicked:
-                raise RuntimeError("未能点击『应用』按钮，请检查DOM结构")
+        #     multiplier_selectors = self._get_selector_candidates(
+        #         pricing_dialog_cfg.get("multiplier"),
+        #         "input[placeholder*='倍数']",
+        #         "input[type='number']",
+        #     )
+        #     multiplier = await self._first_visible_locator(
+        #         scope,  # type: ignore[arg-type]
+        #         multiplier_selectors,
+        #         timeout_ms=TIMEOUTS.NORMAL,
+        #         context="set_price.multiplier",
+        #     )
+        #     if multiplier:
+        #         await multiplier.fill("3")
+        #         logger.info("倍数输入框已填充 3（供货价 = 成本 × 7.5）")
+        #     else:
+        #         logger.warning("未找到倍数输入框，将跳过倍数填充")
 
-            # 5. 等待提示弹窗并关闭
-            close_selectors = [
-                "body > div:nth-child(25) > div > div > footer > button",
-                "button:has-text('关闭')",
-            ]
-            close_clicked = None
-            for selector in close_selectors:
-                try:
-                    locator = page.locator(selector).first
-                    await locator.wait_for(state="visible", timeout=3_000)
-                    await locator.click()
-                    close_clicked = selector
-                    break
-                except Exception as exc:
-                    logger.debug(f"关闭提示弹窗选择器 {selector} 失败: {exc}")
-            if close_clicked:
-                logger.info(f"已关闭提示弹窗：{close_clicked}")
-            else:
-                logger.warning("未能自动关闭提示弹窗，请确认页面状态")
+        #     apply_selectors = self._get_selector_candidates(
+        #         pricing_dialog_cfg.get("apply"),
+        #         "button:has-text('应用')",
+        #         "button:has-text('确定')",
+        #     )
+        #     apply_clicked = await self._click_first_available(
+        #         scope,  # type: ignore[arg-type]
+        #         apply_selectors,
+        #         visible_timeout_ms=2_000,
+        #         click_timeout_ms=1_500,
+        #         attempts=2,
+        #         context="set_price.apply",
+        #     )
+        #     if not apply_clicked:
+        #         raise RuntimeError("未能点击『应用』或『确定』按钮")
 
-            logger.success("✓ 供货价设置完成（使用公式倍数 3）")
-            return True
+        #     supply_prices = [
+        #         self.price_calculator.calculate_supply_price(cost) for cost in costs
+        #     ]
+        #     logger.info(
+        #         "供货价区间: %.2f - %.2f (基于 %s 个产品)",
+        #         min(supply_prices),
+        #         max(supply_prices),
+        #         len(supply_prices),
+        #     )
 
-        except Exception as e:
-            logger.error(f"设置供货价失败: {e}")
-            self._invalidate_publish_context()
-            logger.warning("⚠️  需要使用Codegen获取正确的选择器")
-            return False
+        #     close_selectors = self._get_selector_candidates(
+        #         pricing_dialog_cfg.get("close"),
+        #         "button:has-text('关闭')",
+        #         "button:has-text('确定')",
+        #     )
+        #     await self._click_first_available(
+        #         scope,  # type: ignore[arg-type]
+        #         close_selectors,
+        #         visible_timeout_ms=1_000,
+        #         click_timeout_ms=800,
+        #         attempts=1,
+        #         context="set_price.close",
+        #     )
+
+        #     logger.success("供货价设置完成（公式倍数 3）")
+        #     self._publish_context_ready = True
+        #     return True
+        # except Exception as exc:  # pragma: no cover - 运行时保护
+        #     logger.error("设置供货价失败: %s", exc)
+        #     self._invalidate_publish_context()
+        #     await self._close_dialog_safely(page)
+        #     return False
+        #禁用供货价设置
+
+    async def _handle_pre_publish_modal(self, page: Page) -> None:
+        """处理批量发布前置提示弹窗（可选出现）。"""
+        confirm_first_selectors = self._get_selector_candidates(
+            "button:has-text('我知道了')",
+            "button:has-text('确认')",
+            "button:has-text('确定')",
+            "text='我知道了'",
+        )
+        await page.wait_for_load_state("domcontentloaded")
+
+        confirm_first_clicked = await self._click_first_available(
+            page,
+            confirm_first_selectors,
+            visible_timeout_ms=TIMEOUTS.SLOW,
+            click_timeout_ms=TIMEOUTS.SLOW,
+            attempts=3,
+            context="batch_publish.pre_modal",
+        )
+        if confirm_first_clicked:
+            logger.info("已关闭前置提示弹窗 selector=%s", confirm_first_clicked)
+            await asyncio.sleep(0.2)
 
     async def batch_publish(self, page: Page) -> bool:
-        """批量发布（SOP步骤10）.
-
-        需要2次确认：
-        1. 第1次点击"批量发布"
-        2. 第2次确认发布
-
-        结果：20条 × 2次 = 40条产品
-
-        Args:
-            page: Playwright页面对象
-
-        Returns:
-            是否发布成功
-
-        Examples:
-            >>> await ctrl.batch_publish(page)
-            True
-        """
+        """批量发布（SOP 步骤 10）."""
         logger.info("=" * 60)
-        logger.info("[SOP步骤10] 批量发布（2次确认）")
+        logger.info("[SOP 步骤 10] 批量发布")
         logger.info("=" * 60)
         try:
+            await page.wait_for_load_state("domcontentloaded")
+
             publish_cfg = self.selectors.get("publish", {})
             repeat_cfg = publish_cfg.get("repeat_per_batch", 5)
             try:
                 repeat_per_batch = int(repeat_cfg)
-                if repeat_per_batch < 1:
-                    repeat_per_batch = 5
-                if repeat_per_batch > 10:
-                    repeat_per_batch = 10  # 安全上限
+                repeat_per_batch = max(1, min(repeat_per_batch, 10))
             except Exception:
                 repeat_per_batch = 5
 
+            action_buttons = (
+                self.selectors.get("temu_collect_box", {})
+                .get("action_buttons", {})
+            )
+            configured_batch_publish = action_buttons.get("batch_publish")
+            publish_btn_candidates = self._get_selector_candidates(
+                configured_batch_publish,
+                "button:has-text('批量发布')",
+                "button:has-text('发布')",
+            )
+            flag = False
             for round_idx in range(repeat_per_batch):
                 logger.info(
-                    ">>> 批量发布第 %s/%s 次（单批配置可在 selectors.publish.repeat_per_batch 调整）",
+                    ">>> 批量发布 %s/%s 次，共 20 条产品",
                     round_idx + 1,
                     repeat_per_batch,
                 )
                 await self._reset_to_all_tab(page)
-                logger.info("复位完成")
-                #全选20条产品
                 await self._ensure_publish_context(page, force=True)
-
-                # 1. 第1次：点击"批量发布"按钮
-                publish_btn_selectors = [
-                    "#appScrollContainer > div.sticky-operate-box.space-between > div > div:nth-child(1) > button:nth-child(1)",
-                    "button:has-text('批量发布')",
-                    "button:has-text('发布')",
-                ]
 
                 logger.info("[1/2] 点击「批量发布」按钮...")
                 publish_clicked = await self._click_first_available(
                     page,
-                    publish_btn_selectors,
-                    visible_timeout_ms=500,
+                    publish_btn_candidates,
+                    visible_timeout_ms=1_000,
+                    click_timeout_ms=1_000,
+                    attempts=3,
+                    context="batch_publish.open",
                 )
                 if not publish_clicked:
-                    raise RuntimeError("未能点击「批量发布」按钮，请检查DOM结构")
-                logger.info(f"批量发布按钮选择器命中：{publish_clicked}")
+                    self._invalidate_publish_context()
+                    raise RuntimeError("未能点击「批量发布」按钮")
+                logger.info("批量发布按钮命中 selector=%s", publish_clicked)
+                # 硬编码等待 5.5s，等待弹窗渲染
+                if not flag:
+                    await asyncio.sleep(5.5)
+                    await self._handle_pre_publish_modal(page)
+                    flag = True
 
-                # 1.2 等待弹窗出现并点击确认
-                confirm_first_selectors = [
-                    "button:has-text('知道了')",
-                ]
-                confirm_first_clicked = None
-                for selector in confirm_first_selectors:
-                    try:
-                        locator = page.locator(selector).first
-                        await locator.wait_for(state="visible", timeout=800)
-                        await locator.click()
-                        confirm_first_clicked = selector
-                        break
-                    except PlaywrightTimeoutError:
-                        logger.debug(f"批量发布前置弹窗 {selector} 未在8秒内出现")
-                    except Exception as exc:
-                        logger.debug(
-                            f"批量发布前置弹窗选择器 {selector} 点击失败: {exc}"
-                        )
-                if confirm_first_clicked:
-                    logger.info(f"批量发布前置弹窗已关闭：{confirm_first_clicked}")
-                else:
-                    # 未检测到前置弹窗，可能页面已跳过该步骤，尝试等待后重试一次
-                    logger.info("未检测到批量发布前置弹窗，等待后重试...")
-                    await asyncio.sleep(0.5)
-                    for retry_selector in confirm_first_selectors:
-                        try:
-                            locator = page.locator(retry_selector).first
-                            await locator.wait_for(state="visible", timeout=500)
-                            await locator.click()
-                            confirm_first_clicked = retry_selector
-                            logger.info(f"重试成功，已关闭前置弹窗：{retry_selector}")
-                            break
-                        except Exception:
-                            pass
-                    if not confirm_first_clicked:
-                        logger.warning("前置弹窗仍未出现，继续执行后续步骤")
-
-                # 1.5 点击“图片顺序随机打乱”
-                shuffle_selectors = [
-                    "button:has-text('图片顺序随机打乱')",
-                    "label:has-text('图片顺序随机打乱')",
-                    "text=图片顺序随机打乱",
-                ]
-                shuffle_clicked = await self._click_first_available(
-                    page,
-                    shuffle_selectors,
-                    visible_timeout_ms=400,
-                )
-                if not shuffle_clicked:
-                    logger.warning("未能点击「图片顺序随机打乱」，请确认页面状态")
-
-                # 2. 第2次确认：确认发布
-                confirm_publish_selectors = [
-                    "body > div:nth-child(25) > div > div > footer > div > div.release-footer-wrapper__right > button.jx-button.jx-button--primary.jx-button--default.pro-button",
+                confirm_publish_selectors = self._get_selector_candidates(
                     "button:has-text('确认发布')",
-                ]
+                )
+                logger.info("[2/2] 确认发布...")
+                await page.wait_for_load_state("domcontentloaded")
+                await asyncio.sleep(1)
+                
+                confirm_publish_clicked = await self._click_first_available(
+                    page,
+                    confirm_publish_selectors,
+                    visible_timeout_ms=1_000,
+                    click_timeout_ms=1_000,
+                    attempts=5,
+                    context="batch_publish.confirm",
+                )
+                if not confirm_publish_clicked:
+                    self._invalidate_publish_context()
+                    raise RuntimeError("未能点击「确认发布」按钮")
 
                 close_retry_cfg = (
                     self.selectors.get("publish_confirm", {}).get("close_retry", 5)
                 )
                 try:
                     close_retry = int(close_retry_cfg)
-                    if close_retry < 1:
-                        close_retry = 5
-                    if close_retry > 10:
-                        close_retry = 10
+                    close_retry = max(1, min(close_retry, 10))
                 except Exception:
                     close_retry = 5
 
-                close_button_selectors = [
-                    "body > div:nth-child(34) > div > div > footer > button",
-                    "/html/body/div[16]/div/div/footer/button",
+                close_button_selectors = self._get_selector_candidates(
                     "button:has-text('关闭')",
-                ]
-
-                logger.info("[2/2] 确认发布...")
-                confirm_publish_clicked = await self._click_first_available(
-                    page,
-                    confirm_publish_selectors,
-                    visible_timeout_ms=600,
+                    "button:has-text('取消')",
+                    "button:has-text('确定')",
                 )
-                if not confirm_publish_clicked:
-                    raise RuntimeError("未能点击「确认发布」按钮，请检查DOM结构")
-                logger.info(f"确认发布按钮选择器命中：{confirm_publish_clicked}")
 
                 close_button = None
                 for attempt in range(close_retry):
                     close_button = await self._click_first_available(
                         page,
                         close_button_selectors,
-                        visible_timeout_ms=500,
+                        visible_timeout_ms=1_000,
+                        click_timeout_ms=1_000,
+                        attempts=3,
+                        context=f"batch_publish.close[{attempt+1}/{close_retry}]",
                     )
                     if close_button:
                         logger.info(
-                            "关闭按钮选择器命中：%s (attempt %s/%s)",
+                            "关闭按钮命中 selector=%s (尝试 %s/%s)",
                             close_button,
                             attempt + 1,
                             close_retry,
                         )
                         break
+                    await asyncio.sleep(0.3)
 
                 if not close_button:
-                    raise RuntimeError("未能点击「关闭」按钮，请检查DOM结构")
+                    dialog_selectors = self._get_selector_candidates(
+                        self.selectors.get("publish_confirm", {}).get("dialog"),
+                        ".jx-overlay-dialog:visible",
+                        ".el-dialog:visible",
+                        "[role='dialog']:visible",
+                    )
+                    dialog_still_open = await self._first_visible_locator(
+                        page,
+                        dialog_selectors,
+                        timeout_ms=TIMEOUTS.FAST,
+                        context="batch_publish.dialog_check",
+                    )
+                    if dialog_still_open:
+                        self._invalidate_publish_context()
+                        raise RuntimeError("未能点击「关闭」按钮，弹窗仍存在")
+                    logger.warning("未找到关闭按钮，但确认弹窗已消失，视为本轮发布完成")
+
+                self._invalidate_publish_context()
 
             logger.success(
-                "✓ 批量发布完成（单次20条，执行 %s 次，总计 %s 条）",
+                "批量发布完成 20 条产品 %s 次，共 %s 条产品",
                 repeat_per_batch,
                 20 * repeat_per_batch,
             )
             return True
-
-        except Exception as e:
-            logger.error(f"批量发布失败: {e}")
-            logger.warning("⚠️  需要使用Codegen获取正确的选择器")
+        except Exception as exc:  # pragma: no cover - 运行时保护
+            logger.error("批量发布失败: %s", exc)
             return False
         finally:
-            # 批量发布会刷新列表，标记上下文失效
             self._invalidate_publish_context()
-
 
     async def execute_publish_workflow(
         self,
         page: Page,
-        products_data: List[Dict],
-        shop_name: Optional[str] = None
-    ) -> Dict:
-        """执行发布工作流（SOP步骤8-10）.
-
-        Args:
-            page: Playwright页面对象
-            products_data: 产品数据列表
-            shop_name: 店铺名称（可选）
-
-        Returns:
-            执行结果字典：{
-                "success": bool,
-                "shop_selected": bool,
-                "price_set": bool,
-                "published": bool,
-            }
-
-        Examples:
-            >>> result = await ctrl.execute_publish_workflow(page, products_data, "测试店铺")
-            >>> result["success"]
-            True
-        """
+        products_data: Sequence[Mapping[str, Any]],
+        shop_name: str | None = None,
+    ) -> dict[str, Any]:
+        """执行发布工作流（SOP 步骤 8-10）."""
         logger.info("=" * 80)
-        logger.info("开始执行发布工作流（SOP步骤8-10）")
+        logger.info("开始执行发布工作流（SOP 步骤 8-10）")
         logger.info("=" * 80)
 
-        result = {
-            "success": False,
-            "shop_selected": False,
-            "price_set": False,
-            "published": False,
-            "publish_result": {},
-        }
+        result = PublishWorkflowResult()
 
         try:
-            # 1. 全选20条产品
-            logger.info("\n[准备] 全选20条产品...")
+            logger.info("\n[准备] 全选 20 条产品...")
             await self.select_all_20_products(page)
 
-            # 2. 选择店铺（步骤8）
-            logger.info("\n[步骤8] 选择店铺...")
-            if await self.select_shop(page, shop_name):
-                result["shop_selected"] = True
+            logger.info("\n[步骤 8] 选择店铺...")
+            result.shop_selected = await self.select_shop(page, shop_name)
 
-            # 3. 设置供货价（步骤9）
-            logger.info("\n[步骤9] 设置供货价...")
-            if await self.set_supply_price(page, products_data):
-                result["price_set"] = True
+            # logger.info("\n[步骤 9] 设置供货价...")
+            # result.price_set = await self.set_supply_price(page, products_data)
 
-            # 4. 批量发布（步骤10）
-            logger.info("\n[步骤10] 批量发布...")
-            if await self.batch_publish(page):
-                result["published"] = True
-
-            # 判断整体是否成功
-            result["success"] = (
-                result["shop_selected"] and
-                result["price_set"] and
-                result["published"]
-            )
-            result["publish_result"] = {
-                "success_count": int(result["published"]) * 20,
-                "fail_count": 0 if result["published"] else 20,
-                "total_count": 20,
-            }
+            logger.info("\n[步骤 10] 批量发布...")
+            result.published = await self.batch_publish(page)
 
             logger.info("\n" + "=" * 80)
-            logger.info("发布工作流执行完成")
-            logger.info(f"执行结果: {'✓ 成功' if result['success'] else '✗ 失败'}")
+            logger.info("发布工作流执行完毕")
+            logger.info("执行结果: %s", "✅ 成功" if result.success else "❌ 失败")
             logger.info("=" * 80)
-
-            return result
-
-        except Exception as e:
-            logger.error(f"发布工作流执行失败: {e}")
-            return result
+            return result.to_dict()
+        except Exception as exc:  # pragma: no cover - 运行时保护
+            logger.error("发布工作流执行失败: %s", exc)
+            return result.to_dict()
 
 
 # 测试代码
 if __name__ == "__main__":
-    # 这个控制器需要配合Page对象使用
-    # 测试请在集成测试中进行
+    # 该控制器需要 Playwright Page 对象，单独运行仅用于占位
     pass

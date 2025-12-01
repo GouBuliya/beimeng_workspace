@@ -19,6 +19,7 @@ import asyncio
 import json
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from loguru import logger
 
@@ -244,8 +245,8 @@ class LoginController:
             logger.info("等待登录结果...")
 
             try:
-                # 等待跳转到首页或弹窗消失 (激进优化: 15s -> 8s)
-                await page.wait_for_url("**/erp.91miaoshou.com/welcome**", timeout=8000)
+                # 等待跳转到首页或弹窗消失 
+                await page.wait_for_url("**/erp.91miaoshou.com/welcome**", timeout=15000)
                 logger.success("✓ 已跳转到首页")
             except Exception as e:
                 logger.debug(f"未能等待到URL变化: {e}")
@@ -267,7 +268,7 @@ class LoginController:
                 await self.browser_manager.save_cookies("data/temp/miaoshou_cookies.json")
                 logger.debug("✓ Cookie 已保存")
 
-                await self._dismiss_overlays_if_any()
+                await self._dismiss_overlays_if_any(skip_health=True)
 
                 return True
             else:
@@ -338,22 +339,32 @@ class LoginController:
         if not page:
             return
 
+        scopes = self._collect_page_scopes(page)
+        quick_close_selectors = [
+            "body > div:nth-child(27) > div > div > header > button",
+            ".ant-modal-close",
+            ".ant-drawer-close",
+        ]
+
         # 登录后优先尝试关闭已知弹窗（录制的稳定选择器）
         try:
-            quick_close = page.locator(
-                "body > div:nth-child(27) > div > div > header > button"
-            ).first
-            if await quick_close.count() and await quick_close.is_visible(timeout=500):
-                await quick_close.click(timeout=TIMEOUTS.NORMAL)
-                logger.info("✓ 快速关闭登录后弹窗 (nth-child(27) header button)")
+            if await self._click_first_visible(
+                scopes,
+                quick_close_selectors,
+                timeout_ms=TIMEOUTS.FAST,
+                context="快速关闭",
+            ):
+                logger.info("✓ 快速关闭登录后弹窗/广告")
         except Exception as exc:  # pragma: no cover - 运行时保护
             logger.debug("快速关闭登录后弹窗失败: {}", exc)
 
-        if not skip_health:
-            # 首先处理"店铺健康功能迁移"弹窗 - 使用精确定位
-            await self._dismiss_health_migration_popup(page)
+        
 
-        overlay_selector = ".jx-overlay-dialog, .el-dialog, .pro-dialog, [role='dialog']"
+        overlay_selector = (
+            ".jx-overlay-dialog, .el-dialog, .pro-dialog, [role='dialog'], "
+            "[role='alertdialog'], .ant-modal-wrap, .ant-drawer-content-wrapper, "
+            ".n-modal, .n-dialog"
+        )
         close_selectors = [
             "button:has-text('我已知晓')",
             "button:has-text('关闭')",
@@ -370,6 +381,26 @@ class LoginController:
             "[class*='icon-close']",
             "button:has-text('关闭广告')",
             "button:has-text('立即进入')",
+            ".ant-modal-close",
+            ".ant-drawer-close",
+            ".el-message-box__headerbtn",
+            ".n-dialog__close",
+            ".n-base-close",
+            "button:has-text('关闭弹窗')",
+        ]
+        mask_selectors = [
+            ".el-overlay",
+            ".el-dialog__wrapper",
+            ".ant-modal-mask",
+            ".ant-drawer-mask",
+            ".n-modal-mask",
+        ]
+        floating_close_selectors = [
+            ".el-message-box__headerbtn",
+            ".el-notification__closeBtn",
+            ".jx-message__close",
+            ".ant-notification-close-icon",
+            ".ant-message-notice-close",
         ]
 
         if skip_health:
@@ -380,37 +411,71 @@ class LoginController:
             ]
 
         for attempt in range(5):
-            dialogs = page.locator(overlay_selector)
-            dialog_count = await dialogs.count()
+            scopes = self._collect_page_scopes(page)
+            scoped_dialogs: list[tuple[str, Any, int]] = []
+            dialog_count = 0
+            for scope_name, scope in scopes:
+                dialogs = scope.locator(overlay_selector)
+                scoped_count = await dialogs.count()
+                if scoped_count:
+                    dialog_count += scoped_count
+                    scoped_dialogs.append((scope_name, dialogs, scoped_count))
+
             if dialog_count == 0:
+                if await self._click_first_visible(
+                    scopes,
+                    floating_close_selectors,
+                    timeout_ms=TIMEOUTS.FAST,
+                    context="浮层/广告",
+                ):
+                    await page.wait_for_timeout(200)
+                    continue
                 return
 
             logger.info("检测到登录后弹窗, 尝试关闭 (第{}次)", attempt + 1)
 
             closed_any = False
-            for index in range(dialog_count - 1, -1, -1):
-                dialog = dialogs.nth(index)
-                closed_this_dialog = False
-                for selector in close_selectors:
-                    locator = dialog.locator(selector)
-                    try:
-                        if await locator.count() and await locator.first.is_visible(timeout=1000):
-                            logger.debug("点击弹窗关闭控件 selector={} index={}", selector, index)
-                            await locator.first.click()
+            for scope_name, dialogs, scoped_count in scoped_dialogs:
+                for index in range(scoped_count - 1, -1, -1):
+                    dialog = dialogs.nth(index)
+                    closed_this_dialog = False
+                    for selector in close_selectors:
+                        locator = dialog.locator(selector)
+                        try:
+                            if await locator.count() and await locator.first.is_visible(timeout=1000):
+                                logger.debug(
+                                    "点击弹窗关闭控件 selector={} index={} scope={}",
+                                    selector,
+                                    index,
+                                    scope_name,
+                                )
+                                await locator.first.click()
+                                closed_any = True
+                                closed_this_dialog = True
+                                break
+                        except Exception as exc:  # pragma: no cover - 调试场景
+                            logger.debug("关闭弹窗时忽略异常: {}", exc)
+                    if not closed_this_dialog:
+                        if await self._click_first_visible(
+                            [(f"{scope_name}#dialog{index}", dialog)],
+                            mask_selectors,
+                            timeout_ms=TIMEOUTS.FAST,
+                            context="弹窗遮罩",
+                        ):
                             closed_any = True
                             closed_this_dialog = True
-                            break
-                    except Exception as exc:  # pragma: no cover - 调试场景
-                        logger.debug("关闭弹窗时忽略异常: {}", exc)
-                if not closed_this_dialog:
-                    try:
-                        logger.debug("未找到关闭按钮, 尝试发送 Escape")
-                        await page.keyboard.press("Escape")
-                        closed_any = True
-                        closed_this_dialog = True
-                    except Exception:
-                        pass
 
+
+            if await self._click_first_visible(
+                scopes,
+                floating_close_selectors,
+                timeout_ms=TIMEOUTS.FAST,
+                context="浮层/广告",
+            ):
+                closed_any = True
+            if not skip_health:
+            # 首先处理"店铺健康功能迁移"弹窗 - 使用精确定位
+                await self._dismiss_health_migration_popup(page)
             if not closed_any:
                 logger.warning("⚠️ 弹窗仍存在, 强制继续后续流程")
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -504,6 +569,51 @@ class LoginController:
             logger.debug("枚举 frame 时出错: {}", exc)
 
         return scopes
+
+    async def _click_first_visible(
+        self,
+        scopes: list[tuple[str, Any]],
+        selectors: list[str],
+        *,
+        timeout_ms: int = TIMEOUTS.FAST,
+        context: str = "",
+    ) -> bool:
+        """在多作用域内点击首个可见元素."""
+
+        for selector in selectors:
+            for scope_name, scope in scopes:
+                try:
+                    locator = scope.locator(selector)
+                    count = await locator.count()
+                except Exception as exc:
+                    logger.debug("定位 {} 选择器失败 selector={} scope={}", context or "弹窗", selector, scope_name, exc)
+                    continue
+
+                if count == 0:
+                    continue
+
+                candidate = locator.first
+
+                try:
+                    if await candidate.is_visible(timeout=timeout_ms):
+                        await candidate.click(timeout=timeout_ms)
+                        logger.debug(
+                            "已点击{}关闭控件 selector={} scope={}",
+                            context or "弹窗",
+                            selector,
+                            scope_name,
+                        )
+                        return True
+                except Exception as exc:
+                    logger.debug(
+                        "点击 {} 关闭控件失败 selector={} scope={} err={}",
+                        context or "弹窗",
+                        selector,
+                        scope_name,
+                        exc,
+                    )
+
+        return False
 
     async def _dismiss_health_migration_popup(self, page) -> bool:
         """关闭'店铺健康功能迁移'等弹窗 - 点击3次'我已知晓'."""

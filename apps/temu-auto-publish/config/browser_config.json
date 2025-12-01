@@ -1,6 +1,8 @@
 {
   "browser": {
     "type": "chromium",
+    "channel": "msedge",
+    "channel_fallbacks": ["chrome"],
     "headless": true,
     "window_width": 1280,
     "window_height": 720,
@@ -49,6 +51,22 @@
     "webgl_vendor": true,
     "window_outerdimensions": true
   },
+  "browser_settings": {
+    "expected_playwright_version": "1.56.0",
+    "expected_browser_version": null,
+    "browsers_path": ".playwright-browsers",
+    "storage_state_path": "data/browser/storage_state.json",
+    "downloads_dir": "data/downloads",
+    "user_data_dir": "data/browser/user_data",
+    "launch_args": [
+      "--disable-blink-features=AutomationControlled",
+      "--disable-dev-shm-usage",
+      "--no-sandbox"
+    ],
+    "locale": "zh-CN",
+    "timezone_id": "Asia/Shanghai",
+    "headless": null
+  },
   "timeouts": {
     "default": 30000,
     "navigation": 60000,
@@ -75,8 +93,6 @@
     "directory": "data/temp/screenshots"
   }
 }
-
-
 
 
 

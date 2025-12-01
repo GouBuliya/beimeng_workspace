@@ -31,15 +31,15 @@ from playwright.async_api import Locator, Page, TimeoutError as PlaywrightTimeou
 class WaitStrategy:
     """等待策略配置."""
 
-    wait_after_action_ms: int = 30
-    wait_for_stability_timeout_ms: int = 375
-    wait_for_network_idle_timeout_ms: int = 750
-    retry_initial_delay_ms: int = 30
+    wait_after_action_ms: int = 300
+    wait_for_stability_timeout_ms: int = 3750
+    wait_for_network_idle_timeout_ms: int = 5000
+    retry_initial_delay_ms: int = 300
     retry_backoff_factor: float = 1.6
-    retry_max_delay_ms: int = 375
-    validation_timeout_ms: int = 500
+    retry_max_delay_ms: int = 3750
+    validation_timeout_ms: int = 5000
     dom_stable_checks: int = 3
-    dom_stable_interval_ms: int = 30
+    dom_stable_interval_ms: int = 300
 
     def next_retry_delay(self, attempt: int) -> float:
         """根据重试次数计算指数退避延迟（秒）."""

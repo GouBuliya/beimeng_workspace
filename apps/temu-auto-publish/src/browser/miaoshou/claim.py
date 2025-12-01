@@ -698,23 +698,30 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
             return False
 
     async def _click_claim_button_in_row_by_js(
-        self, page: Page, index: int
+        self,
+        page: Page,
+        index: int,
+        *,
+        target: str = "claim_button",
     ) -> dict[str, Any]:
-        """使用 JavaScript 直接定位并点击第 index 行的"认领到"按钮，然后选择下拉第一项。
+        """使用 JavaScript 直接定位并点击行内目标元素（认领按钮或复选框）。
 
         复用首次编辑的定位逻辑（动态行高检测、translateY 定位等），
-        将点击目标改为"认领到"下拉按钮，并自动点击下拉菜单的第一个选项。
+        目标可选：
+        - target="claim_button"：点击行内"认领到"按钮并选择下拉第一项
+        - target="checkbox"：点击行内复选框（用于批量勾选）
 
         Args:
             page: Playwright 页面对象
             index: 目标商品索引（全局索引，0-based）
+            target: "claim_button" 或 "checkbox"
 
         Returns:
             包含操作结果的字典: {success, error?, scrollerInfo, matchedY, ...}
         """
         try:
             js_code = """
-            async (index) => {
+            async ({ index, target }) => {
                 const DEFAULT_ROW_HEIGHT = 128;
                 
                 // 检查是否为 page-mode（页面级滚动）
@@ -848,6 +855,48 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                     };
                 }
                 
+                // 如果只需要点击复选框，直接处理后返回
+                if (target === 'checkbox') {
+                    const checkboxSelectors = [
+                        '.is-fixed-left.is-selection-column .jx-checkbox__inner',
+                        '.is-fixed-left.is-selection-column .jx-checkbox',
+                        '.jx-checkbox__inner',
+                        'input[type=\"checkbox\"]',
+                    ];
+                    let checkbox = null;
+                    for (const selector of checkboxSelectors) {
+                        const found = targetRow.querySelector(selector);
+                        if (found) {
+                            checkbox = found;
+                            break;
+                        }
+                    }
+                    if (!checkbox) {
+                        return {
+                            success: false,
+                            error: 'Checkbox not found in target row',
+                            scrollerInfo,
+                            matchedY,
+                        };
+                    }
+                    try {
+                        checkbox.click();
+                        return {
+                            success: true,
+                            scrollerInfo,
+                            matchedY,
+                            clickedSelector: checkbox.className || 'checkbox',
+                        };
+                    } catch (e) {
+                        return {
+                            success: false,
+                            error: 'Checkbox click failed',
+                            scrollerInfo,
+                            matchedY,
+                        };
+                    }
+                }
+                
                 // 在行内查找"认领到"按钮
                 // 选择器优先级：包含"认领到"文本的按钮
                 const claimBtnSelectors = [
@@ -940,6 +989,30 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         }
                     }
                 }
+
+                // 如果仍未出现，下拉可能需要点击触发，尝试点击后再查找
+                if (!dropdown || dropdown.offsetParent === null) {
+                    try {
+                        claimBtn.click();
+                        await new Promise(r => setTimeout(r, 500));
+                    } catch (e) {}
+
+                    const clickDropdownSelectors = [
+                        '.el-dropdown-menu:not([style*="display: none"])',
+                        '.jx-dropdown-menu:not([style*="display: none"])', 
+                        '.pro-dropdown__menu:not([style*="display: none"])',
+                        '[role="menu"][aria-hidden="false"]',
+                        '.jx-popper[aria-hidden="false"]',
+                    ];
+                    
+                    for (const selector of clickDropdownSelectors) {
+                        const found = document.querySelector(selector);
+                        if (found && found.offsetParent !== null) {
+                            dropdown = found;
+                            break;
+                        }
+                    }
+                }
                 
                 if (!dropdown) {
                     return { 
@@ -998,17 +1071,25 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
             }
             """
 
-            result = await page.evaluate(js_code, index)
+            result = await page.evaluate(js_code, {"index": index, "target": target})
 
             if result.get("success"):
-                logger.success(
-                    f"✓ JS 点击认领按钮成功，索引={index}, 容器={result.get('scrollerInfo')}, "
-                    f"page-mode={result.get('isPageMode')}, 匹配Y={result.get('matchedY')}px, "
-                    f"选项={result.get('optionText')}"
-                )
+                if target == "checkbox":
+                    logger.success(
+                        "✓ JS 勾选成功，索引=%s, 容器=%s, 匹配Y=%s",
+                        index,
+                        result.get("scrollerInfo"),
+                        result.get("matchedY"),
+                    )
+                else:
+                    logger.success(
+                        f"✓ JS 点击认领按钮成功，索引={index}, 容器={result.get('scrollerInfo')}, "
+                        f"page-mode={result.get('isPageMode')}, 匹配Y={result.get('matchedY')}px, "
+                        f"选项={result.get('optionText')}"
+                    )
             else:
                 logger.warning(
-                    f"JS 点击认领按钮失败: {result.get('error')}, 容器={result.get('scrollerInfo')}, "
+                    f"JS 行内操作失败: {result.get('error')}, 容器={result.get('scrollerInfo')}, "
                     f"可见Y值={result.get('visibleYs')}, 检测行高={result.get('detectedRowHeight')}"
                 )
 
@@ -1024,7 +1105,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
         indexes: Sequence[int],
         *,
         repeat_per_product: int = 5,
-    ) -> tuple[int, int]:
+    ) -> tuple[int, int, int]:
         """使用 JS 定位逻辑逐行认领商品。
 
         复用首次编辑的定位逻辑，对每个索引：
@@ -1039,10 +1120,11 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
             repeat_per_product: 每个商品点击认领的次数（默认5次）
 
         Returns:
-            (成功商品数, 失败商品数) 元组
+            (成功商品数, 失败商品数, 成功点击总数) 元组
         """
         success_count = 0
         fail_count = 0
+        total_click_success = 0
 
         async def _wait_for_virtual_list_ready() -> bool:
             """等待虚拟滚动列表重新加载完成。"""
@@ -1070,49 +1152,115 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
         for idx in indexes:
             logger.info(f"正在认领索引 {idx} 的商品（共 {repeat_per_product} 次）...")
             product_success = 0
+            current_idx = idx
 
             for click_num in range(repeat_per_product):
                 # 每次点击前确保虚拟列表已加载
-                if click_num > 0:
-                    if not await _wait_for_virtual_list_ready():
-                        logger.warning(f"索引 {idx} 第 {click_num + 1} 次: 虚拟列表未就绪，尝试继续")
+                if click_num > 0 and not await _wait_for_virtual_list_ready():
+                    logger.warning(f"索引 {idx} 第 {click_num + 1} 次: 虚拟列表未就绪，尝试继续")
 
-                result = await self._click_claim_button_in_row_by_js(page, idx)
+                result = await self._click_claim_button_in_row_by_js(page, current_idx)
 
                 if result.get("success"):
                     product_success += 1
+                    total_click_success += 1
                     logger.debug(
                         f"索引 {idx} 第 {click_num + 1}/{repeat_per_product} 次认领成功, "
                         f"选项={result.get('optionText')}"
                     )
-                    # 等待认领操作完成，页面可能会刷新
                     await page.wait_for_timeout(800)
+                    # 认领后行可能移除，后续固定使用首行索引防止漂移
+                    current_idx = 0
                 else:
                     logger.warning(
                         f"索引 {idx} 第 {click_num + 1}/{repeat_per_product} 次认领失败: "
                         f"{result.get('error')}"
                     )
-                    # 失败后等待页面恢复
                     await page.wait_for_timeout(500)
-                    # 尝试等待虚拟列表重新加载
                     await _wait_for_virtual_list_ready()
+                    # 失败后同样使用首行索引尝试
+                    current_idx = 0
 
-            if product_success > 0:
+            if product_success == repeat_per_product:
                 success_count += 1
                 logger.success(
                     f"✓ 索引 {idx} 认领完成: {product_success}/{repeat_per_product} 次成功"
                 )
             else:
                 fail_count += 1
-                logger.error(f"✗ 索引 {idx} 认领全部失败")
+                logger.error(
+                    f"✗ 索引 {idx} 认领未达标: {product_success}/{repeat_per_product} 次成功"
+                )
 
             # 每个商品处理完后，等待页面稳定再处理下一个
             await _wait_for_virtual_list_ready()
 
         logger.info(
             f"批量认领完成: 成功商品={success_count}, 失败商品={fail_count}, "
-            f"每商品点击={repeat_per_product}次"
+            f"成功点击总数={total_click_success}, 每商品点击={repeat_per_product}次"
         )
+        return success_count, fail_count, total_click_success
+
+    async def select_products_by_row_js(
+        self,
+        page: Page,
+        indexes: Sequence[int],
+    ) -> tuple[int, int]:
+        """使用 JS 逐行勾选复选框（复用行定位逻辑）."""
+
+        success_count = 0
+        fail_count = 0
+
+        async def _wait_for_virtual_list_ready() -> bool:
+            for _ in range(10):
+                try:
+                    has_rows = await page.evaluate("""
+                        () => {
+                            const rows = document.querySelectorAll('.vue-recycle-scroller__item-view');
+                            let visibleCount = 0;
+                            rows.forEach(row => {
+                                const style = row.getAttribute('style') || '';
+                                const match = style.match(/translateY\\((-?\\d+(?:\\.\\d+)?)\\s*(?:px)?\\s*\\)/);
+                                if (match && parseFloat(match[1]) >= 0) visibleCount++;
+                            });
+                            return visibleCount > 0;
+                        }
+                    """)
+                    if has_rows:
+                        return True
+                except Exception:
+                    pass
+                await page.wait_for_timeout(300)
+            return False
+
+        for idx in indexes:
+            logger.info(f"勾选索引 {idx} 的商品复选框...")
+            current_idx = idx
+            selected = False
+
+            for attempt in range(2):
+                if attempt > 0:
+                    await _wait_for_virtual_list_ready()
+                result = await self._click_claim_button_in_row_by_js(
+                    page,
+                    current_idx,
+                    target="checkbox",
+                )
+                if result.get("success"):
+                    selected = True
+                    break
+                logger.warning("索引 %s 第 %s 次勾选失败: %s", idx, attempt + 1, result.get("error"))
+                current_idx = 0
+                await page.wait_for_timeout(300)
+
+            if selected:
+                success_count += 1
+            else:
+                fail_count += 1
+
+            await _wait_for_virtual_list_ready()
+
+        logger.info("复选框勾选完成: 成功=%s, 失败=%s", success_count, fail_count)
         return success_count, fail_count
 
     async def _find_row_by_translate_y(self, page: Page, index: int):

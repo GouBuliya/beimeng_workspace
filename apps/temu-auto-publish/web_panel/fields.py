@@ -78,9 +78,9 @@ FORM_FIELDS: tuple[FormField, ...] = (
     FormField(
         name="manual_path",
         label="或说明书文件路径",
-        help_text="已存在的 PDF 绝对路径（示例: C:\\docs\\manual.pdf）。未配置时使用默认模板。",
+        help_text="已存在的 PDF 绝对路径（示例: C\\docs\\manual.pdf）。未提供则跳过说明书上传。",
         kind="path",
-        placeholder="例如 C:\\docs\\manual.pdf 或 /data/manuals/booklet.pdf",
+        placeholder="例如 C\\docs\\manual.pdf 或 /data/manuals/booklet.pdf",
     ),
     FormField(
         name="headless_mode",

@@ -1,0 +1,35 @@
+{
+  "workflow_id": "temu_publish_20251130_235310",
+  "start_time": "2025-11-30T23:53:10.926627",
+  "end_time": "2025-11-30T23:59:01.810470",
+  "duration": 350.883843,
+  "status": "failure",
+  "stages": {
+    "stage1_first_edit": {
+      "duration": 155.24112550000063,
+      "success": true
+    },
+    "stage2_claim": {
+      "duration": 21.863856599997234,
+      "success": true
+    },
+    "stage3_batch_edit": {
+      "duration": 121.65554709999924,
+      "success": true
+    },
+    "stage4_publish": {
+      "duration": 28.916207199999917,
+      "success": false
+    }
+  },
+  "operations": {},
+  "errors": [
+    {
+      "type": "StageError",
+      "message": "批量发布存在失败, 请检查执行日志",
+      "stage": "stage4_publish",
+      "timestamp": "2025-11-30T23:59:01.809472"
+    }
+  ],
+  "custom_metrics": {}
+}

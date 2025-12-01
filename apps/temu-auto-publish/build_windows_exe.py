@@ -29,7 +29,6 @@ def _build_args(name: str, clean: bool, onefile: bool) -> list[str]:
         _data_arg(APP_ROOT / "web_panel" / "templates", "web_panel/templates"),
         _data_arg(APP_ROOT / "config", "config"),
         _data_arg(APP_ROOT / "web_panel" / "fields.py", "web_panel"),
-        _data_arg(APP_ROOT / "data" / "input" / "selection.xlsx", "data/input"),
     ]
     hidden_imports = [
         "web_panel.api",
@@ -45,6 +44,9 @@ def _build_args(name: str, clean: bool, onefile: bool) -> list[str]:
         f"--paths={REPO_ROOT}",
         f"--paths={APP_ROOT}",
         f"--paths={APP_ROOT / 'src'}",
+        "--copy-metadata=playwright",
+        "--copy-metadata=playwright_stealth",
+        "--collect-all=playwright",
         "--collect-all=playwright_stealth",
         "--collect-submodules=src",
     ]

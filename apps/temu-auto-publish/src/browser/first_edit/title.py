@@ -1,137 +1,158 @@
 """
-@PURPOSE: 首次编辑标题读取与 AI 生成逻辑.
+@PURPOSE: 处理首次编辑弹窗中的标题定位、读取与覆盖更新。
 @OUTLINE:
-  - class FirstEditTitleMixin: 获取原始标题,编辑标题,AI 标题生成
+  - class FirstEditTitleMixin: 标题定位、读取、覆盖与拼接
+@DEPENDENCIES:
+  - 内部: ...utils.page_load_decorator.wait_dom_loaded, .base.find_visible_element
+  - 外部: playwright.async_api
 """
 
 from __future__ import annotations
 
 from loguru import logger
-from playwright.async_api import Page
+from playwright.async_api import Locator, Page
 
-from ...utils.selector_race import TIMEOUTS, try_selectors_race
 from ...utils.page_load_decorator import wait_dom_loaded
-from .base import FirstEditBase
+from .base import TIMEOUTS, FirstEditBase
+from .retry import first_edit_step_retry
+
+TITLE_INPUT_SELECTORS: list[str] = [
+    ".jx-overlay-dialog input.jx-input__inner[type='text']:visible",
+    (
+        "xpath=//label[contains(text(), '产品标题')]"
+        "/following-sibling::*/descendant::input[@type='text'][1]"
+    ),
+    "xpath=//label[contains(text(), '产品标题')]/following::input[@type='text'][1]",
+    (
+        "xpath=//div[contains(@class, 'jx-form-item')]//label[contains(text(), '产品标题:')]//"
+        "following-sibling::*/descendant::input[@type='text']"
+    ),
+    (
+        "xpath=//label[contains(text(), '产品标题')]/ancestor::div[contains(@class, 'jx-form-"
+        "item')]//input[contains(@class, 'jx-input__inner') and @type='text']"
+    ),
+]
 
 
 class FirstEditTitleMixin(FirstEditBase):
-    """提供首次编辑中的标题获取与编辑能力."""
+    """提供首次编辑场景下的标题读取与覆盖能力。"""
 
-    async def get_original_title(self, page: Page, max_retries: int = 3) -> str:
-        """获取产品的原始标题(SOP 步骤 4.2 准备).
+    @first_edit_step_retry(max_attempts=3, retry_on_false=False)
+    async def _locate_title_input(self, page: Page) -> Locator | None:
+        """定位标题输入框。
 
         Args:
             page: Playwright 页面对象.
-            max_retries: 最大重试次数,默认 3 次.
 
         Returns:
-            原始标题文本;若获取失败返回空字符串.
+            匹配到的标题输入框，未找到时返回 None。
         """
-        logger.debug("获取产品原始标题...")
+        logger.debug("定位标题输入框")
+        await page.wait_for_load_state("domcontentloaded")
 
-        # 优化顺序：基于选择器命中记录，将成功率最高的选择器放在前面
-        title_selectors = [
-            ".jx-overlay-dialog input.jx-input__inner[type='text']:visible",  # 命中率最高
-            "xpath=//label[contains(text(), '产品标题')]/following-sibling::*/descendant::input[@type='text'][1]",
-            "xpath=//label[contains(text(), '产品标题')]/following::input[@type='text'][1]",
-            "xpath=//div[contains(@class, 'jx-form-item')]//label[contains(text(), '产品标题:')]//following-sibling::*/descendant::input[@type='text']",
-            "xpath=//label[contains(text(), '产品标题')]/ancestor::div[contains(@class, 'jx-form-item')]//input[contains(@class, 'jx-input__inner') and @type='text']",
-        ]
+        title_input = await self.find_visible_element(
+            page,
+            TITLE_INPUT_SELECTORS,
+            timeout_ms=TIMEOUTS.NORMAL,
+            context_name="标题输入框定位",
+        )
 
+        if not title_input:
+            logger.error("未定位到标题输入框")
+        return title_input
+
+    @first_edit_step_retry(max_attempts=3, initial_delay_ms=400, retry_on_false=False)
+    async def get_original_title(self, page: Page, max_retries: int = 3) -> str:
+        """获取产品的原始标题（SOP 步骤 4.2 准备）。
+
+        Args:
+            page: Playwright 页面对象.
+            max_retries: 最大重试次数，默认 3 次.
+
+        Returns:
+            原始标题文本; 若获取失败返回空字符串。
+        """
+        await page.wait_for_load_state("domcontentloaded")
         for attempt in range(1, max_retries + 1):
-            try:
-                if attempt > 1:
-                    logger.info("第 {}/{} 次尝试获取原始标题...", attempt, max_retries)
-
-                # 使用并行竞速策略查找标题输入框
-                title_input = await try_selectors_race(
-                    page,
-                    title_selectors,
-                    timeout_ms=TIMEOUTS.NORMAL,
-                    context_name="获取原始标题",
-                )
-
-                if not title_input:
-                    if attempt < max_retries:
-                        logger.warning("第 {} 次尝试未找到标题输入框,准备重试...", attempt)
-                        # 智能等待: 等待 DOM 稳定而非固定延迟
-                        await wait_dom_loaded(page, TIMEOUTS.NORMAL, context=" [retry title]")
-                        continue
-                    logger.error("未找到标题输入框(已重试 {} 次)", max_retries)
-                    return ""
-
-                title = await title_input.input_value()
-                logger.success("获取到原始标题: {}...", title[:50])
+            title_input = await self._locate_title_input(page)
+            if title_input:
+                title = (await title_input.input_value()).strip()
+                logger.success("获取到原始标题 {}", title[:50])
                 return title
-            except Exception as exc:
-                if attempt < max_retries:
-                    logger.warning(f"第 {attempt} 次获取原始标题失败: {exc},准备重试...")
-                    # 智能等待: 等待 DOM 稳定而非固定延迟
-                    await wait_dom_loaded(page, TIMEOUTS.NORMAL, context=" [retry after error]")
-                    continue
-                logger.error(f"获取原始标题失败(已重试 {max_retries} 次): {exc}")
-                return ""
 
+            if attempt < max_retries:
+                logger.warning("第 {}/{} 次未找到标题输入框，等待后重试", attempt, max_retries)
+                await wait_dom_loaded(page, TIMEOUTS.NORMAL, context=" [retry title]")
+
+        logger.error("重试 {} 次后仍未获取到原标题", max_retries)
         return ""
 
+    @first_edit_step_retry(max_attempts=3)
     async def edit_title(self, page: Page, new_title: str) -> bool:
-        """编辑产品标题(SOP 步骤 4.1).
+        """覆盖产品标题（SOP 步骤 4.1）。
 
         Args:
             page: Playwright 页面对象.
-            new_title: 新标题,应包含型号后缀.
+            new_title: 需要覆盖的标题内容.
 
         Returns:
-            标题是否成功更新.
+            标题是否成功更新。
         """
-        logger.info("SOP 4.1: 编辑标题 -> {}", new_title)
-        logger.debug("标题长度: {} 字符", len(new_title))
-
-        try:
-            # 优化顺序：基于选择器命中记录，将成功率最高的选择器放在前面
-            title_selectors = [
-                ".jx-overlay-dialog input.jx-input__inner[type='text']:visible",  # 命中率最高
-                "xpath=//label[contains(text(), '产品标题')]/following-sibling::*/descendant::input[@type='text'][1]",
-                "xpath=//label[contains(text(), '产品标题')]/following::input[@type='text'][1]",
-                "xpath=//div[contains(@class, 'jx-form-item')]//label[contains(text(), '产品标题:')]//following-sibling::*/descendant::input[@type='text']",
-                "xpath=//label[contains(text(), '产品标题')]/ancestor::div[contains(@class, 'jx-form-item')]//input[contains(@class, 'jx-input__inner') and @type='text']",
-            ]
-
-            # 使用并行竞速策略查找标题输入框
-            title_input = await try_selectors_race(
-                page,
-                title_selectors,
-                timeout_ms=TIMEOUTS.NORMAL,
-                context_name="编辑标题输入框",
-            )
-
-            if not title_input:
-                logger.error("未找到标题输入框")
-                logger.error("尝试了 {} 种选择器均失败", len(title_selectors))
-                return False
-
-            current_title = await title_input.input_value()
-            logger.debug("当前标题: {}...", current_title[:50])
-
-            logger.info("清空标题字段并填写新标题")
-            await title_input.fill("")
-            await title_input.fill(new_title)
-
-            updated_title = await title_input.input_value()
-            logger.debug("更新后的标题: {}...", updated_title[:50])
-
-            if updated_title == new_title:
-                logger.success("标题已成功更新: {}", new_title)
-                return True
-
-            logger.warning("标题可能未完全更新")
-            logger.warning("期望: {}", new_title)
-            logger.warning("实际: {}", updated_title)
-            return True
-        except Exception as exc:
-            logger.error(f"编辑标题失败: {exc}")
+        logger.info("SOP 4.1: 覆盖标题 -> {}", new_title)
+        await page.wait_for_load_state("domcontentloaded")
+        title_input = await self._locate_title_input(page)
+        if not title_input:
             return False
 
+        await title_input.fill(new_title)
+        updated_title = (await title_input.input_value()).strip()
+
+        if updated_title != new_title.strip():
+            logger.warning("标题覆盖后与期望不一致，期望: {}，实际: {}", new_title, updated_title)
+            return False
+
+        logger.success("标题已更新为 {}", updated_title)
+        return True
+
+    @first_edit_step_retry(max_attempts=3)
+    async def append_model_to_title(self, page: Page, model_number: str) -> bool:
+        """按“原标题 + 型号”的伪代码逻辑覆盖标题。
+
+        伪代码步骤：
+        1) 定位标题输入框;
+        2) 获取原有标题;
+        3) 拼接新标题（原标题 + 型号）;
+        4) 覆盖原有标题;
+        5) 返回执行结果。
+
+        Args:
+            page: Playwright 页面对象.
+            model_number: 型号后缀，例如 "A0001".
+
+        Returns:
+            标题是否成功更新。
+        """
+        logger.info("按照原标题 + 型号覆盖标题，型号 {}", model_number)
+        await page.wait_for_load_state("domcontentloaded")
+        title_input = await self._locate_title_input(page)
+        if not title_input:
+            return False
+
+        original_title = (await title_input.input_value()).strip()
+        logger.debug("原标题 {}", original_title[:50])
+
+        combined_title = f"{original_title} {model_number}".strip()
+        await title_input.fill(combined_title)
+
+        updated_title = (await title_input.input_value()).strip()
+        if updated_title != combined_title:
+            logger.warning("标题覆盖可能未成功，期望: {}，实际: {}", combined_title, updated_title)
+            return False
+
+        logger.success("标题已覆盖为: {}", updated_title)
+        return True
+
+    @first_edit_step_retry(max_attempts=3)
     async def edit_title_with_ai(
         self,
         page: Page,
@@ -140,42 +161,18 @@ class FirstEditTitleMixin(FirstEditBase):
         model_number: str,
         use_ai: bool = True,
     ) -> bool:
-        """使用 AI 生成的新标题编辑产品标题(SOP 步骤 4.2).
+        """兼容旧接口: 直接采用“原标题 + 型号”覆盖标题。
 
         Args:
             page: Playwright 页面对象.
-            product_index: 产品索引(0-4).
-            all_original_titles: 原始标题列表.
+            product_index: 兼容参数，当前逻辑未使用.
+            all_original_titles: 兼容参数，当前逻辑未使用.
             model_number: 型号后缀.
-            use_ai: 是否启用 AI 生成.
+            use_ai: 兼容参数，当前逻辑未使用.
 
         Returns:
-            标题是否成功更新.
+            标题是否成功更新。
         """
-        logger.info("SOP 4.2: 使用 AI 生成标题(产品 {}/5)", product_index + 1)
-
-        try:
-            from ...data_processor.ai_title_generator import AITitleGenerator
-
-            ai_generator = AITitleGenerator()
-            new_titles = await ai_generator.generate_titles(
-                all_original_titles,
-                model_number=model_number,
-                use_ai=use_ai,
-            )
-
-            if product_index >= len(new_titles):
-                logger.error("产品索引超出范围: {}/{}", product_index, len(new_titles))
-                return False
-
-            new_title = new_titles[product_index]
-            logger.info("为产品 {} 生成的标题: {}", product_index + 1, new_title)
-            return await self.edit_title(page, new_title)
-        except Exception as exc:
-            logger.error(f"使用 AI 编辑标题失败: {exc}")
-            if product_index < len(all_original_titles):
-                fallback_title = f"{all_original_titles[product_index]} {model_number}"
-                logger.warning("使用降级方案: {}", fallback_title)
-                return await self.edit_title(page, fallback_title)
-            return False
-
+        _ = (product_index, all_original_titles, use_ai)
+        logger.info("已切换为简化逻辑: 原标题 + 型号覆盖标题")
+        return await self.append_model_to_title(page, model_number)

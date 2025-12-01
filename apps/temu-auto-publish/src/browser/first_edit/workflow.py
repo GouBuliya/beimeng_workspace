@@ -28,24 +28,28 @@ class FirstEditWorkflowMixin(FirstEditBase):
         logger.info("=" * 60)
         logger.info("开始执行首次编辑完整流程(SOP 步骤 4)")
         logger.info("=" * 60)
-
+        await page.wait_for_load_state("domcontentloaded")
         try:
             if not await self.edit_title(page, title):
                 logger.error("标题设置失败")
                 return False
+            await page.wait_for_load_state("domcontentloaded")
 
             if not await self.set_sku_price(page, price):
                 logger.error("价格设置失败")
                 return False
+            await page.wait_for_load_state("domcontentloaded")
 
             if not await self.set_sku_stock(page, stock):
                 logger.error("库存设置失败")
                 return False
+            await page.wait_for_load_state("domcontentloaded")
 
             logger.info("尝试设置包裹重量(物流信息 Tab)...")
             weight_success = await self.set_package_weight_in_logistics(page, weight)
             if not weight_success:
                 logger.warning("包裹重量设置失败 - 可能需要 Codegen 验证选择器")
+            await page.wait_for_load_state("domcontentloaded")
 
             logger.info("尝试设置包裹尺寸(物流信息 Tab)...")
             length, width, height = dimensions
@@ -61,7 +65,7 @@ class FirstEditWorkflowMixin(FirstEditBase):
             except ValueError as exc:
                 logger.error(f"尺寸验证失败: {exc}")
                 logger.warning("跳过尺寸设置")
-
+            await page.wait_for_load_state("domcontentloaded")
             logger.info("切换回基本信息 Tab...")
             nav_config = self.selectors.get("first_edit_dialog", {}).get("navigation", {})
             basic_info_selector = nav_config.get("basic_info", "text='基本信息'")

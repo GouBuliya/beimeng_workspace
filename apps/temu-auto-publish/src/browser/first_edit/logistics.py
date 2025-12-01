@@ -1,25 +1,30 @@
 """
 @PURPOSE: 首次编辑物流信息 Tab 操作逻辑.
 @OUTLINE:
-  - class FirstEditLogisticsMixin: 切换物流栏,设置包裹重量与尺寸
+  - class FirstEditLogisticsMixin: 切换物流Tab, 设置包裹重量与尺寸
 """
 
 from __future__ import annotations
 
-import asyncio
-
 from loguru import logger
 from playwright.async_api import Page
 
-from ...utils.selector_race import TIMEOUTS, try_selectors_race
-from .base import FirstEditBase
+from .base import TIMEOUTS, FirstEditBase
 
 
 class FirstEditLogisticsMixin(FirstEditBase):
-    """封装物流信息相关的设置流程."""
+    """封装物流信息相关的设置流程。"""
 
     async def navigate_to_logistics_tab(self, page: Page) -> bool:
-        """切换到物流信息 Tab."""
+        """切换到物流信息 Tab.
+
+        Args:
+            page: Playwright 页面对象.
+
+        Returns:
+            是否成功切换到物流信息 Tab.
+        """
+        await page.wait_for_load_state("domcontentloaded")
         try:
             first_edit_config = self.selectors.get("first_edit_dialog", {})
             nav_config = first_edit_config.get("navigation", {})
@@ -34,9 +39,17 @@ class FirstEditLogisticsMixin(FirstEditBase):
             return False
 
     async def set_package_weight_in_logistics(self, page: Page, weight: float) -> bool:
-        """在物流信息 Tab 中设置包裹重量."""
-        logger.info("SOP 4.6: 设置包裹重量 -> {} G", weight)
+        """在物流信息 Tab 中设置包裹重量.
 
+        Args:
+            page: Playwright 页面对象.
+            weight: 包裹重量（克）.
+
+        Returns:
+            是否设置成功.
+        """
+        logger.info("SOP 4.6: 设置包裹重量 -> {} G", weight)
+        await page.wait_for_load_state("domcontentloaded")
         if not (5_000 <= weight <= 9_999):
             logger.warning("重量 {} G 超出推荐范围(5000-9999G)", weight)
 
@@ -58,8 +71,7 @@ class FirstEditLogisticsMixin(FirstEditBase):
                 "input[placeholder*='重']",
             ]
 
-            # 使用并行竞速策略查找重量输入框
-            weight_input = await try_selectors_race(
+            weight_input = await self.find_visible_element(
                 page,
                 weight_selectors,
                 timeout_ms=TIMEOUTS.NORMAL,
@@ -73,7 +85,7 @@ class FirstEditLogisticsMixin(FirstEditBase):
 
             await weight_input.fill("")
             await weight_input.fill(str(weight))
-            logger.success("包裹重量已设置: {} G", weight)
+            logger.success("包裹重量已设置为 {} G", weight)
             return True
         except Exception as exc:
             logger.error(f"设置包裹重量失败: {exc}")
@@ -86,14 +98,27 @@ class FirstEditLogisticsMixin(FirstEditBase):
         width: float,
         height: float,
     ) -> bool:
-        """在物流信息 Tab 中设置包裹尺寸."""
-        logger.info("SOP 4.7: 设置包裹尺寸 -> {} x {} x {} CM", length, width, height)
+        """在物流信息 Tab 中设置包裹尺寸.
 
+        Args:
+            page: Playwright 页面对象.
+            length: 包裹长度（厘米）.
+            width: 包裹宽度（厘米）.
+            height: 包裹高度（厘米）.
+
+        Returns:
+            是否设置成功.
+
+        Raises:
+            ValueError: 当长宽高不满足 SOP 要求时.
+        """
+        logger.info("SOP 4.7: 设置包裹尺寸 -> {} x {} x {} CM", length, width, height)
+        await page.wait_for_load_state("domcontentloaded")
         if not all(50 <= dim <= 99 for dim in [length, width, height]):
             logger.warning("尺寸超出推荐范围(50-99cm)")
 
         if not (length > width > height):
-            raise ValueError(f"尺寸不符合 SOP 规则(长>宽>高): {length}>{width}>{height}")
+            raise ValueError(f"尺寸不符合 SOP 规则(需长>宽>高: {length}>{width}>{height})")
 
         try:
             if not await self.navigate_to_logistics_tab(page):
@@ -115,26 +140,23 @@ class FirstEditLogisticsMixin(FirstEditBase):
                 "input[placeholder*='包裹高度'], input[placeholder*='高度'], input[placeholder*='高']",
             )
 
-            length_selectors = [s.strip() for s in length_selector.split(", ")]
-            width_selectors = [s.strip() for s in width_selector.split(", ")]
-            height_selectors = [s.strip() for s in height_selector.split(", ")]
+            length_selectors = [s.strip() for s in length_selector.split(",")]
+            width_selectors = [s.strip() for s in width_selector.split(",")]
+            height_selectors = [s.strip() for s in height_selector.split(",")]
 
-            # 并行查找长、宽、高三个输入框
-            length_input, width_input, height_input = await asyncio.gather(
-                try_selectors_race(
-                    page, length_selectors, TIMEOUTS.NORMAL, "物流-包裹长度"
-                ),
-                try_selectors_race(
-                    page, width_selectors, TIMEOUTS.NORMAL, "物流-包裹宽度"
-                ),
-                try_selectors_race(
-                    page, height_selectors, TIMEOUTS.NORMAL, "物流-包裹高度"
-                ),
+            length_input = await self.find_visible_element(
+                page, length_selectors, TIMEOUTS.NORMAL, "物流-包裹长度"
+            )
+            width_input = await self.find_visible_element(
+                page, width_selectors, TIMEOUTS.NORMAL, "物流-包裹宽度"
+            )
+            height_input = await self.find_visible_element(
+                page, height_selectors, TIMEOUTS.NORMAL, "物流-包裹高度"
             )
 
             if not length_input or not width_input or not height_input:
                 logger.error(
-                    "未找到包裹尺寸输入框(长:%s 宽:%s 高:%s)",
+                    "未找到包裹尺寸输入框(长:{} 宽:{} 高:{})",
                     length_input is not None,
                     width_input is not None,
                     height_input is not None,
@@ -151,11 +173,10 @@ class FirstEditLogisticsMixin(FirstEditBase):
             await height_input.fill("")
             await height_input.fill(str(height))
 
-            logger.success("包裹尺寸已设置: {} x {} x {} CM", length, width, height)
+            logger.success("包裹尺寸已设置为 {} x {} x {} CM", length, width, height)
             return True
         except ValueError:
             raise
         except Exception as exc:
             logger.error(f"设置包裹尺寸失败: {exc}")
             return False
-

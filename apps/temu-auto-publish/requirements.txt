@@ -1,7 +1,7 @@
 # Temu 自动发布系统 - 依赖包
 
 # Core Framework
-playwright>=1.40.0
+playwright==1.49.0
 playwright-stealth>=1.0.0
 tenacity>=8.2.3
 syncer>=2.0.0
@@ -48,4 +48,3 @@ pytest-playwright>=0.4.3
 pytest-cov>=4.1.0
 pytest-mock>=3.12.0
 faker>=22.0.0
-

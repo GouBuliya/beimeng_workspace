@@ -58,7 +58,7 @@ data = [
 temu = [
     "pandas>=2.2.0",           # Excel 处理
     "openpyxl>=3.1.0",         # Excel 读写
-    "playwright>=1.48.0",      # 浏览器自动化
+    "playwright==1.49.0",      # 浏览器自动化
     "playwright-stealth>=1.0.0",  # 反检测
     "tenacity>=8.2.3",         # 稳定重试
     "syncer>=2.0.0",           # 将异步任务同步执行
