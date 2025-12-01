@@ -484,6 +484,54 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
             "server_url": auth_client.base_url,
         }
 
+    @app.post("/api/clear-cookies")
+    async def clear_cookies(
+        admin: None = Depends(admin_guard),
+    ) -> dict[str, Any]:
+        """清除浏览器 Cookie/Storage State 文件.
+
+        清除后首次运行任务时，脚本会自动检测到 Cookie 失效，
+        并执行完整的登录流程（自动输入用户名和密码）。
+        """
+        # 需要清除的文件列表
+        cookie_files = [
+            # Playwright storage state 文件
+            APP_ROOT / "data" / "browser" / "storage_state.json",
+            APP_ROOT / "playwright-recordings" / "miaoshou-storage.json",
+            # CookieManager 管理的 cookie 文件
+            APP_ROOT / "data" / "temp" / "miaoshou_cookies.json",
+            APP_ROOT / "data" / "temp" / "miaoshou_cookies.json.meta.json",
+            # Temu cookie 文件
+            APP_ROOT / "data" / "input" / "temu_cookies.json",
+        ]
+
+        cleared_files: list[str] = []
+        errors: list[str] = []
+
+        for path in cookie_files:
+            if path.exists():
+                try:
+                    path.unlink()
+                    cleared_files.append(path.name)
+                    logger.info(f"已清除 Cookie 文件: {path}")
+                except Exception as exc:
+                    errors.append(f"{path.name}: {exc}")
+                    logger.error(f"清除 Cookie 文件失败: {path}, 错误: {exc}")
+
+        if errors:
+            raise HTTPException(
+                status_code=500,
+                detail=f"部分文件清除失败: {'; '.join(errors)}",
+            )
+
+        return {
+            "ok": True,
+            "cleared_files": cleared_files,
+            "message": f"已清除 {len(cleared_files)} 个 Cookie 文件，下次运行将自动重新登录"
+            if cleared_files
+            else "无需清除（Cookie 文件不存在）",
+        }
+
     return app
 
 

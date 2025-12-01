@@ -140,6 +140,8 @@ class TestResilientLocator:
     def mock_page(self):
         """创建模拟的 Page 对象"""
         page = MagicMock()
+        page.is_closed = MagicMock(return_value=False)
+        page.is_detached = MagicMock(return_value=False)
         return page
 
     @pytest.fixture
@@ -392,6 +394,8 @@ class TestGlobalResilientLocator:
     async def test_resilient_locate_convenience(self):
         """测试便捷定位函数"""
         mock_page = MagicMock()
+        mock_page.is_closed = MagicMock(return_value=False)
+        mock_page.is_detached = MagicMock(return_value=False)
         mock_loc = MagicMock()
         mock_loc.wait_for = AsyncMock()
         mock_page.locator = MagicMock(return_value=mock_loc)
@@ -404,6 +408,8 @@ class TestGlobalResilientLocator:
     async def test_resilient_click_convenience(self):
         """测试便捷点击函数"""
         mock_page = MagicMock()
+        mock_page.is_closed = MagicMock(return_value=False)
+        mock_page.is_detached = MagicMock(return_value=False)
         mock_loc = MagicMock()
         mock_loc.wait_for = AsyncMock()
         mock_loc.click = AsyncMock()

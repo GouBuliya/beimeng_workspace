@@ -75,12 +75,12 @@ class TestAdaptiveWaitConfig:
         """测试默认配置"""
         config = AdaptiveWaitConfig()
 
-        assert config.min_wait_ms == 30
-        assert config.max_wait_ms == 2000
-        assert config.network_idle_timeout_ms == 500
-        assert config.dom_stable_timeout_ms == 500
-        assert config.dom_stable_checks == 3
-        assert config.learning_factor == 0.3
+        assert config.min_wait_ms == 10
+        assert config.max_wait_ms == 300
+        assert config.network_idle_timeout_ms == 80
+        assert config.dom_stable_timeout_ms == 80
+        assert config.dom_stable_checks == 1
+        assert config.learning_factor == 0.2
 
     def test_custom_values(self):
         """测试自定义配置"""

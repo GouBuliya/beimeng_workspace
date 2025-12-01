@@ -1553,19 +1553,9 @@ class CompletePublishWorkflow:
         working_products = edited_products[start_offset:end_offset]
 
         selection_count = min(max(len(working_products), self.collect_count), 5)
-        if working_products:
-            target_indexes = [
-                product.index
-                for product in working_products[:selection_count]
-                if product.index >= 0
-            ]
-        else:
-            target_indexes = list(range(start_offset, start_offset + selection_count))
-        if len(target_indexes) < selection_count:
-            logger.warning(
-                "Incomplete product index mapping detected, fallback to sequential selection",
-            )
-            target_indexes = list(range(start_offset, start_offset + selection_count))
+        # 使用列表位置计算采集箱中的绝对索引，而不是 product.index
+        # 因为 product.index 可能是占位符流程中的局部索引，不是采集箱位置
+        target_indexes = list(range(start_offset, start_offset + selection_count))
 
         logger.info(
             "认领阶段: 目标索引 %s (筛选后的商品列表,共 %s 条), 每商品点击 %s 次",
@@ -1604,28 +1594,37 @@ class CompletePublishWorkflow:
             )
             if selected_ok < len(batch_indexes):
                 msg = (
-                    f"批次 {batch_start // batch_size + 1} 勾选失败: "
+                    f"批次 {batch_start // batch_size + 1} 勾选部分失败: "
                     f"成功 {selected_ok}/{len(batch_indexes)}, 失败 {selected_fail}"
                 )
                 batch_failures.append(msg)
-                logger.error(msg)
-                break
+                logger.warning(msg)
+                # 即使部分失败也继续认领已勾选的商品
 
-            if not await miaoshou_ctrl.claim_selected_products_to_temu(
-                page, repeat=self.claim_times
-            ):
-                msg = f"批次 {batch_start // batch_size + 1} 批量认领失败"
+            # 如果有成功勾选的商品，继续认领流程
+            if selected_ok > 0:
+                if not await miaoshou_ctrl.claim_selected_products_to_temu(
+                    page, repeat=self.claim_times
+                ):
+                    msg = f"批次 {batch_start // batch_size + 1} 批量认领失败"
+                    batch_failures.append(msg)
+                    logger.error(msg)
+                    # 认领失败也继续下一批次
+                else:
+                    batch_success += 1
+                    total_expected += selected_ok * self.claim_times
+            else:
+                # 全部勾选失败，记录但继续下一批次
+                msg = f"批次 {batch_start // batch_size + 1} 全部勾选失败，跳过认领"
                 batch_failures.append(msg)
                 logger.error(msg)
-                break
-
-            batch_success += 1
-            total_expected += len(batch_indexes) * self.claim_times
             await page.wait_for_timeout(500)
 
-        claim_success = batch_success > 0 and not batch_failures
+        # 只要有批次成功就继续流程（部分成功也算成功）
+        claim_success = batch_success > 0
+        has_failures = len(batch_failures) > 0
 
-        # 去重后的阈值:批次总期望 = 每批勾选数 x claim_times
+        # 去重后的阈值:批次总期望 = 实际成功勾选数 x claim_times
         expected_total = total_expected or (selection_count * self.claim_times)
         unique_threshold = expected_total
         verify_success = await miaoshou_ctrl.verify_claim_success(
@@ -1641,16 +1640,24 @@ class CompletePublishWorkflow:
             )
 
         overall_success = claim_success and verify_success
-        message = (
-            f"认领成功 {selection_count} 个商品,每商品 {self.claim_times} 次 (共 {expected_total} 次)"
-            if overall_success
-            else "认领结果存在异常, 详见 details"
-        )
+        if overall_success and has_failures:
+            message = (
+                f"认领部分成功: 期望 {selection_count} 个商品, "
+                f"实际成功 {batch_success} 批次 (共 {expected_total} 次), "
+                f"存在 {len(batch_failures)} 个失败"
+            )
+        elif overall_success:
+            message = (
+                f"认领成功 {selection_count} 个商品,每商品 {self.claim_times} 次 (共 {expected_total} 次)"
+            )
+        else:
+            message = "认领结果存在异常, 详见 details"
 
         details = {
             "selected_count": selection_count,
             "batches_success": batch_success,
             "batch_failures": batch_failures,
+            "has_failures": has_failures,
             "claim_success": claim_success,
             "expected_total": expected_total,
             "unique_threshold": unique_threshold,

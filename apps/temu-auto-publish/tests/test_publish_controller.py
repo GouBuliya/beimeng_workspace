@@ -123,7 +123,7 @@ class TestPublishControllerMethods:
 
     @pytest.mark.asyncio
     async def test_set_supply_price(self, controller, mock_page):
-        """测试设置供货价"""
+        """测试设置供货价 - 当前功能已禁用，返回 None"""
         mock_page.wait_for_selector = AsyncMock(return_value=MockLocator())
         mock_page.locator = MagicMock(return_value=MockLocator())
         mock_page.fill = AsyncMock()
@@ -132,7 +132,8 @@ class TestPublishControllerMethods:
 
         result = await controller.set_supply_price(mock_page, products_data)
 
-        assert isinstance(result, bool)
+        # 当前功能已禁用,函数不执行任何操作
+        assert result is None
 
     @pytest.mark.asyncio
     async def test_batch_publish(self, controller, mock_page):
@@ -161,10 +162,11 @@ class TestPublishControllerPriceCalculation:
 
         # 使用价格计算器
         cost_price = 10.0
-        result = controller.price_calculator.calculate(cost_price)
+        result = controller.price_calculator.calculate_supply_price(cost_price)
 
-        # 验证返回值
-        assert result.supply_price > 0
+        # 验证返回值 - 成本 x 7.5
+        assert result > 0
+        assert result == cost_price * 7.5
 
 
 class TestPublishControllerEdgeCases:
@@ -172,7 +174,7 @@ class TestPublishControllerEdgeCases:
 
     @pytest.mark.asyncio
     async def test_empty_products_data(self, tmp_path):
-        """测试空产品数据"""
+        """测试空产品数据 - 当前功能已禁用，返回 None"""
         selector_file = tmp_path / "selectors.json"
         selector_file.write_text(json.dumps({}))
         controller = PublishController(str(selector_file))
@@ -182,7 +184,8 @@ class TestPublishControllerEdgeCases:
 
         result = await controller.set_supply_price(mock_page, [])
 
-        assert isinstance(result, bool)
+        # 当前功能已禁用,函数不执行任何操作
+        assert result is None
 
     @pytest.mark.asyncio
     async def test_none_shop_name(self, tmp_path):

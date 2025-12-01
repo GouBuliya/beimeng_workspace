@@ -22,15 +22,15 @@ class TestWaitStrategy:
         """测试默认值"""
         strategy = WaitStrategy()
 
-        assert strategy.wait_after_action_ms == 30
-        assert strategy.wait_for_stability_timeout_ms == 375
-        assert strategy.wait_for_network_idle_timeout_ms == 750
-        assert strategy.retry_initial_delay_ms == 30
-        assert strategy.retry_backoff_factor == 1.6
-        assert strategy.retry_max_delay_ms == 375
-        assert strategy.validation_timeout_ms == 500
-        assert strategy.dom_stable_checks == 3
-        assert strategy.dom_stable_interval_ms == 30
+        assert strategy.wait_after_action_ms == 100
+        assert strategy.wait_for_stability_timeout_ms == 2000
+        assert strategy.wait_for_network_idle_timeout_ms == 3000
+        assert strategy.retry_initial_delay_ms == 200
+        assert strategy.retry_backoff_factor == 1.5
+        assert strategy.retry_max_delay_ms == 2000
+        assert strategy.validation_timeout_ms == 3000
+        assert strategy.dom_stable_checks == 2
+        assert strategy.dom_stable_interval_ms == 150
 
     def test_custom_values(self):
         """测试自定义值"""

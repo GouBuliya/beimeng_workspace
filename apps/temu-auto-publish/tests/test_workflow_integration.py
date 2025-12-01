@@ -20,7 +20,7 @@ class TestWorkflowTimeoutIntegration:
     """测试工作流超时保护集成."""
 
     def test_timeout_config_initialization_default(self):
-        """测试默认超时配置初始化."""
+        """测试默认超时配置初始化(24小时稳定运行模式)."""
         with patch.object(
             CompletePublishWorkflow, "_resolve_image_base_dir", return_value=MagicMock()
         ):
@@ -32,9 +32,10 @@ class TestWorkflowTimeoutIntegration:
             workflow._selection_rows_override = None
             workflow.timeout_config = TimeoutConfig()
 
-            assert workflow.timeout_config.workflow_total == 3600
-            assert workflow.timeout_config.stage1_first_edit == 900
-            assert workflow.timeout_config.stage2_claim == 600
+            # 24 小时稳定运行配置
+            assert workflow.timeout_config.workflow_total == 7200  # 120分钟
+            assert workflow.timeout_config.stage1_first_edit == 1800  # 30分钟
+            assert workflow.timeout_config.stage2_claim == 900  # 15分钟
 
     def test_timeout_config_initialization_custom_dict(self):
         """测试自定义字典超时配置初始化."""
@@ -42,14 +43,14 @@ class TestWorkflowTimeoutIntegration:
 
         workflow = CompletePublishWorkflow.__new__(CompletePublishWorkflow)
         workflow.timeout_config = TimeoutConfig(
-            workflow_total=custom_config.get("workflow_total", 3600),
-            stage1_first_edit=custom_config.get("stage1_first_edit", 900),
+            workflow_total=custom_config.get("workflow_total", 7200),
+            stage1_first_edit=custom_config.get("stage1_first_edit", 1800),
         )
 
         assert workflow.timeout_config.workflow_total == 1800
         assert workflow.timeout_config.stage1_first_edit == 300
-        # 未覆盖的值使用默认
-        assert workflow.timeout_config.stage2_claim == 600
+        # 未覆盖的值使用新的 24 小时模式默认值
+        assert workflow.timeout_config.stage2_claim == 900  # 15分钟
 
     def test_timeout_config_initialization_custom_object(self):
         """测试自定义 TimeoutConfig 对象初始化."""

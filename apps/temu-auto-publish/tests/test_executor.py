@@ -133,17 +133,17 @@ class TestWorkflowExecutor:
 
     def test_init_with_custom_state_dir(self, tmp_path):
         """测试自定义状态目录"""
-        executor = WorkflowExecutor(state_dir=str(tmp_path))
+        executor = WorkflowExecutor(state_dir=tmp_path)
 
-        assert executor.state_dir == Path(tmp_path)
+        assert executor.state_dir == tmp_path
 
     @pytest.mark.asyncio
     async def test_execute_simple_workflow(self):
         """测试执行简单工作流"""
         executor = WorkflowExecutor()
 
-        # 创建简单的工作流函数
-        async def simple_workflow(page, config):
+        # 创建简单的工作流函数 (需要接受 **kwargs 以兼容 executor 传入的额外参数)
+        async def simple_workflow(page, config, **kwargs):
             return {"success": True, "result": "done"}
 
         # Mock page
@@ -170,7 +170,7 @@ class TestWorkflowExecutor:
             stage_results.append("stage2")
             return {"stage2": "done"}
 
-        async def multi_stage_workflow(page, config):
+        async def multi_stage_workflow(page, config, **kwargs):
             context = {}
             context.update(await stage1(page, context))
             context.update(await stage2(page, context))
@@ -189,7 +189,7 @@ class TestWorkflowExecutor:
         """测试工作流执行失败"""
         executor = WorkflowExecutor()
 
-        async def failing_workflow(page, config):
+        async def failing_workflow(page, config, **kwargs):
             raise Exception("Workflow failed")
 
         mock_page = MagicMock()
@@ -200,7 +200,7 @@ class TestWorkflowExecutor:
     @pytest.mark.asyncio
     async def test_save_state(self, tmp_path):
         """测试保存状态"""
-        executor = WorkflowExecutor(state_dir=str(tmp_path))
+        executor = WorkflowExecutor(state_dir=tmp_path)
 
         state = WorkflowState(workflow_id="WF-SAVE-001", status="running", current_stage="stage1")
 
@@ -218,7 +218,7 @@ class TestWorkflowExecutor:
     @pytest.mark.asyncio
     async def test_load_state(self, tmp_path):
         """测试加载状态"""
-        executor = WorkflowExecutor(state_dir=str(tmp_path))
+        executor = WorkflowExecutor(state_dir=tmp_path)
 
         # 创建状态文件
         state_data = {
@@ -246,7 +246,7 @@ class TestWorkflowExecutor:
     @pytest.mark.asyncio
     async def test_load_state_not_found(self, tmp_path):
         """测试加载不存在的状态"""
-        executor = WorkflowExecutor(state_dir=str(tmp_path))
+        executor = WorkflowExecutor(state_dir=tmp_path)
 
         state = await executor.load_state("NONEXISTENT")
 
@@ -255,7 +255,7 @@ class TestWorkflowExecutor:
     @pytest.mark.asyncio
     async def test_resume_workflow(self, tmp_path):
         """测试恢复工作流"""
-        executor = WorkflowExecutor(state_dir=str(tmp_path))
+        executor = WorkflowExecutor(state_dir=tmp_path)
 
         # 创建已有状态
         state_data = {
@@ -274,7 +274,7 @@ class TestWorkflowExecutor:
         state_file.write_text(json.dumps(state_data))
 
         # 定义可恢复的工作流
-        async def resumable_workflow(page, config, resume_from=None):
+        async def resumable_workflow(page, config, resume_from=None, **kwargs):
             if resume_from == "stage2":
                 return {"success": True, "resumed": True}
             return {"success": True, "resumed": False}
@@ -299,7 +299,7 @@ class TestWorkflowExecutorRetry:
 
         call_count = 0
 
-        async def flaky_workflow(page, config):
+        async def flaky_workflow(page, config, **kwargs):
             nonlocal call_count
             call_count += 1
             if call_count < 2:
@@ -328,7 +328,7 @@ class TestWorkflowExecutorMetrics:
         """测试指标被收集"""
         executor = WorkflowExecutor()
 
-        async def workflow_with_metrics(page, config):
+        async def workflow_with_metrics(page, config, **kwargs):
             return {"success": True, "products_processed": 20}
 
         mock_page = MagicMock()

@@ -249,6 +249,18 @@ class LoginController:
         logger.info("开始登录流程")
         logger.info("=" * 60)
 
+        # 0. 检查配置是否禁用 Cookie 登录
+        try:
+            if self.config_path.exists():
+                with open(self.config_path, encoding="utf-8") as f:
+                    browser_config = json.load(f)
+                use_cookie_login = browser_config.get("login", {}).get("use_cookie_login", True)
+                if not use_cookie_login:
+                    logger.info("Cookie 登录已禁用(配置 use_cookie_login=false), 将执行手动登录")
+                    force = True
+        except Exception as e:
+            logger.debug(f"读取 browser_config.json 失败: {e}, 使用默认行为")
+
         # 1. 检查 Cookie
         if not force and self.cookie_manager.is_valid():
             logger.success("✓ Cookie 有效,尝试使用 Cookie 登录")

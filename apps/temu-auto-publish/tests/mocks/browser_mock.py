@@ -250,13 +250,32 @@ class MockPage:
         self._content = content
 
 
+class MockContext:
+    """模拟 Playwright BrowserContext"""
+
+    def __init__(self):
+        self._cookies: list[dict] = []
+
+    async def add_cookies(self, cookies: list[dict]) -> None:
+        """添加Cookies"""
+        self._cookies.extend(cookies)
+
+    async def cookies(self, urls: list[str] | None = None) -> list[dict]:
+        """获取Cookies"""
+        return self._cookies
+
+    async def clear_cookies(self) -> None:
+        """清除Cookies"""
+        self._cookies = []
+
+
 class MockBrowserManager:
     """模拟 BrowserManager"""
 
     def __init__(self):
         self.page = MockPage()
         self.browser = MagicMock()
-        self.context = MagicMock()
+        self.context = MockContext()
         self._is_started = False
         self._cookies: list[dict] = []
 
@@ -291,6 +310,10 @@ class MockBrowserManager:
     async def screenshot(self, path: str | None = None) -> bytes:
         """截图"""
         return b""
+
+    async def goto(self, url: str, **kwargs) -> None:
+        """导航到URL(委托给page)"""
+        await self.page.goto(url, **kwargs)
 
     @property
     def is_started(self) -> bool:

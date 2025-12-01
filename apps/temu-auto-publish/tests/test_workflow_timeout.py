@@ -43,18 +43,19 @@ class TestTimeoutConfig:
     """测试 TimeoutConfig 配置类."""
 
     def test_default_values(self):
-        """测试默认配置值."""
+        """测试默认配置值(24小时稳定运行模式)."""
         config = TimeoutConfig()
-        assert config.stage1_first_edit == 900  # 15分钟
-        assert config.stage2_claim == 600  # 10分钟
-        assert config.stage3_batch_edit == 1200  # 20分钟
-        assert config.stage4_publish == 600  # 10分钟
-        assert config.workflow_total == 3600  # 60分钟
+        # 24 小时稳定运行配置
+        assert config.stage1_first_edit == 1800  # 30分钟
+        assert config.stage2_claim == 900  # 15分钟
+        assert config.stage3_batch_edit == 1800  # 30分钟
+        assert config.stage4_publish == 900  # 15分钟
+        assert config.workflow_total == 7200  # 120分钟
 
     def test_get_stage_timeout(self):
         """测试获取阶段超时."""
         config = TimeoutConfig()
-        assert config.get("stage1_first_edit") == 900
+        assert config.get("stage1_first_edit") == 1800  # 24小时模式默认值
         assert config.get("unknown_stage", 999) == 999
 
     def test_custom_config(self):

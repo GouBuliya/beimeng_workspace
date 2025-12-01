@@ -273,13 +273,22 @@
                     </svg>
                     开始执行任务
                   </button>
-                  
+
                   <button
                     type="button"
                     id="health-btn"
                     class="flex-none px-4 py-3 border border-gray-300 shadow-sm text-sm font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors"
                   >
                     环境自检
+                  </button>
+
+                  <button
+                    type="button"
+                    id="clear-cookies-btn"
+                    class="flex-none px-4 py-3 border border-orange-300 shadow-sm text-sm font-medium rounded-lg text-orange-700 bg-orange-50 hover:bg-orange-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-colors"
+                    title="清除浏览器登录状态，下次运行将自动重新登录"
+                  >
+                    清除 Cookie
                   </button>
                 </div>
                 
@@ -453,6 +462,7 @@
       const form = document.getElementById("control-form");
       const runBtn = document.getElementById("run-btn");
       const healthBtn = document.getElementById("health-btn");
+      const clearCookiesBtn = document.getElementById("clear-cookies-btn");
       const statusPill = document.getElementById("status-pill");
       const statusPillContainer = document.getElementById("status-pill-container");
       const statusMessage = document.getElementById("status-message");
@@ -573,7 +583,7 @@
         const originalText = healthBtn.textContent;
         healthBtn.textContent = "检查中...";
         healthBtn.disabled = true;
-        
+
         try {
           const response = await fetch("/health");
           const payload = await response.json();
@@ -581,18 +591,62 @@
             payload.ok === false
               ? "环境异常, 请检查依赖后重试"
               : `环境正常 · 使用路径 ${payload.selection_dir}`;
-          
+
           // Flash success
           healthBtn.classList.add("bg-green-50", "text-green-700", "border-green-300");
           setTimeout(() => {
              healthBtn.classList.remove("bg-green-50", "text-green-700", "border-green-300");
           }, 2000);
-          
+
         } catch (error) {
           statusMessage.textContent = "自检失败, 请稍后再试";
         } finally {
           healthBtn.textContent = originalText;
           healthBtn.disabled = false;
+        }
+      });
+
+      clearCookiesBtn.addEventListener("click", async () => {
+        if (!confirm("确定要清除浏览器 Cookie 吗？\n\n清除后首次运行时，脚本将自动使用系统设置中的账号密码重新登录。")) {
+          return;
+        }
+
+        const originalText = clearCookiesBtn.textContent;
+        clearCookiesBtn.textContent = "清除中...";
+        clearCookiesBtn.disabled = true;
+
+        try {
+          const response = await fetch("/api/clear-cookies", {
+            method: "POST",
+          });
+          const payload = await response.json();
+
+          if (!response.ok) {
+            throw new Error(payload.detail || "清除失败");
+          }
+
+          statusMessage.textContent = payload.message || "Cookie 已清除";
+
+          // Flash success
+          clearCookiesBtn.classList.remove("border-orange-300", "text-orange-700", "bg-orange-50");
+          clearCookiesBtn.classList.add("border-green-300", "text-green-700", "bg-green-50");
+          setTimeout(() => {
+            clearCookiesBtn.classList.add("border-orange-300", "text-orange-700", "bg-orange-50");
+            clearCookiesBtn.classList.remove("border-green-300", "text-green-700", "bg-green-50");
+          }, 2000);
+
+        } catch (error) {
+          statusMessage.textContent = error.message || "清除 Cookie 失败";
+          // Flash error
+          clearCookiesBtn.classList.remove("border-orange-300", "text-orange-700", "bg-orange-50");
+          clearCookiesBtn.classList.add("border-red-300", "text-red-700", "bg-red-50");
+          setTimeout(() => {
+            clearCookiesBtn.classList.add("border-orange-300", "text-orange-700", "bg-orange-50");
+            clearCookiesBtn.classList.remove("border-red-300", "text-red-700", "bg-red-50");
+          }, 2000);
+        } finally {
+          clearCookiesBtn.textContent = originalText;
+          clearCookiesBtn.disabled = false;
         }
       });
 

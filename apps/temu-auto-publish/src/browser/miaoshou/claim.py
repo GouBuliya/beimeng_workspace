@@ -770,10 +770,12 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                 };
 
                 const ROW_HEIGHT = detectRowHeight();
+                // 滚动到目标索引的位置
                 const targetScrollTop = index * ROW_HEIGHT;
 
                 let scrollerInfo = '';
                 let actualScrollTop = 0;
+                let foundScrollContainer = null;  // 保存滚动容器供方法3复用
 
                 if (isPageMode) {
                     // page-mode:滚动整个页面或找到真正的滚动父容器
@@ -787,11 +789,19 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         const overflowY = style.overflowY;
                         if ((overflowY === 'auto' || overflowY === 'scroll') &&
                             scrollParent.scrollHeight > scrollParent.clientHeight) {
-                            scrollParent.scrollTop = targetScrollTop;
+                            // 计算最大可滚动位置
+                            const maxScrollTop = scrollParent.scrollHeight - scrollParent.clientHeight;
+                            // 如果目标位置接近或超过最大位置，直接滚动到最大位置
+                            // 这样可以确保最后几行能被渲染出来
+                            const effectiveScrollTop = targetScrollTop > maxScrollTop - ROW_HEIGHT
+                                ? maxScrollTop
+                                : targetScrollTop;
+                            scrollParent.scrollTop = effectiveScrollTop;
                             await new Promise(r => setTimeout(r, 500));
                             actualScrollTop = scrollParent.scrollTop;
                             scrollerInfo = `parent: ${scrollParent.className.split(' ')[0] || scrollParent.tagName}`;
                             foundScrollable = true;
+                            foundScrollContainer = scrollParent;  // 保存找到的容器
                             break;
                         }
                         scrollParent = scrollParent.parentElement;
@@ -802,6 +812,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         await new Promise(r => setTimeout(r, 500));
                         actualScrollTop = window.scrollY || document.documentElement.scrollTop;
                         scrollerInfo = 'window';
+                        foundScrollContainer = document.documentElement;  // 使用 documentElement
                     }
                 } else {
                     if (recycleScroller) {
@@ -809,53 +820,194 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         await new Promise(r => setTimeout(r, 500));
                         actualScrollTop = recycleScroller.scrollTop;
                         scrollerInfo = 'vue-recycle-scroller';
+                        foundScrollContainer = recycleScroller;
                     }
                 }
 
                 // 重新获取可见行(滚动后)
                 const visibleRows = getVisibleRows();
 
-                // 根据可见行推断索引的辅助函数
-                const inferRowIndex = (y) => Math.round(y / ROW_HEIGHT);
+                // ========== 新方法：从可见行的 translateY 推断索引 ==========
+                // 核心：每行的 translateY 值直接对应其全局索引
+                // 索引 = translateY / ROW_HEIGHT（考虑偏移量）
 
-                // 计算目标 translateY
+                // 检测 Y 偏移量（虚拟列表可能有固定偏移）
+                const minVisibleY = visibleRows.length > 0 ? Math.min(...visibleRows.map(r => r.y)) : 0;
+                const yOffset = minVisibleY % ROW_HEIGHT;
+
+                // 计算每个可见行的全局索引
+                const calcGlobalIndex = (y) => Math.round((y - yOffset) / ROW_HEIGHT);
+
+                // 找到第一个可见行的全局索引
+                const firstVisibleIndex = visibleRows.length > 0 ? calcGlobalIndex(visibleRows[0].y) : 0;
+
                 let targetRow = null;
-                let targetTranslateY = index * ROW_HEIGHT;
                 let matchedY = -1;
+                let matchMethod = '';
 
-                // 方法1: 基于Y坐标匹配(容差为行高的70%)
-                for (const item of visibleRows) {
-                    const diff = Math.abs(item.y - targetTranslateY);
-                    if (diff < ROW_HEIGHT * 0.7) {
-                        targetRow = item.row;
-                        matchedY = item.y;
+                // 调试信息
+                const debugInfo = visibleRows.map((r, i) => ({
+                    y: r.y,
+                    visibleIdx: i,
+                    globalIdx: calcGlobalIndex(r.y)
+                }));
+
+                // 方法1（首选）: 直接遍历可见行，找到全局索引匹配的行
+                for (let i = 0; i < visibleRows.length; i++) {
+                    const globalIdx = calcGlobalIndex(visibleRows[i].y);
+                    if (globalIdx === index) {
+                        targetRow = visibleRows[i].row;
+                        matchedY = visibleRows[i].y;
+                        matchMethod = `method1:globalIdx=${globalIdx},visiblePos=${i}`;
                         break;
                     }
                 }
 
-                // 方法2: 基于推断索引匹配
+                // 方法2（备用）: 基于相对位置（如果方法1失败）
                 if (!targetRow) {
-                    for (const item of visibleRows) {
-                        const inferredIdx = inferRowIndex(item.y);
-                        if (inferredIdx === index) {
-                            targetRow = item.row;
-                            matchedY = item.y;
-                            break;
+                    const relativeIndex = index - firstVisibleIndex;
+                    if (relativeIndex >= 0 && relativeIndex < visibleRows.length) {
+                        targetRow = visibleRows[relativeIndex].row;
+                        matchedY = visibleRows[relativeIndex].y;
+                        matchMethod = `method2:relativeIdx=${relativeIndex},firstVisible=${firstVisibleIndex}`;
+                    }
+                }
+
+                // 方法3: 如果目标行不在可见区域,尝试多滚动一点再匹配
+                if (!targetRow && visibleRows.length > 0 && foundScrollContainer) {
+                    // 计算需要额外滚动的距离
+                    const targetScrollPosition = index * ROW_HEIGHT;
+                    const extraScroll = targetScrollPosition - actualScrollTop + ROW_HEIGHT;
+
+                    if (extraScroll > 0) {
+                        const scrollBefore = foundScrollContainer.scrollTop || window.scrollY;
+
+                        // 尝试多种滚动方式确保生效
+                        if (foundScrollContainer === document.documentElement) {
+                            window.scrollBy(0, extraScroll);
+                        } else {
+                            foundScrollContainer.scrollTop += extraScroll;
+                        }
+                        window.scrollBy(0, extraScroll);
+                        await new Promise(r => setTimeout(r, 500));
+
+                        let scrollAfter = foundScrollContainer.scrollTop || window.scrollY;
+
+                        // 如果滚动没有变化，可能到达边界，尝试滚动到最大位置
+                        if (Math.abs(scrollAfter - scrollBefore) < 10) {
+                            const maxScrollTop = foundScrollContainer.scrollHeight - foundScrollContainer.clientHeight;
+                            if (foundScrollContainer === document.documentElement) {
+                                window.scrollTo({ top: maxScrollTop, behavior: 'instant' });
+                            } else {
+                                foundScrollContainer.scrollTop = maxScrollTop;
+                            }
+                            await new Promise(r => setTimeout(r, 300));
+                            scrollAfter = foundScrollContainer.scrollTop || window.scrollY;
+                        }
+
+                        const scrollAfterFinal = scrollAfter;
+
+                        // 重新获取可见行
+                        const newVisibleRows = getVisibleRows();
+                        const newVisibleYs = newVisibleRows.map(r => r.y);
+
+                        // 重新计算偏移量和索引函数
+                        const newMinVisibleY = newVisibleRows.length > 0 ? Math.min(...newVisibleRows.map(r => r.y)) : 0;
+                        const newYOffset = newMinVisibleY % ROW_HEIGHT;
+                        const newCalcGlobalIndex = (y) => Math.round((y - newYOffset) / ROW_HEIGHT);
+
+                        // 方法3a（首选）: 遍历可见行找到匹配的全局索引
+                        for (let i = 0; i < newVisibleRows.length; i++) {
+                            const globalIdx = newCalcGlobalIndex(newVisibleRows[i].y);
+                            if (globalIdx === index) {
+                                targetRow = newVisibleRows[i].row;
+                                matchedY = newVisibleRows[i].y;
+                                matchMethod = `method3a:globalIdx=${globalIdx},visiblePos=${i}`;
+                                scrollerInfo += ` (retry: extra=${extraScroll}, before=${scrollBefore}, after=${scrollAfterFinal})`;
+                                break;
+                            }
+                        }
+
+                        // 方法3b: 如果滚动没有变化（到达底部）且目标索引不在可见范围内
+                        // 检查是否是列表末尾的边界情况
+                        if (!targetRow && Math.abs(scrollAfterFinal - scrollBefore) < 10) {
+                            const globalIdxs = newVisibleRows.map(r => newCalcGlobalIndex(r.y));
+                            const maxGlobalIdx = Math.max(...globalIdxs);
+
+                            // 如果目标索引刚好在最大可见索引之后（差值在合理范围内）
+                            if (index > maxGlobalIdx && index <= maxGlobalIdx + 3) {
+                                // 策略：向上滚动一点，让虚拟列表渲染出更多行
+                                // 然后再滚动回来，此时末尾的行应该已经被渲染
+                                const scrollBackAmount = ROW_HEIGHT * 3;  // 向上滚动3行的距离
+                                const currentScroll = foundScrollContainer.scrollTop || window.scrollY;
+
+                                // 先向上滚动
+                                if (foundScrollContainer === document.documentElement) {
+                                    window.scrollTo({ top: Math.max(0, currentScroll - scrollBackAmount), behavior: 'instant' });
+                                } else {
+                                    foundScrollContainer.scrollTop = Math.max(0, currentScroll - scrollBackAmount);
+                                }
+                                await new Promise(r => setTimeout(r, 200));
+
+                                // 再滚动到最大位置
+                                const maxScrollTop = foundScrollContainer.scrollHeight - foundScrollContainer.clientHeight;
+                                if (foundScrollContainer === document.documentElement) {
+                                    window.scrollTo({ top: maxScrollTop, behavior: 'instant' });
+                                } else {
+                                    foundScrollContainer.scrollTop = maxScrollTop;
+                                }
+                                await new Promise(r => setTimeout(r, 300));
+
+                                // 重新获取可见行
+                                const boundaryRows = getVisibleRows();
+                                const boundaryMinY = boundaryRows.length > 0 ? Math.min(...boundaryRows.map(r => r.y)) : 0;
+                                const boundaryYOffset = boundaryMinY % ROW_HEIGHT;
+                                const calcBoundaryGlobalIndex = (y) => Math.round((y - boundaryYOffset) / ROW_HEIGHT);
+
+                                // 遍历查找目标索引
+                                for (let i = 0; i < boundaryRows.length; i++) {
+                                    const globalIdx = calcBoundaryGlobalIndex(boundaryRows[i].y);
+                                    if (globalIdx === index) {
+                                        targetRow = boundaryRows[i].row;
+                                        matchedY = boundaryRows[i].y;
+                                        matchMethod = `method3b:boundary,globalIdx=${globalIdx}`;
+                                        scrollerInfo += ` (boundary scroll: maxVisible=${maxGlobalIdx}, boundaryRows=${boundaryRows.length})`;
+                                        break;
+                                    }
+                                }
+
+                                // 如果还是找不到，记录详细信息
+                                if (!targetRow) {
+                                    const boundaryGlobalIdxs = boundaryRows.map(r => calcBoundaryGlobalIndex(r.y));
+                                    scrollerInfo += ` (boundary failed: targetIdx=${index}, boundaryIdxs=[${boundaryGlobalIdxs.join(',')}])`;
+                                }
+                            }
+                        }
+
+                        // 如果重试后仍然失败,添加调试信息
+                        if (!targetRow) {
+                            const globalIdxs = newVisibleRows.map(r => newCalcGlobalIndex(r.y));
+                            scrollerInfo += ` (retry failed: extra=${extraScroll}, before=${scrollBefore}, after=${scrollAfterFinal}, targetIdx=${index}, yOffset=${newYOffset}, globalIdxs=[${globalIdxs.join(',')}])`;
                         }
                     }
                 }
 
                 if (!targetRow) {
+                    const globalIdxs = visibleRows.map(r => calcGlobalIndex(r.y));
                     return {
                         success: false,
-                        error: `Target Y=${targetTranslateY} not found in visible rows`,
+                        error: `Target index=${index} not found in visible rows`,
                         scrollerInfo,
                         isPageMode,
                         targetScrollTop,
                         actualScrollTop,
+                        yOffset,
+                        firstVisibleIndex,
+                        visibleCount: visibleRows.length,
                         visibleYs: visibleRows.map(r => r.y),
-                        inferredIdxs: visibleRows.map(r => inferRowIndex(r.y)),
-                        detectedRowHeight: ROW_HEIGHT
+                        globalIdxs,
+                        detectedRowHeight: ROW_HEIGHT,
+                        hasScrollContainer: !!foundScrollContainer
                     };
                 }
 
@@ -889,6 +1041,11 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                             success: true,
                             scrollerInfo,
                             matchedY,
+                            matchMethod,
+                            yOffset,
+                            firstVisibleIndex,
+                            rowHeight: ROW_HEIGHT,
+                            debugRows: debugInfo.slice(0, 5),  // 前5行的调试信息
                             clickedSelector: checkbox.className || 'checkbox',
                         };
                     } catch (e) {
@@ -1081,8 +1238,13 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                 if target == "checkbox":
                     logger.success(
                         f"✓ JS 勾选成功,索引={index}, 容器={result.get('scrollerInfo')}, "
-                        f"匹配Y={result.get('matchedY')}"
+                        f"匹配Y={result.get('matchedY')}, 方法={result.get('matchMethod')}, "
+                        f"偏移={result.get('yOffset')}, 首可见索引={result.get('firstVisibleIndex')}"
                     )
+                    # 调试: 输出可见行信息
+                    debug_rows = result.get('debugRows', [])
+                    if debug_rows:
+                        logger.debug(f"  可见行(前5): {debug_rows}")
                 else:
                     logger.success(
                         f"✓ JS 点击认领按钮成功,索引={index}, 容器={result.get('scrollerInfo')}, "
@@ -1213,6 +1375,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
 
         success_count = 0
         fail_count = 0
+        waiter = PageWaiter(page)
 
         async def _wait_for_virtual_list_ready() -> bool:
             for _ in range(10):
@@ -1238,7 +1401,6 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
 
         for idx in indexes:
             logger.info(f"勾选索引 {idx} 的商品复选框...")
-            current_idx = idx
             selected = False
 
             for attempt in range(2):
@@ -1246,14 +1408,13 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                     await _wait_for_virtual_list_ready()
                 result = await self._click_claim_button_in_row_by_js(
                     page,
-                    current_idx,
+                    idx,  # 始终使用原始索引，不要重置
                     target="checkbox",
                 )
                 if result.get("success"):
                     selected = True
                     break
                 logger.warning(f"索引 {idx} 第 {attempt + 1} 次勾选失败: {result.get('error')}")
-                current_idx = 0
                 await waiter.wait_for_dom_stable(timeout_ms=300)
 
             if selected:
@@ -1954,6 +2115,9 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                 "progress": [".el-progress__text", ".el-progress-bar__outer"],
             },
         ]
+
+        # 提取所有进度选择器用于 _progress_completed 函数
+        progress_selectors = [".el-progress__text"]
 
         async def _dialog_locator() -> Locator | None:
             for selector in dialog_selectors:

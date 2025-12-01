@@ -1,6 +1,9 @@
 """
 @PURPOSE: Pytest 配置和通用 fixtures
 @OUTLINE:
+  - pytest_addoption: 添加命令行选项
+  - pytest_configure: 配置 pytest markers
+  - pytest_collection_modifyitems: 根据选项跳过测试
   - mock_auth_client: Mock 认证客户端,用于测试环境
 """
 
@@ -11,6 +14,50 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+
+# ============================================================================
+# pytest 配置函数
+# ============================================================================
+
+
+def pytest_addoption(parser: pytest.Parser) -> None:
+    """添加自定义命令行选项.
+
+    --run-metadata-check: 启用元信息协议检查测试
+    """
+    parser.addoption(
+        "--run-metadata-check",
+        action="store_true",
+        default=False,
+        help="运行元信息协议检查测试(@PURPOSE, @OUTLINE)",
+    )
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """配置 pytest markers."""
+    config.addinivalue_line(
+        "markers",
+        "metadata_check: 元信息协议检查测试(需要 --run-metadata-check 启用)",
+    )
+
+
+def pytest_collection_modifyitems(
+    config: pytest.Config, items: list[pytest.Item]
+) -> None:
+    """根据命令行选项跳过测试.
+
+    如果没有指定 --run-metadata-check,则跳过所有 metadata_check 标记的测试。
+    """
+    if not config.getoption("--run-metadata-check"):
+        skip_metadata = pytest.mark.skip(reason="需要 --run-metadata-check 参数启用")
+        for item in items:
+            if "metadata_check" in item.keywords:
+                item.add_marker(skip_metadata)
+
+
+# ============================================================================
+# 路径配置
+# ============================================================================
 
 # 添加 apps/temu-auto-publish 到路径
 APP_ROOT = Path(__file__).resolve().parents[1] / "apps" / "temu-auto-publish"

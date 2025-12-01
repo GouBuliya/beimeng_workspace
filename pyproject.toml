@@ -173,6 +173,9 @@ addopts = [
 ]
 testpaths = ["tests"]
 pythonpath = ["."]
+markers = [
+    "metadata_check: 元信息协议检查测试(需要 --run-metadata-check 启用)",
+]
 
 # Coverage 配置
 [tool.coverage.run]
