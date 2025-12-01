@@ -527,7 +527,6 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                             f"  [{i}] <{tag}> class='{classes[:50]}...' text='{text[:30]}'"
                         )
                 except Exception:
-
                     pass
         except Exception as e:
             logger.warning(f"🔍 Element inspection failed: {e}")

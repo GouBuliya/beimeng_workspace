@@ -821,9 +821,7 @@ class CompletePublishWorkflow:
                 )
                 if opened:
                     return True
-                logger.debug(
-                    "默认点击失败,尝试 Codegen 录制逻辑打开第 {} 个商品", absolute_idx + 1
-                )
+                logger.debug("默认点击失败,尝试 Codegen 录制逻辑打开第 {} 个商品", absolute_idx + 1)
                 return await open_edit_dialog_codegen(page, absolute_idx)
 
             errors: list[str] = []

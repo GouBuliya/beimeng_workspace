@@ -10,7 +10,6 @@
 @RELATED: test_env.py
 """
 
-
 from config.settings import settings
 from loguru import logger
 from src.data_processor.processor import DataProcessor

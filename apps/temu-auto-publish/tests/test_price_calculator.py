@@ -14,7 +14,6 @@
   - SOP v2.0规则:建议售价×10,供货价×7.5
 """
 
-
 from src.data_processor.price_calculator import PriceCalculator, PriceResult
 
 

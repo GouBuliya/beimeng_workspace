@@ -43,7 +43,9 @@ from src.browser.login_controller import LoginController
 from src.data_processor.product_data_reader import ProductDataReader
 
 
-async def test_batch_edit_with_excel(product_name: str | None = None, manual_pdf_path: str | None = None):
+async def test_batch_edit_with_excel(
+    product_name: str | None = None, manual_pdf_path: str | None = None
+):
     """
     测试批量编辑18步流程(集成Excel数据)
 

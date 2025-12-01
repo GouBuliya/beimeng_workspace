@@ -14,7 +14,6 @@
   - 支持本地密码模式(fallback)和远程认证模式
 """
 
-
 from __future__ import annotations
 
 import json

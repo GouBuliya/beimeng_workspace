@@ -10,7 +10,6 @@
   - 内部: src.data_processor.title_generator
 """
 
-
 from src.data_processor.title_generator import TitleGenerator
 
 

@@ -155,9 +155,12 @@ class DingTalkChannel(NotificationChannel):
             }
 
             # 发送请求
-            async with aiohttp.ClientSession() as session, session.post(
-                self.webhook_url, json=payload, timeout=aiohttp.ClientTimeout(total=10)
-            ) as response:
+            async with (
+                aiohttp.ClientSession() as session,
+                session.post(
+                    self.webhook_url, json=payload, timeout=aiohttp.ClientTimeout(total=10)
+                ) as response,
+            ):
                 if response.status == 200:
                     result = await response.json()
                     if result.get("errcode") == 0:
@@ -246,9 +249,12 @@ class WeComChannel(NotificationChannel):
             payload = {"msgtype": "markdown", "markdown": {"content": markdown_text}}
 
             # 发送请求
-            async with aiohttp.ClientSession() as session, session.post(
-                self.webhook_url, json=payload, timeout=aiohttp.ClientTimeout(total=10)
-            ) as response:
+            async with (
+                aiohttp.ClientSession() as session,
+                session.post(
+                    self.webhook_url, json=payload, timeout=aiohttp.ClientTimeout(total=10)
+                ) as response,
+            ):
                 if response.status == 200:
                     result = await response.json()
                     if result.get("errcode") == 0:
@@ -556,7 +562,6 @@ class NotificationService:
             duration = (end_dt - start_dt).total_seconds()
             duration_str = f"{int(duration // 60)}分{int(duration % 60)}秒"
         except Exception:
-
             duration_str = "未知"
 
         # 构建内容

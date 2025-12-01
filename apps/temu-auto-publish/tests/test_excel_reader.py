@@ -13,7 +13,6 @@
   - 内部: src.data_processor.excel_reader
 """
 
-
 import pytest
 from openpyxl import Workbook
 from src.data_processor.excel_reader import ExcelReader

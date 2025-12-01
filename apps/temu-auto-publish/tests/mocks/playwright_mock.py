@@ -9,7 +9,6 @@
   - 内部: browser_mock
 """
 
-
 from .browser_mock import MockPage
 
 

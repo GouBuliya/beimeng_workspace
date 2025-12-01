@@ -9,7 +9,6 @@
 @RELATED: complete_publish_workflow.py, collection_controller.py
 """
 
-
 from loguru import logger
 from playwright.async_api import Page
 from src.browser.collection_controller import CollectionController

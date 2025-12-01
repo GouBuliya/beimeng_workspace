@@ -47,9 +47,7 @@ console = Console()
 
 @workflow_app.command("run")
 def run(
-    products_file: Path | None = typer.Option(
-        None, "--products", "-p", help="产品数据文件(JSON)"
-    ),
+    products_file: Path | None = typer.Option(None, "--products", "-p", help="产品数据文件(JSON)"),
     config_file: Path | None = typer.Option(
         None, "--config", "-c", help="工作流配置文件(YAML/JSON)"
     ),
@@ -57,13 +55,9 @@ def run(
     enable_batch_edit: bool = typer.Option(
         True, "--batch-edit/--no-batch-edit", help="启用批量编辑"
     ),
-    enable_publish: bool = typer.Option(
-        False, "--publish/--no-publish", help="启用发布(默认关闭)"
-    ),
+    enable_publish: bool = typer.Option(False, "--publish/--no-publish", help="启用发布(默认关闭)"),
     shop_name: str | None = typer.Option(None, "--shop", help="店铺名称"),
-    staff_name: str | None = typer.Option(
-        None, "--staff", help="人员名称(用于筛选采集箱中的产品)"
-    ),
+    staff_name: str | None = typer.Option(None, "--staff", help="人员名称(用于筛选采集箱中的产品)"),
     use_ai_titles: bool = typer.Option(
         True, "--use-ai-titles/--no-ai-titles", help="是否使用AI生成产品标题(默认启用)"
     ),

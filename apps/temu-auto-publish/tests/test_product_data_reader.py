@@ -10,7 +10,6 @@
   - 内部: src.data_processor.product_data_reader
 """
 
-
 import pytest
 from src.data_processor.product_data_reader import ProductDataReader
 

@@ -156,9 +156,7 @@ class CollectionToEditWorkflow:
         logger.info(f"AI标题生成: {'启用' if self.use_ai_titles else '禁用'}")
         logger.info(f"采集验证: {'启用' if enable_validation else '禁用'}")
         logger.info(f"妙手插件: {'启用' if enable_plugin_collection else '禁用'}")
-        logger.info(
-            f"运行模式: {'简化模式(跳过Temu采集)' if skip_temu_collection else '完整模式'}"
-        )
+        logger.info(f"运行模式: {'简化模式(跳过Temu采集)' if skip_temu_collection else '完整模式'}")
         logger.info("=" * 100 + "\n")
 
         # 初始化结果
@@ -387,9 +385,7 @@ class CollectionToEditWorkflow:
             result["success"] = result["success_count"] > 0
 
             logger.info("=" * 80)
-            logger.success(
-                f"✓ 阶段1完成:成功采集 {result['success_count']}/{len(products)} 个产品"
-            )
+            logger.success(f"✓ 阶段1完成:成功采集 {result['success_count']}/{len(products)} 个产品")
             logger.info(f"  总链接数: {len(result['collected_links'])}")
             logger.info("=" * 80 + "\n")
 

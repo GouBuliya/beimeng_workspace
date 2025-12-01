@@ -27,7 +27,6 @@
 @RELATED: user_service.py, permission_manager.py, audit_logger.py
 """
 
-
 import bcrypt
 from pydantic import BaseModel
 

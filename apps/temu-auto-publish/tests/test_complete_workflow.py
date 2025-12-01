@@ -15,7 +15,6 @@
 @RELATED: five_to_twenty_workflow.py, complete_publish_workflow.py
 """
 
-
 import pytest
 from dotenv import load_dotenv
 from loguru import logger
@@ -261,7 +260,6 @@ def test_workflow_data_validation():
 
 # 运行测试的主函数
 if __name__ == "__main__":
-
     # 运行数据验证测试
     test_workflow_data_validation()
 

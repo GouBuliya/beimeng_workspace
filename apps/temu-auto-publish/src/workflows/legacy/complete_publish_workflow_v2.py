@@ -207,7 +207,6 @@ class CompletePublishWorkflow:
                 await all_tab.click()
                 await self.page.wait_for_timeout(1500)
             except Exception:
-
                 logger.warning("切换tab失败,继续...")
 
             # 3. 如果提供了用户名,进行筛选

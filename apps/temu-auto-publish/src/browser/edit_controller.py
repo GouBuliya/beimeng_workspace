@@ -140,7 +140,6 @@ class EditController:
                 screenshot_path = f"data/temp/screenshots/edit_error_{product.id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
                 await self.browser_manager.screenshot(screenshot_path)
             except Exception:
-
                 pass
 
         return result
@@ -352,7 +351,6 @@ class EditController:
                 await success_msg.wait_for(timeout=5000)
                 logger.success("✓ 保存成功提示已出现")
             except Exception:
-
                 logger.warning("⚠️ 未检测到成功提示,但可能已保存")
         else:
             logger.warning("⚠️ 未找到保存按钮")

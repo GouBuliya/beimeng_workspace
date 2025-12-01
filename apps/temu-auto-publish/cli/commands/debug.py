@@ -12,7 +12,6 @@
   - 外部: typer, rich
 """
 
-
 from datetime import datetime
 
 import typer

@@ -45,9 +45,7 @@ async def main():
         password = os.getenv("MIAOSHOU_PASSWORD")
 
         if not username or not password:
-            logger.error(
-                "❌ 未找到登录凭据,请设置 MIAOSHOU_USERNAME 和 MIAOSHOU_PASSWORD 环境变量"
-            )
+            logger.error("❌ 未找到登录凭据,请设置 MIAOSHOU_USERNAME 和 MIAOSHOU_PASSWORD 环境变量")
             return
 
         login_controller = LoginController()

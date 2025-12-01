@@ -97,9 +97,7 @@ def run(playwright: Playwright) -> None:
     page.get_by_role("group", name="产品视频 :").get_by_role("img").click()
     page.get_by_text("网络上传").click()
     page.get_by_text("网络上传").click()
-    page.get_by_role("textbox", name="输入视频URL地址,必须以“.文件格式后缀”结尾,建议上传").fill(
-        ""
-    )
+    page.get_by_role("textbox", name="输入视频URL地址,必须以“.文件格式后缀”结尾,建议上传").fill("")
     page.get_by_role("textbox", name="输入视频URL地址,必须以“.文件格式后缀”结尾,建议上传").press(
         "ControlOrMeta+a"
     )
@@ -156,9 +154,7 @@ def run(playwright: Playwright) -> None:
     page.locator(".video-wrap").click()
     page.get_by_text("网络上传").click()
     page.get_by_role("textbox", name="输入视频URL地址,必须以“.文件格式后缀”结尾,建议上传").click()
-    page.get_by_role("textbox", name="输入视频URL地址,必须以“.文件格式后缀”结尾,建议上传").fill(
-        "s"
-    )
+    page.get_by_role("textbox", name="输入视频URL地址,必须以“.文件格式后缀”结尾,建议上传").fill("s")
     page.get_by_role("button", name="确定").click()
     page.get_by_label("上传视频").get_by_role("button", name="取消").click()
     page.locator(".video-wrap").click()

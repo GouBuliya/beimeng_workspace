@@ -11,7 +11,6 @@
   - 内部: src.data_processor.selection_table_reader
 """
 
-
 import pandas as pd
 import pytest
 from src.data_processor.selection_table_reader import (

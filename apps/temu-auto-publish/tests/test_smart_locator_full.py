@@ -388,9 +388,7 @@ class TestSmartLocatorSelectOptionWithRetry:
         page = MagicMock()
         page.wait_for_timeout = AsyncMock()
         mock_element = create_mock_element(wait_for_succeeds=True)
-        mock_element.evaluate = AsyncMock(
-            return_value=[{"value": "option1", "label": "选项一"}]
-        )
+        mock_element.evaluate = AsyncMock(return_value=[{"value": "option1", "label": "选项一"}])
         page.locator = MagicMock(return_value=mock_element)
 
         locator = SmartLocator(page)

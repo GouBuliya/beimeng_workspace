@@ -341,11 +341,13 @@ class ProductionRunner:
             result: 工作流执行结果
         """
         # 1. 发送通知
-        if (self.config.get("notification", {}).get("triggers", {}).get("on_success") and result.get(
-            "success"
-        )) or (self.config.get("notification", {}).get("triggers", {}).get(
-            "on_failure"
-        ) and not result.get("success")):
+        if (
+            self.config.get("notification", {}).get("triggers", {}).get("on_success")
+            and result.get("success")
+        ) or (
+            self.config.get("notification", {}).get("triggers", {}).get("on_failure")
+            and not result.get("success")
+        ):
             await self._send_notification(result)
 
         # 2. 保存结果

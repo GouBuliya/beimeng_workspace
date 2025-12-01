@@ -178,9 +178,7 @@ class TestWorkflowExecutor:
 
         mock_page = MagicMock()
 
-        await executor.execute(
-            workflow_func=multi_stage_workflow, page=mock_page, config={}
-        )
+        await executor.execute(workflow_func=multi_stage_workflow, page=mock_page, config={})
 
         assert len(stage_results) == 2
         assert "stage1" in stage_results

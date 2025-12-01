@@ -303,7 +303,6 @@ async def fallback_switch_tab(page: Page, tab_name: str) -> bool:
                 if text.strip():
                     logger.warning(f"  Button[{i}]: {text.strip()}")
             except Exception:
-
                 pass
 
         all_tabs = await page.locator(
@@ -316,7 +315,6 @@ async def fallback_switch_tab(page: Page, tab_name: str) -> bool:
                 classes = await tab.get_attribute("class")
                 logger.warning(f"  Tab[{i}]: text='{text.strip()}' class='{classes}'")
             except Exception:
-
                 pass
     except Exception as e:
         logger.warning(f"Debug info collection failed: {e}")

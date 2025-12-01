@@ -17,7 +17,6 @@
   - 2025-11-01: 初始创建,实现完整数据转换功能
 """
 
-
 from loguru import logger
 from src.data_processor.selection_table_reader import ProductSelectionRow
 

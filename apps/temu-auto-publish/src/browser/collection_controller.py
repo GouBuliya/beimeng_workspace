@@ -191,9 +191,7 @@ class CollectionController:
             logger.error("Temu Cookie 注入失败: {}", exc)
             return False
 
-    async def search_products(
-        self, page: Page, keyword: str, filters: dict | None = None
-    ) -> bool:
+    async def search_products(self, page: Page, keyword: str, filters: dict | None = None) -> bool:
         """站内搜索同款商品(SOP步骤2).
 
         根据选品表的关键词,在Temu前端搜索同款商品.
@@ -335,21 +333,18 @@ class CollectionController:
                     try:
                         title = await card.locator(product_title_selector).first.inner_text()
                     except Exception:
-
                         title = "未获取到标题"
 
                     # 获取价格
                     try:
                         price = await card.locator(product_price_selector).first.inner_text()
                     except Exception:
-
                         price = "未获取到价格"
 
                     # 获取图片
                     try:
                         image = await card.locator("img").first.get_attribute("src") or ""
                     except Exception:
-
                         image = ""
 
                     product_info = {
@@ -516,7 +511,6 @@ class CollectionController:
                                             )
                                             break
                                 except Exception:
-
                                     continue
 
                             if plugin_found:
@@ -554,7 +548,6 @@ class CollectionController:
                                 logger.success("    ✓ 检测到采集成功提示")
                                 break
                         except Exception:
-
                             continue
 
                     # 即使没有明确的成功提示,如果点击成功也认为采集成功

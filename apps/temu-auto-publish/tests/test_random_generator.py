@@ -13,7 +13,6 @@
   - 内部: src.data_processor.random_generator
 """
 
-
 from src.data_processor.random_generator import RandomDataGenerator
 
 

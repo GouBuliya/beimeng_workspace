@@ -118,7 +118,6 @@ class SearchController:
                 screenshot_path = f"data/temp/screenshots/search_error_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
                 await self.browser_manager.screenshot(screenshot_path)
             except Exception:
-
                 pass
 
         return result
@@ -175,7 +174,6 @@ class SearchController:
         try:
             await search_button.click()
         except Exception:
-
             # 如果没有搜索按钮,尝试按回车
             await search_input.press("Enter")
 

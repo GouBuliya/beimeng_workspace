@@ -436,7 +436,6 @@ class BatchEditController:
                         logger.success("✓ 主货号步骤完成(预览+保存)")
                         return True
                 except Exception:
-
                     continue
 
             logger.success("✓ 主货号步骤完成(预览+保存)")
@@ -544,7 +543,6 @@ class BatchEditController:
                         logger.success("✓ 定制品步骤完成(预览+保存)")
                         return True
                 except Exception:
-
                     continue
 
             logger.success("✓ 定制品步骤完成(预览+保存)")
@@ -599,7 +597,6 @@ class BatchEditController:
                         logger.success("✓ 敏感属性步骤完成(预览+保存)")
                         return True
                 except Exception:
-
                     continue
 
             logger.success("✓ 敏感属性步骤完成(预览+保存)")
@@ -850,7 +847,6 @@ class BatchEditController:
                         logger.success("✓ 包装清单步骤完成(预览+保存)")
                         return True
                 except Exception:
-
                     continue
 
             logger.success("✓ 包装清单步骤完成(预览+保存)")
