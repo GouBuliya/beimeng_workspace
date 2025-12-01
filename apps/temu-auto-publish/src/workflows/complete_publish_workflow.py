@@ -372,12 +372,15 @@ class CompletePublishWorkflow:
         cleanup_errors: list[str] = []
         workflow_failed = errors or any(not stage.success for stage in stages)
 
-        # 1. 停止稳定性组件
-        try:
-            await self._cleanup_stability_components()
-        except Exception as e:
-            cleanup_errors.append(f"稳定性组件清理: {e}")
-            logger.warning(f"[SafeCleanup] 稳定性组件清理失败: {e}")
+        # 1. 停止稳定性组件(复用登录时跳过,由最后一个批次清理)
+        if self._close_browser_on_complete:
+            try:
+                await self._cleanup_stability_components()
+            except Exception as e:
+                cleanup_errors.append(f"稳定性组件清理: {e}")
+                logger.warning(f"[SafeCleanup] 稳定性组件清理失败: {e}")
+        else:
+            logger.debug("[SafeCleanup] 跳过稳定性组件清理(浏览器保持打开)")
 
         # 2. 保存最终状态（性能追踪）
         try:
@@ -516,6 +519,11 @@ class CompletePublishWorkflow:
             browser_manager: 浏览器管理器实例
             login_controller: 登录控制器实例
         """
+        # 复用登录时跳过稳定性组件初始化(避免重复创建后台任务)
+        if not self._close_browser_on_complete:
+            logger.debug("[Stability] 跳过稳定性组件初始化(复用登录模式)")
+            return
+
         # 1. 初始化资源管理器
         resource_cfg = self.settings.resource
         self._resource_manager = ResourceManager(
@@ -743,8 +751,9 @@ class CompletePublishWorkflow:
             if not login_success:
                 raise RuntimeError("登录ERP失败, 请检查账户或 Cookie")
 
-            # 关闭登录后弹窗
-            await login_ctrl.dismiss_login_overlays()
+            # 关闭登录后弹窗(已登录时跳过,避免阻塞)
+            if not already_logged_in:
+                await login_ctrl.dismiss_login_overlays()
 
             # 初始化页面
             page = login_ctrl.browser_manager.page
@@ -752,10 +761,13 @@ class CompletePublishWorkflow:
                 raise RuntimeError("Playwright page 未初始化")
 
             # 初始化稳定性组件(登录成功后)
+            # 复用登录时仍然需要初始化(因为每个工作流实例是独立的)
+            logger.debug("初始化稳定性组件...")
             await self._init_stability_components(
                 browser_manager=login_ctrl.browser_manager,
                 login_controller=login_ctrl,
             )
+            logger.debug("稳定性组件初始化完成")
 
             if self.only_stage4_publish:
                 # 跳转 Temu 采集箱页面(仅发布)
