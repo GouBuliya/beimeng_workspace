@@ -206,7 +206,8 @@ class CompletePublishWorkflow:
                 all_tab = self.page.locator(".jx-radio-button:has-text('全部')").first
                 await all_tab.click()
                 await self.page.wait_for_timeout(1500)
-            except:
+            except Exception:
+
                 logger.warning("切换tab失败,继续...")
 
             # 3. 如果提供了用户名,进行筛选

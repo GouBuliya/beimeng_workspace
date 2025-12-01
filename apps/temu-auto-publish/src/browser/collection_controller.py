@@ -334,19 +334,22 @@ class CollectionController:
                     # 获取标题
                     try:
                         title = await card.locator(product_title_selector).first.inner_text()
-                    except:
+                    except Exception:
+
                         title = "未获取到标题"
 
                     # 获取价格
                     try:
                         price = await card.locator(product_price_selector).first.inner_text()
-                    except:
+                    except Exception:
+
                         price = "未获取到价格"
 
                     # 获取图片
                     try:
                         image = await card.locator("img").first.get_attribute("src") or ""
-                    except:
+                    except Exception:
+
                         image = ""
 
                     product_info = {
@@ -512,7 +515,8 @@ class CollectionController:
                                                 f"    ✓ 找到妙手插件按钮(iframe): {selector}"
                                             )
                                             break
-                                except:
+                                except Exception:
+
                                     continue
 
                             if plugin_found:
@@ -549,7 +553,8 @@ class CollectionController:
                                 success_detected = True
                                 logger.success("    ✓ 检测到采集成功提示")
                                 break
-                        except:
+                        except Exception:
+
                             continue
 
                     # 即使没有明确的成功提示,如果点击成功也认为采集成功

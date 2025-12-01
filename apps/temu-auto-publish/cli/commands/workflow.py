@@ -99,7 +99,7 @@ def run(
             console.print(f"[green]✓[/green] 已加载产品数据: {len(products)} 个产品")
         except Exception as e:
             console.print(f"[red]✗[/red] 加载产品数据失败: {e}")
-            raise typer.Exit(1)
+            raise typer.Exit(1) from None
     else:
         # 使用默认演示数据
         products = [
@@ -133,7 +133,7 @@ def run(
             console.print(f"[green]✓[/green] 已加载配置文件: {config_file.name}")
         except Exception as e:
             console.print(f"[red]✗[/red] 加载配置失败: {e}")
-            raise typer.Exit(1)
+            raise typer.Exit(1) from None
 
     # 获取登录凭证
     username = os.getenv("MIAOSHOU_USERNAME") or os.getenv("TEMU_USERNAME")
@@ -144,7 +144,7 @@ def run(
         console.print("  请设置环境变量或在 .env 文件中配置:")
         console.print("  - MIAOSHOU_USERNAME / TEMU_USERNAME")
         console.print("  - MIAOSHOU_PASSWORD / TEMU_PASSWORD")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     console.print(f"[green]✓[/green] 登录账号: {username}")
 
@@ -204,7 +204,7 @@ def run(
 
     # 退出码
     if not result["success"]:
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 @workflow_app.command("resume")
@@ -222,7 +222,7 @@ def resume(
 
     if not state_file.exists():
         console.print(f"[red]✗[/red] 状态文件不存在: {state_file}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     console.print(f"[green]✓[/green] 加载状态文件: {state_file.name}")
 
@@ -306,7 +306,7 @@ def workflow_status(
 
     if not state_files:
         console.print(f"[red]✗[/red] 未找到工作流: {workflow_id}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     state_file = state_files[0]
     state_data = json.loads(state_file.read_text(encoding="utf-8"))

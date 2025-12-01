@@ -115,10 +115,15 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]  # 允许未使用的导入
 "tests/*.py" = ["RUF059", "E402"]  # 测试中允许未使用的变量和非顶部导入
+"**/test_*.py" = ["B007", "E402"]  # 测试文件允许循环变量未使用和非顶部导入
+"**/conftest.py" = ["E402", "F401"]  # pytest配置文件
 "**/cli/commands/*.py" = ["E402"]  # CLI命令允许非顶部导入(需要先加载环境变量)
+"**/cli/main.py" = ["E402"]  # CLI主文件允许非顶部导入
 "**/service.py" = ["RUF059"]  # service 文件允许未使用的变量
-"**/test_*.py" = ["B007"]  # 测试文件允许循环变量未使用
 "**/examples/*.py" = ["E402"]  # 示例文件允许非顶部导入
+"**/scripts/*.py" = ["E402"]  # 脚本文件允许非顶部导入
+"**/demo_*.py" = ["E402"]  # 演示文件允许非顶部导入
+"**/run_*.py" = ["E402"]  # 运行脚本允许非顶部导入
 
 [tool.ruff.format]
 quote-style = "double"

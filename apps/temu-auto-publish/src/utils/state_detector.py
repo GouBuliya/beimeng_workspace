@@ -116,7 +116,8 @@ class StateDetector:
                 "button:has-text('登录'), button:has-text('立即登录')"
             ).count()
             return login_btn_count > 0
-        except:
+        except Exception:
+
             return False
 
     async def is_home_page(self, page: Page) -> bool:
@@ -131,7 +132,8 @@ class StateDetector:
         try:
             url = page.url
             return "welcome" in url or url.endswith("91miaoshou.com/")
-        except:
+        except Exception:
+
             return False
 
     async def is_collection_box(self, page: Page) -> bool:
@@ -151,7 +153,8 @@ class StateDetector:
             # 确认页面加载完成(检查tab是否存在)
             tab_count = await page.locator(".jx-radio-button:has-text('全部'), text='全部'").count()
             return tab_count > 0
-        except:
+        except Exception:
+
             return False
 
     async def is_edit_dialog_open(self, page: Page) -> bool:
@@ -183,7 +186,8 @@ class StateDetector:
                     return True
 
             return False
-        except:
+        except Exception:
+
             return False
 
     async def is_batch_edit_page(self, page: Page) -> bool:
@@ -198,7 +202,8 @@ class StateDetector:
         try:
             url = page.url
             return "batch_edit" in url or "认领到" in await page.content()
-        except:
+        except Exception:
+
             return False
 
     async def is_publish_page(self, page: Page) -> bool:
@@ -213,7 +218,8 @@ class StateDetector:
         try:
             url = page.url
             return "publish" in url or "发布" in url
-        except:
+        except Exception:
+
             return False
 
     async def close_any_dialog(self, page: Page) -> bool:
@@ -252,14 +258,16 @@ class StateDetector:
                             await page.locator(selector).nth(i).click(timeout=2000)
                             closed_count += 1
                             await page.wait_for_timeout(500)
-                except:
+                except Exception:
+
                     continue
 
             # 按ESC键作为最后的尝试
             try:
                 await page.keyboard.press("Escape")
                 await page.wait_for_timeout(500)
-            except:
+            except Exception:
+
                 pass
 
             # 验证是否关闭

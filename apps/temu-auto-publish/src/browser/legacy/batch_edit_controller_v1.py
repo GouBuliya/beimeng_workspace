@@ -435,7 +435,8 @@ class BatchEditController:
                     if await page.locator(indicator).count() > 0:
                         logger.success("✓ 主货号步骤完成(预览+保存)")
                         return True
-                except:
+                except Exception:
+
                     continue
 
             logger.success("✓ 主货号步骤完成(预览+保存)")
@@ -542,7 +543,8 @@ class BatchEditController:
                     if await page.locator(indicator).count() > 0:
                         logger.success("✓ 定制品步骤完成(预览+保存)")
                         return True
-                except:
+                except Exception:
+
                     continue
 
             logger.success("✓ 定制品步骤完成(预览+保存)")
@@ -596,7 +598,8 @@ class BatchEditController:
                     if await page.locator(indicator).count() > 0:
                         logger.success("✓ 敏感属性步骤完成(预览+保存)")
                         return True
-                except:
+                except Exception:
+
                     continue
 
             logger.success("✓ 敏感属性步骤完成(预览+保存)")
@@ -846,7 +849,8 @@ class BatchEditController:
                     if await page.locator(indicator).count() > 0:
                         logger.success("✓ 包装清单步骤完成(预览+保存)")
                         return True
-                except:
+                except Exception:
+
                     continue
 
             logger.success("✓ 包装清单步骤完成(预览+保存)")

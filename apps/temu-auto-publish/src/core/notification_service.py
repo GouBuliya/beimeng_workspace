@@ -555,7 +555,8 @@ class NotificationService:
             end_dt = datetime.fromisoformat(result.end_time)
             duration = (end_dt - start_dt).total_seconds()
             duration_str = f"{int(duration // 60)}分{int(duration % 60)}秒"
-        except:
+        except Exception:
+
             duration_str = "未知"
 
         # 构建内容

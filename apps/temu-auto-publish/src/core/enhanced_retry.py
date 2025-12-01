@@ -380,7 +380,7 @@ class EnhancedRetryHandler:
 
                 await asyncio.sleep(delay)
 
-        # 所有重试都失败（检查是否因状态检查提前终止）
+        # 所有重试都失败(检查是否因状态检查提前终止)
         if result.outcome not in (RetryOutcome.STATE_CHECK_FAILED, RetryOutcome.SUCCESS):
             result.outcome = RetryOutcome.EXHAUSTED
             result.end_time = result.end_time or datetime.now().isoformat()
