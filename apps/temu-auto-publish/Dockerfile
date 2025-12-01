@@ -14,17 +14,18 @@ FROM mcr.microsoft.com/playwright/python:v1.49.0-noble AS builder
 
 WORKDIR /build
 
-# 安装构建工具
+# 安装构建工具和 Python venv
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     g++ \
+    python3-venv \
     && rm -rf /var/lib/apt/lists/*
 
 # 复制依赖文件
 COPY requirements.txt .
 
 # 创建虚拟环境并安装依赖
-RUN python -m venv /opt/venv
+RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
     pip install --no-cache-dir -r requirements.txt
