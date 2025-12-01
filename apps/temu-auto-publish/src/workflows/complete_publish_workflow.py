@@ -283,7 +283,8 @@ class CompletePublishWorkflow:
         # 24 小时稳定运行配置
         self._auto_recovery_enabled = True
         self._max_stage_retries = 3
-        self._close_browser_on_complete = True  # 工作流完成后立即关闭浏览器
+        # 当复用登录控制器时,不关闭浏览器,保持浏览器打开供下次运行使用
+        self._close_browser_on_complete = not (reuse_existing_login and login_ctrl is not None)
 
     def execute(self) -> WorkflowExecutionResult:
         """????, ?? asyncio ??."""
