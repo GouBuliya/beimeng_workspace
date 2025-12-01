@@ -107,6 +107,8 @@ class WorkflowTaskManager:
         self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="temu-web")
         self._future: Future | None = None
         self._log_sink_id: int | None = None
+        # 全局复用的登录控制器,避免每次任务都重新登录
+        self._login_ctrl: LoginController | None = None
 
     def start(self, options: WorkflowOptions) -> RunStatus:
         """启动新的工作流运行."""
@@ -162,10 +164,15 @@ class WorkflowTaskManager:
                 logger.warning(f"导出选择器命中报告失败: {exc}")
 
     def _run_single(self, options: WorkflowOptions) -> None:
+        # 复用全局登录控制器,避免重复登录
+        if self._login_ctrl is None:
+            self._login_ctrl = LoginController()
+
         # 单次运行时使用配置的起始轮次
         result = self._execute_workflow(
             options,
             execution_round=options.start_round,
+            login_ctrl=self._login_ctrl,
         )
         self._mark_success(
             workflow_id=result.workflow_id,
@@ -179,8 +186,9 @@ class WorkflowTaskManager:
         # 起始轮次偏移:支持从指定轮次开始(模拟已运行次数)
         start_round_offset = max(0, options.start_round - 1)
         last_workflow_id: str | None = None
-        # 在循环外部创建 LoginController,复用同一个浏览器实例
-        login_ctrl = LoginController()
+        # 复用全局登录控制器,避免重复登录
+        if self._login_ctrl is None:
+            self._login_ctrl = LoginController()
 
         if start_round_offset > 0:
             logger.info(
@@ -221,7 +229,7 @@ class WorkflowTaskManager:
                     options,
                     selection_rows_override=batch.rows,
                     execution_round=actual_round,
-                    login_ctrl=login_ctrl,
+                    login_ctrl=self._login_ctrl,
                 )
             except Exception:
                 queue.return_batch(batch.rows)
@@ -253,6 +261,8 @@ class WorkflowTaskManager:
             workflow_kwargs["execution_round"] = execution_round
         if login_ctrl is not None:
             workflow_kwargs["login_ctrl"] = login_ctrl
+            # 复用登录控制器时,启用登录状态复用(第一次登录后后续流程不再重复登录)
+            workflow_kwargs["reuse_existing_login"] = True
         workflow = CompletePublishWorkflow(**workflow_kwargs)
         return workflow.execute()
 
