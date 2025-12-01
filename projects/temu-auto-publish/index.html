@@ -1,0 +1,1824 @@
+
+<!doctype html>
+<html lang="zh" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="AI-Friendly Python Monorepo 文档">
+      
+      
+        <meta name="author" content="Beimeng Team">
+      
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.0">
+    
+    
+      
+        <title>Temu商品发布自动化项目实施方案 - Beimeng Workspace</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.618322db.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#temu" class="md-skip">
+          跳转至
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="页眉">
+    <a href="../.." title="Beimeng Workspace" class="md-header__button md-logo" aria-label="Beimeng Workspace" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Beimeng Workspace
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Temu商品发布自动化项目实施方案
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="切换到暗色模式"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="切换到暗色模式" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="切换到亮色模式"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="切换到亮色模式" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="搜索" placeholder="搜索" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="查找">
+        
+        <button type="reset" class="md-search__icon md-icon" title="清空当前内容" aria-label="清空当前内容" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            正在初始化搜索引擎
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/your-org/beimeng_workspace" title="前往仓库" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    beimeng_workspace
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="标签" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  首页
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../guides/installation.md" class="md-tabs__link">
+          
+  
+  
+  快速开始
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../architecture/structure/" class="md-tabs__link">
+          
+  
+  
+  架构
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../guides/creating-apps.md" class="md-tabs__link">
+          
+  
+  
+  指南
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../api/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  API 文档
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="导航栏" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Beimeng Workspace" class="md-nav__button md-logo" aria-label="Beimeng Workspace" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Beimeng Workspace
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/your-org/beimeng_workspace" title="前往仓库" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    beimeng_workspace
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    首页
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    快速开始
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    快速开始
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/installation.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    安装
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/quickstart/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    快速上手
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    架构
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    架构
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/structure/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    项目结构
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/ai-mechanisms.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AI Agent 机制
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/conventions.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    开发规范
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    指南
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    指南
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/creating-apps.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    创建应用
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/creating-scripts.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    创建脚本
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/documentation.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    编写文档
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/ai-development/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AI Agent 开发
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API 文档
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="目录">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      目录
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        技术方案确定
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="技术方案确定">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        选型理由
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        架构设计
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        实施计划
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="实施计划">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#phase-1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 1: 基础架构（已完成 ✅）
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Phase 1: 基础架构（已完成 ✅）">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ✅ 环境和项目结构
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ✅ 数据处理层
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_7" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ✅ 浏览器自动化基础
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#phase-2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 2: 核心业务流程（进行中 🚧）
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Phase 2: 核心业务流程（进行中 🚧）">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#day-1-3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🚧 Day 1-3：调整页面选择器
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#day-4-6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🚧 Day 4-6：完善搜索采集流程
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#day-7-10" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🚧 Day 7-10：完善编辑流程
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#day-11-12" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        📅 Day 11-12：批量发布
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#day-13-14" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        📅 Day 13-14：流程编排和优化
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#phase-3-3-5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 3: 测试和优化（3-5天）
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Phase 3: 测试和优化（3-5天）">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#day-15-17" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        📅 Day 15-17：完整测试
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#day-18-19" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        📅 Day 18-19：问题修复和优化
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#day-20" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        📅 Day 20：文档和交付
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_8" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        风险与应对
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="风险与应对">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#_9" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        技术风险
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="技术风险">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. 网站反爬虫机制
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. 页面元素变化
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. 图片验证困难
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. 验证码和登录问题
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. 性能和稳定性
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_10" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        技术栈详情
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="技术栈详情">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#_11" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        核心技术
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_12" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        数据处理
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_13" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        开发工具
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_14" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        优势
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_15" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        后续优化方向
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="后续优化方向">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#phase-4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 4: 功能增强（可选）
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Phase 4: 功能增强（可选）">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. 智能化升级
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. 性能优化
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. 用户体验
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. 企业级功能
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. 生态集成
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_16" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        项目价值
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="项目价值">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#_17" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        效率提升
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_18" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        成本优势
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_19" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        技术优势
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="temu">Temu商品发布自动化项目实施方案</h1>
+<p><strong>编制日期</strong>：2025年10月25日<br />
+<strong>更新日期</strong>：2025年10月30日 - 架构已更新为纯 Playwright 实现<br />
+<strong>预计工期</strong>：1-2个月（可根据实际调整）</p>
+<h2 id="_1">技术方案确定</h2>
+<p>经过对比 Playwright 纯代码、n8n 工作流、影刀 RPA 三种方案，<strong>最终选择纯 Playwright + Python 架构</strong>：</p>
+<h3 id="_2">选型理由</h3>
+<ul>
+<li>✅ <strong>纯代码实现</strong>：完全可控，无外部 RPA 工具依赖</li>
+<li>✅ <strong>异步高效</strong>：使用 Python asyncio 和 Playwright 异步 API</li>
+<li>✅ <strong>反检测能力强</strong>：集成 playwright-stealth</li>
+<li>✅ <strong>易于调试和维护</strong>：完整的日志和截图功能</li>
+<li>✅ <strong>工程化</strong>：符合 SOTA 模式，可长期维护</li>
+<li>✅ <strong>免费开源</strong>：无商业软件授权费用</li>
+</ul>
+<h3 id="_3">架构设计</h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>选品表(Excel) → Python读取处理 → 生成任务数据(JSON) 
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>                                        ↓
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>             Playwright 浏览器自动化 ← Python 异步控制
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>                          ↓
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>                   结果记录(JSON) → 数据统计
+</code></pre></div>
+<h2 id="_4">实施计划</h2>
+<h3 id="phase-1">Phase 1: 基础架构（已完成 ✅）</h3>
+<p><strong>目标</strong>：搭建完整的技术基础和数据处理层</p>
+<h4 id="_5">✅ 环境和项目结构</h4>
+<ul>
+<li>Python 3.12 开发环境</li>
+<li>Playwright 安装和配置</li>
+<li>playwright-stealth 反检测集成</li>
+<li>项目结构初始化（符合工作区规范）</li>
+</ul>
+<h4 id="_6">✅ 数据处理层</h4>
+<ul>
+<li>Excel 读取器（pandas + openpyxl）</li>
+<li>价格计算器（建议售价 = 成本 × 7.5，供货价 = 成本 × 10）</li>
+<li>AI 标题生成器（支持多种模式）</li>
+<li>Pydantic 数据模型（ProductInput, TaskProduct, TaskData）</li>
+<li>完整的类型提示和数据验证</li>
+</ul>
+<h4 id="_7">✅ 浏览器自动化基础</h4>
+<ul>
+<li>BrowserManager：浏览器管理、反检测、Cookie</li>
+<li>LoginController：异步登录、Cookie 复用</li>
+<li>完整的错误处理和截图功能</li>
+<li>日志系统（Loguru）</li>
+</ul>
+<p><strong>Phase 1 验收</strong>：✅ 数据处理层和浏览器基础框架完成</p>
+<hr />
+<h3 id="phase-2">Phase 2: 核心业务流程（进行中 🚧）</h3>
+<p><strong>目标</strong>：实现搜索、编辑、发布的完整业务逻辑</p>
+<h4 id="day-1-3">🚧 Day 1-3：调整页面选择器</h4>
+<p>使用 Playwright codegen 工具获取实际选择器：
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>uv<span class="w"> </span>run<span class="w"> </span>playwright<span class="w"> </span>codegen<span class="w"> </span>https://seller.temu.com
+</code></pre></div></p>
+<p><strong>需要调整的控制器</strong>：
+- <strong>SearchController</strong>: 搜索输入框、商品列表项、分页等
+- <strong>EditController</strong>: 认领按钮、标题输入、类目选择、价格输入等
+- <strong>LoginController</strong>: 微调登录相关选择器（如需要）</p>
+<p><strong>注意事项</strong>：
+- 使用多种定位策略（text、role、data-testid等）
+- 添加 fallback 选择器
+- 考虑页面加载时机（networkidle、domcontentloaded）</p>
+<h4 id="day-4-6">🚧 Day 4-6：完善搜索采集流程</h4>
+<p>基于实际页面结构完善 SearchController：
+- 导航到搜索页面
+- 输入关键词并触发搜索
+- 等待结果加载（处理动态渲染）
+- 提取商品信息（标题、价格、链接）
+- 添加随机延迟（1-3秒）
+- 错误处理和重试机制</p>
+<p><strong>难点</strong>：
+- 商品筛选逻辑
+- 动态加载内容的等待
+- 去重处理</p>
+<h4 id="day-7-10">🚧 Day 7-10：完善编辑流程</h4>
+<p>基于实际页面结构完善 EditController：</p>
+<p><strong>首次编辑</strong>（5条→20条）：
+- 打开采集的商品链接
+- 点击认领按钮 4 次
+- 修改标题（中文 + 触发英文AI生成）
+- 选择类目（可能需要处理树形结构）
+- 保存并验证</p>
+<p><strong>批量编辑18步</strong>：
+1. ✅ 标题（已在首次编辑完成）
+2. 类目属性（参考采集链接，需要复杂逻辑）
+3. 主货号（跳过）
+4. 外包装（长方体/硬包装）
+5. 产地（浙江）
+6-7. 定制品、敏感属性（跳过）
+8. 重量（5000-9999G 随机）
+9. 尺寸（50-99cm，长&gt;宽&gt;高）
+10. 平台SKU（自定义编码）
+11. SKU分类（组合装500件）
+12. 尺码表（跳过）
+13. ✅ 建议售价（已实现基础版）
+14-16. 包装清单、轮播图、颜色图（跳过）
+17. 产品说明书（上传文件）
+18. 保存并验证</p>
+<p><strong>注意事项</strong>：
+- 每步之间添加随机延迟
+- 详细的错误日志
+- 关键步骤截图
+- 支持断点续传</p>
+<h4 id="day-11-12">📅 Day 11-12：批量发布</h4>
+<p>实现 PublishController：
+- 选择目标店铺
+- 设置供货价
+- 批量发布操作（点击2次，共40条）
+- 抓取发布结果
+- 统计成功/失败数量
+- 失败原因分析</p>
+<h4 id="day-13-14">📅 Day 13-14：流程编排和优化</h4>
+<ul>
+<li>主程序串联所有流程</li>
+<li>实现智能重试机制（指数退避）</li>
+<li>断点续传功能</li>
+<li>并发支持（可选）</li>
+<li>性能监控和统计</li>
+</ul>
+<p><strong>Phase 2 验收</strong>：能够自动完成从选品表到发布的完整流程</p>
+<hr />
+<h3 id="phase-3-3-5">Phase 3: 测试和优化（3-5天）</h3>
+<p><strong>目标</strong>：确保系统稳定可靠</p>
+<h4 id="day-15-17">📅 Day 15-17：完整测试</h4>
+<ul>
+<li><strong>功能测试</strong>：至少 3 种不同类型的产品</li>
+<li><strong>稳定性测试</strong>：连续处理 10+ 产品无崩溃</li>
+<li><strong>性能测试</strong>：单个产品处理时间</li>
+<li><strong>错误率统计</strong>：目标 &lt; 20%</li>
+</ul>
+<p><strong>测试场景</strong>：
+1. 简单类目商品（如电子产品）
+2. 复杂类目商品（多级分类）
+3. 特殊情况（无货源、价格异常等）</p>
+<h4 id="day-18-19">📅 Day 18-19：问题修复和优化</h4>
+<ul>
+<li>根据测试结果修复 bug</li>
+<li>优化选择器稳定性</li>
+<li>调整延迟时间</li>
+<li>完善错误处理</li>
+</ul>
+<h4 id="day-20">📅 Day 20：文档和交付</h4>
+<ul>
+<li>更新使用说明文档</li>
+<li>常见问题 FAQ</li>
+<li>部署指南</li>
+<li>代码注释检查</li>
+</ul>
+<p><strong>Phase 3 验收</strong>：系统稳定运行，错误率在可接受范围内</p>
+<hr />
+<h2 id="_8">风险与应对</h2>
+<h3 id="_9">技术风险</h3>
+<h4 id="1">1. 网站反爬虫机制</h4>
+<ul>
+<li><strong>风险等级</strong>：中</li>
+<li><strong>应对措施</strong>：</li>
+<li>✅ 已集成 playwright-stealth 反检测</li>
+<li>✅ 每步添加随机延迟（1-3秒）</li>
+<li>✅ 使用真实浏览器环境（Chromium）</li>
+<li>✅ Cookie 管理减少重复登录</li>
+<li>控制操作频率，避免过快</li>
+<li><strong>如果被封</strong>：</li>
+<li>更换 User-Agent</li>
+<li>调整操作间隔</li>
+<li>联系平台申请白名单（如可能）</li>
+</ul>
+<h4 id="2">2. 页面元素变化</h4>
+<ul>
+<li><strong>风险等级</strong>：中高</li>
+<li><strong>应对措施</strong>：</li>
+<li>使用多种定位策略（text、role、data-testid、xpath）</li>
+<li>为关键元素配置 fallback 选择器</li>
+<li>添加元素存在性检查</li>
+<li>定期（每周）验证流程是否正常</li>
+<li><strong>缓解方案</strong>：</li>
+<li>使用 Playwright codegen 快速更新选择器</li>
+<li>完整的错误日志和截图</li>
+<li>版本控制，快速回滚</li>
+</ul>
+<h4 id="3">3. 图片验证困难</h4>
+<ul>
+<li><strong>风险等级</strong>：低</li>
+<li><strong>应对措施</strong>：</li>
+<li>MVP 阶段：人工确认 + 脚本辅助</li>
+<li>后续优化：接入视觉模型（Qwen-VL、GPT-4V等）</li>
+<li>截图保存供人工审核</li>
+<li><strong>注意事项</strong>：</li>
+<li>图片验证不阻塞主流程</li>
+<li>提供明确的人工介入点</li>
+</ul>
+<h4 id="4">4. 验证码和登录问题</h4>
+<ul>
+<li><strong>风险等级</strong>：中</li>
+<li><strong>应对措施</strong>：</li>
+<li>Cookie 复用，减少登录频率</li>
+<li>支持手动完成验证码</li>
+<li>浏览器保持可见（headless=False）</li>
+<li>预留足够的人工介入时间</li>
+<li><strong>未来优化</strong>：</li>
+<li>接入验证码识别服务</li>
+<li>多账号轮换</li>
+</ul>
+<h4 id="5">5. 性能和稳定性</h4>
+<ul>
+<li><strong>风险等级</strong>：中</li>
+<li><strong>应对措施</strong>：</li>
+<li>完整的异常处理</li>
+<li>智能重试机制（指数退避）</li>
+<li>断点续传功能</li>
+<li>详细的日志和监控</li>
+<li>定期内存清理</li>
+</ul>
+<h2 id="_10">技术栈详情</h2>
+<h3 id="_11">核心技术</h3>
+<ul>
+<li><strong>Python 3.12+</strong>: 现代 Python 特性，类型提示</li>
+<li><strong>Playwright</strong>: 浏览器自动化，支持异步</li>
+<li><strong>playwright-stealth</strong>: 反检测，降低被识别风险</li>
+<li><strong>asyncio</strong>: 异步编程，提升效率</li>
+</ul>
+<h3 id="_12">数据处理</h3>
+<ul>
+<li><strong>Pydantic v2</strong>: 数据验证和模型定义</li>
+<li><strong>pandas</strong>: Excel 读取和数据处理</li>
+<li><strong>openpyxl</strong>: Excel 文件操作</li>
+</ul>
+<h3 id="_13">开发工具</h3>
+<ul>
+<li><strong>Typer</strong>: CLI 框架</li>
+<li><strong>Loguru</strong>: 日志系统</li>
+<li><strong>Rich</strong>: 终端美化输出</li>
+<li><strong>pytest</strong>: 测试框架</li>
+<li><strong>ruff</strong>: 代码格式化和检查</li>
+<li><strong>mypy</strong>: 类型检查</li>
+</ul>
+<h3 id="_14">优势</h3>
+<ol>
+<li><strong>纯代码实现</strong>：完全可控，易于维护</li>
+<li><strong>异步高效</strong>：支持并发操作</li>
+<li><strong>类型安全</strong>：完整的类型提示</li>
+<li><strong>工程化</strong>：符合 SOTA 标准</li>
+<li><strong>免费开源</strong>：无授权费用</li>
+</ol>
+<hr />
+<h2 id="_15">后续优化方向</h2>
+<h3 id="phase-4">Phase 4: 功能增强（可选）</h3>
+<p>如果 MVP 版本稳定运行，可以考虑以下优化：</p>
+<h4 id="1_1">1. 智能化升级</h4>
+<ul>
+<li>🤖 <strong>图片自动验证</strong>：接入 Qwen-VL、GPT-4V 等视觉模型</li>
+<li>🧠 <strong>智能异常处理</strong>：基于历史数据自动调整策略</li>
+<li>📊 <strong>数据分析</strong>：商品表现分析和优化建议</li>
+</ul>
+<h4 id="2_1">2. 性能优化</h4>
+<ul>
+<li>⚡ <strong>并发处理</strong>：多账号/多任务并行</li>
+<li>🔄 <strong>智能调度</strong>：根据平台流量选择最佳时间</li>
+<li>💾 <strong>缓存优化</strong>：减少重复操作</li>
+</ul>
+<h4 id="3_1">3. 用户体验</h4>
+<ul>
+<li>🌐 <strong>Web 管理界面</strong>：方便运营人员使用</li>
+<li>📱 <strong>移动端监控</strong>：随时查看执行状态</li>
+<li>📧 <strong>消息通知</strong>：关键事件提醒（邮件、微信等）</li>
+</ul>
+<h4 id="4_1">4. 企业级功能</h4>
+<ul>
+<li>👥 <strong>多用户支持</strong>：权限管理</li>
+<li>📈 <strong>详细报表</strong>：数据可视化</li>
+<li>🔐 <strong>安全加固</strong>：敏感信息加密</li>
+<li>🔄 <strong>自动更新</strong>：选择器自动适配</li>
+</ul>
+<h4 id="5_1">5. 生态集成</h4>
+<ul>
+<li>🔌 <strong>API 接口</strong>：与其他系统集成</li>
+<li>📦 <strong>Docker 部署</strong>：一键部署</li>
+<li>☁️ <strong>云端运行</strong>：无需本地环境</li>
+</ul>
+<hr />
+<h2 id="_16">项目价值</h2>
+<h3 id="_17">效率提升</h3>
+<ul>
+<li><strong>时间节省</strong>：单个商品从 30+ 分钟降至 5 分钟</li>
+<li><strong>错误率降低</strong>：人工操作错误率 15-20% → 自动化 &lt; 5%</li>
+<li><strong>规模化</strong>：支持批量处理，可扩展</li>
+</ul>
+<h3 id="_18">成本优势</h3>
+<ul>
+<li><strong>无授权费</strong>：完全开源免费</li>
+<li><strong>易维护</strong>：纯代码，技术门槛低</li>
+<li><strong>可定制</strong>：根据业务需求灵活调整</li>
+</ul>
+<h3 id="_19">技术优势</h3>
+<ul>
+<li><strong>SOTA 标准</strong>：符合最佳工程实践</li>
+<li><strong>长期可维护</strong>：清晰的代码结构</li>
+<li><strong>可扩展性强</strong>：模块化设计</li>
+</ul>
+<hr />
+<p><strong>备注</strong>：本方案采用 MVP（最小可行产品）迭代策略，优先实现核心流程自动化，后续根据实际使用反馈逐步优化和扩展功能。</p>
+
+
+
+
+
+
+
+  
+    
+  
+  
+    
+  
+
+
+  <aside class="md-source-file">
+    
+      
+  <span class="md-source-file__fact">
+    <span class="md-icon" title="最后更新">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
+    </span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-date" title="2025年10月30日 03:05:59 UTC">2025年10月30日</span>
+  </span>
+
+    
+    
+      
+  <span class="md-source-file__fact">
+    <span class="md-icon" title="创建日期">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M14.47 15.08 11 13V7h1.5v5.25l3.08 1.83c-.41.28-.79.62-1.11 1m-1.39 4.84c-.36.05-.71.08-1.08.08-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8c0 .37-.03.72-.08 1.08.69.1 1.33.32 1.92.64.1-.56.16-1.13.16-1.72 0-5.5-4.5-10-10-10S2 6.5 2 12s4.47 10 10 10c.59 0 1.16-.06 1.72-.16-.32-.59-.54-1.23-.64-1.92M18 15v3h-3v2h3v3h2v-3h3v-2h-3v-3z"/></svg>
+    </span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-date" title="2025年10月29日 03:56:30 UTC">2025年10月29日</span>
+  </span>
+
+    
+    
+    
+  </aside>
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  回到页面顶部
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/your-org/beimeng_workspace" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tracking", "navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "search.suggest", "search.highlight", "content.code.copy", "content.code.annotate"], "search": "../../assets/javascripts/workers/search.7a47a382.min.js", "tags": null, "translations": {"clipboard.copied": "\u5df2\u590d\u5236", "clipboard.copy": "\u590d\u5236", "search.result.more.one": "\u5728\u8be5\u9875\u4e0a\u8fd8\u6709 1 \u4e2a\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.more.other": "\u5728\u8be5\u9875\u4e0a\u8fd8\u6709 # \u4e2a\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.none": "\u6ca1\u6709\u627e\u5230\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.one": "\u627e\u5230 1 \u4e2a\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.other": "# \u4e2a\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.placeholder": "\u952e\u5165\u4ee5\u5f00\u59cb\u641c\u7d22", "search.result.term.missing": "\u7f3a\u5c11", "select.version": "\u9009\u62e9\u5f53\u524d\u7248\u672c"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.e71a0d61.min.js"></script>
+      
+    
+  </body>
+</html>
