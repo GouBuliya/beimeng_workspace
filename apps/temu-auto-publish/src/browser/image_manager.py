@@ -101,6 +101,9 @@ class ImageManager:
         self.max_retries = max_retries
         self.retry_delay = retry_delay
 
+        # URL 验证结果缓存（性能优化：避免重复验证）
+        self._url_validation_cache: dict[str, tuple[bool, str]] = {}
+
         logger.info(f"图片管理器初始化完成（重试{max_retries}次，延迟{retry_delay}秒）")
 
     def _load_selectors(self) -> dict:
@@ -235,7 +238,7 @@ class ImageManager:
             return False, f"URL解析错误: {e!s}"
 
     def validate_image_url(self, url: str) -> tuple[bool, str]:
-        """验证图片URL.
+        """验证图片URL（带缓存优化）.
 
         Args:
             url: 图片URL
@@ -247,8 +250,13 @@ class ImageManager:
             >>> manager.validate_image_url("https://example.com/image.jpg")
             (True, "")
         """
+        # 性能优化：使用缓存避免重复验证
+        if url in self._url_validation_cache:
+            return self._url_validation_cache[url]
+
         is_valid, error = self.validate_url(url)
         if not is_valid:
+            self._url_validation_cache[url] = (False, error)
             return False, error
 
         # 检查文件扩展名
@@ -256,10 +264,14 @@ class ImageManager:
         path = parsed.path.lower()
 
         if not any(path.endswith(ext) for ext in self.SUPPORTED_IMAGE_FORMATS):
-            return False, (
-                f"不支持的图片格式。支持的格式: {', '.join(self.SUPPORTED_IMAGE_FORMATS)}"
+            result = (
+                False,
+                f"不支持的图片格式。支持的格式: {', '.join(self.SUPPORTED_IMAGE_FORMATS)}",
             )
+            self._url_validation_cache[url] = result
+            return result
 
+        self._url_validation_cache[url] = (True, "")
         return True, ""
 
     def validate_video_url(self, url: str) -> tuple[bool, str]:

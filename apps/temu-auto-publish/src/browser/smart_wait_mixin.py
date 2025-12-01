@@ -54,16 +54,22 @@ class WaitMetrics:
 @dataclass(slots=True)
 class AdaptiveWaitConfig:
     """自适应等待配置
-    
-    注意: 已优化为极速模式，最小化等待时间
+
+    注意: 平衡模式 - 在保持响应速度的同时减少 CPU 负担
+
+    性能优化调整:
+    - min_wait_ms: 5 -> 10 (避免过于频繁的检测)
+    - network_idle_timeout_ms: 50 -> 80 (减少超时误判)
+    - dom_stable_timeout_ms: 50 -> 80 (减少超时误判)
+    - dom_stable_interval_ms: 10 -> 15 (降低 CPU 负担)
     """
-    
-    min_wait_ms: int = 5            # 极速: 10 -> 5
-    max_wait_ms: int = 300          # 极速: 800 -> 300
-    network_idle_timeout_ms: int = 50    # 极速: 150 -> 50
-    dom_stable_timeout_ms: int = 50      # 极速: 150 -> 50
-    dom_stable_checks: int = 1           # 极速: 2 -> 1
-    dom_stable_interval_ms: int = 10     # 极速: 20 -> 10
+
+    min_wait_ms: int = 10           # 平衡: 最小等待稍微增加，减少空转
+    max_wait_ms: int = 300          # 保持: 最大等待限制
+    network_idle_timeout_ms: int = 80    # 平衡: 减少网络空闲超时误判
+    dom_stable_timeout_ms: int = 80      # 平衡: 减少 DOM 稳定超时误判
+    dom_stable_checks: int = 1           # 保持: 单次检查
+    dom_stable_interval_ms: int = 15     # 平衡: 降低采样频率减少 CPU 负担
     # 学习因子：根据历史数据调整等待时间
     learning_factor: float = 0.2
 

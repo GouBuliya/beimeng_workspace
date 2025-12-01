@@ -156,19 +156,27 @@ class SelectionTableQueue:
         """Quick check whether the selection table still contains rows."""
 
         try:
-            rows = self._load_rows()
+            # 只读检查，无需复制列表（性能优化）
+            rows = self._load_rows(copy=False)
         except SelectionTableFormatError:
             return False
         return bool(rows)
 
-    def _load_rows(self) -> list[ProductSelectionRow]:
+    def _load_rows(self, *, copy: bool = True) -> list[ProductSelectionRow]:
+        """加载选品行数据。
+
+        Args:
+            copy: 是否返回副本。默认 True 以防止外部修改缓存。
+                  在只读场景（如 has_pending_rows）可设为 False 以提升性能。
+        """
         if self._cached_rows is not None:
-            return list(self._cached_rows)
+            # 性能优化：只读场景下避免不必要的列表复制
+            return list(self._cached_rows) if copy else self._cached_rows
 
         try:
             rows = self.reader.read_excel(str(self.selection_table_path))
             self._cached_rows = list(rows)
-            return rows
+            return list(rows) if copy else rows
         except FileNotFoundError as exc:
             raise FileNotFoundError(
                 f"选品表不存在: {self.selection_table_path}"
