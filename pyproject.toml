@@ -142,6 +142,20 @@ warn_redundant_casts = true
 warn_unused_ignores = true
 warn_no_return = true
 strict_equality = true
+namespace_packages = true
+explicit_package_bases = true
+mypy_path = "packages"
+# 排除所有不是有效 Python 包的目录和文件
+exclude = [
+    "^apps/",        # 排除所有 apps 目录（大部分包含连字符）
+    "^scripts/",     # 排除脚本目录
+    ".*\\.air$",     # 排除 AirTest 脚本文件
+    "^build/",       # 排除构建目录
+    "^dist/",        # 排除分发目录
+    "^\\.venv/",     # 排除虚拟环境
+]
+# 只检查 packages 目录下的标准 Python 包
+files = ["packages/"]
 
 # Pytest 配置
 [tool.pytest.ini_options]
