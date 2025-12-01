@@ -1,0 +1,35 @@
+{
+  "workflow_id": "temu_publish_20251201_162908",
+  "start_time": "2025-12-01T16:29:08.902468",
+  "end_time": "2025-12-01T16:34:28.260241",
+  "duration": 319.357773,
+  "status": "failure",
+  "stages": {
+    "stage1_first_edit": {
+      "duration": 158.88092810000126,
+      "success": true
+    },
+    "stage2_claim": {
+      "duration": 20.767864199999167,
+      "success": true
+    },
+    "stage3_batch_edit": {
+      "duration": 116.88959559999967,
+      "success": true
+    },
+    "stage4_publish": {
+      "duration": 3.89731650000067,
+      "success": false
+    }
+  },
+  "operations": {},
+  "errors": [
+    {
+      "type": "StageError",
+      "message": "选择店铺 未指定 失败",
+      "stage": "stage4_publish",
+      "timestamp": "2025-12-01T16:34:28.260241"
+    }
+  ],
+  "custom_metrics": {}
+}

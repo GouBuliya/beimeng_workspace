@@ -1,0 +1,162 @@
+{
+  "workflow_id": "temu_publish_20251201_150546",
+  "workflow_type": "complete_publish",
+  "current_stage": "stage3_batch_edit",
+  "stages": {
+    "stage1_first_edit": {
+      "name": "stage1_first_edit",
+      "status": "completed",
+      "start_time": "2025-12-01T15:08:50.615116",
+      "end_time": "2025-12-01T15:08:50.615116",
+      "data": {
+        "products": [
+          {
+            "index": 0,
+            "product_name": "卫生间收纳柜",
+            "model_number": "A026",
+            "owner": "未指定",
+            "title": "梳妆台窄缝收纳架 | 白色塑料防潮储物柜 带抽屉搁板 无需组装易清洁 可移动 浴室厨房客厅通用 小空间杂物存储 适用于 100 种浴室 110 种家庭空间 620 种物品可放置 AY026 型号, 厨房收纳,浴室收纳,现代收纳器,节省空间的置物架,耐用塑料,抽屉收纳盒,可移动置物架,极简生活方式,公寓生活 A026",
+            "cost_price": 80.0,
+            "suggested_price": 800.0,
+            "supply_price": 600.0,
+            "real_supply_price": 200.0,
+            "weight_g": 5299,
+            "dimensions_cm": {
+              "length": 96,
+              "width": 86,
+              "height": 76
+            }
+          },
+          {
+            "index": 1,
+            "product_name": "带轮子的滚动洗衣篮",
+            "model_number": "A045/A046",
+            "owner": "未指定",
+            "title": "带盖带轮折叠洗衣篮——大号长方形加厚可折叠塑料脏衣篓，适用于浴室、阳台、洗衣房，节省空间的便携式衣物收纳筐 A045/A046",
+            "cost_price": 35.0,
+            "suggested_price": 350.0,
+            "supply_price": 262.5,
+            "real_supply_price": 87.5,
+            "weight_g": 7197,
+            "dimensions_cm": {
+              "length": 83,
+              "width": 69,
+              "height": 61
+            }
+          },
+          {
+            "index": 2,
+            "product_name": "三层晾衣架(单管）",
+            "model_number": "A057",
+            "owner": "未指定",
+            "title": "三层晾衣架(单管) 型号 适用于100个国家, 可移动干燥站,紧凑型洗衣管理,伸缩毛巾架,可调节衣物烘干机,分层储物单元,垂直空间整理器 A057",
+            "cost_price": 39.0,
+            "suggested_price": 390.0,
+            "supply_price": 292.5,
+            "real_supply_price": 97.5,
+            "weight_g": 7184,
+            "dimensions_cm": {
+              "length": 94,
+              "width": 74,
+              "height": 62
+            }
+          },
+          {
+            "index": 3,
+            "product_name": "马桶刷 黑色",
+            "model_number": "A061",
+            "owner": "未指定",
+            "title": "【黑色卫生纸架｜浴室收纳全能王】落地式卷纸收纳，黑色材质，防刮耐用；创新集成马桶刷置物位，清洁工具归位整洁；加粗支架，承重稳固，卫生纸+马桶刷同储，浴室空间高效利用，告别杂乱！1000个家庭选择使用 A061",
+            "cost_price": 50.0,
+            "suggested_price": 500.0,
+            "supply_price": 375.0,
+            "real_supply_price": 125.0,
+            "weight_g": 6261,
+            "dimensions_cm": {
+              "length": 99,
+              "width": 79,
+              "height": 62
+            }
+          },
+          {
+            "index": 4,
+            "product_name": "15cm（大号）方形猫砂盆",
+            "model_number": "A055",
+            "owner": "未指定",
+            "title": "猫厕所【告别“厕所味”的客厅：高效除臭猫砂盆打造清新环境】：强调一款优秀的猫砂盆对于维持整个家庭空气品质的重要性 A055",
+            "cost_price": 20.0,
+            "suggested_price": 200.0,
+            "supply_price": 150.0,
+            "real_supply_price": 50.0,
+            "weight_g": 6649,
+            "dimensions_cm": {
+              "length": 91,
+              "width": 74,
+              "height": 54
+            }
+          }
+        ]
+      },
+      "error": null,
+      "retry_count": 0
+    },
+    "stage2_claim": {
+      "name": "stage2_claim",
+      "status": "completed",
+      "start_time": "2025-12-01T15:09:12.368456",
+      "end_time": "2025-12-01T15:09:12.368456",
+      "data": {
+        "selected_count": 5,
+        "batches_success": 1,
+        "batch_failures": [],
+        "claim_success": true,
+        "expected_total": 20,
+        "unique_threshold": 20,
+        "verify_success": true
+      },
+      "error": null,
+      "retry_count": 0
+    },
+    "stage3_batch_edit": {
+      "name": "stage3_batch_edit",
+      "status": "completed",
+      "start_time": "2025-12-01T15:11:10.210722",
+      "end_time": "2025-12-01T15:11:10.210722",
+      "data": {
+        "success": true,
+        "completed_steps": 18,
+        "total_steps": 18,
+        "error": null,
+        "step_errors": [],
+        "timing": {
+          "标题": 3766.76,
+          "英语标题": 4764.81,
+          "类目属性": 4748.81,
+          "主货号": 5187.39,
+          "外包装": 5912.91,
+          "产地": 5102.41,
+          "定制品": 4306.2,
+          "敏感属性": 4602.27,
+          "重量": 4745.94,
+          "尺寸": 4885.16,
+          "平台SKU": 5426.84,
+          "SKU分类": 5336.78,
+          "尺码表": 1055.6,
+          "建议售价": 4946.6,
+          "包装清单": 4297.37,
+          "轮播图": 1091.8,
+          "颜色图": 1554.63,
+          "产品说明书": 4127.16,
+          "total": 117839.25
+        }
+      },
+      "error": null,
+      "retry_count": 0
+    }
+  },
+  "global_data": {},
+  "retry_count": 0,
+  "last_error": "批量发布存在失败, 请检查执行日志",
+  "created_at": "2025-12-01T15:08:50.615116",
+  "updated_at": "2025-12-01T15:11:10.210722"
+}

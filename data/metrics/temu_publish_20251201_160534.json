@@ -1,0 +1,28 @@
+{
+  "workflow_id": "temu_publish_20251201_160534",
+  "start_time": "2025-12-01T16:05:34.948187",
+  "end_time": "2025-12-01T16:17:00.479390",
+  "duration": 685.531203,
+  "status": "success",
+  "stages": {
+    "stage1_first_edit": {
+      "duration": 357.7224305999989,
+      "success": true
+    },
+    "stage2_claim": {
+      "duration": 25.90052850000029,
+      "success": true
+    },
+    "stage3_batch_edit": {
+      "duration": 120.21104000000014,
+      "success": true
+    },
+    "stage4_publish": {
+      "duration": 159.62937710000006,
+      "success": true
+    }
+  },
+  "operations": {},
+  "errors": [],
+  "custom_metrics": {}
+}
