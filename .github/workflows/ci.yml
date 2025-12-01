@@ -78,8 +78,31 @@ jobs:
       - name: Sync dependencies
         run: uv sync --extra dev --extra web --extra temu
 
-      - name: Pytest
-        run: uv run pytest
+      - name: Pytest with Coverage
+        run: |
+          uv run pytest \
+            --cov=apps/temu-auto-publish/web_panel \
+            --cov=apps/temu-auto-publish/config \
+            --cov=packages/common \
+            --cov-report=xml \
+            --cov-report=html \
+            --cov-report=term-missing
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage.xml
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false  # 初期不阻断，等配置好 token 后改为 true
+
+      - name: Upload HTML coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-html
+          path: htmlcov/
 
   docker-build:
     name: Build & Scan Docker Images
@@ -132,14 +155,18 @@ jobs:
           sarif_file: 'trivy-${{ matrix.app.name }}.sarif'
 
   docs:
-    name: Build Docs
+    name: Build & Deploy Docs
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     needs: quality
     timeout-minutes: 10
+    permissions:
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # 需要完整历史用于 git-revision-date
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -161,10 +188,10 @@ jobs:
         run: uv sync --extra docs
 
       - name: Build MkDocs
-        run: uv run mkdocs build
+        run: uv run mkdocs build --strict
 
-      - name: Upload site artifact
-        uses: actions/upload-artifact@v4
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
         with:
-          name: site
-          path: site
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./site

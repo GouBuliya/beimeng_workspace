@@ -1,0 +1,59 @@
+version: 2
+updates:
+  # Python 依赖（uv.lock）
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Shanghai"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "python"
+    groups:
+      dev-dependencies:
+        patterns:
+          - "pytest*"
+          - "ruff*"
+          - "mypy*"
+          - "pre-commit*"
+      production-dependencies:
+        patterns:
+          - "fastapi*"
+          - "playwright*"
+          - "uvicorn*"
+          - "pydantic*"
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Shanghai"
+    labels:
+      - "dependencies"
+      - "github-actions"
+
+  # Docker 基础镜像 - temu-auto-publish
+  - package-ecosystem: "docker"
+    directory: "/apps/temu-auto-publish"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels:
+      - "dependencies"
+      - "docker"
+
+  # Docker 基础镜像 - temu-auto-publish-server
+  - package-ecosystem: "docker"
+    directory: "/apps/temu-auto-publish-server"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels:
+      - "dependencies"
+      - "docker"

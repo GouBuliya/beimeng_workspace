@@ -1,0 +1,21 @@
+coverage:
+  status:
+    project:
+      default:
+        target: 70%  # 目标覆盖率
+        threshold: 2%  # 允许下降 2%
+    patch:
+      default:
+        target: 60%  # PR 新增代码覆盖率
+
+ignore:
+  - "tests/"
+  - "**/__init__.py"
+  - "scripts/"
+  - "build/"
+  - "dist/"
+
+comment:
+  layout: "reach,diff,flags,files"
+  behavior: default
+  require_changes: false

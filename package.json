@@ -1,0 +1,16 @@
+{
+  "name": "beimeng-workspace",
+  "version": "0.0.0-development",
+  "description": "AI-Friendly Python Monorepo",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/GouBuliya/beimeng_workspace.git"
+  },
+  "devDependencies": {
+    "semantic-release": "^22.0.0",
+    "@semantic-release/changelog": "^6.0.3",
+    "@semantic-release/git": "^10.0.1",
+    "@semantic-release/exec": "^6.0.3"
+  }
+}
