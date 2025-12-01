@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import re
 import sys
@@ -164,12 +165,17 @@ class WorkflowTaskManager:
                 logger.warning(f"导出选择器命中报告失败: {exc}")
 
     def _run_single(self, options: WorkflowOptions) -> None:
+        """单次运行模式入口,使用 asyncio.run 包装异步流程."""
+        asyncio.run(self._run_single_async(options))
+
+    async def _run_single_async(self, options: WorkflowOptions) -> None:
+        """单次运行模式的异步实现."""
         # 复用全局登录控制器,避免重复登录
         if self._login_ctrl is None:
             self._login_ctrl = LoginController()
 
         # 单次运行时使用配置的起始轮次
-        result = self._execute_workflow(
+        result = await self._execute_workflow_async(
             options,
             execution_round=options.start_round,
             login_ctrl=self._login_ctrl,
@@ -181,6 +187,11 @@ class WorkflowTaskManager:
         )
 
     def _run_continuous(self, options: WorkflowOptions) -> None:
+        """循环运行模式入口,使用 asyncio.run 包装整个循环."""
+        asyncio.run(self._run_continuous_async(options))
+
+    async def _run_continuous_async(self, options: WorkflowOptions) -> None:
+        """循环运行模式的异步实现,所有批次共享同一事件循环."""
         queue = SelectionTableQueue(options.selection_path)
         processed_batches = 0
         # 起始轮次偏移:支持从指定轮次开始(模拟已运行次数)
@@ -225,7 +236,7 @@ class WorkflowTaskManager:
                 f"(实际轮次={actual_round}, 条目={batch.size})"
             )
             try:
-                result = self._execute_workflow(
+                result = await self._execute_workflow_async(
                     options,
                     selection_rows_override=batch.rows,
                     execution_round=actual_round,
@@ -239,6 +250,10 @@ class WorkflowTaskManager:
                 processed_batches += 1
                 last_workflow_id = result.workflow_id or last_workflow_id
                 queue.archive_batch(batch.rows, suffix="success")
+
+                # 批次成功后,导航回采集箱准备下一批次
+                if queue.has_pending_rows() and self._login_ctrl:
+                    await self._navigate_to_collect_box(self._login_ctrl)
             else:
                 queue.return_batch(batch.rows)
                 queue.archive_batch(batch.rows, suffix="failed")
@@ -246,7 +261,23 @@ class WorkflowTaskManager:
                 self._mark_failure(error_msg)
                 return
 
-    def _execute_workflow(
+    async def _navigate_to_collect_box(self, login_ctrl: LoginController) -> None:
+        """批次之间导航回采集箱页面,重置页面状态."""
+        target_url = "https://erp.91miaoshou.com/common_collect_box/items"
+        page = login_ctrl.browser_manager.page
+        if page is None:
+            return
+
+        try:
+            logger.debug("导航回采集箱页面准备下一批次...")
+            await page.goto(target_url, timeout=60_000)
+            await page.wait_for_load_state("domcontentloaded")
+            await page.wait_for_timeout(500)
+            logger.debug("已返回采集箱页面")
+        except Exception as exc:
+            logger.warning(f"导航回采集箱页面失败: {exc}")
+
+    async def _execute_workflow_async(
         self,
         options: WorkflowOptions,
         *,
@@ -254,6 +285,7 @@ class WorkflowTaskManager:
         execution_round: int | None = None,
         login_ctrl: LoginController | None = None,
     ):
+        """异步执行工作流,供单次和循环模式共用."""
         workflow_kwargs = options.as_workflow_kwargs()
         if selection_rows_override is not None:
             workflow_kwargs["selection_rows_override"] = selection_rows_override
@@ -264,7 +296,7 @@ class WorkflowTaskManager:
             # 复用登录控制器时,启用登录状态复用(第一次登录后后续流程不再重复登录)
             workflow_kwargs["reuse_existing_login"] = True
         workflow = CompletePublishWorkflow(**workflow_kwargs)
-        return workflow.execute()
+        return await workflow.execute_async()
 
     def _mark_success(
         self,

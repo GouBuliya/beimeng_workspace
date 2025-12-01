@@ -91,11 +91,17 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
 
         try:
             logger.debug(f"Refreshing collection box page at {self._COLLECTION_BOX_URL}")
-            await page.goto(self._COLLECTION_BOX_URL, wait_until="domcontentloaded")
+            # 添加超时保护,避免无限等待
+            await page.goto(
+                self._COLLECTION_BOX_URL,
+                wait_until="domcontentloaded",
+                timeout=30_000,  # 30秒超时
+            )
             # 性能优化:networkidle 改为短等待,避免长时间阻塞
             # 原因:networkidle 可能永远无法触发,且大部分情况下 domcontentloaded 已足够
             with suppress(Exception):
                 await page.wait_for_timeout(300)
+            logger.debug("Collection box page refreshed successfully")
         except Exception as exc:
             logger.warning(f"Failed to refresh collection box page: {exc}")
 
