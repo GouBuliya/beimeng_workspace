@@ -29,9 +29,9 @@ from src.browser.login_controller import LoginController
 @pytest.mark.integration
 async def test_collect_products():
     """测试产品采集功能.
-    
+
     手动在浏览器中采集1-2个测试产品。
-    
+
     Returns:
         bool: 是否成功
     """
@@ -142,9 +142,9 @@ async def main():
     except Exception as e:
         logger.error(f"\n测试过程出错: {e}")
         import traceback
+
         traceback.print_exc()
 
 
 if __name__ == "__main__":
     asyncio.run(main())
-

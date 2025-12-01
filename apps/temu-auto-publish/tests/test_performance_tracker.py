@@ -76,9 +76,7 @@ class TestActionMetrics:
 
     def test_action_with_metadata(self):
         """测试带元数据的 Action"""
-        action = ActionMetrics(
-            name="fill_input", metadata={"field": "title", "value": "test"}
-        )
+        action = ActionMetrics(name="fill_input", metadata={"field": "title", "value": "test"})
 
         assert action.metadata["field"] == "title"
         assert action.metadata["value"] == "test"
@@ -169,12 +167,8 @@ class TestWorkflowMetrics:
     def test_workflow_stage_count(self):
         """测试 Workflow 的 Stage 计数"""
         workflow = WorkflowMetrics()
-        workflow.stages.append(
-            StageMetrics(name="stage1", display_name="阶段1", order=1)
-        )
-        workflow.stages.append(
-            StageMetrics(name="stage2", display_name="阶段2", order=2)
-        )
+        workflow.stages.append(StageMetrics(name="stage1", display_name="阶段1", order=1))
+        workflow.stages.append(StageMetrics(name="stage2", display_name="阶段2", order=2))
 
         assert workflow.stage_count == 2
 

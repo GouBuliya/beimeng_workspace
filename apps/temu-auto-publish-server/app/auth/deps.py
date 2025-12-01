@@ -123,4 +123,3 @@ async def get_current_superuser(
             detail="需要管理员权限",
         )
     return current_user
-

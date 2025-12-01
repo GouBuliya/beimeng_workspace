@@ -21,7 +21,7 @@ from src.data_processor.price_calculator import PriceCalculator, PriceResult
 
 def test_price_result_calculate_sop_rules():
     """测试SOP v2.0规则价格计算.
-    
+
     SOP规则：
     - 建议售价 = 成本 × 10（步骤7.14）
     - 真实供货价 = 成本 × 2.5
@@ -87,7 +87,7 @@ def test_price_calculator_default_sop_rules():
 
 def test_real_supply_price():
     """测试真实供货价计算.
-    
+
     SOP规则：真实供货价 = 成本 × 2.5（最低倍率）
     妙手供货价 = 真实供货价 × 3 = 成本 × 7.5
     """
@@ -110,5 +110,3 @@ def test_price_breakdown():
     assert breakdown["真实供货价（×2.5）"] == 375.0
     assert breakdown["妙手供货价（SOP步骤9）"] == 1125.0
     assert breakdown["供货价倍率"] == 7.5
-
-

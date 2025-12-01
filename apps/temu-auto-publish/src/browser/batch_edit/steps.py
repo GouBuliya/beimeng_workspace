@@ -286,7 +286,9 @@ class BatchEditStepsMixin:
                         if await network_img_btn.count() > 0 and await network_img_btn.is_visible():
                             await network_img_btn.click()
                             # 等待输入框出现
-                            url_input = self.page.locator("input[placeholder*='图片'], textarea").first
+                            url_input = self.page.locator(
+                                "input[placeholder*='图片'], textarea"
+                            ).first
                             await url_input.wait_for(state="visible", timeout=TIMEOUTS.NORMAL)
                             if await url_input.count() > 0:
                                 await url_input.fill(upload_source)
@@ -842,7 +844,10 @@ class BatchEditStepsMixin:
                             for selector in upload_btn_selectors:
                                 try:
                                     upload_btn = upload_btn_scope.locator(selector).first
-                                    if await upload_btn.count() > 0 and await upload_btn.is_visible():
+                                    if (
+                                        await upload_btn.count() > 0
+                                        and await upload_btn.is_visible()
+                                    ):
                                         await upload_btn.hover()
                                         logger.debug("  ✓ 已悬停在'上传文件'按钮")
                                         with suppress(Exception):
@@ -870,21 +875,30 @@ class BatchEditStepsMixin:
                             for selector in local_upload_selectors:
                                 try:
                                     local_upload_option = self.page.locator(selector).first
-                                    if await local_upload_option.count() > 0 and await local_upload_option.is_visible():
+                                    if (
+                                        await local_upload_option.count() > 0
+                                        and await local_upload_option.is_visible()
+                                    ):
                                         dropdown_wrapper = self.page.locator(
                                             ".el-dropdown-menu:visible, .el-popover:visible"
                                         )
                                         with suppress(Exception):
-                                            await dropdown_wrapper.first.wait_for(state="visible", timeout=TIMEOUTS.NORMAL)
+                                            await dropdown_wrapper.first.wait_for(
+                                                state="visible", timeout=TIMEOUTS.NORMAL
+                                            )
                                         try:
-                                            with self.page.expect_file_chooser(timeout=TIMEOUTS.NORMAL) as fc_info:
+                                            with self.page.expect_file_chooser(
+                                                timeout=TIMEOUTS.NORMAL
+                                            ) as fc_info:
                                                 await local_upload_option.click()
                                             file_chooser = await fc_info.value
                                             logger.debug("  ✓ 已点击'本地上传'并捕获文件选择器")
                                             clicked = True
                                             break
                                         except TimeoutError:
-                                            logger.debug("  ⚠️ '本地上传' 未触发文件选择器, 尝试下一候选")
+                                            logger.debug(
+                                                "  ⚠️ '本地上传' 未触发文件选择器, 尝试下一候选"
+                                            )
                                             continue
                                 except Exception as err:  # noqa: BLE001
                                     logger.debug(f"  点击选择器 {selector} 失败: {err}")
@@ -904,7 +918,9 @@ class BatchEditStepsMixin:
                                         timeout=TIMEOUTS.SLOW,
                                     )
                                 except Exception:  # noqa: BLE001
-                                    await wait_network_idle(self.page, TIMEOUTS.SLOW, context=" [upload wait]")
+                                    await wait_network_idle(
+                                        self.page, TIMEOUTS.SLOW, context=" [upload wait]"
+                                    )
                                 logger.success(f"  ✅ 已上传产品说明书: {file_path.name}")
                                 uploaded = True
                             except Exception as err:  # noqa: BLE001
@@ -934,7 +950,9 @@ class BatchEditStepsMixin:
                                             continue
                                         accept_attr = ""
                                         with suppress(Exception):
-                                            accept_attr = await file_input.get_attribute("accept") or ""
+                                            accept_attr = (
+                                                await file_input.get_attribute("accept") or ""
+                                            )
                                         if accept_attr and "pdf" not in accept_attr.lower():
                                             logger.debug(
                                                 "  ⚠️ 选择器 %s 的 accept=%s, 跳过非 PDF 输入框",
@@ -943,7 +961,9 @@ class BatchEditStepsMixin:
                                             )
                                             continue
                                         await file_input.set_input_files(str(file_path))
-                                        await wait_network_idle(self.page, TIMEOUTS.SLOW, context=" [file upload]")
+                                        await wait_network_idle(
+                                            self.page, TIMEOUTS.SLOW, context=" [file upload]"
+                                        )
                                         logger.success(f"  ✅ 已上传产品说明书: {file_path.name}")
                                         uploaded = True
                                         break
@@ -956,11 +976,15 @@ class BatchEditStepsMixin:
                                 break
                             else:
                                 logger.warning(f"  ⚠️ 第 {attempt} 次尝试仍未上传成功，重试中...")
-                                await wait_dom_loaded(self.page, TIMEOUTS.SLOW, context=" [retry wait]")
+                                await wait_dom_loaded(
+                                    self.page, TIMEOUTS.SLOW, context=" [retry wait]"
+                                )
                         except Exception as err:  # noqa: BLE001
                             last_error = err
                             logger.warning(f"  ⚠️ 上传尝试 {attempt} 失败: {err}")
-                            await wait_dom_loaded(self.page, TIMEOUTS.SLOW, context=" [error recovery]")
+                            await wait_dom_loaded(
+                                self.page, TIMEOUTS.SLOW, context=" [error recovery]"
+                            )
 
                     if not success_upload:
                         if last_error:

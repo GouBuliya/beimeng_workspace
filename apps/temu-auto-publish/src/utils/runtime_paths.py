@@ -43,4 +43,3 @@ def resolve_runtime_path(path_like: str | Path) -> Path:
 
     project_root = Path(__file__).resolve().parents[2]
     return (project_root / candidate).resolve()
-

@@ -187,9 +187,7 @@ async def scroll_container(
                 continue
 
             # 检查是否可滚动
-            is_scrollable = await container.evaluate(
-                "el => el.scrollHeight > el.clientHeight"
-            )
+            is_scrollable = await container.evaluate("el => el.scrollHeight > el.clientHeight")
             if not is_scrollable:
                 continue
 
@@ -369,9 +367,7 @@ async def scroll_to_find_and_click(
     Returns:
         是否成功点击
     """
-    element = await scroll_to_find_element(
-        page, locator_factory, target_index, **scroll_kwargs
-    )
+    element = await scroll_to_find_element(page, locator_factory, target_index, **scroll_kwargs)
 
     if element is None:
         return False
@@ -383,4 +379,3 @@ async def scroll_to_find_and_click(
     except Exception as exc:
         logger.error(f"点击元素失败: {exc}")
         return False
-

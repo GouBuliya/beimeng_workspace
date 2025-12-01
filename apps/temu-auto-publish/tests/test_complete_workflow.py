@@ -160,7 +160,7 @@ async def test_complete_workflow_without_publish():
             TEST_PRODUCTS_DATA,
             shop_name=TEST_SHOP_NAME,
             enable_batch_edit=True,
-            enable_publish=False
+            enable_publish=False,
         )
 
         # 4. 验证结果
@@ -184,7 +184,7 @@ async def test_complete_workflow_full():
     """测试完整工作流（包含所有步骤）.
 
     警告：这个测试会执行真实的发布操作！
-    
+
     验证：
     1. 5→20工作流成功
     2. 批量编辑18步成功
@@ -219,7 +219,7 @@ async def test_complete_workflow_full():
             TEST_PRODUCTS_DATA,
             shop_name=TEST_SHOP_NAME,
             enable_batch_edit=True,
-            enable_publish=True
+            enable_publish=True,
         )
 
         # 4. 验证结果
@@ -230,7 +230,9 @@ async def test_complete_workflow_full():
 
         # 检查发布结果
         publish_result = result["stage3_result"].get("publish_result", {})
-        logger.info(f"发布结果：成功{publish_result.get('success_count', 0)}条，失败{publish_result.get('fail_count', 0)}条")
+        logger.info(
+            f"发布结果：成功{publish_result.get('success_count', 0)}条，失败{publish_result.get('fail_count', 0)}条"
+        )
 
         logger.success("✓ 测试通过：完整工作流（包含发布）")
 
@@ -252,13 +254,13 @@ def test_workflow_data_validation():
     assert len(TEST_PRODUCTS_DATA) == 5, "必须提供5个产品数据"
 
     for i, product in enumerate(TEST_PRODUCTS_DATA):
-        assert "keyword" in product, f"产品{i+1}缺少keyword字段"
-        assert "model_number" in product, f"产品{i+1}缺少model_number字段"
-        assert "cost" in product, f"产品{i+1}缺少cost字段"
-        assert "stock" in product, f"产品{i+1}缺少stock字段"
+        assert "keyword" in product, f"产品{i + 1}缺少keyword字段"
+        assert "model_number" in product, f"产品{i + 1}缺少model_number字段"
+        assert "cost" in product, f"产品{i + 1}缺少cost字段"
+        assert "stock" in product, f"产品{i + 1}缺少stock字段"
 
-        assert product["cost"] > 0, f"产品{i+1}成本必须大于0"
-        assert product["stock"] > 0, f"产品{i+1}库存必须大于0"
+        assert product["cost"] > 0, f"产品{i + 1}成本必须大于0"
+        assert product["stock"] > 0, f"产品{i + 1}库存必须大于0"
 
     logger.success("✓ 测试通过：工作流数据验证")
 
@@ -283,4 +285,3 @@ if __name__ == "__main__":
     print("\n或运行所有集成测试（跳过发布测试）：")
     print("  pytest tests/test_complete_workflow.py -m integration -v -s")
     print("=" * 80)
-

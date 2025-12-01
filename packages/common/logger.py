@@ -89,4 +89,3 @@ def setup_file_logger(
     )
 
     return logger.bind(name=name)
-

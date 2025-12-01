@@ -37,7 +37,7 @@ if TYPE_CHECKING:
 @dataclass
 class SelectorChain:
     """选择器链 - 按优先级依次尝试
-    
+
     Attributes:
         key: 唯一标识符
         primary: 首选选择器
@@ -46,14 +46,14 @@ class SelectorChain:
         wait_state: 等待元素的状态 (visible, attached, hidden)
         timeout_per_selector: 每个选择器的超时时间(毫秒)
     """
-    
+
     key: str
     primary: str
     fallbacks: list[str] = field(default_factory=list)
     description: str = ""
     wait_state: str = "visible"
     timeout_per_selector: int = 2000
-    
+
     @property
     def all_selectors(self) -> list[str]:
         """获取所有选择器（主选择器 + 降级选择器）"""
@@ -63,30 +63,30 @@ class SelectorChain:
 @dataclass
 class SelectorHitMetrics:
     """选择器命中统计
-    
+
     用于分析哪些选择器最有效，指导选择器顺序优化。
     """
-    
+
     chain_key: str
     hits: dict[int, int] = field(default_factory=lambda: defaultdict(int))
     misses: int = 0
     total_time_ms: float = 0.0
-    
+
     def record_hit(self, selector_index: int, time_ms: float) -> None:
         """记录命中"""
         self.hits[selector_index] += 1
         self.total_time_ms += time_ms
-    
+
     def record_miss(self, time_ms: float) -> None:
         """记录未命中"""
         self.misses += 1
         self.total_time_ms += time_ms
-    
+
     @property
     def total_attempts(self) -> int:
         """总尝试次数"""
         return sum(self.hits.values()) + self.misses
-    
+
     @property
     def success_rate(self) -> float:
         """成功率"""
@@ -94,7 +94,7 @@ class SelectorHitMetrics:
         if total == 0:
             return 0.0
         return sum(self.hits.values()) / total
-    
+
     @property
     def primary_hit_rate(self) -> float:
         """主选择器命中率"""
@@ -102,7 +102,7 @@ class SelectorHitMetrics:
         if total == 0:
             return 0.0
         return self.hits.get(0, 0) / total
-    
+
     def to_dict(self) -> dict[str, Any]:
         """转换为字典"""
         return {
@@ -118,20 +118,20 @@ class SelectorHitMetrics:
 
 class ResilientLocator:
     """弹性定位器 - 自动降级选择器
-    
+
     特点:
     1. 按优先级尝试多个选择器
     2. 支持自定义选择器链
     3. 收集命中统计用于优化
     4. 智能超时分配
-    
+
     Examples:
         >>> locator = ResilientLocator()
         >>> element = await locator.locate(page, "claim_button")
         >>> if element:
         ...     await element.click()
     """
-    
+
     ALLOWED_WAIT_STATES = {"attached", "detached", "visible", "hidden"}
     MIN_TIMEOUT_PER_SELECTOR_MS = 120
 
@@ -169,7 +169,6 @@ class ResilientLocator:
             ],
             description="认领确认按钮",
         ),
-        
         # 批量编辑相关
         "batch_edit_dialog": SelectorChain(
             key="batch_edit_dialog",
@@ -218,7 +217,6 @@ class ResilientLocator:
             ],
             description="关闭按钮",
         ),
-        
         # 表格/列表相关
         "product_row": SelectorChain(
             key="product_row",
@@ -239,7 +237,6 @@ class ResilientLocator:
             ],
             description="复选框",
         ),
-        
         # 输入相关
         "title_input": SelectorChain(
             key="title_input",
@@ -259,7 +256,6 @@ class ResilientLocator:
             ],
             description="价格输入框",
         ),
-        
         # 下拉选择相关
         "select_dropdown": SelectorChain(
             key="select_dropdown",
@@ -280,12 +276,12 @@ class ResilientLocator:
             description="下拉选项",
         ),
     }
-    
+
     def __init__(self):
         """初始化弹性定位器"""
         self._chains: dict[str, SelectorChain] = self.DEFAULT_CHAINS.copy()
         self._metrics: dict[str, SelectorHitMetrics] = {}
-    
+
     @classmethod
     def _normalize_wait_state(cls, requested: str | None, default_state: str) -> str:
         """确保等待状态合法，非法值回退到可见状态."""
@@ -330,9 +326,7 @@ class ResilientLocator:
         return page.locator(selector).first
 
     @staticmethod
-    def _log_failure_context(
-        chain: SelectorChain, timeout_per: int, failures: list[str]
-    ) -> None:
+    def _log_failure_context(chain: SelectorChain, timeout_per: int, failures: list[str]) -> None:
         """输出失败上下文，便于调试."""
         if not failures:
             logger.error(f"所有选择器均失败: {chain.description}")
@@ -347,24 +341,24 @@ class ResilientLocator:
 
     def register_chain(self, chain: SelectorChain) -> None:
         """注册新的选择器链
-        
+
         Args:
             chain: 选择器链配置
         """
         self._chains[chain.key] = chain
         logger.debug(f"已注册选择器链: {chain.key}")
-    
+
     def get_chain(self, key: str) -> SelectorChain | None:
         """获取选择器链
-        
+
         Args:
             key: 选择器链的键
-            
+
         Returns:
             选择器链，不存在则返回 None
         """
         return self._chains.get(key)
-    
+
     async def locate(
         self,
         page: Page | Frame,
@@ -374,13 +368,13 @@ class ResilientLocator:
         wait_state: str | None = None,
     ) -> Locator | None:
         """按优先级尝试定位元素
-        
+
         Args:
             page: Playwright Page 或 Frame 对象
             key: 选择器链的键
             timeout: 总超时时间(毫秒)，默认使用链配置
             wait_state: 等待状态，默认使用链配置
-            
+
         Returns:
             定位到的元素，失败则返回 None
         """
@@ -388,15 +382,15 @@ class ResilientLocator:
         if chain is None:
             logger.error(f"未知的选择器键: {key}")
             return None
-        
+
         effective_timeout = timeout or (chain.timeout_per_selector * len(chain.all_selectors))
         effective_state = self._normalize_wait_state(wait_state, chain.wait_state)
         timeout_per = self._compute_timeout_per_selector(
             effective_timeout, len(chain.all_selectors)
         )
-    
+
         start_time = time.perf_counter()
-        
+
         # 初始化或获取指标
         if key not in self._metrics:
             self._metrics[key] = SelectorHitMetrics(chain_key=key)
@@ -405,24 +399,22 @@ class ResilientLocator:
             logger.error("页面已关闭/分离，无法定位 {}", chain.description)
             return None
         failures: list[str] = []
-        
+
         for idx, selector in enumerate(chain.all_selectors):
             try:
                 locator = page.locator(selector)
                 await locator.wait_for(state=effective_state, timeout=timeout_per)
-                
+
                 elapsed_ms = (time.perf_counter() - start_time) * 1000
                 metrics.record_hit(idx, elapsed_ms)
-                
+
                 if idx > 0:
-                    logger.warning(
-                        f"使用降级选择器[{idx}] 定位 {chain.description}: {selector}"
-                    )
+                    logger.warning(f"使用降级选择器[{idx}] 定位 {chain.description}: {selector}")
                 else:
                     logger.debug(f"定位成功 {chain.description}: {selector}")
-                
+
                 return locator
-                
+
             except PlaywrightTimeoutError:
                 failures.append(f"#{idx} timeout {selector}")
                 logger.debug(f"选择器超时 [{idx}] {chain.description}: {selector}")
@@ -431,14 +423,14 @@ class ResilientLocator:
                 failures.append(f"#{idx} {type(exc).__name__}: {exc}")
                 logger.debug(f"选择器异常 [{idx}] {chain.description}: {exc}")
                 continue
-        
+
         # 所有选择器都失败
         elapsed_ms = (time.perf_counter() - start_time) * 1000
         metrics.record_miss(elapsed_ms)
         self._log_failure_context(chain, timeout_per, failures)
-        
+
         return None
-    
+
     async def locate_with_selector(
         self,
         page: Page | Frame,
@@ -449,16 +441,16 @@ class ResilientLocator:
         description: str = "",
     ) -> Locator | None:
         """使用单个选择器定位元素
-        
+
         用于不在预定义链中的临时选择器。
-        
+
         Args:
             page: Playwright Page 或 Frame 对象
             selector: CSS 选择器
             timeout: 超时时间(毫秒)
             wait_state: 等待状态
             description: 描述（用于日志）
-            
+
         Returns:
             定位到的元素，失败则返回 None
         """
@@ -473,7 +465,7 @@ class ResilientLocator:
         except Exception as exc:
             logger.warning(f"定位异常 {description or selector}: {exc}")
             return None
-    
+
     async def locate_all(
         self,
         page: Page | Frame,
@@ -482,12 +474,12 @@ class ResilientLocator:
         timeout: int | None = None,
     ) -> list[Locator]:
         """定位所有匹配的元素
-        
+
         Args:
             page: Playwright Page 或 Frame 对象
             key: 选择器链的键
             timeout: 超时时间(毫秒)
-            
+
         Returns:
             匹配的元素列表
         """
@@ -495,7 +487,7 @@ class ResilientLocator:
         if chain is None:
             logger.error(f"未知的选择器键: {key}")
             return []
-        
+
         effective_timeout = timeout or chain.timeout_per_selector
         timeout_per = self._compute_timeout_per_selector(
             effective_timeout, len(chain.all_selectors)
@@ -504,28 +496,28 @@ class ResilientLocator:
         if self._is_target_closed(page):
             logger.error("页面已关闭/分离，无法批量定位 {}", chain.description)
             return []
-        
+
         for selector in chain.all_selectors:
             try:
                 locator = page.locator(selector)
                 # 等待至少一个元素
                 await locator.first.wait_for(state="attached", timeout=timeout_per)
-                
+
                 count = await locator.count()
                 if count > 0:
                     logger.debug(f"定位到 {count} 个 {chain.description}")
                     return [locator.nth(i) for i in range(count)]
-                    
+
             except PlaywrightTimeoutError:
                 failures.append(f"timeout {selector}")
                 continue
             except Exception:
                 failures.append(f"exception {selector}")
                 continue
-        
+
         logger.warning(f"未定位到任何 {chain.description} | 尝试: {'; '.join(failures[:5])}")
         return []
-    
+
     async def click(
         self,
         page: Page | Frame,
@@ -535,27 +527,27 @@ class ResilientLocator:
         force: bool = False,
     ) -> bool:
         """定位并点击元素
-        
+
         Args:
             page: Playwright Page 或 Frame 对象
             key: 选择器链的键
             timeout: 超时时间(毫秒)
             force: 是否强制点击
-            
+
         Returns:
             是否成功点击
         """
         locator = await self.locate(page, key, timeout=timeout)
         if locator is None:
             return False
-        
+
         try:
             await locator.click(force=force)
             return True
         except Exception as exc:
             logger.error(f"点击失败 {key}: {exc}")
             return False
-    
+
     async def fill(
         self,
         page: Page | Frame,
@@ -566,21 +558,21 @@ class ResilientLocator:
         clear_first: bool = True,
     ) -> bool:
         """定位并填写元素
-        
+
         Args:
             page: Playwright Page 或 Frame 对象
             key: 选择器链的键
             value: 要填写的值
             timeout: 超时时间(毫秒)
             clear_first: 是否先清空
-            
+
         Returns:
             是否成功填写
         """
         locator = await self.locate(page, key, timeout=timeout)
         if locator is None:
             return False
-        
+
         try:
             if clear_first:
                 await locator.clear()
@@ -589,7 +581,7 @@ class ResilientLocator:
         except Exception as exc:
             logger.error(f"填写失败 {key}: {exc}")
             return False
-    
+
     async def select_option(
         self,
         page: Page | Frame,
@@ -600,14 +592,14 @@ class ResilientLocator:
         option_chain_key: str | None = "select_option",
     ) -> bool:
         """定位下拉框并选择选项
-        
+
         Args:
             page: Playwright Page 或 Frame 对象
             key: 选择器链的键
             option_text: 选项文本
             timeout: 超时时间(毫秒)
             option_chain_key: 选项列表的选择器链键，None 时仅使用文本匹配
-            
+
         Returns:
             是否成功选择
         """
@@ -620,66 +612,66 @@ class ResilientLocator:
         dropdown = await self.locate(page, key, timeout=timeout)
         if dropdown is None:
             return False
-        
+
         try:
             await dropdown.click()
-            
+
             # 等待下拉菜单出现
             dropdown_container = await self.locate(
                 page, "select_dropdown", timeout=option_timeout, wait_state="visible"
             )
             if dropdown_container is None:
                 await asyncio.sleep(0.2)
-            
+
             # 定位并点击选项
             option_locator = None
             if option_chain_key:
                 option_locator = await self.locate(
                     page, option_chain_key, timeout=option_timeout, wait_state="visible"
                 )
-            
+
             if option_locator is None:
                 option_locator = self._build_text_option_locator(page, option_text)
                 await option_locator.wait_for(state="visible", timeout=option_timeout)
-            
+
             await option_locator.click()
-            
+
             return True
         except Exception as exc:
             logger.error(f"选择选项失败 {key} -> {option_text}: {exc}")
             return False
-    
+
     def get_metrics(self, key: str | None = None) -> dict[str, Any]:
         """获取选择器命中统计
-        
+
         Args:
             key: 选择器链的键，为空则返回所有统计
-            
+
         Returns:
             统计数据字典
         """
         if key:
             metrics = self._metrics.get(key)
             return metrics.to_dict() if metrics else {}
-        
+
         return {k: m.to_dict() for k, m in self._metrics.items()}
-    
+
     def reset_metrics(self) -> None:
         """重置所有统计数据"""
         self._metrics.clear()
-    
+
     def suggest_optimizations(self) -> list[dict[str, Any]]:
         """根据统计数据建议选择器优化
-        
+
         Returns:
             优化建议列表
         """
         suggestions = []
-        
+
         for key, metrics in self._metrics.items():
             if metrics.total_attempts < 10:
                 continue  # 样本太少
-            
+
             # 主选择器命中率低
             if metrics.primary_hit_rate < 0.5:
                 # 找到命中最多的索引
@@ -687,25 +679,31 @@ class ResilientLocator:
                 if best_idx > 0:
                     chain = self._chains.get(key)
                     if chain:
-                        suggestions.append({
-                            "key": key,
-                            "type": "reorder",
-                            "message": f"建议将选择器[{best_idx}]提升为主选择器",
-                            "current_primary": chain.primary,
-                            "suggested_primary": chain.all_selectors[best_idx] if best_idx < len(chain.all_selectors) else None,
-                            "primary_hit_rate": metrics.primary_hit_rate,
-                        })
-            
+                        suggestions.append(
+                            {
+                                "key": key,
+                                "type": "reorder",
+                                "message": f"建议将选择器[{best_idx}]提升为主选择器",
+                                "current_primary": chain.primary,
+                                "suggested_primary": chain.all_selectors[best_idx]
+                                if best_idx < len(chain.all_selectors)
+                                else None,
+                                "primary_hit_rate": metrics.primary_hit_rate,
+                            }
+                        )
+
             # 成功率低
             if metrics.success_rate < 0.8:
-                suggestions.append({
-                    "key": key,
-                    "type": "add_selectors",
-                    "message": f"成功率仅 {metrics.success_rate:.1%}，建议添加更多降级选择器",
-                    "success_rate": metrics.success_rate,
-                    "misses": metrics.misses,
-                })
-        
+                suggestions.append(
+                    {
+                        "key": key,
+                        "type": "add_selectors",
+                        "message": f"成功率仅 {metrics.success_rate:.1%}，建议添加更多降级选择器",
+                        "success_rate": metrics.success_rate,
+                        "misses": metrics.misses,
+                    }
+                )
+
         return suggestions
 
 
@@ -728,12 +726,12 @@ async def resilient_locate(
     **kwargs,
 ) -> Locator | None:
     """便捷函数：弹性定位元素
-    
+
     Args:
         page: Playwright Page 或 Frame 对象
         key: 选择器链的键
         **kwargs: 传递给 locate 的其他参数
-        
+
     Returns:
         定位到的元素
     """
@@ -746,12 +744,12 @@ async def resilient_click(
     **kwargs,
 ) -> bool:
     """便捷函数：弹性定位并点击
-    
+
     Args:
         page: Playwright Page 或 Frame 对象
         key: 选择器链的键
         **kwargs: 传递给 click 的其他参数
-        
+
     Returns:
         是否成功点击
     """
@@ -767,5 +765,3 @@ __all__ = [
     "resilient_locate",
     "resilient_click",
 ]
-
-

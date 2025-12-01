@@ -6,7 +6,7 @@ version: '3.8'
 services:
   # PostgreSQL 数据库
   postgres:
-    image: postgres:15-alpine
+    image: docker.m.daocloud.io/library/postgres:15-alpine
     container_name: temu-auth-postgres
     restart: unless-stopped
     environment:
@@ -27,7 +27,7 @@ services:
 
   # Redis 缓存（用于会话管理）
   redis:
-    image: redis:7-alpine
+    image: docker.m.daocloud.io/library/redis:7-alpine
     container_name: temu-auth-redis
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
@@ -84,11 +84,14 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
+      # 使用深度健康检查端点 (检测 DB + Redis)
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health/readiness"]
+      interval: 15s  # 从 30s 改为 15s (更快检测故障)
+      timeout: 5s    # 从 10s 改为 5s (避免阻塞)
+      retries: 3     # 保持 3 次重试
+      start_period: 30s  # 从 10s 改为 30s (给初始化更多时间)
+    # 优雅关闭: 等待 30 秒让请求完成
+    stop_grace_period: 30s
 
 networks:
   temu-auth-network:

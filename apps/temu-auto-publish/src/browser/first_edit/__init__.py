@@ -10,4 +10,3 @@ from __future__ import annotations
 from .controller import FirstEditController
 
 __all__ = ["FirstEditController"]
-

@@ -274,4 +274,3 @@ def get_selector_recorder() -> SelectorHitRecorder:
         SelectorHitRecorder 单例实例.
     """
     return SelectorHitRecorder.get_instance()
-

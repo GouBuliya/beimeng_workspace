@@ -137,4 +137,3 @@ def decode_token(token: str) -> TokenPayload | None:
         )
     except JWTError:
         return None
-

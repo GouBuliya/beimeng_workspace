@@ -11,4 +11,3 @@ from __future__ import annotations
 from .miaoshou import MiaoshouController
 
 __all__ = ["MiaoshouController"]
-

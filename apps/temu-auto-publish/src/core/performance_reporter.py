@@ -193,18 +193,11 @@ class ConsoleReporter:
                 if stage.operations:
                     print("\n操作详情:")
                     for op in stage.operations:
-                        status_mark = (
-                            "✓" if op.status.value == "success" else "✗"
-                        )
-                        print(
-                            f"  {status_mark} {op.name}: "
-                            f"{format_duration(op.duration_s)}"
-                        )
+                        status_mark = "✓" if op.status.value == "success" else "✗"
+                        print(f"  {status_mark} {op.name}: {format_duration(op.duration_s)}")
                         if op.actions:
                             for act in op.actions:
-                                act_mark = (
-                                    "✓" if act.status.value == "success" else "✗"
-                                )
+                                act_mark = "✓" if act.status.value == "success" else "✗"
                                 print(
                                     f"      {act_mark} {act.name}: "
                                     f"{format_duration(act.duration_s)}"

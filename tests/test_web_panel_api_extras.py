@@ -72,7 +72,9 @@ async def test_login_and_logout_flow(app_factory):
         wrong = await client.post("/login", data={"password": "bad"}, follow_redirects=False)
         assert wrong.status_code == 401
 
-        ok = await client.post("/login", data={"password": TEST_ADMIN_PASSWORD}, follow_redirects=False)
+        ok = await client.post(
+            "/login", data={"password": TEST_ADMIN_PASSWORD}, follow_redirects=False
+        )
         assert ok.status_code == 303
 
         home = await client.get("/", follow_redirects=False)

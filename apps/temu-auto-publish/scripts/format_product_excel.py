@@ -140,7 +140,9 @@ def format_excel(
                 match = re.search(r"ID_([A-F0-9]+)", product_img)
                 if match:
                     image_id = match.group(1)
-                    logger.debug(f"提取图片ID: {record['产品名称']} 规格{record['规格序号']} -> ID_{image_id}")
+                    logger.debug(
+                        f"提取图片ID: {record['产品名称']} 规格{record['规格序号']} -> ID_{image_id}"
+                    )
 
             record["图片ID"] = image_id
             record["图片路径"] = ""  # 待填充
@@ -210,9 +212,11 @@ def format_excel(
 
     table.add_row("总记录数", str(total_records))
     table.add_row("产品数量", str(total_products))
-    table.add_row("有图片ID", f"{has_image_id_count} ({has_image_id_count/total_records*100:.1f}%)")
-    table.add_row("已匹配图片", f"{has_image_count} ({has_image_count/total_records*100:.1f}%)")
-    table.add_row("缺失图片", f"{no_image_count} ({no_image_count/total_records*100:.1f}%)")
+    table.add_row(
+        "有图片ID", f"{has_image_id_count} ({has_image_id_count / total_records * 100:.1f}%)"
+    )
+    table.add_row("已匹配图片", f"{has_image_count} ({has_image_count / total_records * 100:.1f}%)")
+    table.add_row("缺失图片", f"{no_image_count} ({no_image_count / total_records * 100:.1f}%)")
 
     console.print(table)
 
@@ -221,9 +225,7 @@ def format_excel(
         console.print("\n⚠️  以下产品缺失图片:", style="yellow bold")
         missing_df = formatted_df[formatted_df["图片路径"] == ""]
         for _, row in missing_df.iterrows():
-            console.print(
-                f"  • {row['产品名称']} ({row['标题后缀']}) - {row['产品颜色/规格']}"
-            )
+            console.print(f"  • {row['产品名称']} ({row['标题后缀']}) - {row['产品颜色/规格']}")
 
         console.print(
             f"\n💡 提示: 请将图片放入 {image_dir} 目录,文件名格式:",
@@ -236,12 +238,9 @@ def format_excel(
     console.print("\n📦 产品列表:", style="green bold")
     for product_name in formatted_df["产品名称"].unique():
         spec_count = len(formatted_df[formatted_df["产品名称"] == product_name])
-        suffix = formatted_df[formatted_df["产品名称"] == product_name][
-            "标题后缀"
-        ].iloc[0]
+        suffix = formatted_df[formatted_df["产品名称"] == product_name]["标题后缀"].iloc[0]
         console.print(f"  • {product_name} ({suffix}): {spec_count} 个规格")
 
 
 if __name__ == "__main__":
     app()
-

@@ -52,9 +52,7 @@ class PageLoadTimeouts:
     FAST: int = int(os.environ.get("PAGE_LOAD_TIMEOUT_FAST", str(min(1500 * 10, 5000))))
     NORMAL: int = int(os.environ.get("PAGE_LOAD_TIMEOUT_NORMAL", str(min(3000 * 10, 5000))))
     SLOW: int = int(os.environ.get("PAGE_LOAD_TIMEOUT_SLOW", str(min(5000 * 10, 5000))))
-    NETWORK: int = int(
-        os.environ.get("PAGE_LOAD_TIMEOUT_NETWORK", str(min(5000 * 10, 5000)))
-    )
+    NETWORK: int = int(os.environ.get("PAGE_LOAD_TIMEOUT_NETWORK", str(min(5000 * 10, 5000))))
 
 
 # 全局超时配置实例
@@ -425,4 +423,3 @@ __all__ = [
     "wait_dom_loaded",
     "wait_network_idle",
 ]
-

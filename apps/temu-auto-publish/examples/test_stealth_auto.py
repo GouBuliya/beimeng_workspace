@@ -70,4 +70,3 @@ async def test_stealth_auto():
 
 if __name__ == "__main__":
     asyncio.run(test_stealth_auto())
-

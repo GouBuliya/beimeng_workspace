@@ -278,9 +278,7 @@ class FileInfoParser:
         # 只返回已定义的字段
         return {k: v for k, v in fields.items() if k in METADATA_FIELDS}
 
-    def parse_multiple_files(
-        self, file_paths: list[str | Path]
-    ) -> dict[str, FileMetadata]:
+    def parse_multiple_files(self, file_paths: list[str | Path]) -> dict[str, FileMetadata]:
         """批量解析多个文件.
 
         Args:
@@ -294,4 +292,3 @@ class FileInfoParser:
             metadata = self.parse_file(file_path)
             results[str(file_path)] = metadata
         return results
-

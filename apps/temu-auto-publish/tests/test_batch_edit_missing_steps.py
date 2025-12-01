@@ -40,9 +40,7 @@ class TestBatchEditMissingSteps:
         ]
 
         for step_name in missing_steps:
-            assert hasattr(
-                self.controller, step_name
-            ), f"缺失步骤方法: {step_name}"
+            assert hasattr(self.controller, step_name), f"缺失步骤方法: {step_name}"
             method = getattr(self.controller, step_name)
             assert callable(method), f"方法 {step_name} 不可调用"
 
@@ -55,8 +53,9 @@ class TestBatchEditMissingSteps:
         params = list(sig.parameters.keys())
 
         assert "page" in params, "缺少page参数"
-        assert sig.return_annotation == bool or str(sig.return_annotation) == "bool", \
+        assert sig.return_annotation == bool or str(sig.return_annotation) == "bool", (
             "返回类型应为bool"
+        )
 
     def test_step_07_customization_signature(self):
         """测试步骤7（定制品）的方法签名."""
@@ -67,8 +66,9 @@ class TestBatchEditMissingSteps:
         params = list(sig.parameters.keys())
 
         assert "page" in params, "缺少page参数"
-        assert sig.return_annotation == bool or str(sig.return_annotation) == "bool", \
+        assert sig.return_annotation == bool or str(sig.return_annotation) == "bool", (
             "返回类型应为bool"
+        )
 
     def test_step_08_sensitive_attrs_signature(self):
         """测试步骤8（敏感属性）的方法签名."""
@@ -79,8 +79,9 @@ class TestBatchEditMissingSteps:
         params = list(sig.parameters.keys())
 
         assert "page" in params, "缺少page参数"
-        assert sig.return_annotation == bool or str(sig.return_annotation) == "bool", \
+        assert sig.return_annotation == bool or str(sig.return_annotation) == "bool", (
             "返回类型应为bool"
+        )
 
     def test_step_15_package_list_signature(self):
         """测试步骤15（包装清单）的方法签名."""
@@ -91,8 +92,9 @@ class TestBatchEditMissingSteps:
         params = list(sig.parameters.keys())
 
         assert "page" in params, "缺少page参数"
-        assert sig.return_annotation == bool or str(sig.return_annotation) == "bool", \
+        assert sig.return_annotation == bool or str(sig.return_annotation) == "bool", (
             "返回类型应为bool"
+        )
 
     def test_step_04_docstring(self):
         """测试步骤4的docstring是否完整."""
@@ -147,8 +149,7 @@ class TestBatchEditMissingSteps:
 
         for step_name in missing_steps:
             method = getattr(self.controller, step_name)
-            assert inspect.iscoroutinefunction(method), \
-                f"方法 {step_name} 应该是async方法"
+            assert inspect.iscoroutinefunction(method), f"方法 {step_name} 应该是async方法"
 
     def test_batch_edit_controller_outline_updated(self):
         """测试BatchEditController的@OUTLINE是否已更新."""
@@ -187,8 +188,7 @@ class TestBatchEditMissingSteps:
         ]
 
         for step_name in implemented_steps:
-            assert hasattr(self.controller, step_name), \
-                f"缺失步骤: {step_name}"
+            assert hasattr(self.controller, step_name), f"缺失步骤: {step_name}"
 
         # 验证共有18个实现的步骤（算上跳过的，总共18步）
         assert len(implemented_steps) == 15, "应实现15个步骤（其他3步SOP标记跳过）"
@@ -214,16 +214,17 @@ class TestMissingStepsImplementation:
 
         for method in missing_steps:
             source = inspect.getsource(method)
-            
+
             # 验证包含预览按钮点击逻辑
             assert "预览" in source, f"{method.__name__}应包含预览逻辑"
-            
+
             # 验证包含保存按钮点击逻辑
             assert "保存" in source, f"{method.__name__}应包含保存逻辑"
-            
+
             # 验证包含成功指示器检查
-            assert "success_indicators" in source or "成功" in source, \
+            assert "success_indicators" in source or "成功" in source, (
                 f"{method.__name__}应检查保存成功提示"
+            )
 
     def test_error_handling(self):
         """测试4个步骤是否都有错误处理."""
@@ -238,14 +239,15 @@ class TestMissingStepsImplementation:
 
         for method in missing_steps:
             source = inspect.getsource(method)
-            
+
             # 验证包含try-except块
             assert "try:" in source, f"{method.__name__}应包含try块"
             assert "except" in source, f"{method.__name__}应包含except块"
-            
+
             # 验证包含错误日志
-            assert "logger.error" in source or "logger.warning" in source, \
+            assert "logger.error" in source or "logger.warning" in source, (
                 f"{method.__name__}应记录错误日志"
+            )
 
     def test_logging_present(self):
         """测试4个步骤是否都有日志记录."""
@@ -260,10 +262,10 @@ class TestMissingStepsImplementation:
 
         for method in missing_steps:
             source = inspect.getsource(method)
-            
+
             # 验证包含logger.info（步骤开始）
             assert "logger.info" in source, f"{method.__name__}应记录info日志"
-            
+
             # 验证包含logger.success（步骤完成）
             assert "logger.success" in source, f"{method.__name__}应记录success日志"
 
@@ -284,4 +286,3 @@ def test_integration_execute_batch_edit_steps():
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "--tb=short"])
-

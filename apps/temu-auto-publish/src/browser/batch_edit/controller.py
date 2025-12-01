@@ -316,7 +316,11 @@ class BatchEditController:
         # 定义步骤列表，每个元素: (步骤名称, 操作函数, 是否需要products_data)
         steps = [
             ("step_01_title", lambda: self.step_01_modify_title(page), False),
-            ("step_02_english_title", lambda: self.step_02_english_title(page, products_data), True),
+            (
+                "step_02_english_title",
+                lambda: self.step_02_english_title(page, products_data),
+                True,
+            ),
             ("step_03_category_attrs", lambda: self.step_03_category_attrs(page), False),
             ("step_04_main_sku", lambda: self.step_04_main_sku(page), False),
             ("step_05_packaging", lambda: self.step_05_packaging(page), False),
@@ -328,7 +332,11 @@ class BatchEditController:
             ("step_11_sku", lambda: self.step_11_sku(page), False),
             ("step_12_sku_category", lambda: self.step_12_sku_category(page), False),
             # 步骤13跳过
-            ("step_14_suggested_price", lambda: self.step_14_suggested_price(page, products_data), True),
+            (
+                "step_14_suggested_price",
+                lambda: self.step_14_suggested_price(page, products_data),
+                True,
+            ),
             ("step_15_package_list", lambda: self.step_15_package_list(page), False),
             # 步骤16-17跳过
             ("step_18_manual_upload", lambda: self.step_18_manual_upload(page), False),

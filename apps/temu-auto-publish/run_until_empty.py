@@ -87,9 +87,7 @@ def configure_logger(level: str) -> None:
     logger.add(sys.stdout, level=level.upper())
 
 
-async def navigate_to_common_collect_box(
-    login_ctrl: LoginController, target_url: str
-) -> None:
+async def navigate_to_common_collect_box(login_ctrl: LoginController, target_url: str) -> None:
     """Jump back to the shared collection box to prepare for the next round."""
 
     page = login_ctrl.browser_manager.page

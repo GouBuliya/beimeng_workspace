@@ -119,4 +119,3 @@ class MiaoshouControllerBase:
                 fallback_selectors.append(candidate)
 
         return fallback_selectors
-

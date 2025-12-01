@@ -3,9 +3,10 @@
 @OUTLINE:
   - class BrowserManager: 浏览器管理器主类
   - async def start(): 启动浏览器, 应用统一配置并校验版本
-  - async def close(): 关闭浏览器
+  - async def close(): 关闭浏览器（自动保存 Storage State）
   - async def save_cookies(): 保存 Cookie
   - async def load_cookies(): 加载 Cookie
+  - async def save_storage_state(): 保存 Storage State（Cookie + localStorage + sessionStorage）
   - async def screenshot(): 截图
   - async def _launch_chromium(): 优先使用具备编解码器的 Chromium 渠道
   - def _assert_version_consistency(): 校验 Playwright 与浏览器版本
@@ -14,15 +15,14 @@
   - def prepare_page(): 对外暴露的页面初始化
 @GOTCHAS:
   - 必须使用 async/await 异步操作
-  - 关闭浏览器前应保存 Cookie
+  - 关闭浏览器时会自动保存 Storage State（可通过 save_state=False 禁用）
   - 反检测配置在 browser_config.json 中
 @DEPENDENCIES:
   - 外部: playwright
 @RELATED: login_controller.py, cookie_manager.py
 """
 
-
-
+import asyncio
 import fnmatch
 import importlib.metadata as importlib_metadata
 import json
@@ -80,9 +80,7 @@ class BrowserManager:
         self.context: BrowserContext | None = None
         self.page: Page | None = None
         self.timing_config: dict[str, Any] = self.config.get("timing", {})
-        self.resource_blocking_config: dict[str, Any] = self.config.get(
-            "resource_blocking", {}
-        )
+        self.resource_blocking_config: dict[str, Any] = self.config.get("resource_blocking", {})
         self.tracing_config: dict[str, Any] = self.config.get("tracing", {})
         self.network_idle_trigger_ms = getattr(
             self,
@@ -388,7 +386,11 @@ class BrowserManager:
         )
 
     def _patch_page_wait(self, page: Page) -> None:
-        """为页面注入智能等待逻辑, 减少硬编码延迟."""
+        """为页面注入智能等待逻辑, 减少硬编码延迟.
+
+        注意: 此方法会在 page 上注册 _bemg_cleanup_waiter 清理回调，
+        必须在 close() 时调用以避免内存泄漏。
+        """
 
         if getattr(page, "_bemg_smart_wait_patched", False):
             return
@@ -396,16 +398,23 @@ class BrowserManager:
         waiter = PageWaiter(page, self.wait_strategy)
         original_wait_for_timeout = page.wait_for_timeout
         minimal_wait_ms = max(self.wait_strategy.wait_after_action_ms, 60)
+        network_idle_trigger = self.network_idle_trigger_ms
 
         async def smart_wait_for_timeout(timeout: float) -> None:
+            nonlocal waiter
             if timeout <= 0:
+                return
+
+            # 如果 waiter 已被清理，回退到原始等待
+            if waiter is None:
+                await original_wait_for_timeout(timeout)
                 return
 
             if timeout <= minimal_wait_ms:
                 await original_wait_for_timeout(timeout)
                 return
 
-            wait_for_network = timeout >= self.network_idle_trigger_ms
+            wait_for_network = timeout >= network_idle_trigger
             start = time.perf_counter()
 
             try:
@@ -423,9 +432,23 @@ class BrowserManager:
                 remaining = max(minimal_wait_ms - elapsed_ms, 0)
                 await original_wait_for_timeout(remaining)
 
+        def cleanup_page_waiter() -> None:
+            """清理 PageWaiter 资源，释放内存引用."""
+            nonlocal waiter
+            if hasattr(page, "_bemg_original_wait_for_timeout"):
+                try:
+                    page.wait_for_timeout = page._bemg_original_wait_for_timeout  # type: ignore
+                    delattr(page, "_bemg_original_wait_for_timeout")
+                except Exception:
+                    pass
+            waiter = None  # 允许 GC 回收 PageWaiter 实例
+            page._bemg_smart_wait_patched = False  # type: ignore[attr-defined]
+            logger.debug("PageWaiter 已清理")
+
         page.wait_for_timeout = smart_wait_for_timeout  # type: ignore[assignment]
         page._bemg_smart_wait_patched = True  # type: ignore[attr-defined]
         page._bemg_original_wait_for_timeout = original_wait_for_timeout  # type: ignore[attr-defined]
+        page._bemg_cleanup_waiter = cleanup_page_waiter  # type: ignore[attr-defined]
 
     async def _apply_resource_blocking(self) -> None:
         """按配置阻断不必要的资源以加速执行."""
@@ -728,8 +751,58 @@ class BrowserManager:
         await self.page.screenshot(path=str(screenshot_path), full_page=full_page)
         logger.debug(f"截图已保存: {screenshot_path}")
 
-    async def close(self) -> None:
-        """关闭浏览器."""
+    async def save_storage_state(self, file_path: str | None = None) -> bool:
+        """保存浏览器 Storage State（包含 Cookie、localStorage、sessionStorage）.
+
+        Args:
+            file_path: Storage State 文件路径，如果不指定则使用配置文件中的路径
+
+        Returns:
+            是否成功保存
+        """
+        if not self.context:
+            logger.warning("浏览器上下文未初始化，无法保存 Storage State")
+            return False
+
+        try:
+            if file_path is None:
+                browser_config = self.config.get("browser", {})
+                file_path = browser_config.get(
+                    "storage_state_path", self.settings.storage_state_path
+                )
+
+            storage_path = self.settings.resolve_path(file_path)
+            storage_path.parent.mkdir(parents=True, exist_ok=True)
+
+            await self.context.storage_state(path=str(storage_path))
+            logger.info(f"Storage State 已保存到: {storage_path}")
+            return True
+
+        except Exception as e:
+            logger.error(f"保存 Storage State 失败: {e}")
+            return False
+
+    async def close(self, save_state: bool = True) -> None:
+        """关闭浏览器，确保所有资源被正确释放.
+
+        Args:
+            save_state: 是否在关闭前保存 Storage State（默认 True）
+
+        注意:
+            - 使用 try-finally 确保即使某个资源关闭失败，其他资源也会被清理
+            - 每个资源关闭都有独立的超时控制，防止卡死
+            - 清理顺序: PageWaiter → Page → Context → Browser → Playwright
+        """
+        errors: list[tuple[str, Exception]] = []
+
+        # 1. 保存 Storage State（非关键，失败不影响关闭）
+        if save_state and self.context:
+            try:
+                await self.save_storage_state()
+            except Exception as exc:
+                logger.warning(f"关闭前保存 Storage State 失败: {exc}")
+
+        # 2. 停止 Tracing（非关键）
         tracing_cfg = self.tracing_config or {}
         if tracing_cfg.get("enabled") and self.context:
             trace_path = tracing_cfg.get("path")
@@ -742,19 +815,78 @@ class BrowserManager:
                 else:
                     await self.context.tracing.stop()
                     logger.info("Tracing 已停止（未指定保存路径）")
-            except Exception as exc:  # pragma: no cover - 运行时保护
+            except Exception as exc:
                 logger.warning(f"停止 tracing 失败: {exc}")
 
-        if self.page:
-            await self.page.close()
-        if self.context:
-            await self.context.close()
-        if self.browser:
-            await self.browser.close()
-        if self.playwright:
-            await self.playwright.stop()
+        # 3. 清理 PageWaiter（防止内存泄漏）
+        if self.page and hasattr(self.page, "_bemg_cleanup_waiter"):
+            try:
+                self.page._bemg_cleanup_waiter()
+            except Exception as exc:
+                logger.debug(f"清理 PageWaiter 失败: {exc}")
 
-        logger.info("浏览器已关闭")
+        # 4. 关闭 Page（带超时）
+        try:
+            if self.page:
+                try:
+                    await asyncio.wait_for(self.page.close(), timeout=5.0)
+                except asyncio.TimeoutError:
+                    errors.append(("page", TimeoutError("page.close() 超时 (5s)")))
+                    logger.warning("page.close() 超时 (5s)")
+                except Exception as exc:
+                    errors.append(("page", exc))
+                    logger.debug(f"page.close() 失败: {exc}")
+        finally:
+            self.page = None
+
+        # 5. 关闭 Context（带超时）
+        try:
+            if self.context:
+                try:
+                    await asyncio.wait_for(self.context.close(), timeout=5.0)
+                except asyncio.TimeoutError:
+                    errors.append(("context", TimeoutError("context.close() 超时 (5s)")))
+                    logger.warning("context.close() 超时 (5s)")
+                except Exception as exc:
+                    errors.append(("context", exc))
+                    logger.debug(f"context.close() 失败: {exc}")
+        finally:
+            self.context = None
+
+        # 6. 关闭 Browser（带超时，时间稍长）
+        try:
+            if self.browser:
+                try:
+                    await asyncio.wait_for(self.browser.close(), timeout=10.0)
+                except asyncio.TimeoutError:
+                    errors.append(("browser", TimeoutError("browser.close() 超时 (10s)")))
+                    logger.warning("browser.close() 超时 (10s)")
+                except Exception as exc:
+                    errors.append(("browser", exc))
+                    logger.debug(f"browser.close() 失败: {exc}")
+        finally:
+            self.browser = None
+
+        # 7. 停止 Playwright（必须执行，否则进程残留）
+        try:
+            if self.playwright:
+                try:
+                    await asyncio.wait_for(self.playwright.stop(), timeout=5.0)
+                except asyncio.TimeoutError:
+                    errors.append(("playwright", TimeoutError("playwright.stop() 超时 (5s)")))
+                    logger.warning("playwright.stop() 超时 (5s)")
+                except Exception as exc:
+                    errors.append(("playwright", exc))
+                    logger.debug(f"playwright.stop() 失败: {exc}")
+        finally:
+            self.playwright = None
+
+        # 8. 汇总错误日志
+        if errors:
+            error_summary = ", ".join(f"{name}:{type(e).__name__}" for name, e in errors)
+            logger.warning(f"浏览器关闭过程中有 {len(errors)} 个错误: {error_summary}")
+        else:
+            logger.info("浏览器已关闭")
 
     async def __aenter__(self):
         """异步上下文管理器入口."""

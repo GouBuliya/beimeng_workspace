@@ -32,13 +32,13 @@ if TYPE_CHECKING:
 @dataclass(slots=True)
 class WaitMetrics:
     """等待操作的统计指标"""
-    
+
     operation: str
     success_count: int = 0
     failure_count: int = 0
     total_wait_ms: float = 0.0
     avg_wait_ms: float = 0.0
-    
+
     def record(self, wait_ms: float, success: bool) -> None:
         """记录一次等待操作"""
         if success:
@@ -64,38 +64,38 @@ class AdaptiveWaitConfig:
     - dom_stable_interval_ms: 10 -> 15 (降低 CPU 负担)
     """
 
-    min_wait_ms: int = 10           # 平衡: 最小等待稍微增加，减少空转
-    max_wait_ms: int = 300          # 保持: 最大等待限制
-    network_idle_timeout_ms: int = 80    # 平衡: 减少网络空闲超时误判
-    dom_stable_timeout_ms: int = 80      # 平衡: 减少 DOM 稳定超时误判
-    dom_stable_checks: int = 1           # 保持: 单次检查
-    dom_stable_interval_ms: int = 15     # 平衡: 降低采样频率减少 CPU 负担
+    min_wait_ms: int = 10  # 平衡: 最小等待稍微增加，减少空转
+    max_wait_ms: int = 300  # 保持: 最大等待限制
+    network_idle_timeout_ms: int = 80  # 平衡: 减少网络空闲超时误判
+    dom_stable_timeout_ms: int = 80  # 平衡: 减少 DOM 稳定超时误判
+    dom_stable_checks: int = 1  # 保持: 单次检查
+    dom_stable_interval_ms: int = 15  # 平衡: 降低采样频率减少 CPU 负担
     # 学习因子：根据历史数据调整等待时间
     learning_factor: float = 0.2
 
 
 class SmartWaitMixin:
     """统一的智能等待混入类，替代所有硬编码等待
-    
+
     特点:
     1. 自适应等待 - 基于历史数据动态调整等待时间
     2. 多条件并行检测 - 网络空闲+DOM稳定同时检测
     3. 非阻塞式 - 超时不会阻塞后续操作
     4. 指标收集 - 记录等待效率用于持续优化
-    
+
     Examples:
         >>> class MyController(SmartWaitMixin):
         ...     async def do_action(self, page):
         ...         await page.click("button")
         ...         await self.adaptive_wait(page, "click_button")
     """
-    
+
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self._wait_config = AdaptiveWaitConfig()
         self._wait_metrics: dict[str, WaitMetrics] = {}
         self._wait_cache: dict[str, float] = {}  # operation -> 历史平均等待时间
-    
+
     async def adaptive_wait(
         self,
         page: Page,
@@ -107,7 +107,7 @@ class SmartWaitMixin:
         wait_for_dom: bool = True,
     ) -> float:
         """自适应等待 - 基于历史数据动态调整等待时间
-        
+
         Args:
             page: Playwright Page 对象
             operation: 操作标识（用于统计和缓存）
@@ -115,74 +115,71 @@ class SmartWaitMixin:
             max_ms: 最大等待时间(毫秒)
             wait_for_network: 是否等待网络空闲
             wait_for_dom: 是否等待DOM稳定
-            
+
         Returns:
             实际等待时间(毫秒)
         """
         min_wait = min_ms or self._wait_config.min_wait_ms
         max_wait = max_ms or self._wait_config.max_wait_ms
-        
+
         # 获取历史平均等待时间作为参考
         cached_wait = self._wait_cache.get(operation, min_wait)
         target_timeout = int(min(max(cached_wait, min_wait), max_wait))
-        
+
         start_time = time.perf_counter()
         success = True
-        
+
         try:
             # 并行执行多种稳定性检测
             tasks: list[Awaitable[bool]] = []
-            
+
             if wait_for_network:
-                tasks.append(self._wait_for_network_quiet(
-                    page, 
-                    timeout_ms=min(target_timeout, self._wait_config.network_idle_timeout_ms)
-                ))
-            
+                tasks.append(
+                    self._wait_for_network_quiet(
+                        page,
+                        timeout_ms=min(target_timeout, self._wait_config.network_idle_timeout_ms),
+                    )
+                )
+
             if wait_for_dom:
-                tasks.append(self._wait_for_dom_stable(
-                    page,
-                    timeout_ms=min(target_timeout, self._wait_config.dom_stable_timeout_ms)
-                ))
-            
+                tasks.append(
+                    self._wait_for_dom_stable(
+                        page,
+                        timeout_ms=min(target_timeout, self._wait_config.dom_stable_timeout_ms),
+                    )
+                )
+
             if tasks:
                 results = await asyncio.gather(*tasks, return_exceptions=True)
-                success = all(
-                    r is True for r in results 
-                    if not isinstance(r, Exception)
-                )
+                success = all(r is True for r in results if not isinstance(r, Exception))
             else:
                 # 如果没有任何检测条件，至少等待最小时间
                 await asyncio.sleep(min_wait / 1000)
-                
+
         except Exception as exc:
             logger.debug(f"自适应等待异常 ({operation}): {exc}")
             success = False
-        
+
         elapsed_ms = (time.perf_counter() - start_time) * 1000
-        
+
         # 确保至少等待最小时间
         if elapsed_ms < min_wait:
             remaining = (min_wait - elapsed_ms) / 1000
             await asyncio.sleep(remaining)
             elapsed_ms = min_wait
-        
+
         # 更新统计和缓存
         self._update_wait_metrics(operation, elapsed_ms, success)
-        
+
         return elapsed_ms
-    
-    async def _wait_for_network_quiet(
-        self, 
-        page: Page, 
-        timeout_ms: int = 500
-    ) -> bool:
+
+    async def _wait_for_network_quiet(self, page: Page, timeout_ms: int = 500) -> bool:
         """等待网络请求静止（非阻塞式）
-        
+
         Args:
             page: Playwright Page 对象
             timeout_ms: 超时时间(毫秒)
-            
+
         Returns:
             是否成功等待到网络空闲
         """
@@ -196,7 +193,7 @@ class SmartWaitMixin:
         except Exception as exc:
             logger.debug(f"网络空闲等待异常: {exc}")
             return False
-    
+
     async def _wait_for_dom_stable(
         self,
         page: Page,
@@ -205,26 +202,26 @@ class SmartWaitMixin:
         interval_ms: int | None = None,
     ) -> bool:
         """等待 DOM 在多次采样内保持稳定
-        
+
         通过对比DOM快照来检测页面是否稳定，避免在动态加载过程中进行操作。
-        
+
         Args:
             page: Playwright Page 对象
             timeout_ms: 总超时时间(毫秒)
             checks: 需要连续稳定的采样次数
             interval_ms: 采样间隔(毫秒)
-            
+
         Returns:
             是否检测到DOM稳定
         """
         timeout = timeout_ms or self._wait_config.dom_stable_timeout_ms
         required_checks = checks or self._wait_config.dom_stable_checks
         poll_interval = interval_ms or self._wait_config.dom_stable_interval_ms
-        
+
         deadline = time.monotonic() + timeout / 1000
         last_snapshot: tuple[int, int] | None = None
         stable_count = 0
-        
+
         while time.monotonic() < deadline:
             try:
                 snapshot = await self._capture_dom_snapshot(page)
@@ -232,7 +229,7 @@ class SmartWaitMixin:
                 # JavaScript执行失败，跳过本次采样
                 await asyncio.sleep(poll_interval / 1000)
                 continue
-            
+
             if snapshot == last_snapshot:
                 stable_count += 1
                 if stable_count >= required_checks:
@@ -240,15 +237,15 @@ class SmartWaitMixin:
             else:
                 stable_count = 0
                 last_snapshot = snapshot
-            
+
             await asyncio.sleep(poll_interval / 1000)
-        
+
         logger.debug(f"DOM稳定等待超时 ({timeout}ms)")
         return False
-    
+
     async def _capture_dom_snapshot(self, page: Page) -> tuple[int, int]:
         """捕获页面 DOM 快照用于稳定性对比
-        
+
         Returns:
             (文本长度, 节点数量) 元组
         """
@@ -265,7 +262,7 @@ class SmartWaitMixin:
             }
             """
         )
-    
+
     async def wait_for_element_stable(
         self,
         locator: Locator,
@@ -275,27 +272,27 @@ class SmartWaitMixin:
         interval_ms: int = 100,
     ) -> bool:
         """等待特定元素稳定（位置和尺寸不变）
-        
+
         Args:
             locator: Playwright Locator 对象
             timeout_ms: 超时时间(毫秒)
             checks: 连续稳定的检查次数
             interval_ms: 检查间隔(毫秒)
-            
+
         Returns:
             元素是否稳定
         """
         deadline = time.monotonic() + timeout_ms / 1000
         last_box: dict[str, float] | None = None
         stable_count = 0
-        
+
         while time.monotonic() < deadline:
             try:
                 box = await locator.bounding_box()
                 if box is None:
                     await asyncio.sleep(interval_ms / 1000)
                     continue
-                
+
                 if last_box is not None and self._boxes_equal(box, last_box):
                     stable_count += 1
                     if stable_count >= checks:
@@ -303,26 +300,24 @@ class SmartWaitMixin:
                 else:
                     stable_count = 0
                     last_box = box
-                    
+
             except Exception:
                 stable_count = 0
-            
+
             await asyncio.sleep(interval_ms / 1000)
-        
+
         return False
-    
+
     @staticmethod
     def _boxes_equal(
-        box1: dict[str, float], 
-        box2: dict[str, float], 
-        tolerance: float = 1.0
+        box1: dict[str, float], box2: dict[str, float], tolerance: float = 1.0
     ) -> bool:
         """比较两个边界框是否相等（允许容差）"""
         for key in ("x", "y", "width", "height"):
             if abs(box1.get(key, 0) - box2.get(key, 0)) > tolerance:
                 return False
         return True
-    
+
     async def batch_wait(
         self,
         page: Page,
@@ -332,52 +327,41 @@ class SmartWaitMixin:
         require_all: bool = False,
     ) -> tuple[bool, list[bool]]:
         """批量等待多个条件
-        
+
         Args:
             page: Playwright Page 对象
             conditions: 条件检查函数列表
             timeout_ms: 总超时时间(毫秒)
             require_all: 是否需要所有条件都满足
-            
+
         Returns:
             (总体是否满足, 各条件结果列表)
         """
+
         async def check_condition(cond: Callable) -> bool:
             try:
-                return await asyncio.wait_for(
-                    cond(page),
-                    timeout=timeout_ms / 1000
-                )
+                return await asyncio.wait_for(cond(page), timeout=timeout_ms / 1000)
             except asyncio.TimeoutError:
                 return False
             except Exception:
                 return False
-        
+
         results = await asyncio.gather(
-            *[check_condition(c) for c in conditions],
-            return_exceptions=True
+            *[check_condition(c) for c in conditions], return_exceptions=True
         )
-        
-        bool_results = [
-            r if isinstance(r, bool) else False 
-            for r in results
-        ]
-        
+
+        bool_results = [r if isinstance(r, bool) else False for r in results]
+
         if require_all:
             overall = all(bool_results)
         else:
             overall = any(bool_results)
-        
+
         return overall, bool_results
-    
-    def _update_wait_metrics(
-        self, 
-        operation: str, 
-        elapsed_ms: float, 
-        success: bool
-    ) -> None:
+
+    def _update_wait_metrics(self, operation: str, elapsed_ms: float, success: bool) -> None:
         """更新等待操作的统计指标
-        
+
         Args:
             operation: 操作标识
             elapsed_ms: 实际等待时间(毫秒)
@@ -385,19 +369,19 @@ class SmartWaitMixin:
         """
         if operation not in self._wait_metrics:
             self._wait_metrics[operation] = WaitMetrics(operation=operation)
-        
+
         metrics = self._wait_metrics[operation]
         metrics.record(elapsed_ms, success)
-        
+
         # 使用指数移动平均更新缓存
         old_avg = self._wait_cache.get(operation, elapsed_ms)
         factor = self._wait_config.learning_factor
         new_avg = old_avg * (1 - factor) + elapsed_ms * factor
         self._wait_cache[operation] = new_avg
-    
+
     def get_wait_statistics(self) -> dict[str, Any]:
         """获取等待操作的统计数据
-        
+
         Returns:
             统计数据字典
         """
@@ -410,7 +394,7 @@ class SmartWaitMixin:
             }
             for operation, m in self._wait_metrics.items()
         }
-    
+
     def reset_wait_cache(self) -> None:
         """重置等待时间缓存（用于新场景）"""
         self._wait_cache.clear()
@@ -439,7 +423,7 @@ async def smart_wait(
     wait_for_dom: bool = True,
 ) -> float:
     """便捷函数：执行智能等待
-    
+
     Args:
         page: Playwright Page 对象
         operation: 操作标识
@@ -447,10 +431,10 @@ async def smart_wait(
         max_ms: 最大等待时间(毫秒)
         wait_for_network: 是否等待网络空闲
         wait_for_dom: 是否等待DOM稳定
-        
+
     Returns:
         实际等待时间(毫秒)
-    
+
     Examples:
         >>> await smart_wait(page, "click_submit", min_ms=100)
     """
@@ -463,5 +447,3 @@ async def smart_wait(
         wait_for_network=wait_for_network,
         wait_for_dom=wait_for_dom,
     )
-
-

@@ -74,9 +74,7 @@ class CookieExporter:
                 "--disable-infobars",
                 "--start-maximized",
             ]
-            logger.info(
-                f"启动 Chromium 浏览器 (channel={self.channel}, headless={self.headless})"
-            )
+            logger.info(f"启动 Chromium 浏览器 (channel={self.channel}, headless={self.headless})")
         else:
             logger.info("启动 Chromium 浏览器 (headless={})", self.headless)
 

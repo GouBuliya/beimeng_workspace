@@ -121,4 +121,3 @@ class ParserConfig:
     max_lines_to_read: int = 100
     strip_comment_markers: bool = True
     normalize_whitespace: bool = True
-

@@ -9,7 +9,6 @@
 @RELATED: src/data_processor/excel_reader.py, src/data_processor/processor.py
 """
 
-
 from pydantic import BaseModel, Field, field_validator
 
 

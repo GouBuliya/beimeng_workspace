@@ -229,4 +229,3 @@ async def get_user_service(db: AsyncSession, session_manager: SessionManager) ->
         UserService: 用户管理服务实例
     """
     return UserService(db, session_manager)
-

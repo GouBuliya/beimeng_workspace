@@ -7,4 +7,3 @@
 from .controller import BatchEditController
 
 __all__ = ["BatchEditController"]
-

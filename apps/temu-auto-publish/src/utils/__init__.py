@@ -23,4 +23,3 @@ __all__ = [
     "wait_dom_loaded",
     "wait_network_idle",
 ]
-

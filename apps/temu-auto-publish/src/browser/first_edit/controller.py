@@ -35,4 +35,3 @@ class FirstEditController(
     def __init__(self, selector_path: str = "config/miaoshou_selectors_v2.json") -> None:
         """初始化控制器."""
         super().__init__(selector_path=selector_path)
-

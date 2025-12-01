@@ -90,4 +90,3 @@ class MessageResponse(BaseModel):
 
     message: str = Field(..., description="消息内容")
     success: bool = Field(default=True, description="是否成功")
-

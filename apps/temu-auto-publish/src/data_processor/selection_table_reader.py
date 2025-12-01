@@ -56,9 +56,7 @@ class ProductSelectionRow(BaseModel):
     spec_unit: str | None = Field(default=None, description="规格单位名称")
     spec_options: list[str] | None = Field(default=None, description="规格选项列表")
     variant_costs: list[float] | None = Field(default=None, description="多规格价格列表")
-    image_files: list[str] | None = Field(
-        default=None, description="本地或相对路径图片文件名"
-    )
+    image_files: list[str] | None = Field(default=None, description="本地或相对路径图片文件名")
     size_chart_image_url: str = Field(default="", description="尺码图 URL")
     product_video_url: str | None = Field(default=None, description="产品视频 URL")
     sku_image_urls: list[str] = Field(
@@ -179,9 +177,7 @@ class SelectionTableReader:
                 logger.debug("CSV 编码尝试失败，encoding={}，error={}", encoding, exc)
             except ParserError as exc:
                 last_error = str(exc)
-                logger.warning(
-                    "CSV 解析异常，尝试使用 python engine 跳过坏行: {}", exc
-                )
+                logger.warning("CSV 解析异常，尝试使用 python engine 跳过坏行: {}", exc)
                 try:
                     df = pd.read_csv(
                         path,
@@ -219,9 +215,7 @@ class SelectionTableReader:
                 engine="python",
                 on_bad_lines="skip",
             )
-            logger.warning(
-                "CSV 进入容错模式（utf-8 replace, 跳过异常行），共 {} 行", len(df)
-            )
+            logger.warning("CSV 进入容错模式（utf-8 replace, 跳过异常行），共 {} 行", len(df))
             return df
         except Exception as exc:  # noqa: BLE001
             last_error = str(exc)
@@ -252,9 +246,7 @@ class SelectionTableReader:
             encoding = result.get("encoding")
             confidence = result.get("confidence", 0)
             if encoding and confidence > 0.5:
-                logger.debug(
-                    "编码检测结果: {} (置信度: {:.1%})", encoding, confidence
-                )
+                logger.debug("编码检测结果: {} (置信度: {:.1%})", encoding, confidence)
                 return encoding
             logger.debug("编码检测置信度过低: {} ({:.1%})", encoding, confidence)
             return None
@@ -311,24 +303,16 @@ class SelectionTableReader:
                     "product_name": product_name,
                     "model_number": str(row.get("model_number", "") or ""),
                     "color_spec": self._parse_scalar(row.get("color_spec")),
-                    "collect_count": self._parse_collect_count(
-                        row.get("collect_count")
-                    ),
+                    "collect_count": self._parse_collect_count(row.get("collect_count")),
                     "spec_unit": self._parse_scalar(row.get("spec_unit")),
                     "spec_options": self._parse_json_list(row.get("spec_options")),
                     "image_files": self._parse_json_list(row.get("image_files")),
-                    "size_chart_image_url": self._parse_scalar(
-                        row.get("size_chart_image_url")
-                    )
+                    "size_chart_image_url": self._parse_scalar(row.get("size_chart_image_url"))
                     or "",
-                    "product_video_url": self._parse_scalar(
-                        row.get("product_video_url")
-                    ),
+                    "product_video_url": self._parse_scalar(row.get("product_video_url")),
                 }
 
-                cost_price, variant_costs = self._parse_costs(
-                    row.get("cost_price")
-                )
+                cost_price, variant_costs = self._parse_costs(row.get("cost_price"))
                 product_data["cost_price"] = cost_price
                 product_data["variant_costs"] = variant_costs
                 product_data["sku_image_urls"] = self._build_product_image_urls(
@@ -545,9 +529,7 @@ class SelectionTableReader:
         except (TypeError, ValueError):
             return None, None
 
-    def _build_product_image_urls(
-        self, image_files: list[str] | None
-    ) -> list[str]:
+    def _build_product_image_urls(self, image_files: list[str] | None) -> list[str]:
         """根据实拍图文件名构建 SKU 图 URL 列表。
 
         Args:
@@ -567,9 +549,7 @@ class SelectionTableReader:
             if text.startswith(("http://", "https://")):
                 urls.append(text)
             elif self.product_image_base_url:
-                url = urljoin(
-                    f"{self.product_image_base_url.rstrip('/')}/", text.lstrip("/")
-                )
+                url = urljoin(f"{self.product_image_base_url.rstrip('/')}/", text.lstrip("/"))
                 urls.append(url)
         return urls
 

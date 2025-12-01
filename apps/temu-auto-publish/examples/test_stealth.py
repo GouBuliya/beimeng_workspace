@@ -60,4 +60,3 @@ async def test_stealth():
 
 if __name__ == "__main__":
     asyncio.run(test_stealth())
-

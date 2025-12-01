@@ -19,6 +19,5 @@ sys.path.insert(0, str(workspace_root))
 if __name__ == "__main__":
     from packages.mcp_file_info.mcp_server import main
     import asyncio
-    
-    asyncio.run(main())
 
+    asyncio.run(main())

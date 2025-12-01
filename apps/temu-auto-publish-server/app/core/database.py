@@ -72,4 +72,3 @@ async def init_db() -> None:
 async def close_db() -> None:
     """关闭数据库连接."""
     await engine.dispose()
-

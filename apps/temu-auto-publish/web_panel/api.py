@@ -107,8 +107,7 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
                 # 令牌失效（可能被其他设备登录踢出）
                 request.session.clear()
                 raise HTTPException(
-                    status_code=401,
-                    detail=result.message or "会话已失效，请重新登录"
+                    status_code=401, detail=result.message or "会话已失效，请重新登录"
                 )
 
     def _login_template(request: Request, *, error: str | None = None) -> HTMLResponse:
@@ -340,6 +339,7 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
             raise HTTPException(status_code=401, detail="未登录")
 
         import httpx
+
         auth_client = get_auth_client()
         async with httpx.AsyncClient(base_url=auth_client.base_url, timeout=10.0) as client:
             response = await client.get(
@@ -365,6 +365,7 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
             raise HTTPException(status_code=401, detail="未登录")
 
         import httpx
+
         auth_client = get_auth_client()
         async with httpx.AsyncClient(base_url=auth_client.base_url, timeout=10.0) as client:
             response = await client.post(
@@ -375,7 +376,9 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
             if response.status_code == 403:
                 raise HTTPException(status_code=403, detail="需要管理员权限")
             if response.status_code == 400:
-                raise HTTPException(status_code=400, detail=response.json().get("detail", "请求失败"))
+                raise HTTPException(
+                    status_code=400, detail=response.json().get("detail", "请求失败")
+                )
             if response.status_code != 201:
                 raise HTTPException(status_code=response.status_code, detail="请求失败")
             return response.json()
@@ -393,6 +396,7 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
             raise HTTPException(status_code=401, detail="未登录")
 
         import httpx
+
         auth_client = get_auth_client()
         async with httpx.AsyncClient(base_url=auth_client.base_url, timeout=10.0) as client:
             response = await client.put(
@@ -403,7 +407,9 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
             if response.status_code == 403:
                 raise HTTPException(status_code=403, detail="需要管理员权限")
             if response.status_code == 400:
-                raise HTTPException(status_code=400, detail=response.json().get("detail", "请求失败"))
+                raise HTTPException(
+                    status_code=400, detail=response.json().get("detail", "请求失败")
+                )
             if response.status_code == 404:
                 raise HTTPException(status_code=404, detail="用户不存在")
             if response.status_code != 200:
@@ -422,6 +428,7 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
             raise HTTPException(status_code=401, detail="未登录")
 
         import httpx
+
         auth_client = get_auth_client()
         async with httpx.AsyncClient(base_url=auth_client.base_url, timeout=10.0) as client:
             response = await client.delete(
@@ -431,7 +438,9 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
             if response.status_code == 403:
                 raise HTTPException(status_code=403, detail="需要管理员权限")
             if response.status_code == 400:
-                raise HTTPException(status_code=400, detail=response.json().get("detail", "请求失败"))
+                raise HTTPException(
+                    status_code=400, detail=response.json().get("detail", "请求失败")
+                )
             if response.status_code == 404:
                 raise HTTPException(status_code=404, detail="用户不存在")
             if response.status_code != 200:
@@ -450,6 +459,7 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
             raise HTTPException(status_code=401, detail="未登录")
 
         import httpx
+
         auth_client = get_auth_client()
         async with httpx.AsyncClient(base_url=auth_client.base_url, timeout=10.0) as client:
             response = await client.post(

@@ -58,18 +58,14 @@ class ContextUpdater:
                 if script_dir not in [
                     self.workspace_root / c.get("path", "") for c in components["scripts"]
                 ]:
-                    components["scripts"].append(
-                        self._load_component_metadata(script_dir)
-                    )
+                    components["scripts"].append(self._load_component_metadata(script_dir))
 
         # 发现 packages
         packages_dir = self.workspace_root / "packages"
         if packages_dir.exists():
             for pkg_ai_json in packages_dir.rglob(".ai.json"):
                 pkg_dir = pkg_ai_json.parent
-                components["packages"].append(
-                    self._load_component_metadata(pkg_dir)
-                )
+                components["packages"].append(self._load_component_metadata(pkg_dir))
 
         return components
 
@@ -138,4 +134,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

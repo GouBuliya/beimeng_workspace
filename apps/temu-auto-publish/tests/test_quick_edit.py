@@ -20,6 +20,7 @@ sys.path.insert(0, str(project_root))
 
 # 加载环境变量
 from dotenv import load_dotenv
+
 env_file = project_root / ".env"
 if env_file.exists():
     load_dotenv(env_file)
@@ -64,7 +65,7 @@ async def quick_test():
             await page.locator("button:has-text('我知道了')").first.click()
             await asyncio.sleep(0.5)  # 0.5秒
             logger.success("✓ 已关闭弹窗")
-        
+
         # 也尝试其他可能的关闭按钮
         close_btn_count = await page.locator("button:has-text('关闭')").count()
         if close_btn_count > 0:
@@ -91,7 +92,7 @@ async def quick_test():
                 logger.success("✓ 已切换到「全部」tab（方法2）")
             else:
                 logger.warning("未找到「全部」tab，可能已经在全部tab")
-        
+
         # 等待页面加载完成
         await page.wait_for_load_state("networkidle", timeout=10000)
         logger.info("✓ 页面加载完成")
@@ -102,11 +103,15 @@ async def quick_test():
     logger.info("正在筛选创建人员...")
     try:
         # 查找"创建人员"下拉框
-        creator_input = await page.locator("input[placeholder*='创建人员'], input[placeholder*='全部']").count()
+        creator_input = await page.locator(
+            "input[placeholder*='创建人员'], input[placeholder*='全部']"
+        ).count()
         if creator_input > 0:
             logger.info("找到创建人员筛选项")
             # 点击下拉框
-            await page.locator("input[placeholder*='创建人员'], input[placeholder*='全部']").first.click()
+            await page.locator(
+                "input[placeholder*='创建人员'], input[placeholder*='全部']"
+            ).first.click()
             await asyncio.sleep(0.5)  # 0.5秒
             # 输入搜索
             await page.keyboard.type("柯诗俊")
@@ -119,14 +124,14 @@ async def quick_test():
                 logger.success("✓ 已选择创建人员：柯诗俊")
             else:
                 logger.warning("未找到「柯诗俊」选项，尝试直接搜索")
-        
+
         # 点击搜索按钮
         search_btn = await page.locator("button:has-text('搜索')").count()
         if search_btn > 0:
             await page.locator("button:has-text('搜索')").first.click()
             logger.info("✓ 已点击搜索按钮")
             await asyncio.sleep(2)  # 2秒，等待搜索结果加载
-            
+
             # 等待搜索结果加载完成
             await page.wait_for_load_state("networkidle", timeout=10000)
             logger.success("✓ 搜索结果已加载")
@@ -149,11 +154,11 @@ async def quick_test():
         logger.info("3. 粘贴商品链接（1688/淘宝），选择平台，点击「采集并自动认领」")
         logger.info("\n程序会等待2分钟，供您完成采集...")
         await asyncio.sleep(120)
-        
+
         # 重新检查
         await page.goto("https://erp.91miaoshou.com/common_collect_box/items")
         await asyncio.sleep(2)
-        
+
         # 重新选择创建人员和切换到全部tab
         try:
             await page.locator("input[placeholder*='创建人员']").first.click()
@@ -168,10 +173,10 @@ async def quick_test():
             await asyncio.sleep(1)
         except:
             pass
-        
+
         counts = await miaoshou_controller.get_product_count(page)
         total = counts.get("claimed", 0) + counts.get("unclaimed", 0)
-        
+
         if total == 0:
             logger.error("仍然没有产品，测试终止")
             return False
@@ -194,9 +199,7 @@ async def quick_test():
     price_calc = PriceCalculator()
     # 使用PriceResult的静态方法计算价格
     price_result = PriceResult.calculate(
-        cost, 
-        price_calc.suggested_multiplier, 
-        price_calc.supply_multiplier
+        cost, price_calc.suggested_multiplier, price_calc.supply_multiplier
     )
 
     title_gen = TitleGenerator()
@@ -204,7 +207,7 @@ async def quick_test():
         ["自动化测试商品"],
         model_prefix="AUTO",
         start_number=random.randint(1, 9999),
-        add_modifiers=True
+        add_modifiers=True,
     )
 
     test_data = {
@@ -212,11 +215,7 @@ async def quick_test():
         "price": price_result.suggested_price,
         "stock": 99,
         "weight": round(random.uniform(0.3, 0.8), 2),
-        "dimensions": (
-            random.randint(20, 40),
-            random.randint(20, 40),
-            random.randint(10, 30)
-        ),
+        "dimensions": (random.randint(20, 40), random.randint(20, 40), random.randint(10, 30)),
     }
 
     logger.info(f"\n测试数据：")
@@ -224,12 +223,14 @@ async def quick_test():
     logger.info(f"  价格: {test_data['price']} CNY")
     logger.info(f"  库存: {test_data['stock']}")
     logger.info(f"  重量: {test_data['weight']} KG")
-    logger.info(f"  尺寸: {test_data['dimensions'][0]}x{test_data['dimensions'][1]}x{test_data['dimensions'][2]} CM\n")
+    logger.info(
+        f"  尺寸: {test_data['dimensions'][0]}x{test_data['dimensions'][1]}x{test_data['dimensions'][2]} CM\n"
+    )
 
     # 执行编辑
     logger.info("开始执行编辑流程...")
     first_edit_controller = FirstEditController()
-    
+
     success = await first_edit_controller.complete_first_edit(
         page=page,
         title=test_data["title"],
@@ -255,9 +256,9 @@ async def main():
     except Exception as e:
         logger.error(f"错误: {e}")
         import traceback
+
         traceback.print_exc()
 
 
 if __name__ == "__main__":
     asyncio.run(main())
-

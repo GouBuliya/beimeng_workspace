@@ -258,4 +258,3 @@ async def close_auth_client() -> None:
     if _auth_client:
         await _auth_client.close()
         _auth_client = None
-

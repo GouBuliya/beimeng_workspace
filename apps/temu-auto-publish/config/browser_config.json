@@ -13,14 +13,14 @@
   },
   "fast_mode": {
     "enabled": true,
-    "first_edit_target_ms": 5000,
-    "batch_edit_step_target_ms": 1500,
-    "dialog_wait_ms": 300,
-    "element_wait_ms": 250,
-    "upload_wait_ms": 300,
-    "save_wait_ms": 300,
-    "toast_visible_ms": 100,
-    "toast_hidden_ms": 200
+    "first_edit_target_ms": 3000,
+    "batch_edit_step_target_ms": 1000,
+    "dialog_wait_ms": 200,
+    "element_wait_ms": 150,
+    "upload_wait_ms": 200,
+    "save_wait_ms": 200,
+    "toast_visible_ms": 80,
+    "toast_hidden_ms": 150
   },
   "resource_blocking": {
     "enabled": false,
@@ -48,16 +48,16 @@
   },
   "timing": {
     "slow_mo_ms": 0,
-    "wait_after_action_ms": 10,
-    "wait_for_stability_timeout_ms": 150,
-    "wait_for_network_idle_timeout_ms": 150,
-    "retry_initial_delay_ms": 20,
-    "retry_backoff_factor": 1.5,
-    "retry_max_delay_ms": 200,
-    "validation_timeout_ms": 200,
-    "dom_stable_checks": 2,
-    "dom_stable_interval_ms": 20,
-    "network_idle_trigger_ms": 100
+    "wait_after_action_ms": 8,
+    "wait_for_stability_timeout_ms": 100,
+    "wait_for_network_idle_timeout_ms": 100,
+    "retry_initial_delay_ms": 15,
+    "retry_backoff_factor": 1.4,
+    "retry_max_delay_ms": 150,
+    "validation_timeout_ms": 150,
+    "dom_stable_checks": 1,
+    "dom_stable_interval_ms": 15,
+    "network_idle_trigger_ms": 80
   },
   "stealth": {
     "enabled": true,
@@ -92,24 +92,24 @@
     "headless": null
   },
   "timeouts": {
-    "default": 30000,
-    "navigation": 60000,
-    "element_wait": 10000
+    "default": 20000,
+    "navigation": 45000,
+    "element_wait": 8000
   },
   "retry": {
-    "max_attempts": 3,
-    "delay_ms": 2000
+    "max_attempts": 2,
+    "delay_ms": 1500
   },
   "login": {
     "url": "https://seller.temu.com/login",
     "cookie_max_age_hours": 24
   },
   "search": {
-    "wait_after_search": 500,
+    "wait_after_search": 300,
     "max_results": 10
   },
   "edit": {
-    "wait_after_action": 200
+    "wait_after_action": 150
   },
   "screenshots": {
     "enabled": true,

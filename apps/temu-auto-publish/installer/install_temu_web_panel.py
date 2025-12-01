@@ -31,7 +31,9 @@ APP_NAME: Final[str] = "TemuWebPanel"
 PAYLOAD_DIR: Final[str] = "payload"
 PAYLOAD_EXE: Final[str] = "TemuWebPanel.exe"
 DESKTOP_SHORTCUT: Final[str] = f"{APP_NAME}.lnk"
-DEFAULT_INSTALL_DIR: Final[Path] = Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / APP_NAME
+DEFAULT_INSTALL_DIR: Final[Path] = (
+    Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / APP_NAME
+)
 FALLBACK_INSTALL_DIR: Final[Path] = Path.home() / "AppData" / "Local" / APP_NAME
 
 app = typer.Typer(add_completion=False, no_args_is_help=True)
@@ -227,4 +229,3 @@ def install(
 
 if __name__ == "__main__":
     app()
-

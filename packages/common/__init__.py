@@ -16,4 +16,3 @@ __all__ = [
     "BaseAppConfig",
     "setup_logger",
 ]
-

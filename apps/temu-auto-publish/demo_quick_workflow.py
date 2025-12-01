@@ -18,8 +18,9 @@ from loguru import logger
 # 加载.env文件
 try:
     from dotenv import load_dotenv
+
     # 加载项目根目录的.env文件
-    env_path = Path(__file__).parent / '.env'
+    env_path = Path(__file__).parent / ".env"
     if env_path.exists():
         load_dotenv(env_path)
         logger.debug(f"✓ 已加载环境变量从: {env_path}")
@@ -77,26 +78,28 @@ async def demo_five_to_twenty():
     logger.info("=" * 100)
 
     login_ctrl = None
-    
+
     # 创建调试助手（根据需要配置）
-    debug = DebugHelper(DebugConfig(
-        enabled=True,
-        auto_screenshot=True,
-        auto_save_html=False,  # HTML较大，可选择关闭
-        enable_timing=True,
-        enable_breakpoint=False
-    ))
+    debug = DebugHelper(
+        DebugConfig(
+            enabled=True,
+            auto_screenshot=True,
+            auto_save_html=False,  # HTML较大，可选择关闭
+            enable_timing=True,
+            enable_breakpoint=False,
+        )
+    )
 
     try:
         # 1. 初始化和登录
         logger.info("\n[1/4] 初始化浏览器...")
         debug.start_timer("total")
         login_ctrl = LoginController()
-        
+
         # 从环境变量获取登录信息（已从.env加载）
         username = os.getenv("MIAOSHOU_USERNAME") or os.getenv("TEMU_USERNAME", "")
         password = os.getenv("MIAOSHOU_PASSWORD") or os.getenv("TEMU_PASSWORD", "")
-        
+
         if not username or not password:
             logger.error("✗ 请在.env文件中设置 TEMU_USERNAME 和 TEMU_PASSWORD")
             logger.info("或设置环境变量:")
@@ -165,6 +168,7 @@ async def demo_five_to_twenty():
     except Exception as e:
         logger.error(f"演示失败: {e}")
         import traceback
+
         traceback.print_exc()
 
     finally:
@@ -179,26 +183,28 @@ async def demo_complete_workflow():
     logger.info("=" * 100)
 
     login_ctrl = None
-    
+
     # 创建调试助手
-    debug = DebugHelper(DebugConfig(
-        enabled=True,
-        auto_screenshot=True,
-        auto_save_html=False,
-        enable_timing=True,
-        enable_breakpoint=False
-    ))
+    debug = DebugHelper(
+        DebugConfig(
+            enabled=True,
+            auto_screenshot=True,
+            auto_save_html=False,
+            enable_timing=True,
+            enable_breakpoint=False,
+        )
+    )
 
     try:
         # 1. 初始化和登录
         logger.info("\n[1/4] 初始化浏览器...")
         debug.start_timer("total")
         login_ctrl = LoginController()
-        
+
         # 从环境变量获取登录信息（已从.env加载）
         username = os.getenv("MIAOSHOU_USERNAME") or os.getenv("TEMU_USERNAME", "")
         password = os.getenv("MIAOSHOU_PASSWORD") or os.getenv("TEMU_PASSWORD", "")
-        
+
         if not username or not password:
             logger.error("✗ 请在.env文件中设置 TEMU_USERNAME 和 TEMU_PASSWORD")
             logger.info("或设置环境变量:")
@@ -212,7 +218,7 @@ async def demo_complete_workflow():
             logger.error("✗ 登录失败")
             return
         debug.end_timer("login")
-        
+
         page = login_ctrl.browser_manager.page
         await debug.save_state(page, "01_after_login")
 
@@ -230,13 +236,13 @@ async def demo_complete_workflow():
         logger.info("[4/4] 执行完整工作流...")
         debug.start_timer("complete_workflow")
         workflow = CompletePublishWorkflow()
-        
+
         result = await workflow.execute(
             page,
             DEMO_PRODUCTS_DATA,
             shop_name=None,  # 使用第一个店铺
             enable_batch_edit=True,  # 启用批量编辑
-            enable_publish=False     # 禁用发布（演示模式）
+            enable_publish=False,  # 禁用发布（演示模式）
         )
         debug.end_timer("complete_workflow")
         await debug.save_state(page, "03_workflow_complete", full_page=True)
@@ -245,7 +251,7 @@ async def demo_complete_workflow():
         logger.info("\n" + "=" * 100)
         logger.info("演示结果")
         logger.info("=" * 100)
-        
+
         logger.info("\n【阶段1：5→20工作流】")
         stage1 = result["stage1_result"]
         logger.info(f"  状态: {'✓ 成功' if stage1.get('success') else '✗ 失败'}")
@@ -277,9 +283,9 @@ async def demo_complete_workflow():
                 logger.warning(f"  - {error}")
 
         logger.info("=" * 100)
-        
+
         debug.end_timer("total")
-        
+
         # 显示性能摘要
         debug.log_performance_summary()
 
@@ -295,6 +301,7 @@ async def demo_complete_workflow():
         except:
             pass
         import traceback
+
         traceback.print_exc()
 
     finally:
@@ -328,4 +335,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-

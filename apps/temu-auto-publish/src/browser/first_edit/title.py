@@ -48,7 +48,7 @@ class FirstEditTitleMixin(FirstEditBase):
             匹配到的标题输入框，未找到时返回 None。
         """
         logger.debug("定位标题输入框")
-        await page.wait_for_load_state("domcontentloaded")
+        # 优化：移除冗余的 wait_for_load_state，由调用方保证页面已加载
 
         title_input = await self.find_visible_element(
             page,
@@ -72,7 +72,7 @@ class FirstEditTitleMixin(FirstEditBase):
         Returns:
             原始标题文本; 若获取失败返回空字符串。
         """
-        await page.wait_for_load_state("domcontentloaded")
+        # 优化：移除冗余的 wait_for_load_state
         for attempt in range(1, max_retries + 1):
             title_input = await self._locate_title_input(page)
             if title_input:
@@ -99,7 +99,7 @@ class FirstEditTitleMixin(FirstEditBase):
             标题是否成功更新。
         """
         logger.info("SOP 4.1: 覆盖标题 -> {}", new_title)
-        await page.wait_for_load_state("domcontentloaded")
+        # 优化：移除冗余的 wait_for_load_state
         title_input = await self._locate_title_input(page)
         if not title_input:
             return False
@@ -116,7 +116,7 @@ class FirstEditTitleMixin(FirstEditBase):
 
     @first_edit_step_retry(max_attempts=3)
     async def append_model_to_title(self, page: Page, model_number: str) -> bool:
-        """按“原标题 + 型号”的伪代码逻辑覆盖标题。
+        """按"原标题 + 型号"的伪代码逻辑覆盖标题。
 
         伪代码步骤：
         1) 定位标题输入框;
@@ -133,7 +133,7 @@ class FirstEditTitleMixin(FirstEditBase):
             标题是否成功更新。
         """
         logger.info("按照原标题 + 型号覆盖标题，型号 {}", model_number)
-        await page.wait_for_load_state("domcontentloaded")
+        # 优化：移除冗余的 wait_for_load_state
         title_input = await self._locate_title_input(page)
         if not title_input:
             return False

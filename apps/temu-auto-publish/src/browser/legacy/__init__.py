@@ -8,4 +8,3 @@
 from .batch_edit_controller_v1 import BatchEditController as BatchEditControllerV1
 
 __all__ = ["BatchEditControllerV1"]
-

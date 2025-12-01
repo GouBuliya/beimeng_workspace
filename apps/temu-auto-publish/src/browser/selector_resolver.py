@@ -135,9 +135,7 @@ class SelectorResolver:
         logger.warning(f"字段配置中的所有定位器都不可用: {field_config}")
         return None
 
-    async def resolve_field_list(
-        self, field_config: dict[str, Any]
-    ) -> list[Locator]:
+    async def resolve_field_list(self, field_config: dict[str, Any]) -> list[Locator]:
         """解析字段配置，返回所有匹配的 Locator 列表.
 
         Args:
@@ -165,5 +163,3 @@ class SelectorResolver:
                 continue
 
         return result
-
-

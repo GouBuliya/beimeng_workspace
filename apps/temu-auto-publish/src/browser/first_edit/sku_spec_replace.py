@@ -281,9 +281,7 @@ async def fill_first_spec_unit(
         return False
 
 
-async def _locate_spec_option_inputs(
-    page: Page, timeout_ms: int
-) -> SpecLocatorResult | None:
+async def _locate_spec_option_inputs(page: Page, timeout_ms: int) -> SpecLocatorResult | None:
     """尝试使用多候选选择器定位规格选项输入框列."""
     await page.wait_for_load_state("domcontentloaded")
     located = await _locate_with_candidates(
@@ -484,9 +482,7 @@ async def _fill_spec_values_core(
             add_btn, strategy = add_btn_located
             current_count = input_count
             await add_btn.first.click()
-            created = await _wait_for_count_change(
-                inputs, current_count + 1, timeout_ms=timeout
-            )
+            created = await _wait_for_count_change(inputs, current_count + 1, timeout_ms=timeout)
             if not created:
                 logger.error("点击添加选项按钮失败，输入框数量未增加(策略: {})", strategy)
                 return False

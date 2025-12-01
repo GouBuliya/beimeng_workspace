@@ -100,9 +100,7 @@ class PublishController:
     def _load_selectors(self) -> dict[str, Any]:
         """加载选择器配置并做基本校验."""
         if not self.selector_path.exists():
-            logger.warning(
-                f"选择器配置文件不存在，将使用兜底选择器: {self.selector_path}"
-            )
+            logger.warning(f"选择器配置文件不存在，将使用兜底选择器: {self.selector_path}")
             return {}
 
         try:
@@ -159,12 +157,18 @@ class PublishController:
         page: Page,
         selectors: Sequence[str],
         *,
-        visible_timeout_ms: int = 4_000,
-        click_timeout_ms: int = 3_000,
-        attempts: int = 3,
+        visible_timeout_ms: int = 2_000,
+        click_timeout_ms: int = 1_500,
+        attempts: int = 2,
         context: str = "",
     ) -> str | None:
-        """尝试依次点击第一个可见且可用的选择器."""
+        """尝试依次点击第一个可见且可用的选择器.
+
+        性能优化说明：
+        - visible_timeout_ms: 4000 -> 2000
+        - click_timeout_ms: 3000 -> 1500
+        - attempts: 3 -> 2
+        """
         last_error: Exception | None = None
         waiter = self._build_waiter(page)
         await waiter.wait_for_dom_stable(timeout_ms=visible_timeout_ms)
@@ -250,10 +254,8 @@ class PublishController:
         """全选当前页 20 条产品."""
 
         logger.info("全选当前页产品（目标 20 条）...")
-        logger.info(f"全选当前页产品（目标 20 条）...")
         if require_load_state:
             await wait_dom_loaded(page, context="[select all 20]")
-            logger.info(f"全选当前页产品（目标 20 条）...")
 
         collection_box_config = self.selectors.get("collection_box", {})
         pagination_config = collection_box_config.get("pagination", {})
@@ -287,16 +289,8 @@ class PublishController:
     async def _reset_to_all_tab(self, page: Page) -> None:
         """复位到「全部」TAB，确保后续操作在正确的列表."""
 
-        temu_tabs = (
-            self.selectors.get("temu_collect_box", {})
-            .get("tabs", {})
-            .get("all", [])
-        )
-        collection_tabs = (
-            self.selectors.get("collection_box", {})
-            .get("tabs", {})
-            .get("all", [])
-        )
+        temu_tabs = self.selectors.get("temu_collect_box", {}).get("tabs", {}).get("all", [])
+        collection_tabs = self.selectors.get("collection_box", {}).get("tabs", {}).get("all", [])
 
         configured_selectors = self._get_selector_candidates(temu_tabs, collection_tabs)
         fallback_selectors = [
@@ -333,10 +327,7 @@ class PublishController:
         try:
             await self._ensure_publish_context(page)
 
-            action_buttons = (
-                self.selectors.get("temu_collect_box", {})
-                .get("action_buttons", {})
-            )
+            action_buttons = self.selectors.get("temu_collect_box", {}).get("action_buttons", {})
             configured_select_shop = action_buttons.get("select_shop")
             select_shop_candidates = self._get_selector_candidates(
                 configured_select_shop,
@@ -348,8 +339,8 @@ class PublishController:
             clicked = await self._click_first_available(
                 page,
                 select_shop_candidates,
-                visible_timeout_ms=5_000,
-                click_timeout_ms=3_000,
+                visible_timeout_ms=2_500,
+                click_timeout_ms=1_500,
                 attempts=2,
                 context="select_shop.open",
             )
@@ -367,12 +358,11 @@ class PublishController:
                 logger.info(f"选择店铺: {normalized_name}")
                 target = page.get_by_text(normalized_name, exact=False).first
                 try:
-                    await target.wait_for(state="visible", timeout=TIMEOUTS.SLOW)
-                    await target.click(timeout=TIMEOUTS.NORMAL)
+                    # 性能优化：减少店铺选择等待时间
+                    await target.wait_for(state="visible", timeout=1500)
+                    await target.click(timeout=1000)
                 except Exception as exc:
-                    logger.warning(
-                        f"定位店铺失败，将尝试全选店铺 name={normalized_name} err={exc}"
-                    )
+                    logger.warning(f"定位店铺失败，将尝试全选店铺 name={normalized_name} err={exc}")
                     await self._select_all_shops(page)
             else:
                 logger.info("未指定店铺，直接全选所有店铺")
@@ -627,7 +617,7 @@ class PublishController:
         #     self._invalidate_publish_context()
         #     await self._close_dialog_safely(page)
         #     return False
-        #禁用供货价设置
+        # 禁用供货价设置
 
     @ensure_dom_ready
     async def _handle_pre_publish_modal(self, page: Page) -> None:
@@ -639,17 +629,18 @@ class PublishController:
             "text='我知道了'",
         )
 
+        # 性能优化：减少前置弹窗超时时间
         confirm_first_clicked = await self._click_first_available(
             page,
             confirm_first_selectors,
-            visible_timeout_ms=TIMEOUTS.SLOW,
-            click_timeout_ms=TIMEOUTS.SLOW,
-            attempts=3,
+            visible_timeout_ms=1500,
+            click_timeout_ms=1200,
+            attempts=2,  # 从 3 次减少到 2 次
             context="batch_publish.pre_modal",
         )
         if confirm_first_clicked:
             logger.info(f"已关闭前置提示弹窗 selector={confirm_first_clicked}")
-            await self._build_waiter(page).wait_for_dom_stable(timeout_ms=TIMEOUTS.FAST)
+            await self._build_waiter(page).wait_for_dom_stable(timeout_ms=500)
 
     @ensure_dom_ready
     async def batch_publish(self, page: Page) -> bool:
@@ -658,7 +649,6 @@ class PublishController:
         logger.info("[SOP 步骤 10] 批量发布")
         logger.info("=" * 60)
         try:
-
             publish_cfg = self.selectors.get("publish", {})
             repeat_cfg = publish_cfg.get("repeat_per_batch", 5)
             try:
@@ -667,10 +657,7 @@ class PublishController:
             except Exception:
                 repeat_per_batch = 5
 
-            action_buttons = (
-                self.selectors.get("temu_collect_box", {})
-                .get("action_buttons", {})
-            )
+            action_buttons = self.selectors.get("temu_collect_box", {}).get("action_buttons", {})
             configured_batch_publish = action_buttons.get("batch_publish")
             publish_btn_candidates = self._get_selector_candidates(
                 configured_batch_publish,
@@ -679,9 +666,7 @@ class PublishController:
             )
             waiter = self._build_waiter(page)
             for round_idx in range(repeat_per_batch):
-                logger.info(
-                    f">>> 批量发布 {round_idx + 1}/{repeat_per_batch} 次，共 20 条产品"
-                )
+                logger.info(f">>> 批量发布 {round_idx + 1}/{repeat_per_batch} 次，共 20 条产品")
                 await self._reset_to_all_tab(page)
                 await self._ensure_publish_context(page, force=True)
 
@@ -698,7 +683,8 @@ class PublishController:
                     self._invalidate_publish_context()
                     raise RuntimeError("未能点击「批量发布」按钮")
                 logger.info(f"批量发布按钮命中 selector={publish_clicked}")
-                await waiter.wait_for_dom_stable(timeout_ms=TIMEOUTS.SLOW)
+                # 性能优化：减少 DOM 稳定检测超时
+                await waiter.wait_for_dom_stable(timeout_ms=1000)
                 await self._handle_pre_publish_modal(page)
 
                 confirm_publish_selectors = self._get_selector_candidates(
@@ -708,31 +694,31 @@ class PublishController:
                 confirm_ready = await self._first_visible_locator(
                     page,
                     confirm_publish_selectors,
-                    timeout_ms=TIMEOUTS.SLOW,
+                    timeout_ms=1500,  # 性能优化：从 TIMEOUTS.SLOW(2500) 减少
                     context="batch_publish.confirm_ready",
                 )
                 if not confirm_ready:
                     self._invalidate_publish_context()
                     raise RuntimeError("确认发布弹窗未出现")
-                await waiter.wait_for_dom_stable(timeout_ms=TIMEOUTS.NORMAL)
+                # 性能优化：减少 DOM 稳定检测超时
+                await waiter.wait_for_dom_stable(timeout_ms=800)
 
                 confirm_publish_clicked = await self._click_first_available(
                     page,
                     confirm_publish_selectors,
                     visible_timeout_ms=1_000,
                     click_timeout_ms=1_000,
-                    attempts=3,#不可更改
+                    attempts=3,  # 不可更改
                     context="batch_publish.confirm",
                 )
-                
-                close_retry_cfg = (
-                    self.selectors.get("publish_confirm", {}).get("close_retry", 5)
-                )
+
+                # 性能优化：减少 close_retry 默认值从 5 到 3
+                close_retry_cfg = self.selectors.get("publish_confirm", {}).get("close_retry", 3)
                 try:
                     close_retry = int(close_retry_cfg)
-                    close_retry = max(1, min(close_retry, 10))
+                    close_retry = max(1, min(close_retry, 5))
                 except Exception:
-                    close_retry = 5
+                    close_retry = 3
 
                 close_button_selectors = self._get_selector_candidates(
                     "button:has-text('关闭')",
@@ -745,10 +731,10 @@ class PublishController:
                     close_button = await self._click_first_available(
                         page,
                         close_button_selectors,
-                        visible_timeout_ms=1_000,
-                        click_timeout_ms=1_000,
+                        visible_timeout_ms=600,  # 性能优化：从 800 减少
+                        click_timeout_ms=500,  # 性能优化：从 600 减少
                         attempts=1,
-                        context=f"batch_publish.close[{attempt+1}/{close_retry}]",
+                        context=f"batch_publish.close[{attempt + 1}/{close_retry}]",
                     )
                     if close_button:
                         logger.info(
@@ -756,7 +742,8 @@ class PublishController:
                             f"(尝试 {attempt + 1}/{close_retry})"
                         )
                         break
-                    await waiter.wait_for_dom_stable(timeout_ms=TIMEOUTS.NORMAL)
+                    # 性能优化：减少等待时间
+                    await waiter.wait_for_dom_stable(timeout_ms=300)
                     if attempt < close_retry - 1:
                         await waiter.apply_retry_backoff(attempt + 1)
 

@@ -14,7 +14,6 @@
 @RELATED: processor.py
 """
 
-
 from loguru import logger
 from pydantic import BaseModel, Field
 
@@ -128,9 +127,7 @@ class PriceCalculator:
             suggested_multiplier: 建议售价倍率（默认使用SOP规则10.0）
             supply_multiplier: 供货价倍率（默认使用SOP规则7.5）
         """
-        self.suggested_multiplier = (
-            suggested_multiplier or self.DEFAULT_SUGGESTED_MULTIPLIER
-        )
+        self.suggested_multiplier = suggested_multiplier or self.DEFAULT_SUGGESTED_MULTIPLIER
         self.supply_multiplier = supply_multiplier or self.DEFAULT_SUPPLY_MULTIPLIER
 
         logger.info(
@@ -150,9 +147,7 @@ class PriceCalculator:
         """
         results = []
         for cost in cost_prices:
-            result = PriceResult.calculate(
-                cost, self.suggested_multiplier, self.supply_multiplier
-            )
+            result = PriceResult.calculate(cost, self.suggested_multiplier, self.supply_multiplier)
             results.append(result)
 
         logger.debug(f"批量计算完成，共 {len(results)} 个")

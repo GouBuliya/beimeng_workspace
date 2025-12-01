@@ -33,6 +33,14 @@ from typing import TYPE_CHECKING, Any, Awaitable, Callable
 
 from loguru import logger
 
+from ..core.workflow_timeout import (
+    DEFAULT_STAGE_TIMEOUTS,
+    TimeoutConfig,
+    WorkflowTimeoutError,
+    get_timeout_config,
+    with_stage_timeout,
+)
+
 try:  # pragma: no cover - optional dependency
     from dotenv import load_dotenv
 except ImportError:  # pragma: no cover
@@ -187,6 +195,8 @@ class CompletePublishWorkflow:
         execution_round: int = 1,
         login_ctrl: "LoginController" | None = None,
         reuse_existing_login: bool = False,
+        # 新增: 超时配置
+        timeout_config: dict[str, int] | TimeoutConfig | None = None,
     ) -> None:
         """初始化工作流控制器.
 
@@ -220,13 +230,19 @@ class CompletePublishWorkflow:
         self.collect_count = max(1, min(self.settings.business.collect_count, 5))
         self.claim_times = max(1, self.settings.business.claim_count)
         self.headless = headless if headless is not None else self.settings.browser.headless
-        
+
         # 断点恢复配置
         self.resume_from_checkpoint = resume_from_checkpoint
         self.checkpoint_id = checkpoint_id
         self.execution_round = max(1, execution_round)
         self.login_ctrl = login_ctrl
         self.reuse_existing_login = reuse_existing_login
+
+        # 超时配置
+        if isinstance(timeout_config, TimeoutConfig):
+            self.timeout_config = timeout_config
+        else:
+            self.timeout_config = get_timeout_config(timeout_config)
 
         # 归一化相对路径(以应用根目录为基准，适配 Windows)
         self._app_root = Path(__file__).resolve().parents[2]
@@ -259,13 +275,40 @@ class CompletePublishWorkflow:
         return asyncio.run(self.execute_async())
 
     async def execute_async(self) -> WorkflowExecutionResult:
-        """?????????????????????."""
+        """异步执行工作流入口."""
 
-        logger.info("?? Temu ??????? (SOTA ????)")
+        logger.info("启动 Temu 发布工作流 (SOTA 异步模式)")
         return await self._run()
 
+    async def _emergency_cleanup(self, reason: str = "timeout") -> None:
+        """紧急清理: 超时或取消时调用.
+
+        Args:
+            reason: 触发清理的原因 ("timeout" | "cancelled" | "error")
+        """
+        logger.warning(f"[EMERGENCY] 触发紧急清理: {reason}")
+
+        # 1. 尝试关闭浏览器资源
+        if self.login_ctrl and self.login_ctrl.browser_manager:
+            try:
+                bm = self.login_ctrl.browser_manager
+                # 调用改进后的 close 方法
+                await bm.close(save_state=False)
+                logger.info("[EMERGENCY] 浏览器资源已清理")
+            except Exception as exc:
+                logger.error(f"[EMERGENCY] 浏览器清理失败: {exc}")
+
+        # 2. 结束性能追踪
+        try:
+            self._perf_tracker.end_workflow(success=False, error=f"Emergency cleanup: {reason}")
+            self._perf_reporter.print_summary()
+        except Exception as exc:
+            logger.debug(f"[EMERGENCY] 性能追踪结束失败: {exc}")
+
     async def _run(self) -> WorkflowExecutionResult:
-        workflow_id = self.checkpoint_id or f"temu_publish_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        workflow_id = (
+            self.checkpoint_id or f"temu_publish_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        )
         stages: list[StageOutcome] = []
         errors: list[str] = []
 
@@ -275,7 +318,7 @@ class CompletePublishWorkflow:
         # 开始性能追踪
         self._perf_tracker.start_workflow(workflow_id)
         self._perf_reporter.print_workflow_start()
-        
+
         # 尝试从检查点恢复
         restored_products: list[EditedProduct] = []
         if self.resume_from_checkpoint:
@@ -283,7 +326,7 @@ class CompletePublishWorkflow:
             if checkpoint and checkpoint.is_resumable:
                 logger.info(f"从检查点恢复: {checkpoint.current_stage}")
                 logger.info(f"已完成阶段: {checkpoint.completed_stages}")
-                
+
                 # 恢复已完成阶段的数据
                 stage1_data = checkpoint_mgr.get_stage_data("stage1_first_edit")
                 if stage1_data and "products" in stage1_data:
@@ -293,10 +336,21 @@ class CompletePublishWorkflow:
         login_ctrl = self.login_ctrl or LoginController()
         self.login_ctrl = login_ctrl
 
+        # 工作流总超时保护
+        workflow_timeout = self.timeout_config.get("workflow_total", 3600)
+        logger.info(
+            f"[TIMEOUT] 工作流总超时设置: {workflow_timeout}s ({workflow_timeout / 60:.1f}分钟)"
+        )
+
         try:
-            selection_rows: list[ProductSelectionRow] = []
-            staff_name = ""
-            page = None
+            async with with_stage_timeout(
+                "workflow_total",
+                workflow_timeout,
+                on_timeout=lambda: self._emergency_cleanup("timeout"),
+            ):
+                selection_rows: list[ProductSelectionRow] = []
+                staff_name = ""
+                page = None
             miaoshou_ctrl: MiaoshouController | None = None
             first_edit_ctrl: FirstEditController | None = None
             batch_edit_ctrl: BatchEditController | None = None
@@ -305,7 +359,7 @@ class CompletePublishWorkflow:
 
             # ===== 阶段 0: 预处理（登录+初始化） =====
             logger.info("阶段0: 预处理开始")
-            
+
             # 解析凭证
             username, password = self._resolve_credentials()
             if not username or not password:
@@ -335,7 +389,7 @@ class CompletePublishWorkflow:
 
             if not login_success:
                 raise RuntimeError("登录ERP失败, 请检查账户或 Cookie")
-            
+
             # 关闭登录后弹窗
             await login_ctrl.dismiss_login_overlays()
 
@@ -346,10 +400,8 @@ class CompletePublishWorkflow:
 
             if self.only_stage4_publish:
                 # 跳转 Temu 采集箱页面(仅发布)
-                collect_box_url = (
-                    login_ctrl.selectors.get("temu_collect_box", {}).get(
-                        "url", "https://erp.91miaoshou.com/pddkj/collect_box/items"
-                    )
+                collect_box_url = login_ctrl.selectors.get("temu_collect_box", {}).get(
+                    "url", "https://erp.91miaoshou.com/pddkj/collect_box/items"
                 )
                 await login_ctrl.ensure_collect_box_ready(collect_box_url)
 
@@ -481,13 +533,9 @@ class CompletePublishWorkflow:
                         )
                         stages.append(stage2)
                         if stage2.success:
-                            await checkpoint_mgr.mark_stage_complete(
-                                "stage2_claim", stage2.details
-                            )
+                            await checkpoint_mgr.mark_stage_complete("stage2_claim", stage2.details)
                         else:
-                            await checkpoint_mgr.mark_stage_failed(
-                                "stage2_claim", stage2.message
-                            )
+                            await checkpoint_mgr.mark_stage_failed("stage2_claim", stage2.message)
                             errors.append(stage2.message)
                             self._perf_tracker.end_workflow(success=False, error=stage2.message)
                             return WorkflowExecutionResult(workflow_id, False, stages, errors)
@@ -621,7 +669,7 @@ class CompletePublishWorkflow:
         # 修复：不管是否有 override，都应该根据 execution_round 计算偏移
         # 因为页面上的商品列表是完整的，需要根据轮次定位到正确的商品
         start_offset = max(0, (self.execution_round - 1) * self.collect_count)
-        
+
         logger.info(
             "首次编辑起始偏移: start_offset=%s (execution_round=%s, collect_count=%s, use_override=%s)",
             start_offset,
@@ -714,17 +762,17 @@ class CompletePublishWorkflow:
                     await locator.click()
                     await locator.fill(str(target_page))
                     with contextlib.suppress(Exception):
-                        await locator.press('Enter')
+                        await locator.press("Enter")
                     await page.wait_for_timeout(800)
                     with contextlib.suppress(Exception):
                         await miaoshou_ctrl._wait_for_table_refresh(page)  # type: ignore[attr-defined]
                     current_page = target_page
-                    logger.info('????? {} ???????', target_page)
+                    logger.info("????? {} ???????", target_page)
                     return current_page
                 except Exception as exc:
-                    logger.debug('???? selector={} ??: {}', selector, exc)
+                    logger.debug("???? selector={} ??: {}", selector, exc)
 
-            logger.warning('???????? {} ????????? {}', target_page, current_page)
+            logger.warning("???????? {} ????????? {}", target_page, current_page)
             return current_page
 
         original_timeout_ms = getattr(
@@ -743,6 +791,7 @@ class CompletePublishWorkflow:
             timeout_overridden = True
 
         try:
+
             async def open_edit_dialog(absolute_idx: int) -> bool:
                 """打开编辑弹窗。
 
@@ -759,7 +808,9 @@ class CompletePublishWorkflow:
                 )
                 if opened:
                     return True
-                logger.debug("默认点击失败，尝试 Codegen 录制逻辑打开第 {} 个商品", absolute_idx + 1)
+                logger.debug(
+                    "默认点击失败，尝试 Codegen 录制逻辑打开第 {} 个商品", absolute_idx + 1
+                )
                 return await open_edit_dialog_codegen(page, absolute_idx)
 
             errors: list[str] = []
@@ -789,9 +840,7 @@ class CompletePublishWorkflow:
 
                 # 为每个商品的编辑添加 Operation 级别追踪
                 op_name = f"edit_product_{absolute_index + 1}"
-                async with self._perf_tracker.operation(
-                    op_name, product_index=absolute_index + 1
-                ):
+                async with self._perf_tracker.operation(op_name, product_index=absolute_index + 1):
                     logger.info(
                         f"编辑商品 {absolute_index + 1} "
                         f"(批次内第 {index + 1}/{len(working_selections)} 个，"
@@ -928,6 +977,7 @@ class CompletePublishWorkflow:
             urls_for_hook = [url.strip() for url in sku_image_urls if url and url.strip()]
 
             if urls_for_hook:
+
                 async def _sync_sku_images(target_page) -> bool:
                     try:
                         return await self.image_manager.replace_sku_images_with_urls(
@@ -1144,7 +1194,9 @@ class CompletePublishWorkflow:
         selection_count = min(max(len(working_products), self.collect_count), 5)
         if working_products:
             target_indexes = [
-                product.index for product in working_products[:selection_count] if product.index >= 0
+                product.index
+                for product in working_products[:selection_count]
+                if product.index >= 0
             ]
         else:
             target_indexes = list(range(start_offset, start_offset + selection_count))
@@ -1176,7 +1228,7 @@ class CompletePublishWorkflow:
         for batch_start in range(0, len(abs_indexes), batch_size):
             batch_indexes = abs_indexes[batch_start : batch_start + batch_size]
             if not batch_indexes:
-                batch_failures.append(f"批次 {batch_start//batch_size+1} 无有效索引")
+                batch_failures.append(f"批次 {batch_start // batch_size + 1} 无有效索引")
                 break
 
             logger.info(
@@ -1191,7 +1243,7 @@ class CompletePublishWorkflow:
             )
             if selected_ok < len(batch_indexes):
                 msg = (
-                    f"批次 {batch_start//batch_size+1} 勾选失败: "
+                    f"批次 {batch_start // batch_size + 1} 勾选失败: "
                     f"成功 {selected_ok}/{len(batch_indexes)}, 失败 {selected_fail}"
                 )
                 batch_failures.append(msg)
@@ -1201,7 +1253,7 @@ class CompletePublishWorkflow:
             if not await miaoshou_ctrl.claim_selected_products_to_temu(
                 page, repeat=self.claim_times
             ):
-                msg = f"批次 {batch_start//batch_size+1} 批量认领失败"
+                msg = f"批次 {batch_start // batch_size + 1} 批量认领失败"
                 batch_failures.append(msg)
                 logger.error(msg)
                 break
@@ -1402,7 +1454,9 @@ class CompletePublishWorkflow:
 
             last_stage: StageOutcome | None = None
             for attempt in range(1, max_attempts + 1):
-                navigation_ok = await batch_edit_ctrl.navigate_to_batch_edit(select_count=target_count)
+                navigation_ok = await batch_edit_ctrl.navigate_to_batch_edit(
+                    select_count=target_count
+                )
                 if not navigation_ok:
                     last_stage = StageOutcome(
                         name="stage3_batch_edit",
@@ -1543,7 +1597,7 @@ class CompletePublishWorkflow:
             start_offset = max(0, (self.execution_round - 1) * self.collect_count)
             end_offset = start_offset + self.collect_count
             limited_rows = list(rows[start_offset:end_offset])
-            
+
             if start_offset > 0:
                 logger.info(
                     "起始轮次=%s: 跳过前 %s 条，处理第 %s-%s 条数据",

@@ -27,6 +27,7 @@ def _import_create_app():
 
     try:  # 优先按包模式导入
         from .api import create_app as factory  # type: ignore[import-not-found]
+
         return factory
     except ImportError:
         panel_dir = Path(__file__).resolve().parent

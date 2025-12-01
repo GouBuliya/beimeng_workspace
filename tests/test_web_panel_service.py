@@ -256,9 +256,7 @@ def test_execute_workflow_invokes_workflow_class(tmp_path, monkeypatch):
             return "done"
 
     monkeypatch.setattr(service, "CompletePublishWorkflow", DummyWorkflow)
-    result = manager._execute_workflow(
-        _make_options(tmp_path), selection_rows_override=["row"]
-    )
+    result = manager._execute_workflow(_make_options(tmp_path), selection_rows_override=["row"])
     assert result == "done"
     assert captured["selection_rows_override"] == ["row"]
     assert captured["selection_table"]

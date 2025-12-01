@@ -60,7 +60,7 @@ class FiveToTwentyWorkflow:
 
     def __init__(self, use_ai_titles: bool = True, debug_mode: bool = False):
         """初始化工作流控制器.
-        
+
         Args:
             use_ai_titles: 是否使用AI生成标题（默认True）
             debug_mode: 是否启用调试模式（默认False）
@@ -73,15 +73,17 @@ class FiveToTwentyWorkflow:
         self.ai_title_generator = AITitleGenerator()
         self.use_ai_titles = use_ai_titles
         self.debug = DebugHelper(enabled=debug_mode)
-        
-        logger.info(f"5→20工作流控制器已初始化（AI标题: {'启用' if use_ai_titles else '禁用'}，调试模式: {'启用' if debug_mode else '禁用'}）")
+
+        logger.info(
+            f"5→20工作流控制器已初始化（AI标题: {'启用' if use_ai_titles else '禁用'}，调试模式: {'启用' if debug_mode else '禁用'}）"
+        )
 
     async def edit_single_product(
         self,
         page: Page,
         product_index: int,
         product_data: Dict,
-        new_titles: Optional[List[str]] = None
+        new_titles: Optional[List[str]] = None,
     ) -> bool:
         """编辑单个产品（首次编辑+逐个AI生成）.
 
@@ -116,28 +118,28 @@ class FiveToTwentyWorkflow:
             True
         """
         logger.info(f"=" * 60)
-        logger.info(f"开始首次编辑第{product_index+1}个产品（逐个AI生成模式）")
+        logger.info(f"开始首次编辑第{product_index + 1}个产品（逐个AI生成模式）")
         logger.info(f"=" * 60)
 
         # 🔴 调试断点: 开始编辑产品
         await self.debug.breakpoint(
-            f"准备编辑第{product_index+1}个产品",
+            f"准备编辑第{product_index + 1}个产品",
             data={
                 "产品索引": product_index,
                 "关键词": product_data.get("keyword"),
                 "型号": product_data.get("model_number"),
                 "成本": product_data.get("cost"),
-            }
+            },
         )
 
         try:
             # 1. 点击编辑按钮，打开编辑弹窗
             if not await self.miaoshou_ctrl.click_edit_product_by_index(page, product_index):
-                logger.error(f"✗ 无法打开第{product_index+1}个产品的编辑弹窗")
+                logger.error(f"✗ 无法打开第{product_index + 1}个产品的编辑弹窗")
                 return False
 
             # 🔴 调试断点: 编辑弹窗已打开
-            await self.debug.breakpoint(f"编辑弹窗已打开（第{product_index+1}个产品）")
+            await self.debug.breakpoint(f"编辑弹窗已打开（第{product_index + 1}个产品）")
 
             # 2. 读取原始标题
             logger.info(f">>> 步骤1: 读取原始标题...")
@@ -151,7 +153,7 @@ class FiveToTwentyWorkflow:
             # 2.5. 核对商品类目（SOP 4.3）
             logger.info(f"\n>>> 步骤1.5: 核对商品类目（SOP 4.3）...")
             is_valid_category, category_name = await self.first_edit_ctrl.check_category(page)
-            
+
             if not is_valid_category:
                 logger.error(f"❌ 类目不合规: {category_name}")
                 logger.warning(f"⚠️  建议：跳过此产品或人工确认后继续")
@@ -163,8 +165,8 @@ class FiveToTwentyWorkflow:
                 logger.success(f"✓ 类目合规: {category_name}")
 
             # 3. 使用AI生成新标题（独立对话）
-            model_number = product_data.get("model_number", f"A{str(product_index+1).zfill(4)}")
-            
+            model_number = product_data.get("model_number", f"A{str(product_index + 1).zfill(4)}")
+
             # 🔴 调试断点: 准备AI生成
             await self.debug.breakpoint(
                 f"准备调用AI生成标题",
@@ -172,31 +174,30 @@ class FiveToTwentyWorkflow:
                     "原始标题": original_title[:80],
                     "型号": model_number,
                     "AI启用": self.use_ai_titles,
-                }
+                },
             )
-            
+
             if self.use_ai_titles:
                 logger.info(f"\n>>> 步骤2: 调用AI生成新标题（独立对话）...")
                 logger.debug(f"    AI提供商: {self.ai_title_generator.provider}")
                 logger.debug(f"    模型: {self.ai_title_generator.model}")
                 if self.ai_title_generator.base_url:
                     logger.debug(f"    API地址: {self.ai_title_generator.base_url}")
-                
+
                 try:
                     import time
+
                     start_time = time.time()
-                    
+
                     # 调用AI生成单个标题
                     title = await self.ai_title_generator.generate_single_title(
-                        original_title,
-                        model_number=f"{model_number}型号",
-                        use_ai=True
+                        original_title, model_number=f"{model_number}型号", use_ai=True
                     )
-                    
+
                     elapsed_time = time.time() - start_time
                     logger.success(f"✓ AI生成完成，耗时: {elapsed_time:.2f}秒")
                     logger.info(f"✓ 新标题: {title}")
-                    
+
                     # 🔴 调试断点: AI生成完成
                     await self.debug.breakpoint(
                         f"AI标题生成完成",
@@ -204,9 +205,9 @@ class FiveToTwentyWorkflow:
                             "原始标题": original_title[:60],
                             "新标题": title,
                             "耗时": f"{elapsed_time:.2f}秒",
-                        }
+                        },
                     )
-                    
+
                 except Exception as e:
                     logger.error(f"❌ AI生成失败: {e}")
                     logger.warning(f"⚠️ 使用降级方案：原标题+型号")
@@ -220,15 +221,15 @@ class FiveToTwentyWorkflow:
             logger.info(f"\n>>> 步骤3: 填写新标题...")
             logger.debug(f"    标题内容: {title}")
             logger.debug(f"    标题长度: {len(title)} 字符")
-            
+
             edit_result = await self.first_edit_ctrl.edit_title(page, title)
-            
+
             if not edit_result:
                 logger.error(f"✗ 标题编辑失败")
                 logger.error(f"    失败的标题: {title}")
             else:
                 logger.success(f"✓ 标题编辑成功")
-            
+
             # 等待标题更新生效
             await page.wait_for_timeout(1000)
             logger.debug(f"    已等待1秒确保标题更新")
@@ -248,12 +249,12 @@ class FiveToTwentyWorkflow:
             if not await self.first_edit_ctrl.set_sku_price(page, price):
                 logger.error(f"✗ 价格设置失败")
                 return False
-            
+
             # 8. 设置库存
             if not await self.first_edit_ctrl.set_sku_stock(page, stock):
                 logger.error(f"✗ 库存设置失败")
                 return False
-            
+
             # 9. 设置重量（SOP 7.9要求：5000-9999G）
             logger.info(f"\n>>> 步骤6: 设置重量...")
             weight = random.randint(5000, 9999)
@@ -265,7 +266,7 @@ class FiveToTwentyWorkflow:
                     logger.warning(f"⚠️  重量设置失败（可能需要在实际环境调试选择器）")
             except Exception as e:
                 logger.warning(f"⚠️  重量设置异常: {e}")
-            
+
             # 10. 设置尺寸（SOP 7.10要求：长>宽>高，50-99cm）
             logger.info(f"\n>>> 步骤7: 设置尺寸...")
             # 生成符合要求的尺寸（长>宽>高）
@@ -280,7 +281,7 @@ class FiveToTwentyWorkflow:
                     logger.warning(f"⚠️  尺寸设置失败（可能需要在实际环境调试选择器）")
             except Exception as e:
                 logger.warning(f"⚠️  尺寸设置异常: {e}")
-            
+
             # 11. 上传尺寸图（如果提供了URL）- SOP 4.5
             size_chart_url = product_data.get("size_chart_url")
             if size_chart_url:
@@ -308,40 +309,37 @@ class FiveToTwentyWorkflow:
                     logger.warning(f"⚠️  产品视频上传异常: {e}")
             else:
                 logger.debug("跳过产品视频上传（未提供URL）")
-            
+
             # 🔴 调试断点: 准备保存
             await self.debug.breakpoint(
-                f"所有编辑完成，准备保存（第{product_index+1}个产品）",
+                f"所有编辑完成，准备保存（第{product_index + 1}个产品）",
                 data={
                     "标题": title[:60],
                     "价格": price,
                     "库存": stock,
-                }
+                },
             )
-            
+
             # 13. 保存修改
             logger.info(f"\n>>> 步骤10: 保存修改...")
             if not await self.first_edit_ctrl.save_changes(page, wait_for_close=False):
                 logger.error(f"✗ 保存失败")
                 return False
-            
+
             # 14. 关闭弹窗
             await self.first_edit_ctrl.close_dialog(page)
             await page.wait_for_timeout(500)
 
-            logger.success(f"✓ 第{product_index+1}个产品首次编辑完成")
+            logger.success(f"✓ 第{product_index + 1}个产品首次编辑完成")
             return True
 
         except Exception as e:
-            logger.error(f"编辑第{product_index+1}个产品失败: {e}")
+            logger.error(f"编辑第{product_index + 1}个产品失败: {e}")
             logger.exception("详细错误信息:")
             return False
 
     async def execute(
-        self,
-        page: Page,
-        products_data: Optional[List[Dict]] = None,
-        claim_times: int = 4
+        self, page: Page, products_data: Optional[List[Dict]] = None, claim_times: int = 4
     ) -> Dict:
         """执行完整的5→20工作流.
 
@@ -384,7 +382,7 @@ class FiveToTwentyWorkflow:
         # 验证输入数据
         if products_data is None:
             raise ValueError("必须提供产品数据（products_data），不再支持空数据模式")
-        
+
         if len(products_data) != 5:
             raise ValueError(f"必须提供5个产品数据，当前提供了{len(products_data)}个")
 
@@ -393,7 +391,7 @@ class FiveToTwentyWorkflow:
             "edited_count": 0,
             "claimed_count": 0,
             "final_count": 0,
-            "errors": []
+            "errors": [],
         }
 
         try:
@@ -406,17 +404,17 @@ class FiveToTwentyWorkflow:
 
             edited_count = 0
             for i in range(5):
-                logger.info(f"\n>>> 编辑第{i+1}/5个产品...")
-                
+                logger.info(f"\n>>> 编辑第{i + 1}/5个产品...")
+
                 # 逐个模式：不再传入new_titles，每个产品内部独立生成
                 if await self.edit_single_product(page, i, products_data[i], None):
                     edited_count += 1
-                    logger.success(f"✓ 第{i+1}个产品编辑成功（总计: {edited_count}/5）")
+                    logger.success(f"✓ 第{i + 1}个产品编辑成功（总计: {edited_count}/5）")
                 else:
-                    error_msg = f"第{i+1}个产品编辑失败"
+                    error_msg = f"第{i + 1}个产品编辑失败"
                     result["errors"].append(error_msg)
                     logger.error(f"✗ {error_msg}")
-                
+
                 # 每个产品编辑完后等待一下
                 await page.wait_for_timeout(500)
 
@@ -440,17 +438,19 @@ class FiveToTwentyWorkflow:
 
             claimed_count = 0
             for i in range(edited_count):
-                logger.info(f"\n>>> 认领第{i+1}/{edited_count}个产品...")
-                
+                logger.info(f"\n>>> 认领第{i + 1}/{edited_count}个产品...")
+
                 # 注意：认领后产品会移动，所以始终认领索引0的产品
                 if await self.miaoshou_ctrl.claim_product_multiple_times(page, 0, claim_times):
                     claimed_count += 1
-                    logger.success(f"✓ 第{i+1}个产品认领成功（总计: {claimed_count}/{edited_count}）")
+                    logger.success(
+                        f"✓ 第{i + 1}个产品认领成功（总计: {claimed_count}/{edited_count}）"
+                    )
                 else:
-                    error_msg = f"第{i+1}个产品认领失败"
+                    error_msg = f"第{i + 1}个产品认领失败"
                     result["errors"].append(error_msg)
                     logger.error(f"✗ {error_msg}")
-                
+
                 # 每个产品认领完后等待一下
                 await page.wait_for_timeout(500)
 
@@ -496,9 +496,7 @@ class FiveToTwentyWorkflow:
 
 # 便捷函数
 async def execute_five_to_twenty_workflow(
-    page: Page,
-    products_data: List[Dict],
-    claim_times: int = 4
+    page: Page, products_data: List[Dict], claim_times: int = 4
 ) -> Dict:
     """执行5→20工作流的便捷函数.
 
@@ -522,4 +520,3 @@ if __name__ == "__main__":
     # 这个工作流需要配合Page对象和真实数据使用
     # 测试请在集成测试中进行
     pass
-

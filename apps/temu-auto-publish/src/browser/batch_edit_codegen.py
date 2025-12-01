@@ -71,27 +71,34 @@ async def _stabilize(
     page: Page,
     label: str,
     *,
-    min_ms: int = 80,
-    max_ms: int = 500,
+    min_ms: int = 30,
+    max_ms: int = 200,
     wait_for_network: bool = False,
 ) -> float:
-    """使用智能等待替代硬编码 sleep, 失败时退回最小等待."""
+    """使用智能等待替代硬编码 sleep, 失败时退回最小等待.
+
+    性能优化说明：
+    - 默认 min_ms 从 80 减少到 30
+    - 默认 max_ms 从 500 减少到 200
+    - 调用处的参数会被应用一个缩减因子来加速
+    """
+    # 应用性能优化因子（减少约 40-50% 的等待时间）
+    optimized_min = max(20, int(min_ms * 0.5))
+    optimized_max = max(50, int(max_ms * 0.5))
 
     try:
         return await smart_wait(
             page,
             label,
-            min_ms=min_ms,
-            max_ms=max_ms,
+            min_ms=optimized_min,
+            max_ms=optimized_max,
             wait_for_network=wait_for_network,
             wait_for_dom=True,
         )
     except Exception as exc:  # pragma: no cover - 调试保护
-        logger.debug(
-            f"智能等待失败 label={label} err={exc}, fallback={min_ms}ms"
-        )
-        await page.wait_for_timeout(min_ms)
-        return float(min_ms)
+        logger.debug(f"智能等待失败 label={label} err={exc}, fallback={optimized_min}ms")
+        await page.wait_for_timeout(optimized_min)
+        return float(optimized_min)
 
 
 # 步骤级重试策略
@@ -100,7 +107,7 @@ _step_retry_policy = create_step_retry_policy()
 
 def smart_retry(max_attempts: int = 2, delay: float = 0.5, exceptions: tuple = (Exception,)):
     """智能重试装饰器,用于关键操作的自动重试。
-    
+
     注意: 此为兼容旧代码的包装器，内部使用增强版重试机制。
 
     Args:
@@ -176,8 +183,9 @@ async def run_batch_edit(
         "step_errors": [],  # 记录各步骤的错误
         "timing": {},  # 记录各步骤耗时
     }
-    
+
     import time
+
     workflow_start = time.perf_counter()
 
     try:
@@ -206,7 +214,7 @@ async def run_batch_edit(
         await checkbox.click()
         # 使用智能等待
         await smart_wait(page, "select_all_products", min_ms=20, max_ms=300)
-        
+
         # 验证选中状态
         try:
             await page.locator(".jx-checkbox.is-checked").first.wait_for(
@@ -220,7 +228,7 @@ async def run_batch_edit(
         await page.get_by_text("批量编辑").click()
         # 优化: 减少等待时间 600 -> 300
         await smart_wait(page, "open_batch_edit_dialog", min_ms=20, max_ms=300)
-        
+
         try:
             await _wait_for_dialog_open(page)
         except Exception:
@@ -234,7 +242,10 @@ async def run_batch_edit(
             ("英语标题", lambda: _step_02_english_title(page)),
             ("类目属性", lambda: _step_03_category_attrs(page, payload)),
             ("主货号", lambda: _step_04_main_sku(page)),
-            ("外包装", lambda: _step_05_outer_package(page, payload.get("outer_package_image", ""))),
+            (
+                "外包装",
+                lambda: _step_05_outer_package(page, payload.get("outer_package_image", "")),
+            ),
             ("产地", lambda: _step_06_origin(page)),
             ("定制品", lambda: _step_07_customized(page)),
             ("敏感属性", lambda: _step_08_sensitive(page)),
@@ -290,14 +301,14 @@ async def run_batch_edit(
 
         workflow_elapsed = (time.perf_counter() - workflow_start) * 1000
         result["timing"]["total"] = round(workflow_elapsed, 2)
-        
+
         logger.success(f"批量编辑 18 步全部完成 (总耗时: {workflow_elapsed:.0f}ms)")
         result["success"] = True
 
     except Exception as exc:
         workflow_elapsed = (time.perf_counter() - workflow_start) * 1000
         result["timing"]["total"] = round(workflow_elapsed, 2)
-        
+
         logger.exception(
             f"批量编辑流程失败(第 {result['completed_steps']}/{result['total_steps']} 步): {exc}"
         )
@@ -536,7 +547,9 @@ async def _step_05_outer_package(page: Page, image_path: str | None) -> None:
             # 直接使用已存在的文件输入框
             await file_inputs.last.set_input_files(chosen_path)
             logger.success("✓ 外包装图片已上传: {}", chosen_path)
-            await _stabilize(page, "outer_package_upload", min_ms=40, max_ms=80, wait_for_network=True)
+            await _stabilize(
+                page, "outer_package_upload", min_ms=40, max_ms=80, wait_for_network=True
+            )
         else:
             # 如果没有文件输入框,尝试通过下拉菜单触发
             logger.warning("未找到文件输入框,跳过外包装图片上传")
@@ -793,7 +806,7 @@ async def _step_11_platform_sku(page: Page) -> None:
 async def _step_12_sku_category(page: Page) -> None:
     """步骤 12: SKU 分类 - 点击分类下拉框选择单品，然后保存。"""
     dialog = page.get_by_role("dialog")
-    
+
     # 等待加载遮罩消失
     loading_mask = page.locator(".el-loading-mask")
     with suppress(Exception):
@@ -823,12 +836,12 @@ async def _step_12_sku_category(page: Page) -> None:
 
     if not nav_clicked:
         raise RuntimeError("未能点击SKU分类导航")
-    
+
     # 等待加载
     with suppress(Exception):
         await loading_mask.wait_for(state="hidden", timeout=2000)
     await _stabilize(page, "sku_category_loading", min_ms=350, max_ms=650, wait_for_network=True)
-    
+
     # 2. 点击"分类"下拉框 - 多种选择器尝试
     dropdown_clicked = False
     dropdown_selectors = [
@@ -848,7 +861,7 @@ async def _step_12_sku_category(page: Page) -> None:
         dialog.locator(".batch-editor-right .el-select input").first,
         dialog.locator(".batch-editor-right .el-select").first,
     ]
-    
+
     for selector in dropdown_selectors:
         try:
             if await selector.count():
@@ -859,17 +872,19 @@ async def _step_12_sku_category(page: Page) -> None:
         except Exception as e:
             logger.debug(f"选择器失败: {e}")
             continue
-    
+
     if not dropdown_clicked:
         raise RuntimeError("未找到SKU分类下拉框")
 
     # 等待下拉菜单出现
     await _stabilize(page, "sku_category_dropdown", min_ms=300, max_ms=550)
-    
+
     # 3. 在下拉菜单中选择"单品"
     option_clicked = False
     option_selectors = [
-        page.locator(".el-select-dropdown:visible .el-select-dropdown__item").filter(has_text="单品").first,
+        page.locator(".el-select-dropdown:visible .el-select-dropdown__item")
+        .filter(has_text="单品")
+        .first,
         page.locator(".el-select-dropdown__item:has-text('单品')").first,
         page.get_by_role("option", name="单品").first,
         page.get_by_text("单品", exact=True).first,
@@ -892,7 +907,7 @@ async def _step_12_sku_category(page: Page) -> None:
         raise RuntimeError("未找到'单品'选项")
 
     await _stabilize(page, "sku_category_pre_save", min_ms=220, max_ms=360)
-    
+
     # 4. 点击保存修改
     save_btn = page.get_by_role("button", name="保存修改")
     try:
@@ -900,7 +915,7 @@ async def _step_12_sku_category(page: Page) -> None:
     except Exception as e:
         logger.warning(f"点击保存修改失败: {e}，尝试备用选择器")
         await page.locator("button:has-text('保存修改')").first.click(timeout=2000)
-    
+
     await _close_edit_dialog(page)
 
 
@@ -981,25 +996,25 @@ async def _step_18_manual(page: Page, file_path: str) -> None:
         file_path: 产品说明书 PDF 文件路径(绝对路径)。
     """
     dialog = page.get_by_role("dialog")
-    
+
     # 1. 点击左侧导航"产品说明书"
     await page.get_by_text("产品说明书").click()
     await _stabilize(page, "manual_nav", min_ms=220, max_ms=360)
-    
+
     if not file_path:
         logger.warning("⚠️ 未提供产品说明书文件路径，跳过上传")
         await page.get_by_role("button", name="预览").click()
         await page.get_by_role("button", name="保存修改").click()
         await _close_edit_dialog(page)
         return
-    
+
     # 2. hover 到"上传文件"按钮，触发下拉菜单
     upload_btn_selectors = [
         dialog.locator("button:has-text('上传文件')").first,
         page.locator("button:has-text('上传文件')").first,
         page.get_by_role("button", name="上传文件").first,
     ]
-    
+
     hover_done = False
     for upload_btn in upload_btn_selectors:
         try:
@@ -1012,10 +1027,10 @@ async def _step_18_manual(page: Page, file_path: str) -> None:
                 break
         except Exception:
             continue
-    
+
     if not hover_done:
         logger.warning("⚠️ 未找到上传文件按钮")
-    
+
     # 3. 点击"本地上传"选项
     local_upload_selectors = [
         page.locator("text=本地上传").first,
@@ -1024,7 +1039,7 @@ async def _step_18_manual(page: Page, file_path: str) -> None:
         page.locator(".el-dropdown-menu__item:has-text('本地上传')").first,
         page.locator("li:has-text('本地上传')").first,
     ]
-    
+
     local_clicked = False
     for local_btn in local_upload_selectors:
         try:
@@ -1035,10 +1050,10 @@ async def _step_18_manual(page: Page, file_path: str) -> None:
                 break
         except Exception:
             continue
-    
+
     if not local_clicked:
         logger.warning("⚠️ 未找到本地上传选项")
-    
+
     # 4. 上传文件
     await _stabilize(page, "manual_before_upload", min_ms=150, max_ms=240)
     try:
@@ -1046,7 +1061,9 @@ async def _step_18_manual(page: Page, file_path: str) -> None:
         if await file_inputs.count() > 0:
             await file_inputs.last.set_input_files(file_path)
             logger.success(f"✓ 产品说明书已上传: {file_path}")
-            await _stabilize(page, "manual_after_upload", min_ms=350, max_ms=600, wait_for_network=True)
+            await _stabilize(
+                page, "manual_after_upload", min_ms=350, max_ms=600, wait_for_network=True
+            )
         else:
             logger.warning("⚠️ 未找到文件输入框")
     except Exception as exc:
@@ -1058,29 +1075,29 @@ async def _step_18_manual(page: Page, file_path: str) -> None:
     await _close_edit_dialog(page)
 
 
-async def _wait_for_save_toast(page: Page, timeout: int = 200) -> None:
-    """等待保存成功提示并等待其消失(极速模式)。
+async def _wait_for_save_toast(page: Page, timeout: int = 150) -> None:
+    """等待保存成功提示并等待其消失(极速模式 v2)。
 
     Args:
         page: Playwright 页面对象。
-        timeout: 超时时间(毫秒),默认 200（极速: 600 -> 200）。
+        timeout: 超时时间(毫秒),默认 150（优化: 200 -> 150）。
     """
     try:
         toast = page.locator("text=保存成功")
         await toast.wait_for(state="visible", timeout=timeout)
-        # 极速模式: 减少等待时间 300 -> 100
-        await smart_wait(page, "wait_save_toast", min_ms=10, max_ms=100, wait_for_network=True)
+        # 优化: 100 -> 50
+        await smart_wait(page, "wait_save_toast", min_ms=8, max_ms=50, wait_for_network=False)
     except Exception:
-        # 静默失败（极速: 100 -> 30）
-        await smart_wait(page, "wait_save_fallback", min_ms=10, max_ms=30)
+        # 静默失败（优化: 30 -> 20）
+        await smart_wait(page, "wait_save_fallback", min_ms=8, max_ms=20)
 
 
-async def _wait_for_dropdown_options(page: Page, timeout: int = 150) -> None:
-    """等待下拉选项列表出现(极速模式)。
+async def _wait_for_dropdown_options(page: Page, timeout: int = 100) -> None:
+    """等待下拉选项列表出现(极速模式 v2)。
 
     Args:
         page: Playwright 页面对象。
-        timeout: 超时时间(毫秒),默认 150（极速: 400 -> 150）。
+        timeout: 超时时间(毫秒),默认 100（优化: 150 -> 100）。
     """
     try:
         await page.locator(".el-select-dropdown").wait_for(state="visible", timeout=timeout)
@@ -1088,21 +1105,21 @@ async def _wait_for_dropdown_options(page: Page, timeout: int = 150) -> None:
         pass
 
 
-async def _wait_for_dialog_open(page: Page, timeout: int = 300) -> None:
-    """等待编辑对话框完全打开(极速模式)。
+async def _wait_for_dialog_open(page: Page, timeout: int = 200) -> None:
+    """等待编辑对话框完全打开(极速模式 v2)。
 
     Args:
         page: Playwright 页面对象。
-        timeout: 超时时间(毫秒),默认 300（极速: 800 -> 300）。
+        timeout: 超时时间(毫秒),默认 200（优化: 300 -> 200）。
     """
     try:
         dialog = page.get_by_role("dialog")
         await dialog.wait_for(state="visible", timeout=timeout)
-        # 极速模式: 150 -> 50
-        await smart_wait(page, "dialog_open", min_ms=10, max_ms=50)
+        # 优化: 50 -> 30
+        await smart_wait(page, "dialog_open", min_ms=8, max_ms=30)
     except Exception:
-        # 降级（极速: 200 -> 50）
-        await smart_wait(page, "dialog_open_fallback", min_ms=10, max_ms=50)
+        # 降级（优化: 50 -> 30）
+        await smart_wait(page, "dialog_open_fallback", min_ms=8, max_ms=30)
 
 
 async def _close_edit_dialog(page: Page) -> None:
@@ -1113,7 +1130,7 @@ async def _close_edit_dialog(page: Page) -> None:
     """
     # 极速: 800 -> 300
     close_locator = await _resilient_locator.locate(page, "close_button", timeout=300)
-    
+
     if close_locator:
         try:
             await close_locator.click()
@@ -1122,7 +1139,7 @@ async def _close_edit_dialog(page: Page) -> None:
             return
         except Exception as exc:
             logger.debug(f"弹性选择器关闭按钮点击失败: {exc}")
-    
+
     # 降级方案1: 使用 role 定位
     try:
         close_btn = page.get_by_role("button", name="关闭", exact=True)
@@ -1132,7 +1149,7 @@ async def _close_edit_dialog(page: Page) -> None:
         return
     except Exception:
         pass
-    
+
     # 降级方案2: 使用图标关闭
     try:
         close_icon = page.locator(".edit-box-header-side > .el-icon-close")
@@ -1159,7 +1176,7 @@ async def _apply_user_filter(page: Page, filter_owner: str) -> bool:
     # 等待页面加载完成
     logger.info("等待 Temu 全托管采集箱页面加载...")
     await _stabilize(page, "temu_collect_load", min_ms=500, max_ms=1000, wait_for_network=True)
-    
+
     # 等待表格行出现，确认页面已加载
     try:
         await page.locator(".pro-virtual-table__row-body").first.wait_for(
@@ -1171,9 +1188,9 @@ async def _apply_user_filter(page: Page, filter_owner: str) -> bool:
 
     # 方案1: 通过"所属人员"标签找到对应的 jx-select 组件
     logger.info(f"尝试按所属人员筛选: {filter_owner}")
-    
+
     filter_applied = False
-    
+
     # 策略1: 找到包含"所属人员"文本的 form-item，然后定位其中的输入框
     # 注意：Temu 全托管采集箱使用"所属人员"而不是"创建人员"
     try:
@@ -1187,14 +1204,14 @@ async def _apply_user_filter(page: Page, filter_owner: str) -> bool:
             ".jx-form-item:has(label:has-text('创建人员'))",
             ".jx-form-item:has-text('创建人员')",
         ]
-        
+
         for form_selector in form_item_selectors:
             form_item = page.locator(form_selector).first
             if await form_item.count() == 0:
                 continue
-                
+
             logger.debug(f"找到人员筛选表单项: {form_selector}")
-            
+
             # 点击整个 jx-select 容器（而不是 input），避免被其他元素拦截
             select_wrapper = form_item.locator(".jx-select__wrapper").first
             if await select_wrapper.count() > 0:
@@ -1214,27 +1231,33 @@ async def _apply_user_filter(page: Page, filter_owner: str) -> bool:
                         logger.debug("强制点击 input")
                     else:
                         continue
-            
+
             await _stabilize(page, "filter_focus_primary", min_ms=220, max_ms=340)
-            
+
             # 在输入框中输入筛选内容
             input_element = form_item.locator("input.jx-select__input").first
             if await input_element.count() > 0:
                 await input_element.fill("")
                 await input_element.type(filter_owner, delay=80)
                 await _stabilize(page, "filter_type_primary", min_ms=850, max_ms=1100)
-                
+
                 # 点击匹配的下拉选项
                 option_clicked = await _click_dropdown_option(page, filter_owner)
-                
+
                 if option_clicked:
                     await _stabilize(page, "filter_option_primary", min_ms=220, max_ms=340)
                     await _click_search_button(page)
-                    await _stabilize(page, "filter_apply_primary", min_ms=1200, max_ms=1600, wait_for_network=True)
+                    await _stabilize(
+                        page,
+                        "filter_apply_primary",
+                        min_ms=1200,
+                        max_ms=1600,
+                        wait_for_network=True,
+                    )
                     filter_applied = True
                     logger.success(f"✓ 二次编辑人员筛选成功: {filter_owner}")
                     break
-                    
+
     except Exception as exc:
         logger.debug(f"策略1筛选失败: {exc}")
 
@@ -1242,7 +1265,7 @@ async def _apply_user_filter(page: Page, filter_owner: str) -> bool:
     if not filter_applied:
         try:
             logger.debug("使用策略2: 通过 label 文本直接定位所属人员")
-            
+
             # 找到"所属人员"标签，然后定位其父元素中的 jx-select
             label = page.locator("label:has-text('所属人员')").first
             if await label.count() > 0:
@@ -1257,16 +1280,24 @@ async def _apply_user_filter(page: Page, filter_owner: str) -> bool:
                         await input_element.fill("")
                         await input_element.type(filter_owner, delay=80)
                         await _stabilize(page, "filter_type_strategy2", min_ms=850, max_ms=1100)
-                        
+
                         option_clicked = await _click_dropdown_option(page, filter_owner)
-                        
+
                         if option_clicked:
-                            await _stabilize(page, "filter_option_strategy2", min_ms=220, max_ms=340)
+                            await _stabilize(
+                                page, "filter_option_strategy2", min_ms=220, max_ms=340
+                            )
                             await _click_search_button(page)
-                            await _stabilize(page, "filter_apply_strategy2", min_ms=1200, max_ms=1600, wait_for_network=True)
+                            await _stabilize(
+                                page,
+                                "filter_apply_strategy2",
+                                min_ms=1200,
+                                max_ms=1600,
+                                wait_for_network=True,
+                            )
                             filter_applied = True
                             logger.success(f"✓ 二次编辑人员筛选成功(策略2): {filter_owner}")
-                    
+
         except Exception as exc:
             logger.debug(f"策略2筛选失败: {exc}")
 
@@ -1286,7 +1317,7 @@ async def _click_dropdown_option(page: Page, filter_owner: str) -> bool:
         f".el-select-dropdown__wrap li:has-text('{filter_owner}')",
         f"li:has-text('{filter_owner}')",
     ]
-    
+
     for opt_selector in option_selectors:
         try:
             option_locator = page.locator(opt_selector).first
@@ -1296,7 +1327,7 @@ async def _click_dropdown_option(page: Page, filter_owner: str) -> bool:
                 return True
         except Exception:
             continue
-    
+
     logger.warning(f"未找到用户选项: {filter_owner}")
     return False
 
@@ -1309,7 +1340,7 @@ async def _click_search_button(page: Page) -> bool:
         "button.jx-button--primary:has-text('搜索')",
         "button:has-text('搜索')",
     ]
-    
+
     for search_selector in search_btn_selectors:
         try:
             search_btn = page.locator(search_selector).first
@@ -1319,6 +1350,6 @@ async def _click_search_button(page: Page) -> bool:
                 return True
         except Exception:
             continue
-    
+
     logger.warning("未找到搜索按钮")
     return False

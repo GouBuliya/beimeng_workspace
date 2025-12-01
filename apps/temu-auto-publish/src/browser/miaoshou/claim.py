@@ -44,9 +44,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
     # vue-recycle-scroller 虚拟滚动行选择器
     _VIRTUAL_ROW_SELECTOR: ClassVar[str] = ".vue-recycle-scroller__item-view"
     _ROW_HEIGHT: ClassVar[int] = 119
-    _ROW_CHECKBOX_SELECTOR: ClassVar[str] = (
-        ".is-fixed-left.is-selection-column .jx-checkbox"
-    )
+    _ROW_CHECKBOX_SELECTOR: ClassVar[str] = ".is-fixed-left.is-selection-column .jx-checkbox"
     _CHECKBOX_CANDIDATE_SELECTORS: ClassVar[tuple[str, ...]] = (
         "input[type='checkbox']",
         ".jx-checkbox__input",
@@ -93,12 +91,12 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
         """Refresh the Miaoshou collection box page and ensure rows are visible."""
 
         try:
-            logger.debug(
-                f"Refreshing collection box page at {self._COLLECTION_BOX_URL}"
-            )
+            logger.debug(f"Refreshing collection box page at {self._COLLECTION_BOX_URL}")
             await page.goto(self._COLLECTION_BOX_URL, wait_until="domcontentloaded")
+            # 性能优化：networkidle 改为短等待，避免长时间阻塞
+            # 原因：networkidle 可能永远无法触发，且大部分情况下 domcontentloaded 已足够
             with suppress(Exception):
-                await page.wait_for_load_state("networkidle", timeout=PAGE_TIMEOUTS.NETWORK)
+                await page.wait_for_timeout(300)
         except Exception as exc:
             logger.warning(f"Failed to refresh collection box page: {exc}")
 
@@ -114,17 +112,17 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
             except Exception as exc:
                 logger.warning("负责人筛选失败({}): {}", filter_owner, exc)
 
-    async def _wait_for_rows(self, page: Page, *, timeout: int = 1_500) -> bool:
-        """Wait until the collection box table rows are rendered."""
+    async def _wait_for_rows(self, page: Page, *, timeout: int = 1_000) -> bool:
+        """Wait until the collection box table rows are rendered.
 
+        性能优化：timeout 从 1500ms 减少到 1000ms
+        """
         rows = page.locator(self._ROW_SELECTOR)
         try:
             await rows.first.wait_for(state="visible", timeout=timeout)
             return True
         except PlaywrightTimeoutError:
-            logger.warning(
-                f"Product rows did not become visible within {timeout}ms"
-            )
+            logger.warning(f"Product rows did not become visible within {timeout}ms")
             return False
 
     async def _wait_for_dropdown_state(
@@ -133,10 +131,12 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
         selectors: str,
         *,
         state: str = "visible",
-        timeout: int = 400,
+        timeout: int = 250,
     ) -> None:
-        """Wait for dropdown containers matching ``selectors`` to reach ``state``."""
+        """Wait for dropdown containers matching ``selectors`` to reach ``state``.
 
+        性能优化：timeout 从 400ms 减少到 250ms
+        """
         dropdown = page.locator(selectors)
         with suppress(Exception):
             await dropdown.first.wait_for(state=state, timeout=timeout)
@@ -146,7 +146,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
         page: Page,
         *,
         state: str = "visible",
-        timeout: int = 400,
+        timeout: int = 250,
     ) -> None:
         await self._wait_for_dropdown_state(
             page, self._SELECT_DROPDOWN_LOCATOR, state=state, timeout=timeout
@@ -157,7 +157,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
         page: Page,
         *,
         state: str = "visible",
-        timeout: int = 400,
+        timeout: int = 250,
     ) -> None:
         await self._wait_for_dropdown_state(
             page, self._CLAIM_DROPDOWN_LOCATOR, state=state, timeout=timeout
@@ -181,9 +181,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
             if idx < 0:
                 continue
             if idx >= available:
-                logger.debug(
-                    f"Row index {idx} exceeds available rows {available}"
-                )
+                logger.debug(f"Row index {idx} exceeds available rows {available}")
                 continue
             resolved.append(idx)
         return resolved
@@ -220,16 +218,16 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                 await locator.click()
                 await locator.fill(str(target_page))
                 with suppress(Exception):
-                    await locator.press('Enter')
+                    await locator.press("Enter")
                 await waiter.wait_for_dom_stable(timeout_ms=800)
                 with suppress(Exception):
                     await self._wait_for_rows(page)
-                logger.info('认领流程：已跳转到第 {} 页', target_page)
+                logger.info("认领流程：已跳转到第 {} 页", target_page)
                 return True
             except Exception as exc:
-                logger.debug('翻页失败 selector={}: {}', selector, exc)
+                logger.debug("翻页失败 selector={}: {}", selector, exc)
 
-        logger.warning('认领流程：无法跳转到第 {} 页', target_page)
+        logger.warning("认领流程：无法跳转到第 {} 页", target_page)
         return False
 
     async def select_products_for_claim(
@@ -320,12 +318,15 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                 if enable_scroll:
                     for rel_idx in page_relative_indexes[page_selected:]:
                         from ...utils.scroll_helper import scroll_to_product_position
+
                         await scroll_to_product_position(page, target_index=rel_idx)
                         await waiter.wait_for_dom_stable(timeout_ms=500)
                         if await self._click_checkbox_by_js(page, 0):
                             selected += 1
                         else:
-                            logger.error(f"Failed to toggle checkbox for page-relative index {rel_idx}")
+                            logger.error(
+                                f"Failed to toggle checkbox for page-relative index {rel_idx}"
+                            )
 
         if selected == len(target_indexes):
             logger.success(f"Selected {selected}/{len(target_indexes)} rows for claim")
@@ -588,7 +589,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                 f"JS 批量勾选完成: {selected}/{len(indexes)}, "
                 f"page-mode={is_page_mode}, 检测行高={detected_row_height}px"
             )
-            
+
             # 输出失败项的详细信息
             for r in result.get("results", []):
                 if not r.get("success"):
@@ -597,7 +598,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         f"目标Y={r.get('targetY')}, 检测行高={r.get('detectedRowHeight')}px, "
                         f"可见Y={r.get('visibleYs')}, 推断索引={r.get('inferredIdxs')}"
                     )
-            
+
             return selected
         except Exception as exc:
             logger.debug(f"JS 批量勾选异常: {exc}")
@@ -1252,9 +1253,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                 if result.get("success"):
                     selected = True
                     break
-                logger.warning(
-                    f"索引 {idx} 第 {attempt + 1} 次勾选失败: {result.get('error')}"
-                )
+                logger.warning(f"索引 {idx} 第 {attempt + 1} 次勾选失败: {result.get('error')}")
                 current_idx = 0
                 await waiter.wait_for_dom_stable(timeout_ms=300)
 
@@ -1292,7 +1291,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                 return None
 
             # 找到 translateY 最小且 >= 0 的行（视口中的第一行）
-            min_translate_y = float('inf')
+            min_translate_y = float("inf")
             target_row = None
 
             for i in range(count):
@@ -1366,9 +1365,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
             logger.debug(f"Failed to prepare selection cell for interaction: {exc}")
 
         if not await self._hover_locator(page, selection_cell):
-            logger.debug(
-                "Unable to hover selection cell directly; fallback to row hover"
-            )
+            logger.debug("Unable to hover selection cell directly; fallback to row hover")
             with suppress(Exception):
                 await self._hover_locator(page, row)
 
@@ -1710,21 +1707,15 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
             if hasattr(scope, "get_by_role"):
                 with suppress(Exception):
                     exact_confirm = scope.get_by_role("button", name="确定", exact=True)
-                    scope_candidates.append(
-                        ("role=button(name='确定', exact=True)", exact_confirm)
-                    )
+                    scope_candidates.append(("role=button(name='确定', exact=True)", exact_confirm))
                 with suppress(Exception):
                     fuzzy_confirm = scope.get_by_role("button", name="确定", exact=False)
-                    scope_candidates.append(
-                        ("role=button(name~='确定')", fuzzy_confirm)
-                    )
+                    scope_candidates.append(("role=button(name~='确定')", fuzzy_confirm))
                 with suppress(Exception):
                     confirm_trimmed = scope.locator("button").filter(
                         has_text=re.compile(r"\s*确定\s*")
                     )
-                    scope_candidates.append(
-                        ("button:trimmed-text='确定'", confirm_trimmed)
-                    )
+                    scope_candidates.append(("button:trimmed-text='确定'", confirm_trimmed))
 
             for selector in candidate_selectors:
                 scope_candidates.append((selector, scope.locator(selector)))
@@ -1860,7 +1851,9 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
 
                             for dropdown_text in ("Temu全托管", "Temu 全托管", "Temu托管"):
                                 with suppress(Exception):
-                                    spans_locator = page.locator("span").filter(has_text=dropdown_text)
+                                    spans_locator = page.locator("span").filter(
+                                        has_text=dropdown_text
+                                    )
                                     if await spans_locator.count():
                                         temu_option = spans_locator.first
                                         logger.debug(
@@ -1869,7 +1862,9 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                                         break
                                 for frame in page.frames:
                                     with suppress(Exception):
-                                        frame_spans = frame.locator("span").filter(has_text=dropdown_text)
+                                        frame_spans = frame.locator("span").filter(
+                                            has_text=dropdown_text
+                                        )
                                         if await frame_spans.count():
                                             temu_option = frame_spans.first
                                             logger.debug(
@@ -1882,7 +1877,9 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                             if temu_option is not None:
                                 break
 
-                            logger.debug("未立即找到下拉菜单项，尝试第 {} 次点击按钮展开", attempt + 1)
+                            logger.debug(
+                                "未立即找到下拉菜单项，尝试第 {} 次点击按钮展开", attempt + 1
+                            )
                             await claim_button.click(force=True)
                             await self._wait_for_claim_dropdown(page, state="visible", timeout=300)
 
@@ -1915,9 +1912,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
 
         if success_count > 0:
             if success_count < repeat:
-                logger.warning(
-                    f"认领流程已成功执行 {success_count}/{repeat} 次，仍有部分尝试失败"
-                )
+                logger.warning(f"认领流程已成功执行 {success_count}/{repeat} 次，仍有部分尝试失败")
             else:
                 logger.success("简化版认领流程执行完成")
             return True
@@ -1925,9 +1920,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
         if last_error is None:
             logger.error(f"认领流程在连续 {repeat} 次尝试后仍未成功: 未知错误")
         else:
-            logger.error(
-                f"认领流程在连续 {repeat} 次尝试后仍未成功: {last_error}"
-            )
+            logger.error(f"认领流程在连续 {repeat} 次尝试后仍未成功: {last_error}")
         return False
 
     async def _dismiss_claim_progress_dialog(self, page: Page) -> bool:
@@ -2059,7 +2052,9 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         "button:has-text('关闭'), button:has-text('完成'), button[aria-label*='关闭']"
                     )
                     with suppress(Exception):
-                        await page.wait_for_selector(button_selector, state="visible", timeout=1_000)
+                        await page.wait_for_selector(
+                            button_selector, state="visible", timeout=1_000
+                        )
                     close_button = await self._locate_progress_close_button(dialog)
                     if close_button is None:
                         close_button = await self._locate_progress_close_button(page)
@@ -2085,7 +2080,9 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                 try:
                     await close_button.click(force=True)
                 except Exception as exc:
-                    logger.debug(f"点击认领进度弹窗关闭按钮失败 attempt={attempt + 1}/{max_retries}: {exc}")
+                    logger.debug(
+                        f"点击认领进度弹窗关闭按钮失败 attempt={attempt + 1}/{max_retries}: {exc}"
+                    )
                     if attempt < max_retries - 1:
                         continue
                     return False
@@ -2099,13 +2096,15 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                     with suppress(PlaywrightTimeoutError):
                         await dialog.wait_for(state="detached", timeout=1_000)
                         dialog_closed = True
-                
+
                 if dialog_closed:
                     logger.debug("认领进度弹窗关闭成功 attempt={}/{}", attempt + 1, max_retries)
                     return True
-                
-                logger.debug("认领进度弹窗关闭失败，准备重试 attempt={}/{}", attempt + 1, max_retries)
-            
+
+                logger.debug(
+                    "认领进度弹窗关闭失败，准备重试 attempt={}/{}", attempt + 1, max_retries
+                )
+
             logger.debug("认领进度弹窗关闭失败，已达最大重试次数")
             return False
         except PlaywrightTimeoutError as exc:
@@ -2299,9 +2298,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
         Returns:
             True when claimed item count meets or exceeds ``expected_count``.
         """
-        logger.info(
-            f"Verifying claim result, expecting at least {expected_count} items"
-        )
+        logger.info(f"Verifying claim result, expecting at least {expected_count} items")
 
         try:
             await self.switch_tab(page, "claimed")
@@ -2318,8 +2315,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                 return True
 
             logger.error(
-                f"Claim verification failed: claimed={claimed_count} "
-                f"expected>={expected_count}"
+                f"Claim verification failed: claimed={claimed_count} expected>={expected_count}"
             )
             return False
         except Exception as exc:
@@ -2398,27 +2394,31 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         continue
 
                 if not filter_applied:
-                    logger.warning("User filter could not be applied via selectors, trying fallback")
+                    logger.warning(
+                        "User filter could not be applied via selectors, trying fallback"
+                    )
                     filter_applied = await fallback_apply_user_filter(page, filter_by_user)
                     if not filter_applied:
-                        logger.warning("Fallback user filter also failed, continuing without filter")
+                        logger.warning(
+                            "Fallback user filter also failed, continuing without filter"
+                        )
             else:
                 logger.info("Step 2: skip user filter")
 
             logger.info(f"Step 3: switch to tab {switch_to_tab}")
             await self._wait_for_table_refresh(page)
-            
+
             # 等待可能的tab容器出现
             try:
                 await page.wait_for_selector(
                     "button, [role='tab'], .jx-radio-button, .jx-tabs__item",
                     state="visible",
-                    timeout=1_500
+                    timeout=1_500,
                 )
                 logger.debug("Tab elements detected on page")
             except Exception as e:
                 logger.warning(f"Tab element wait timed out: {e}, continuing anyway...")
-            
+
             if not await self.switch_tab(page, switch_to_tab):
                 logger.error("Tab switch failed, attempting fallback")
                 if not await fallback_switch_tab(page, switch_to_tab):

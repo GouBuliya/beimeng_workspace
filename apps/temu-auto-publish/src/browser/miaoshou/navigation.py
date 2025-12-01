@@ -88,9 +88,7 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                     # 激进优化: 30s -> 15s
                     await page.goto(target_url, timeout=15_000)
                 except Exception as exc:
-                    logger.warning(
-                        "Direct navigation failed (%s), retrying via sidebar", exc
-                    )
+                    logger.warning("Direct navigation failed (%s), retrying via sidebar", exc)
                     return await self.navigate_to_collection_box(page, use_sidebar=True)
 
             # 激进优化: 5s -> 2s
@@ -99,20 +97,20 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
             if "common_collect_box/items" in page.url:
                 logger.success("Navigation to shared collection box succeeded")
                 logger.debug("Waiting for page to settle...")
-                
+
                 # 激进优化: 合并两个等待，总超时 3s
                 try:
                     logger.debug("Waiting for main content and interactive elements...")
                     await page.wait_for_selector(
                         ".jx-main, .pro-layout-content, button, [role='tab'], .jx-button",
                         state="visible",
-                        timeout=3_000
+                        timeout=3_000,
                     )
                     logger.debug("Page elements loaded")
                 except Exception as e:
                     logger.warning(f"Content wait timed out: {e}")
                     # 激进优化: 移除 networkidle 等待，直接继续
-                
+
                 await self._ensure_popups_closed(page)
 
                 return True
@@ -189,7 +187,9 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                                     )
                                     await elements[0].click()
                                     with suppress(Exception):
-                                        await dropdown_locator.first.wait_for(state="hidden", timeout=1_500)
+                                        await dropdown_locator.first.wait_for(
+                                            state="hidden", timeout=1_500
+                                        )
                                     staff_option_clicked = True
                                     logger.success("Staff member selected: {}", staff_name)
                                     break
@@ -223,7 +223,10 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
             search_btn_selector = search_box_config.get("search_btn", "button:has-text('搜索')")
             search_btn = page.locator(search_btn_selector).first
             if await search_btn.count() == 0:
-                logger.warning("Search button not found with selector {}, skipping explicit search", search_btn_selector)
+                logger.warning(
+                    "Search button not found with selector {}, skipping explicit search",
+                    search_btn_selector,
+                )
             else:
                 await search_btn.click()
             await self._wait_for_table_refresh(page)
@@ -280,7 +283,9 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                         locator = scope.locator(selector)
                         count = await locator.count()
                     except Exception as exc:
-                        logger.debug("Popup selector {} failed in {}: {}", selector, scope_name, exc)
+                        logger.debug(
+                            "Popup selector {} failed in {}: {}", selector, scope_name, exc
+                        )
                         continue
 
                     if not count:
@@ -289,7 +294,9 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                     try:
                         await locator.first.click(timeout=2_000)
                     except Exception as exc:
-                        logger.debug("Click selector {} failed in {}: {}", selector, scope_name, exc)
+                        logger.debug(
+                            "Click selector {} failed in {}: {}", selector, scope_name, exc
+                        )
                         continue
 
                     await self._wait_for_message_box_dismissal(page)
@@ -324,12 +331,16 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                                 logger.success("Popup closed via header button ({})", scope_name)
                                 return True
                         except Exception as exc:
-                            logger.debug("Header close failed ({}, scope={}): {}", selector, scope_name, exc)
+                            logger.debug(
+                                "Header close failed ({}, scope={}): {}", selector, scope_name, exc
+                            )
 
             # 针对 .jx-overlay-message-box（如“提示”“知道了”）的兜底处理
             for scope_name, scope in scopes:
                 try:
-                    message_box = scope.locator(".jx-overlay-message-box:visible, .el-message-box:visible")
+                    message_box = scope.locator(
+                        ".jx-overlay-message-box:visible, .el-message-box:visible"
+                    )
                     msg_count = await message_box.count()
                 except Exception as exc:
                     logger.debug("Message box lookup failed in {}: {}", scope_name, exc)
@@ -354,10 +365,14 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                         if await btn.count() and await btn.is_visible(timeout=500):
                             await btn.click(timeout=1_000)
                             await self._wait_for_message_box_dismissal(page)
-                            logger.success("Overlay message box closed via {} ({})", selector, scope_name)
+                            logger.success(
+                                "Overlay message box closed via {} ({})", selector, scope_name
+                            )
                             return True
                     except Exception as exc:
-                        logger.debug("Closing overlay via {} failed in {}: {}", selector, scope_name, exc)
+                        logger.debug(
+                            "Closing overlay via {} failed in {}: {}", selector, scope_name, exc
+                        )
                         continue
                 with suppress(Exception):
                     await page.keyboard.press("Escape")
@@ -480,10 +495,10 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
             True when the tab switch succeeded, otherwise False.
         """
         logger.info("Switching to tab: {}", tab_name)
-        
+
         # 调试：输出当前页面URL和HTML快照
         logger.warning(f"🔍 DEBUG Current page URL: {page.url}")
-        
+
         # 调试：尝试截图
         try:
             screenshot_path = f"data/temp/screenshots/debug_tab_switch_{tab_name}.png"
@@ -491,7 +506,7 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
             logger.warning(f"🔍 DEBUG Screenshot saved to: {screenshot_path}")
         except Exception as e:
             logger.warning(f"Screenshot failed: {e}")
-            
+
         # 调试：输出页面上所有可能相关的元素
         try:
             all_text = await page.locator("body").inner_text()
@@ -499,9 +514,11 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                 logger.warning("🔍 Found '全部' in page text")
             if "All" in all_text or "ALL" in all_text:
                 logger.warning("🔍 Found 'All/ALL' in page text")
-            
+
             # 检查所有可能的tab元素
-            tab_candidates = await page.locator("button, [role='tab'], .jx-radio-button, .jx-tabs__item, [class*='tab']").all()
+            tab_candidates = await page.locator(
+                "button, [role='tab'], .jx-radio-button, .jx-tabs__item, [class*='tab']"
+            ).all()
             logger.warning(f"🔍 Found {len(tab_candidates)} potential tab elements")
             for i, elem in enumerate(tab_candidates[:30]):
                 try:
@@ -509,7 +526,9 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                     tag = await elem.evaluate("el => el.tagName")
                     classes = await elem.get_attribute("class") or ""
                     if text:
-                        logger.warning(f"  [{i}] <{tag}> class='{classes[:50]}...' text='{text[:30]}'")
+                        logger.warning(
+                            f"  [{i}] <{tag}> class='{classes[:50]}...' text='{text[:30]}'"
+                        )
                 except:
                     pass
         except Exception as e:
@@ -1032,8 +1051,7 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                     await button.wait_for(state="visible", timeout=2_000)
                     await button.click()
                     logger.success(
-                        "✓ 基于行定位成功点击编辑按钮，索引: {}, 选择器: {}",
-                        index, selector
+                        "✓ 基于行定位成功点击编辑按钮，索引: {}, 选择器: {}", index, selector
                     )
                     return True
                 except Exception as exc:
@@ -1045,4 +1063,3 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
         except Exception as exc:
             logger.debug(f"行内点击编辑按钮异常: {exc}")
             return False
-

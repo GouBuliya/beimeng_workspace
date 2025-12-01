@@ -156,7 +156,7 @@ class FirstEditExecutor:
             logger.success("已填写字段: {}", ", ".join(result.get("filled", [])))
         if result and "missing" in result and result["missing"]:
             logger.warning("缺失字段: {}", ", ".join(result.get("missing", [])))
-        
+
         if not result:
             raise RuntimeError("注入脚本返回空结果")
         if not result.get("success", False):

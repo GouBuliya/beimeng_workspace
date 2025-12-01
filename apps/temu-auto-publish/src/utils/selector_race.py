@@ -34,11 +34,16 @@ class SelectorTimeouts:
     - SELECTOR_TIMEOUT_FAST: 快速检测超时
     - SELECTOR_TIMEOUT_NORMAL: 默认超时
     - SELECTOR_TIMEOUT_SLOW: 慢速超时
+
+    性能优化说明：
+    - FAST: 3000ms -> 1500ms (50% 减少)
+    - NORMAL: 5000ms -> 2000ms (60% 减少)
+    - SLOW: 5000ms -> 2500ms (50% 减少)
     """
 
-    FAST: int = int(os.environ.get("SELECTOR_TIMEOUT_FAST", str(min(300 * 10, 5000))))
-    NORMAL: int = int(os.environ.get("SELECTOR_TIMEOUT_NORMAL", str(min(500 * 10, 5000))))
-    SLOW: int = int(os.environ.get("SELECTOR_TIMEOUT_SLOW", str(min(1000 * 10, 5000))))
+    FAST: int = int(os.environ.get("SELECTOR_TIMEOUT_FAST", str(min(300 * 5, 1500))))
+    NORMAL: int = int(os.environ.get("SELECTOR_TIMEOUT_NORMAL", str(min(500 * 4, 2000))))
+    SLOW: int = int(os.environ.get("SELECTOR_TIMEOUT_SLOW", str(min(1000 * 5, 2500))))
 
 
 # 全局超时配置实例
@@ -272,4 +277,3 @@ __all__ = [
     "try_selectors_race_with_elements",
     "try_selectors_sequential",
 ]
-

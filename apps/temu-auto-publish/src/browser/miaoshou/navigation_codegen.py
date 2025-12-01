@@ -33,7 +33,9 @@ def _label_variants(tab_name: str) -> list[str]:
     return variants or [tab_name]
 
 
-async def _wait_for_dropdown_visibility(page: Page, state: str = "visible", timeout: int = 800) -> None:
+async def _wait_for_dropdown_visibility(
+    page: Page, state: str = "visible", timeout: int = 800
+) -> None:
     """等待通用下拉组件达到指定状态."""
 
     dropdown = page.locator(
@@ -188,10 +190,18 @@ async def fallback_apply_user_filter(page: Page, staff_name: str) -> bool:
         page.locator(".jx-form-item:has-text('妙手')"),
         page.locator(".pro-form-item:has-text('Creator')"),
         page.locator(".jx-form-item:has-text('Creator')"),
-        page.locator("xpath=//label[contains(normalize-space(),'创建人')]/ancestor::*[contains(@class,'form-item')][1]"),
-        page.locator("xpath=//label[contains(normalize-space(),'负责人')]/ancestor::*[contains(@class,'form-item')][1]"),
-        page.locator("xpath=//label[contains(normalize-space(),'妙手')]/ancestor::*[contains(@class,'form-item')][1]"),
-        page.locator("xpath=//label[contains(normalize-space(),'Creator')]/ancestor::*[contains(@class,'form-item')][1]"),
+        page.locator(
+            "xpath=//label[contains(normalize-space(),'创建人')]/ancestor::*[contains(@class,'form-item')][1]"
+        ),
+        page.locator(
+            "xpath=//label[contains(normalize-space(),'负责人')]/ancestor::*[contains(@class,'form-item')][1]"
+        ),
+        page.locator(
+            "xpath=//label[contains(normalize-space(),'妙手')]/ancestor::*[contains(@class,'form-item')][1]"
+        ),
+        page.locator(
+            "xpath=//label[contains(normalize-space(),'Creator')]/ancestor::*[contains(@class,'form-item')][1]"
+        ),
     ]
 
     target_input: Locator | None = None
@@ -282,7 +292,7 @@ async def fallback_switch_tab(page: Page, tab_name: str) -> bool:
 
     labels = _label_variants(tab_name)
     logger.warning(f"🔍 Fallback tab switch DEBUG: looking for labels {labels}")
-    
+
     # 调试：输出页面内所有可能的 tab 相关元素
     try:
         all_buttons = await page.locator("button").all()
@@ -294,8 +304,10 @@ async def fallback_switch_tab(page: Page, tab_name: str) -> bool:
                     logger.warning(f"  Button[{i}]: {text.strip()}")
             except:
                 pass
-        
-        all_tabs = await page.locator("[role='tab'], .jx-tabs__item, .jx-radio-button, [class*='tab']").all()
+
+        all_tabs = await page.locator(
+            "[role='tab'], .jx-tabs__item, .jx-radio-button, [class*='tab']"
+        ).all()
         logger.warning(f"🔍 Found {len(all_tabs)} tab-like elements")
         for i, tab in enumerate(all_tabs[:20]):
             try:
@@ -364,4 +376,3 @@ async def _click_candidate(locator: Locator) -> bool:
         return True
     except Exception:
         return False
-

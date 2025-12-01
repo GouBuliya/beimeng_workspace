@@ -90,9 +90,7 @@ class BrowserSettings(BaseSettings):
     )
     locale: str = Field(default="zh-CN", description="语言区域")
     timezone_id: str = Field(default="Asia/Shanghai", description="时区 ID")
-    headless: bool | None = Field(
-        default=None, description="覆盖无头模式; None 表示沿用 JSON 配置"
-    )
+    headless: bool | None = Field(default=None, description="覆盖无头模式; None 表示沿用 JSON 配置")
 
     def resolve_path(self, path: str | Path) -> Path:
         """将相对路径解析为绝对路径(相对于应用根目录).

@@ -38,7 +38,7 @@ from .data_mock import (
 __all__ = [
     # Browser mocks
     "MockPage",
-    "MockLocator", 
+    "MockLocator",
     "MockBrowserManager",
     "MockPlaywright",
     "MockBrowser",
@@ -65,4 +65,3 @@ __all__ = [
     "MockExcelReader",
     "MockMetricsCollector",
 ]
-

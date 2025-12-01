@@ -112,9 +112,7 @@ class FileMetadata:
         Returns:
             如果所有必填字段都存在则返回 True
         """
-        required_fields = [
-            name for name, info in METADATA_FIELDS.items() if info["required"]
-        ]
+        required_fields = [name for name, info in METADATA_FIELDS.items() if info["required"]]
         return all(field in self.fields and self.fields[field] for field in required_fields)
 
     def missing_required_fields(self) -> list[str]:
@@ -123,12 +121,7 @@ class FileMetadata:
         Returns:
             缺失的必填字段名称列表
         """
-        required_fields = [
-            name for name, info in METADATA_FIELDS.items() if info["required"]
-        ]
+        required_fields = [name for name, info in METADATA_FIELDS.items() if info["required"]]
         return [
-            field
-            for field in required_fields
-            if field not in self.fields or not self.fields[field]
+            field for field in required_fields if field not in self.fields or not self.fields[field]
         ]
-

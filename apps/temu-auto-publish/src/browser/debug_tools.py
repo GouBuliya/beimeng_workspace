@@ -86,7 +86,9 @@ async def maybe_pause_for_inspector(page: Page, *, enabled: bool | None = None) 
     await page.pause()
 
 
-def run_with_optional_syncer(async_fn: Callable[..., Awaitable[Any]], *args: Any, **kwargs: Any) -> Any:
+def run_with_optional_syncer(
+    async_fn: Callable[..., Awaitable[Any]], *args: Any, **kwargs: Any
+) -> Any:
     """尝试使用 syncer 将异步函数同步执行, 未安装时回退到 asyncio.run."""
     try:
         from syncer import sync

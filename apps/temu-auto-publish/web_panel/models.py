@@ -60,7 +60,9 @@ class WorkflowOptions(BaseModel):
             "skip_first_edit": self.skip_first_edit,
             "only_claim": self.only_claim,
             "only_stage4_publish": self.only_stage4_publish,
-            "outer_package_image": str(self.outer_package_image) if self.outer_package_image else None,
+            "outer_package_image": str(self.outer_package_image)
+            if self.outer_package_image
+            else None,
             "manual_file": str(self.manual_file) if self.manual_file else None,
             "execution_round": self.start_round,
         }

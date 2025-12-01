@@ -143,8 +143,7 @@ class WorkflowTaskManager:
 
     def _run_workflow(self, options: WorkflowOptions) -> None:
         logger.info(
-            f"Web Panel 启动 Temu 工作流 "
-            f"({'单次模式' if options.single_run else '循环模式'})"
+            f"Web Panel 启动 Temu 工作流 ({'单次模式' if options.single_run else '循环模式'})"
         )
         try:
             if options.single_run:
@@ -235,9 +234,7 @@ class WorkflowTaskManager:
             else:
                 queue.return_batch(batch.rows)
                 queue.archive_batch(batch.rows, suffix="failed")
-                error_msg = (
-                    "; ".join(result.errors) if result.errors else "批次执行存在失败"
-                )
+                error_msg = "; ".join(result.errors) if result.errors else "批次执行存在失败"
                 self._mark_failure(error_msg)
                 return
 
@@ -267,9 +264,7 @@ class WorkflowTaskManager:
         *,
         message: str | None = None,
     ) -> None:
-        final_message = message or (
-            "全部步骤完成" if total_success else "流程结束, 但存在告警"
-        )
+        final_message = message or ("全部步骤完成" if total_success else "流程结束, 但存在告警")
         error_msg = "; ".join(errors) if errors else None
         with self._lock:
             self._status = RunStatus(

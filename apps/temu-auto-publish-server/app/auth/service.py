@@ -300,4 +300,3 @@ async def get_auth_service(db: AsyncSession) -> AuthService:
     """
     session_manager = await get_session_manager()
     return AuthService(db, session_manager)
-

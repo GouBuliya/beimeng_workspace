@@ -91,4 +91,3 @@ class BaseAppConfig(BaseSettings):
             raise ValueError(f"不支持的文件格式: {file_path.suffix}")
 
         return cls(**data)
-

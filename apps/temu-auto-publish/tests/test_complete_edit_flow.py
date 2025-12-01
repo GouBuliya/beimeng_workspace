@@ -34,7 +34,7 @@ from src.data_processor.title_generator import TitleGenerator
 
 def generate_test_data():
     """生成测试数据.
-    
+
     Returns:
         dict: 包含标题、价格、库存、重量、尺寸的测试数据
     """
@@ -47,10 +47,7 @@ def generate_test_data():
     original_title = "测试商品"
     title_gen = TitleGenerator()
     titles = title_gen.generate_with_model_suffix(
-        [original_title],
-        model_prefix="TEST",
-        start_number=1,
-        add_modifiers=True
+        [original_title], model_prefix="TEST", start_number=1, add_modifiers=True
     )
 
     # 生成随机重量和尺寸
@@ -72,14 +69,14 @@ def generate_test_data():
 @pytest.mark.integration
 async def test_complete_edit_flow():
     """测试完整的产品编辑流程.
-    
+
     测试步骤：
     1. 登录妙手ERP
     2. 导航到公用采集箱
     3. 检查产品数量
     4. 点击第一个产品的编辑按钮
     5. 执行完整的首次编辑流程（SOP步骤4）
-    
+
     Returns:
         bool: 是否成功
     """
@@ -134,14 +131,14 @@ async def test_complete_edit_flow():
     # 4. 切换到"已认领"或"未认领"tab（选择有产品的tab）
     logger.info("步骤4：切换到有产品的tab")
     logger.info("-" * 80)
-    
+
     if product_counts.get("claimed", 0) > 0:
         logger.info("切换到「已认领」tab...")
         await miaoshou_controller.switch_tab(page, "claimed")
     elif product_counts.get("unclaimed", 0) > 0:
         logger.info("切换到「未认领」tab...")
         await miaoshou_controller.switch_tab(page, "unclaimed")
-    
+
     await asyncio.sleep(2)
     logger.success("✅ 步骤4完成：tab切换成功\n")
 
@@ -163,7 +160,9 @@ async def test_complete_edit_flow():
     logger.info(f"测试价格: {test_data['price']} CNY")
     logger.info(f"测试库存: {test_data['stock']}")
     logger.info(f"测试重量: {test_data['weight']} KG")
-    logger.info(f"测试尺寸: {test_data['dimensions'][0]}x{test_data['dimensions'][1]}x{test_data['dimensions'][2]} CM")
+    logger.info(
+        f"测试尺寸: {test_data['dimensions'][0]}x{test_data['dimensions'][1]}x{test_data['dimensions'][2]} CM"
+    )
     logger.success("✅ 步骤6完成：测试数据已生成\n")
 
     # 7. 执行完整的首次编辑流程
@@ -229,9 +228,9 @@ async def main():
     except Exception as e:
         logger.error(f"\n测试过程出错: {e}")
         import traceback
+
         traceback.print_exc()
 
 
 if __name__ == "__main__":
     asyncio.run(main())
-

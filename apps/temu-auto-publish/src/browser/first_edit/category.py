@@ -59,8 +59,7 @@ class FirstEditCategoryMixin(FirstEditBase):
             category_text = ""
             if category_element:
                 category_text = (
-                    await category_element.input_value()
-                    or await category_element.inner_text()
+                    await category_element.input_value() or await category_element.inner_text()
                 )
                 if category_text:
                     logger.debug("找到类目信息: {}", category_text)

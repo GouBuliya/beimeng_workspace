@@ -41,7 +41,7 @@ def process(
     output_dir: Path = typer.Option(None, "--output", "-o", help="输出目录"),
 ):
     """处理选品表，生成任务数据（完整流程）.
-    
+
     Examples:
         temu-auto-publish process data/input/products.xlsx
         temu-auto-publish process products.xlsx -o data/output
@@ -82,7 +82,7 @@ def login(
     headless: bool = typer.Option(False, "--headless", help="无头模式"),
 ):
     """测试 Temu 登录（使用 Playwright）.
-    
+
     Examples:
         temu-auto-publish login
         temu-auto-publish login -u user -p pass
@@ -104,7 +104,7 @@ def login(
     async def _login():
         controller = LoginController()
         return await controller.login(username, password, force=force, headless=headless)
-    
+
     success = asyncio.run(_login())
 
     if success:
@@ -117,7 +117,7 @@ def login(
 @app.command()
 def status():
     """查看系统状态和配置.
-    
+
     Examples:
         temu-auto-publish status
     """
@@ -143,7 +143,7 @@ def status():
     manager = CookieManager()
     cookie_status = "✓ 有效" if manager.is_valid() else "✗ 无效/不存在"
     console.print(f"\n[bold]Cookie 状态:[/bold] {cookie_status}")
-    
+
     # 浏览器配置
     console.print("\n[bold]浏览器配置:[/bold]")
     console.print(f"  无头模式: {settings.browser_headless}")
@@ -158,7 +158,7 @@ app.add_typer(dev_app, name="dev")
 @dev_app.command("excel")
 def dev_excel(file_path: Path = typer.Argument(..., help="Excel 文件路径")):
     """测试 Excel 读取.
-    
+
     Examples:
         temu-auto-publish dev excel data/input/products.xlsx
     """
@@ -183,7 +183,7 @@ def dev_excel(file_path: Path = typer.Argument(..., help="Excel 文件路径")):
 @dev_app.command("price")
 def dev_price(cost: float = typer.Argument(..., help="成本价")):
     """测试价格计算.
-    
+
     Examples:
         temu-auto-publish dev price 100
         temu-auto-publish dev price 150.5
@@ -203,5 +203,3 @@ def dev_price(cost: float = typer.Argument(..., help="成本价")):
 
 if __name__ == "__main__":
     app()
-
-

@@ -1,9 +1,12 @@
 # Temu Auto Publish Auth Server - Dockerfile
 # 多阶段构建，优化镜像大小
 
-FROM python:3.12-slim as builder
+FROM docker.m.daocloud.io/library/python:3.12-slim as builder
 
 WORKDIR /build
+
+# 使用阿里云 Debian 镜像源
+RUN sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources
 
 # 安装构建依赖
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -17,13 +20,20 @@ COPY requirements.txt .
 # 安装 Python 依赖到虚拟环境
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
-RUN pip install --no-cache-dir --upgrade pip && \
+
+# 使用阿里云 pip 源
+RUN pip config set global.index-url https://mirrors.aliyun.com/pypi/simple/ && \
+    pip config set global.trusted-host mirrors.aliyun.com && \
+    pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
 # 生产镜像
-FROM python:3.12-slim as production
+FROM docker.m.daocloud.io/library/python:3.12-slim as production
 
 WORKDIR /app
+
+# 使用阿里云 Debian 镜像源
+RUN sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources
 
 # 安装运行时依赖
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -51,9 +61,9 @@ USER appuser
 # 暴露端口
 EXPOSE 8001
 
-# 健康检查
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8001/health || exit 1
+# 健康检查 (使用深度检查端点)
+HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:8001/health/readiness || exit 1
 
 # 启动命令
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8001"]

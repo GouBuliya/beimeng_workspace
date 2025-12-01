@@ -56,7 +56,7 @@ async def test_navigation():
 
             # 2. 测试通过侧边栏导航到公用采集箱
             logger.info("测试导航...")
-            
+
             # 方式1：直接URL导航
             logger.info("方式1：直接URL导航到公用采集箱")
             await page.goto("https://erp.91miaoshou.com/common_collect_box/items", timeout=30000)
@@ -70,7 +70,7 @@ async def test_navigation():
 
             # 3. 测试切换到"已认领"tab
             logger.info("测试Tab切换...")
-            
+
             # 使用文本定位器（更可靠）
             claimed_tab = page.locator('text="已认领"')
             if await claimed_tab.count() > 0:
@@ -82,7 +82,7 @@ async def test_navigation():
 
             # 4. 打印当前页面的一些选择器（用于调试）
             logger.info("获取当前页面的选择器信息...")
-            
+
             # 尝试找到产品列表的编辑按钮
             edit_buttons = await page.locator('button:has-text("编辑")').count()
             logger.info(f"找到 {edit_buttons} 个编辑按钮")
@@ -94,10 +94,14 @@ async def test_navigation():
                 await asyncio.sleep(2)
 
                 # 检查弹窗是否打开
-                close_button = await page.locator('button:has-text("关闭"), button[aria-label*="关闭"]').count()
+                close_button = await page.locator(
+                    'button:has-text("关闭"), button[aria-label*="关闭"]'
+                ).count()
                 if close_button > 0:
                     logger.success("✅ 编辑弹窗已打开")
-                    await page.locator('button:has-text("关闭"), button[aria-label*="关闭"]').first.click()
+                    await page.locator(
+                        'button:has-text("关闭"), button[aria-label*="关闭"]'
+                    ).first.click()
                     await asyncio.sleep(1)
                     logger.info("✓ 弹窗已关闭")
                 else:
@@ -114,6 +118,7 @@ async def test_navigation():
         except Exception as e:
             logger.error(f"❌ 测试失败: {e}")
             import traceback
+
             traceback.print_exc()
 
         finally:
@@ -127,4 +132,3 @@ if __name__ == "__main__":
         logger.info("测试被用户中断")
     except Exception as e:
         logger.error(f"测试运行失败: {e}")
-

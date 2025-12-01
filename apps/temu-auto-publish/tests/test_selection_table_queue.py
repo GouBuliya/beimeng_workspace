@@ -89,11 +89,3 @@ def test_format_error_raises(tmp_path):
 
     with pytest.raises(SelectionTableFormatError):
         queue.pop_next_batch(batch_size=1)
-
-
-
-
-
-
-
-

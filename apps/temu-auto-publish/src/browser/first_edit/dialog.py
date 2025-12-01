@@ -184,9 +184,7 @@ class FirstEditDialogMixin(FirstEditBase):
                 target_dialog = dialogs.nth(dialog_count - 1)
 
                 candidate_locators: list[Locator] = []
-                candidate_locators.extend(
-                    target_dialog.locator(selector) for selector in selectors
-                )
+                candidate_locators.extend(target_dialog.locator(selector) for selector in selectors)
                 candidate_locators.extend(
                     target_dialog.locator(selector) for selector in fallback_selectors
                 )
@@ -199,8 +197,7 @@ class FirstEditDialogMixin(FirstEditBase):
                     for regex in text_button_regex
                 )
                 button_locators.extend(
-                    target_dialog.locator("a").filter(has_text=regex)
-                    for regex in text_button_regex
+                    target_dialog.locator("a").filter(has_text=regex) for regex in text_button_regex
                 )
                 candidate_locators.extend(button_locators)
 

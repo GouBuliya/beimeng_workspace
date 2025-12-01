@@ -26,9 +26,9 @@ def check_environment():
     print("=" * 80)
     print("环境配置检查")
     print("=" * 80)
-    
+
     errors = []
-    
+
     # 检查.env文件
     env_file = app_root / ".env"
     if not env_file.exists():
@@ -39,11 +39,12 @@ def check_environment():
         print("  BROWSER_HEADLESS=false")
     else:
         print("✓ .env 文件存在")
-        
+
         # 检查必需的环境变量
         from dotenv import load_dotenv
+
         load_dotenv(env_file)
-        
+
         required_vars = ["MIAOSHOU_USERNAME", "MIAOSHOU_PASSWORD"]
         for var in required_vars:
             value = os.getenv(var)
@@ -51,10 +52,11 @@ def check_environment():
                 errors.append(f"❌ 环境变量 {var} 未设置")
             else:
                 print(f"✓ {var} 已设置")
-    
+
     # 检查Playwright安装
     try:
         from playwright.sync_api import sync_playwright
+
         with sync_playwright() as p:
             p.chromium.launch(headless=True)
         print("✓ Playwright Chromium 已安装")
@@ -62,9 +64,9 @@ def check_environment():
         errors.append(f"❌ Playwright 浏览器未安装: {e}")
         print("\n请运行以下命令安装 Playwright 浏览器：")
         print("  uv run playwright install chromium")
-    
+
     print("\n" + "=" * 80)
-    
+
     if errors:
         print("环境配置检查失败：")
         for error in errors:
@@ -80,36 +82,39 @@ def check_environment():
 def run_integration_tests():
     """运行集成测试."""
     import subprocess
-    
+
     # 检查环境
     if not check_environment():
         print("\n请先修复上述问题，然后重新运行。")
         return False
-    
+
     print("\n" + "=" * 80)
     print("运行集成测试")
     print("=" * 80)
     print("\n提示：集成测试需要浏览器交互，可能需要较长时间。")
     print("      请确保测试期间不要操作浏览器窗口。\n")
-    
+
     # 询问是否继续
     response = input("是否继续？(y/N): ").strip().lower()
-    if response != 'y':
+    if response != "y":
         print("已取消。")
         return False
-    
+
     # 运行pytest集成测试
     cmd = [
-        "uv", "run", "pytest",
+        "uv",
+        "run",
+        "pytest",
         "-v",
-        "-m", "integration",
+        "-m",
+        "integration",
         "--tb=short",
         "--no-cov",  # 集成测试不需要覆盖率
     ]
-    
+
     print(f"\n运行命令: {' '.join(cmd)}\n")
     result = subprocess.run(cmd, cwd=app_root)
-    
+
     return result.returncode == 0
 
 
@@ -121,4 +126,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

@@ -137,7 +137,7 @@ class TitleGenerator:
                 full_title = f"{title} {model_number}型号"
 
             result.append(full_title)
-            logger.debug(f"  标题 {i+1}: {full_title}")
+            logger.debug(f"  标题 {i + 1}: {full_title}")
 
         logger.success(f"生成完成，共{len(result)}个标题")
         return result
@@ -177,7 +177,7 @@ class TitleGenerator:
         """
         # TODO: 接入实际AI API
         prompt = self.PROMPT_TEMPLATE.format(
-            count=len(titles), titles="\n".join([f"{i+1}. {t}" for i, t in enumerate(titles)])
+            count=len(titles), titles="\n".join([f"{i + 1}. {t}" for i, t in enumerate(titles)])
         )
         # ai_response = call_ai_api(prompt)
         # return parse_ai_response(ai_response)
@@ -195,7 +195,7 @@ class TitleGenerator:
             完整的提示词
         """
         return self.PROMPT_TEMPLATE.format(
-            count=len(titles), titles="\n".join([f"{i+1}. {t}" for i, t in enumerate(titles)])
+            count=len(titles), titles="\n".join([f"{i + 1}. {t}" for i, t in enumerate(titles)])
         )
 
     def generate_by_rule(self, product_name: str, keyword: str) -> str:

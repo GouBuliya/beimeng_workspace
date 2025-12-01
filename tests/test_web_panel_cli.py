@@ -24,7 +24,9 @@ def test_install_success_and_failures(monkeypatch):
     cli.install()
     assert calls and calls[0][0][0] == "uv"
 
-    monkeypatch.setattr(cli.subprocess, "run", lambda *_args, **_kwargs: (_ for _ in ()).throw(FileNotFoundError()))
+    monkeypatch.setattr(
+        cli.subprocess, "run", lambda *_args, **_kwargs: (_ for _ in ()).throw(FileNotFoundError())
+    )
     with pytest.raises(cli.typer.Exit):
         cli.install()
 

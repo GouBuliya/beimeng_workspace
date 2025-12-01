@@ -18,6 +18,7 @@ import pytest
 # TODO: 实现集成测试
 # 这是一个占位文件，完整的测试将在后续实现
 
+
 def test_placeholder():
     """占位测试."""
     assert True
@@ -45,5 +46,3 @@ async def test_edit_workflow():
     # 测试商品编辑流程
     pass
 """
-
-

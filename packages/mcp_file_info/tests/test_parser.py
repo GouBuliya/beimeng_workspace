@@ -180,4 +180,3 @@ def test_raw_content_preservation(parser, sample_files_dir):
     # 应该保留原始注释内容
     assert len(metadata.raw_content) > 0
     assert isinstance(metadata.raw_content, str)
-

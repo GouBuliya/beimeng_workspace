@@ -273,4 +273,3 @@ async def get_session_manager() -> SessionManager:
     """
     redis_client = await get_redis()
     return SessionManager(redis_client)
-

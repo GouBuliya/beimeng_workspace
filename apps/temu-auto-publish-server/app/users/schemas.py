@@ -62,4 +62,3 @@ class ForceLogoutRequest(BaseModel):
     """强制下线请求."""
 
     user_id: uuid.UUID = Field(..., description="要下线的用户 ID")
-

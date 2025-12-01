@@ -22,4 +22,3 @@ __all__ = [
     "COMMENT_PATTERNS",
     "SUPPORTED_EXTENSIONS",
 ]
-

@@ -138,4 +138,3 @@ def test_seed_reproducibility():
     dims1 = gen1.generate_dimensions()
     dims2 = gen2.generate_dimensions()
     assert dims1 == dims2
-

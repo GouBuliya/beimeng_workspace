@@ -23,32 +23,32 @@ from loguru import logger
 
 def parse_complex_excel(input_file: str) -> pd.DataFrame:
     """解析复杂格式的Excel文件.
-    
+
     处理以下格式：
     - 产品名称在第一行，后续行为空
     - 标题后缀可能在第一行或后续行
     - 规格分布在多行
-    
+
     Args:
         input_file: 输入Excel文件路径
-        
+
     Returns:
         解析后的DataFrame
     """
     logger.info(f"读取Excel文件: {input_file}")
-    
+
     # 读取所有数据
     df = pd.read_excel(input_file)
-    
+
     logger.info(f"✓ 读取成功，共 {len(df)} 行，{len(df.columns)} 列")
     logger.debug(f"列名: {df.columns.tolist()}")
-    
+
     return df
 
 
 def convert_to_standard_format(df: pd.DataFrame) -> pd.DataFrame:
     """转换为标准选品表格式.
-    
+
     标准格式要求：
     - 主品负责人
     - 产品名称
@@ -56,23 +56,23 @@ def convert_to_standard_format(df: pd.DataFrame) -> pd.DataFrame:
     - 产品颜色/规格
     - 采集数量
     - 进货价
-    
+
     Args:
         df: 原始DataFrame
-        
+
     Returns:
         标准格式的DataFrame
     """
     logger.info("开始转换为标准格式...")
-    
+
     # 提取关键列（只保留基本信息和进货价）
     key_columns = {
-        '产品名称': '产品名称',
-        '标题后缀': '标题后缀',
-        '产品颜色/规格': '产品颜色/规格',
-        '    进货价': '进货价',  # 保留进货价
+        "产品名称": "产品名称",
+        "标题后缀": "标题后缀",
+        "产品颜色/规格": "产品颜色/规格",
+        "    进货价": "进货价",  # 保留进货价
     }
-    
+
     # 检查列是否存在
     missing_cols = [col for col in key_columns.keys() if col not in df.columns]
     if missing_cols:
@@ -80,114 +80,114 @@ def convert_to_standard_format(df: pd.DataFrame) -> pd.DataFrame:
         # 移除缺失的列
         for col in missing_cols:
             key_columns.pop(col)
-    
+
     # 创建工作副本
     work_df = df[list(key_columns.keys())].copy()
     work_df.columns = list(key_columns.values())
-    
+
     # 向下填充产品名称、标题后缀和进货价
     logger.info("向下填充产品名称、标题后缀和进货价...")
-    work_df['产品名称'] = work_df['产品名称'].ffill()
-    work_df['标题后缀'] = work_df['标题后缀'].ffill()
-    if '进货价' in work_df.columns:
-        work_df['进货价'] = work_df['进货价'].ffill()
-    
+    work_df["产品名称"] = work_df["产品名称"].ffill()
+    work_df["标题后缀"] = work_df["标题后缀"].ffill()
+    if "进货价" in work_df.columns:
+        work_df["进货价"] = work_df["进货价"].ffill()
+
     # 过滤掉无效行（没有规格信息的）
     logger.info("过滤无效行...")
-    work_df = work_df[work_df['产品颜色/规格'].notna()].copy()
-    
+    work_df = work_df[work_df["产品颜色/规格"].notna()].copy()
+
     # 添加采集数量（默认5个）
-    work_df['采集数量'] = 5
-    
+    work_df["采集数量"] = 5
+
     # 添加负责人（默认为空，需要手动填写）
-    work_df['主品负责人'] = ''
-    
+    work_df["主品负责人"] = ""
+
     # 重新排列列顺序
-    columns_order = ['主品负责人', '产品名称', '标题后缀', '产品颜色/规格', '采集数量']
-    
+    columns_order = ["主品负责人", "产品名称", "标题后缀", "产品颜色/规格", "采集数量"]
+
     # 添加可选列（如果存在）
-    if '进货价' in work_df.columns:
-        columns_order.append('进货价')
-    
+    if "进货价" in work_df.columns:
+        columns_order.append("进货价")
+
     standard_df = work_df[columns_order].copy()
-    
+
     # 清理数据
     logger.info("清理数据...")
-    standard_df = standard_df.dropna(subset=['产品名称', '标题后缀'])
-    
+    standard_df = standard_df.dropna(subset=["产品名称", "标题后缀"])
+
     logger.success(f"✓ 转换完成，共 {len(standard_df)} 条有效数据")
-    
+
     return standard_df
 
 
 def validate_output(df: pd.DataFrame) -> bool:
     """验证输出数据的有效性.
-    
+
     Args:
         df: 待验证的DataFrame
-        
+
     Returns:
         是否通过验证
     """
     logger.info("验证输出数据...")
-    
+
     issues = []
-    
+
     # 检查必填列
-    required_cols = ['主品负责人', '产品名称', '标题后缀', '产品颜色/规格', '采集数量']
+    required_cols = ["主品负责人", "产品名称", "标题后缀", "产品颜色/规格", "采集数量"]
     for col in required_cols:
         if col not in df.columns:
             issues.append(f"缺少必填列: {col}")
-    
+
     # 检查空值（必填列）
-    for col in ['产品名称', '标题后缀', '产品颜色/规格']:
+    for col in ["产品名称", "标题后缀", "产品颜色/规格"]:
         if col in df.columns:
             null_count = df[col].isna().sum()
             if null_count > 0:
                 issues.append(f"列 '{col}' 有 {null_count} 个空值")
-    
+
     # 检查采集数量
-    if '采集数量' in df.columns:
-        invalid_counts = df[~df['采集数量'].between(1, 100)]
+    if "采集数量" in df.columns:
+        invalid_counts = df[~df["采集数量"].between(1, 100)]
         if len(invalid_counts) > 0:
             issues.append(f"有 {len(invalid_counts)} 行的采集数量不在1-100范围内")
-    
+
     # 可选列统计
-    if '进货价' in df.columns:
-        valid_count = df['进货价'].notna().sum()
+    if "进货价" in df.columns:
+        valid_count = df["进货价"].notna().sum()
         logger.info(f"  可选列 '进货价': {valid_count}/{len(df)} 行有数据")
-    
+
     if issues:
         logger.warning("⚠️  发现以下问题:")
         for issue in issues:
             logger.warning(f"  - {issue}")
         return False
-    
+
     logger.success("✓ 数据验证通过")
     return True
 
 
 def show_preview(df: pd.DataFrame, n: int = 10):
     """显示数据预览.
-    
+
     Args:
         df: DataFrame
         n: 显示行数
     """
-    logger.info(f"\n{'='*80}")
+    logger.info(f"\n{'=' * 80}")
     logger.info(f"📋 数据预览（前{n}行）")
-    logger.info(f"{'='*80}")
+    logger.info(f"{'=' * 80}")
     print(df.head(n).to_string(index=False))
-    
-    logger.info(f"\n{'='*80}")
+
+    logger.info(f"\n{'=' * 80}")
     logger.info(f"📊 数据统计")
-    logger.info(f"{'='*80}")
+    logger.info(f"{'=' * 80}")
     logger.info(f"总行数: {len(df)}")
     logger.info(f"产品数: {df['产品名称'].nunique()}")
     logger.info(f"规格数: {len(df)}")
     logger.info(f"\n产品列表（前10个）:")
-    for i, prod in enumerate(df['产品名称'].unique()[:10], 1):
-        count = len(df[df['产品名称'] == prod])
+    for i, prod in enumerate(df["产品名称"].unique()[:10], 1):
+        count = len(df[df["产品名称"] == prod])
         logger.info(f"  {i}. {prod} ({count}个规格)")
 
 
@@ -206,58 +206,47 @@ def main():
   
   # 只预览不保存
   python format_selection_table.py ../../10月品.xlsx --preview-only
-        """
+        """,
     )
-    
+
+    parser.add_argument("input_file", help="输入Excel文件路径")
+
     parser.add_argument(
-        'input_file',
-        help='输入Excel文件路径'
+        "-o",
+        "--output",
+        default="selection_formatted.xlsx",
+        help="输出文件名（默认: selection_formatted.xlsx）",
     )
-    
-    parser.add_argument(
-        '-o', '--output',
-        default='selection_formatted.xlsx',
-        help='输出文件名（默认: selection_formatted.xlsx）'
-    )
-    
-    parser.add_argument(
-        '--preview-only',
-        action='store_true',
-        help='只预览数据，不保存文件'
-    )
-    
-    parser.add_argument(
-        '--preview-lines',
-        type=int,
-        default=10,
-        help='预览行数（默认: 10）'
-    )
-    
+
+    parser.add_argument("--preview-only", action="store_true", help="只预览数据，不保存文件")
+
+    parser.add_argument("--preview-lines", type=int, default=10, help="预览行数（默认: 10）")
+
     args = parser.parse_args()
-    
+
     try:
         # 解析Excel
         df = parse_complex_excel(args.input_file)
-        
+
         # 转换格式
         standard_df = convert_to_standard_format(df)
-        
+
         # 验证
         validate_output(standard_df)
-        
+
         # 预览
         show_preview(standard_df, args.preview_lines)
-        
+
         # 保存
         if not args.preview_only:
             output_path = Path(args.output)
             if not output_path.is_absolute():
                 # 保存到data/input目录
-                output_path = Path(__file__).parent.parent / 'data' / 'input' / output_path
-            
+                output_path = Path(__file__).parent.parent / "data" / "input" / output_path
+
             output_path.parent.mkdir(parents=True, exist_ok=True)
             standard_df.to_excel(output_path, index=False)
-            
+
             logger.success(f"\n✅ 文件已保存: {output_path}")
             logger.info(f"   总行数: {len(standard_df)}")
             logger.info(f"   产品数: {standard_df['产品名称'].nunique()}")
@@ -265,7 +254,7 @@ def main():
             logger.info(f"   python run_collection_to_edit_test.py --selection {output_path}")
         else:
             logger.info("\n⏭️  预览模式：未保存文件")
-    
+
     except FileNotFoundError:
         logger.error(f"❌ 文件不存在: {args.input_file}")
         sys.exit(1)
@@ -277,4 +266,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

@@ -34,13 +34,13 @@ py_file = sample_dir / "example.py"
 if py_file.exists():
     print(f"\n✓ 解析文件: {py_file.name}")
     metadata = parser.parse_file(py_file)
-    
+
     if metadata.has_metadata:
         print("  ✓ 成功提取元信息")
         print(f"  - 文件路径: {metadata.file_path}")
         print(f"  - 包含字段: {', '.join(metadata.fields.keys())}")
         print(f"  - 必填字段完整: {'是' if metadata.is_complete() else '否'}")
-        
+
         if metadata.get_field("PURPOSE"):
             purpose = metadata.get_field("PURPOSE")
             if len(purpose) > 60:
@@ -56,7 +56,7 @@ ts_file = sample_dir / "example.ts"
 if ts_file.exists():
     print(f"\n✓ 解析文件: {ts_file.name}")
     metadata = parser.parse_file(ts_file)
-    
+
     if metadata.has_metadata:
         print("  ✓ 成功提取元信息")
         print(f"  - 包含字段: {', '.join(metadata.fields.keys())}")
@@ -75,4 +75,3 @@ if sample_files:
 print("\n" + "=" * 60)
 print("✨ 所有测试完成！")
 print("=" * 60)
-

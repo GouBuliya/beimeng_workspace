@@ -137,9 +137,7 @@ class RandomDataGenerator:
             True
         """
         # 生成三个不同的随机数
-        dimensions = self._random.sample(
-            range(self.dimension_min, self.dimension_max + 1), 3
-        )
+        dimensions = self._random.sample(range(self.dimension_min, self.dimension_max + 1), 3)
         # 排序: 从大到小
         dimensions.sort(reverse=True)
         length, width, height = dimensions
@@ -232,9 +230,7 @@ class RandomDataGenerator:
             False
         """
         # 检查范围
-        if not all(
-            self.dimension_min <= d <= self.dimension_max for d in [length, width, height]
-        ):
+        if not all(self.dimension_min <= d <= self.dimension_max for d in [length, width, height]):
             return False
 
         # 检查顺序: 长>宽>高
@@ -269,10 +265,7 @@ if __name__ == "__main__":
     for i in range(5):
         length, width, height = generator.generate_dimensions()
         is_valid = generator.validate_dimensions(length, width, height)
-        print(
-            f"  {i + 1}. {length}×{width}×{height}cm "
-            f"(长>宽>高: {is_valid})"
-        )
+        print(f"  {i + 1}. {length}×{width}×{height}cm (长>宽>高: {is_valid})")
 
     # 测试生成外包装尺寸
     print("\n生成外包装尺寸（厘米）:")
@@ -306,4 +299,3 @@ if __name__ == "__main__":
         print(f"  {status} {length}×{width}×{height}cm -> {is_valid} (预期: {expected})")
 
     print("\n" + "=" * 60)
-

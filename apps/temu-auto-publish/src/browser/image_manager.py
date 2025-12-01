@@ -732,12 +732,12 @@ class ImageManager:
             return False
 
         await self._wait_for_sku_cleanup(page, sku_section)
-        logger.success(
-            f"✓ SKU 区域旧图片已清空 (总耗时 {_elapsed_ms(overall_start)}ms)"
-        )
+        logger.success(f"✓ SKU 区域旧图片已清空 (总耗时 {_elapsed_ms(overall_start)}ms)")
         return True
 
-    async def _wait_for_sku_cleanup(self, page: Page, sku_section: Locator, timeout: int = TIMEOUTS.SLOW * 5) -> None:
+    async def _wait_for_sku_cleanup(
+        self, page: Page, sku_section: Locator, timeout: int = TIMEOUTS.SLOW * 5
+    ) -> None:
         """等待 SKU 图列表清空或成功提示出现（智能等待）."""
         wait_start = time.perf_counter()
         selector = ".picture-draggable-list .image-item, .picture-draggable-list img"
@@ -754,7 +754,7 @@ class ImageManager:
 
         # 降级: 使用指数退避轮询
         poll_interval = 0.05  # 初始 50ms
-        max_interval = 0.2    # 最大 200ms
+        max_interval = 0.2  # 最大 200ms
         loop = asyncio.get_running_loop()
         deadline = loop.time() + (timeout / 1_000)
         while loop.time() < deadline:
@@ -792,7 +792,7 @@ class ImageManager:
 
         # 降级: 使用指数退避轮询
         poll_interval = 0.05  # 初始 50ms
-        max_interval = 0.2    # 最大 200ms
+        max_interval = 0.2  # 最大 200ms
         images = sku_section.locator(selector)
         loop = asyncio.get_running_loop()
         deadline = loop.time() + (timeout / 1_000)
@@ -807,18 +807,20 @@ class ImageManager:
             await asyncio.sleep(poll_interval)
             poll_interval = min(poll_interval * 1.5, max_interval)  # 指数退避
 
-        logger.warning(
-            f"SKU 图片总数未在 {timeout}ms 内达到预期({expected})"
-        )
+        logger.warning(f"SKU 图片总数未在 {timeout}ms 内达到预期({expected})")
         return False
 
     async def _wait_for_row_image_increment(
-        self, images_locator: Locator, previous_count: int, slot_hint: str, timeout: int = TIMEOUTS.SLOW * 5
+        self,
+        images_locator: Locator,
+        previous_count: int,
+        slot_hint: str,
+        timeout: int = TIMEOUTS.SLOW * 5,
     ) -> bool:
         """等待单个 SKU 行的图片数量增加（智能等待）."""
         # 使用指数退避轮询策略
         poll_interval = 0.05  # 初始 50ms
-        max_interval = 0.2    # 最大 200ms
+        max_interval = 0.2  # 最大 200ms
 
         loop = asyncio.get_running_loop()
         deadline = loop.time() + (timeout / 1_000)
@@ -849,9 +851,7 @@ class ImageManager:
             button = sku_section.get_by_role("button", name=re.compile(label)).first
             await button.wait_for(state="visible", timeout=timeout)
             await button.click()
-            logger.debug(
-                f"已点击{log_label}按钮 (耗时 {_elapsed_ms(overall_start)}ms)"
-            )
+            logger.debug(f"已点击{log_label}按钮 (耗时 {_elapsed_ms(overall_start)}ms)")
             return True
         except Exception as exc:
             logger.warning("点击{}失败: {}", log_label, exc)
@@ -919,9 +919,7 @@ class ImageManager:
         if btn is not None:
             try:
                 await btn.click(timeout=TIMEOUTS.SLOW)
-                logger.debug(
-                    f"删除确认弹窗已点击按钮 (耗时 {_elapsed_ms(dialog_start)}ms)"
-                )
+                logger.debug(f"删除确认弹窗已点击按钮 (耗时 {_elapsed_ms(dialog_start)}ms)")
                 await self._wait_for_message_box_dismissal(page)
                 return True
             except Exception:
@@ -931,15 +929,15 @@ class ImageManager:
         with suppress(Exception):
             await page.keyboard.press("Escape")
             await self._wait_for_message_box_dismissal(page)
-            logger.debug(
-                f"删除确认弹窗通过 Escape 关闭 (耗时 {_elapsed_ms(dialog_start)}ms)"
-            )
+            logger.debug(f"删除确认弹窗通过 Escape 关闭 (耗时 {_elapsed_ms(dialog_start)}ms)")
             return True
 
         logger.warning("删除确认弹窗未找到可用按钮")
         return False
 
-    async def _wait_for_message_box_dismissal(self, page: Page, timeout: int = TIMEOUTS.NORMAL) -> None:
+    async def _wait_for_message_box_dismissal(
+        self, page: Page, timeout: int = TIMEOUTS.NORMAL
+    ) -> None:
         """等待所有 message box 隐藏."""
 
         locator = page.locator(".jx-overlay-message-box, .jx-message-box, .el-message-box")
@@ -958,17 +956,20 @@ class ImageManager:
 
         # URL编码处理（处理中文路径）
         from urllib.parse import quote, urlparse, urlunparse
+
         try:
             parsed = urlparse(image_url)
-            encoded_path = quote(parsed.path.encode('utf-8'), safe='/:@!$&\'()*+,;=')
-            encoded_url = urlunparse((
-                parsed.scheme,
-                parsed.netloc,
-                encoded_path,
-                parsed.params,
-                parsed.query,
-                parsed.fragment
-            ))
+            encoded_path = quote(parsed.path.encode("utf-8"), safe="/:@!$&'()*+,;=")
+            encoded_url = urlunparse(
+                (
+                    parsed.scheme,
+                    parsed.netloc,
+                    encoded_path,
+                    parsed.params,
+                    parsed.query,
+                    parsed.fragment,
+                )
+            )
             logger.debug(f"SKU图片URL编码: {image_url} -> {encoded_url}")
             image_url = encoded_url
         except Exception as e:

@@ -11,4 +11,3 @@ from __future__ import annotations
 from .first_edit import FirstEditController
 
 __all__ = ["FirstEditController"]
-

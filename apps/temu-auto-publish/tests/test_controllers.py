@@ -49,7 +49,7 @@ async def test_login():
 
         if success:
             logger.success("✅ 测试1通过：登录成功")
-            
+
             # 保持浏览器打开，供后续测试使用
             return controller
         else:
@@ -99,7 +99,9 @@ async def test_navigation(login_controller: LoginController):
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_first_edit(login_controller: LoginController, miaoshou_controller: MiaoshouController):
+async def test_first_edit(
+    login_controller: LoginController, miaoshou_controller: MiaoshouController
+):
     """测试3：首次编辑功能."""
     logger.info("=" * 80)
     logger.info("测试3：首次编辑功能")
@@ -137,7 +139,7 @@ async def test_first_edit(login_controller: LoginController, miaoshou_controller
 
         # 注意：这里仅测试部分功能，避免实际修改数据
         # 如果要完整测试，取消注释以下代码：
-        
+
         # success = await first_edit_controller.complete_first_edit(
         #     page,
         #     test_title,
@@ -222,4 +224,5 @@ if __name__ == "__main__":
     except Exception as e:
         logger.error(f"测试运行失败: {e}")
         import traceback
+
         traceback.print_exc()

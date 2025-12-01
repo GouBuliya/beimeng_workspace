@@ -96,9 +96,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
         return [
             TextContent(
                 type="text",
-                text=json.dumps(
-                    {"error": f"未知的工具: {name}"}, ensure_ascii=False, indent=2
-                ),
+                text=json.dumps({"error": f"未知的工具: {name}"}, ensure_ascii=False, indent=2),
             )
         ]
 
@@ -118,9 +116,7 @@ async def get_file_metadata(arguments: dict) -> list[TextContent]:
         return [
             TextContent(
                 type="text",
-                text=json.dumps(
-                    {"error": "缺少必需参数: file_path"}, ensure_ascii=False, indent=2
-                ),
+                text=json.dumps({"error": "缺少必需参数: file_path"}, ensure_ascii=False, indent=2),
             )
         ]
 
@@ -143,11 +139,7 @@ async def get_file_metadata(arguments: dict) -> list[TextContent]:
         if missing:
             response["missing_required_fields"] = missing
 
-    return [
-        TextContent(
-            type="text", text=json.dumps(response, ensure_ascii=False, indent=2)
-        )
-    ]
+    return [TextContent(type="text", text=json.dumps(response, ensure_ascii=False, indent=2))]
 
 
 async def get_specific_metadata(arguments: dict) -> list[TextContent]:
@@ -166,9 +158,7 @@ async def get_specific_metadata(arguments: dict) -> list[TextContent]:
         return [
             TextContent(
                 type="text",
-                text=json.dumps(
-                    {"error": "缺少必需参数: file_path"}, ensure_ascii=False, indent=2
-                ),
+                text=json.dumps({"error": "缺少必需参数: file_path"}, ensure_ascii=False, indent=2),
             )
         ]
 
@@ -176,9 +166,7 @@ async def get_specific_metadata(arguments: dict) -> list[TextContent]:
         return [
             TextContent(
                 type="text",
-                text=json.dumps(
-                    {"error": "缺少必需参数: fields"}, ensure_ascii=False, indent=2
-                ),
+                text=json.dumps({"error": "缺少必需参数: fields"}, ensure_ascii=False, indent=2),
             )
         ]
 
@@ -224,11 +212,7 @@ async def get_specific_metadata(arguments: dict) -> list[TextContent]:
         "fields": result,
     }
 
-    return [
-        TextContent(
-            type="text", text=json.dumps(response, ensure_ascii=False, indent=2)
-        )
-    ]
+    return [TextContent(type="text", text=json.dumps(response, ensure_ascii=False, indent=2))]
 
 
 async def main():
@@ -239,4 +223,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-

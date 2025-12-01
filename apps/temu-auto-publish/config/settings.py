@@ -34,9 +34,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # ========== 子配置类 ==========
 
+
 class DebugConfig(BaseSettings):
     """调试配置.
-    
+
     Attributes:
         enabled: 是否启用调试
         auto_screenshot: 自动截图
@@ -48,6 +49,7 @@ class DebugConfig(BaseSettings):
         save_html_on_error: 错误时保存HTML
         debug_dir: 调试目录
     """
+
     enabled: bool = Field(default=True, description="是否启用调试")
     auto_screenshot: bool = Field(default=True, description="自动截图")
     auto_save_html: bool = Field(default=False, description="自动保存HTML")
@@ -61,7 +63,7 @@ class DebugConfig(BaseSettings):
 
 class LoggingConfig(BaseSettings):
     """日志配置.
-    
+
     Attributes:
         level: 日志级别
         format: 日志格式
@@ -70,6 +72,7 @@ class LoggingConfig(BaseSettings):
         rotation: 轮转大小
         retention: 保留时间
     """
+
     level: str = Field(default="INFO", description="日志级别")
     format: str = Field(default="detailed", description="日志格式")
     output: List[str] = Field(default=["console", "file"], description="输出目标")
@@ -80,7 +83,7 @@ class LoggingConfig(BaseSettings):
 
 class BrowserConfig(BaseSettings):
     """浏览器配置.
-    
+
     Attributes:
         headless: 无头模式
         slow_mo: 慢速模式（毫秒）
@@ -88,19 +91,17 @@ class BrowserConfig(BaseSettings):
         viewport: 视口大小
         user_agent: 用户代理
     """
+
     headless: bool = Field(default=False, description="无头模式")
     slow_mo: int = Field(default=0, description="慢速模式（毫秒）")
     timeout: int = Field(default=30000, description="默认超时（毫秒）")
-    viewport: Dict[str, int] = Field(
-        default={"width": 1280, "height": 720},
-        description="视口大小"
-    )
+    viewport: Dict[str, int] = Field(default={"width": 1280, "height": 720}, description="视口大小")
     user_agent: Optional[str] = Field(default=None, description="用户代理")
 
 
 class RetryConfig(BaseSettings):
     """重试配置.
-    
+
     Attributes:
         enabled: 是否启用重试
         max_attempts: 最大重试次数
@@ -108,6 +109,7 @@ class RetryConfig(BaseSettings):
         initial_delay: 初始延迟（秒）
         max_delay: 最大延迟（秒）
     """
+
     enabled: bool = Field(default=True, description="是否启用重试")
     max_attempts: int = Field(default=3, ge=1, description="最大重试次数")
     backoff_factor: float = Field(default=2.0, ge=1.0, description="退避因子")
@@ -117,12 +119,13 @@ class RetryConfig(BaseSettings):
 
 class MetricsConfig(BaseSettings):
     """指标配置.
-    
+
     Attributes:
         enabled: 是否启用指标收集
         storage_dir: 存储目录
         export_format: 导出格式
     """
+
     enabled: bool = Field(default=True, description="是否启用指标收集")
     storage_dir: str = Field(default="data/metrics", description="存储目录")
     export_format: str = Field(default="json", description="导出格式")
@@ -130,7 +133,7 @@ class MetricsConfig(BaseSettings):
 
 class BusinessConfig(BaseSettings):
     """业务配置.
-    
+
     Attributes:
         price_multiplier: 建议售价倍率
         supply_price_multiplier: 供货价倍率
@@ -139,6 +142,7 @@ class BusinessConfig(BaseSettings):
         claim_count: 认领次数
         collection_owner: 妙手采集箱创建人员显示名(不含账号)
     """
+
     price_multiplier: float = Field(default=10.0, description="建议售价倍率")
     supply_price_multiplier: float = Field(default=7.5, description="供货价倍率")
     real_supply_multiplier: float = Field(default=2.5, description="真实供货价倍率")
@@ -152,13 +156,14 @@ class BusinessConfig(BaseSettings):
 
 class WorkflowConfig(BaseSettings):
     """工作流配置.
-    
+
     Attributes:
         enable_state_save: 启用状态保存
         state_dir: 状态目录
         auto_resume: 自动恢复
         checkpoint_interval: 检查点间隔
     """
+
     enable_state_save: bool = Field(default=True, description="启用状态保存")
     state_dir: str = Field(default="data/workflow_states", description="状态目录")
     auto_resume: bool = Field(default=False, description="自动恢复")
@@ -167,26 +172,25 @@ class WorkflowConfig(BaseSettings):
 
 class AuthConfig(BaseSettings):
     """认证服务配置.
-    
+
     Attributes:
         server_url: 认证服务器地址
         timeout: 请求超时时间（秒）
     """
-    server_url: str = Field(
-        default="http://121.199.32.74:8001",
-        description="认证服务器地址"
-    )
+
+    server_url: str = Field(default="http://121.199.32.74:8001", description="认证服务器地址")
     timeout: float = Field(default=10.0, description="请求超时时间（秒）")
 
 
 # ========== 主配置类 ==========
 
+
 class Settings(BaseSettings):
     """应用配置主类.
-    
+
     从环境变量、.env文件和YAML配置文件加载配置。
     优先级：环境变量 > YAML > 默认值
-    
+
     Attributes:
         environment: 运行环境
         temu_username: Temu用户名
@@ -203,7 +207,7 @@ class Settings(BaseSettings):
         metrics: 指标配置
         business: 业务配置
         workflow: 工作流配置
-        
+
     Examples:
         >>> from config.settings import settings
         >>> settings.environment
@@ -211,28 +215,27 @@ class Settings(BaseSettings):
         >>> settings.debug.enabled
         True
     """
-    
+
     # 环境配置
     environment: str = Field(default="development", description="运行环境")
-    
+
     # Temu 账号配置（从.env加载）
     temu_username: str = Field(default="", description="Temu 用户名")
     temu_password: str = Field(default="", description="Temu 密码")
     miaoshou_username: str = Field(default="", description="妙手 用户名")
     miaoshou_password: str = Field(default="", description="妙手 密码")
-    
+
     # 路径配置
     data_input_dir: str = Field(default="data/input", description="输入目录")
     data_output_dir: str = Field(default="data/output", description="输出目录")
     data_temp_dir: str = Field(default="data/temp", description="临时目录")
     data_logs_dir: str = Field(default="data/logs", description="日志目录")
-    
+
     # 浏览器配置文件
     browser_config_file: str = Field(
-        default="config/browser_config.json",
-        description="浏览器配置文件"
+        default="config/browser_config.json", description="浏览器配置文件"
     )
-    
+
     # 子配置
     debug: DebugConfig = Field(default_factory=DebugConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
@@ -242,7 +245,7 @@ class Settings(BaseSettings):
     business: BusinessConfig = Field(default_factory=BusinessConfig)
     workflow: WorkflowConfig = Field(default_factory=WorkflowConfig)
     auth: AuthConfig = Field(default_factory=AuthConfig)
-    
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
@@ -250,7 +253,7 @@ class Settings(BaseSettings):
         extra="ignore",
         env_nested_delimiter="__",  # 支持 DEBUG__ENABLED=true
     )
-    
+
     @field_validator("environment")
     @classmethod
     def validate_environment(cls, v: str) -> str:
@@ -259,19 +262,19 @@ class Settings(BaseSettings):
         if v not in valid_envs:
             raise ValueError(f"环境必须是: {valid_envs}")
         return v
-    
+
     def get_absolute_path(self, relative_path: str) -> Path:
         """将相对路径转换为绝对路径.
-        
+
         Args:
             relative_path: 相对路径
-            
+
         Returns:
             绝对路径
         """
         base_dir = Path(__file__).parent.parent
         return base_dir / relative_path
-    
+
     def ensure_directories(self) -> None:
         """确保所有必需的目录存在."""
         for dir_path in [
@@ -285,7 +288,7 @@ class Settings(BaseSettings):
         ]:
             full_path = self.get_absolute_path(dir_path)
             full_path.mkdir(parents=True, exist_ok=True)
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典（隐藏敏感信息）."""
         data = self.model_dump()
@@ -298,6 +301,7 @@ class Settings(BaseSettings):
 
 
 # ========== 配置加载 ==========
+
 
 def load_environment_config(env: str = "development") -> Dict[str, Any]:
     """从YAML文件加载环境配置，支持别名引用."""
@@ -343,20 +347,20 @@ def load_environment_config(env: str = "development") -> Dict[str, Any]:
 
 def create_settings(env: Optional[str] = None) -> Settings:
     """创建配置实例.
-    
+
     Args:
         env: 环境名称，如果为None则从环境变量获取
-        
+
     Returns:
         配置实例
     """
     # 确定环境
     if env is None:
         env = os.getenv("ENVIRONMENT", "development")
-    
+
     # 加载YAML配置
     yaml_config = load_environment_config(env)
-    
+
     # 创建配置实例（YAML配置作为默认值）
     settings = Settings(
         environment=env,
@@ -369,10 +373,10 @@ def create_settings(env: Optional[str] = None) -> Settings:
         workflow=WorkflowConfig(**yaml_config.get("workflow", {})),
         auth=AuthConfig(**yaml_config.get("auth", {})),
     )
-    
+
     # 确保目录存在
     settings.ensure_directories()
-    
+
     return settings
 
 

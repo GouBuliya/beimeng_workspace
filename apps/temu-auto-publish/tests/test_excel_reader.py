@@ -51,17 +51,17 @@ class TestExcelReaderRead:
         file_path = tmp_path / "products.xlsx"
         wb = Workbook()
         ws = wb.active
-        
+
         # 添加表头和数据（使用标准列名映射）
         ws.append(["商品名称", "成本价", "类目", "关键词", "备注"])
         ws.append(["智能手表", 150.0, "电子产品/智能穿戴", "智能手表", "热销款"])
         ws.append(["蓝牙耳机", 80.0, "电子产品/耳机", "蓝牙耳机", ""])
         wb.save(file_path)
-        
+
         # 读取并验证
         reader = ExcelReader(file_path)
         products = reader.read()
-        
+
         assert len(products) == 2
         assert isinstance(products[0], ProductInput)
         assert products[0].name == "智能手表"
@@ -69,7 +69,7 @@ class TestExcelReaderRead:
         assert products[0].category == "电子产品/智能穿戴"
         assert products[0].keyword == "智能手表"
         assert products[0].notes == "热销款"
-        
+
         assert products[1].name == "蓝牙耳机"
         assert products[1].notes == ""  # 默认值
 
@@ -78,15 +78,15 @@ class TestExcelReaderRead:
         file_path = tmp_path / "products.xlsx"
         wb = Workbook()
         ws = wb.active
-        
+
         # 列名带空格
         ws.append(["  商品名称  ", " 成本价", "类目 ", "关键词", "备注"])
         ws.append(["产品A", 100.0, "类目A", "关键词A", ""])
         wb.save(file_path)
-        
+
         reader = ExcelReader(file_path)
         products = reader.read()
-        
+
         assert len(products) == 1
         assert products[0].name == "产品A"
 
@@ -95,17 +95,17 @@ class TestExcelReaderRead:
         file_path = tmp_path / "products.xlsx"
         wb = Workbook()
         ws = wb.active
-        
+
         ws.append(["商品名称", "成本价", "类目", "关键词", "备注"])
         ws.append(["产品1", 100.0, "类目1", "关键词1", ""])
         ws.append([None, None, None, None, None])  # 空行
         ws.append(["产品2", 200.0, "类目2", "关键词2", "备注2"])
         ws.append(["", "", "", "", ""])  # 空字符串行
         wb.save(file_path)
-        
+
         reader = ExcelReader(file_path)
         products = reader.read()
-        
+
         # 空行应该被过滤
         assert len(products) == 2
         assert products[0].name == "产品1"
@@ -116,12 +116,12 @@ class TestExcelReaderRead:
         file_path = tmp_path / "products.xlsx"
         wb = Workbook()
         ws = wb.active
-        
+
         # 没有备注列
         ws.append(["商品名称", "成本价", "类目", "关键词"])
         ws.append(["产品1", 100.0, "类目1", "关键词1"])
         wb.save(file_path)
-        
+
         reader = ExcelReader(file_path)
         # 应该能正常读取，备注字段使用默认值
         try:
@@ -137,15 +137,15 @@ class TestExcelReaderRead:
         file_path = tmp_path / "products.xlsx"
         wb = Workbook()
         ws = wb.active
-        
+
         ws.append(["商品名称", "成本价", "类目", "关键词", "备注"])
         ws.append(["产品1", 99.999, "类目1", "关键词1", ""])
         ws.append(["产品2", 50.123, "类目2", "关键词2", ""])
         wb.save(file_path)
-        
+
         reader = ExcelReader(file_path)
         products = reader.read()
-        
+
         assert len(products) == 2
         # 价格应该被四舍五入到2位小数
         assert products[0].cost_price == 100.0
@@ -162,10 +162,10 @@ class TestExcelReaderEdgeCases:
         ws = wb.active
         ws.append(["商品名称", "成本价", "类目", "关键词", "备注"])
         wb.save(file_path)
-        
+
         reader = ExcelReader(file_path)
         products = reader.read()
-        
+
         assert len(products) == 0
 
     def test_read_large_dataset(self, tmp_path):
@@ -173,17 +173,19 @@ class TestExcelReaderEdgeCases:
         file_path = tmp_path / "large.xlsx"
         wb = Workbook()
         ws = wb.active
-        
+
         ws.append(["商品名称", "成本价", "类目", "关键词", "备注"])
-        
+
         # 添加100条数据
         for i in range(100):
-            ws.append([f"产品{i+1}", float(i * 10 + 10), f"类目{i%5}", f"关键词{i}", f"备注{i}"])
+            ws.append(
+                [f"产品{i + 1}", float(i * 10 + 10), f"类目{i % 5}", f"关键词{i}", f"备注{i}"]
+            )
         wb.save(file_path)
-        
+
         reader = ExcelReader(file_path)
         products = reader.read()
-        
+
         assert len(products) == 100
         assert products[0].name == "产品1"
         assert products[99].name == "产品100"
@@ -193,14 +195,14 @@ class TestExcelReaderEdgeCases:
         file_path = tmp_path / "special.xlsx"
         wb = Workbook()
         ws = wb.active
-        
+
         ws.append(["商品名称", "成本价", "类目", "关键词", "备注"])
         ws.append(["产品 (特价！)", 100.0, "类目/子类目", "关键词&搜索", "备注：测试"])
         wb.save(file_path)
-        
+
         reader = ExcelReader(file_path)
         products = reader.read()
-        
+
         assert len(products) == 1
         assert products[0].name == "产品 (特价！)"
         assert products[0].category == "类目/子类目"
@@ -210,14 +212,14 @@ class TestExcelReaderEdgeCases:
         file_path = tmp_path / "unicode.xlsx"
         wb = Workbook()
         ws = wb.active
-        
+
         ws.append(["商品名称", "成本价", "类目", "关键词", "备注"])
         ws.append(["日本🇯🇵产品", 100.0, "进口商品", "日韩", "emoji测试"])
         wb.save(file_path)
-        
+
         reader = ExcelReader(file_path)
         products = reader.read()
-        
+
         assert len(products) == 1
         assert "日本" in products[0].name
 
@@ -232,9 +234,9 @@ class TestProductInputModel:
             cost_price=100.0,
             category="测试类目",
             keyword="测试关键词",
-            notes="测试备注"
+            notes="测试备注",
         )
-        
+
         assert product.name == "测试产品"
         assert product.cost_price == 100.0
         assert product.category == "测试类目"
@@ -243,51 +245,26 @@ class TestProductInputModel:
         """测试价格验证"""
         # 负价格应该失败
         with pytest.raises(ValueError):
-            ProductInput(
-                name="测试",
-                cost_price=-100.0,
-                category="类目",
-                keyword="关键词"
-            )
-        
+            ProductInput(name="测试", cost_price=-100.0, category="类目", keyword="关键词")
+
         # 零价格应该失败
         with pytest.raises(ValueError):
-            ProductInput(
-                name="测试",
-                cost_price=0,
-                category="类目",
-                keyword="关键词"
-            )
+            ProductInput(name="测试", cost_price=0, category="类目", keyword="关键词")
 
     def test_product_input_name_validation(self):
         """测试名称验证"""
         # 空名称应该失败
         with pytest.raises(ValueError):
-            ProductInput(
-                name="",
-                cost_price=100.0,
-                category="类目",
-                keyword="关键词"
-            )
+            ProductInput(name="", cost_price=100.0, category="类目", keyword="关键词")
 
     def test_product_input_default_notes(self):
         """测试默认备注值"""
-        product = ProductInput(
-            name="测试",
-            cost_price=100.0,
-            category="类目",
-            keyword="关键词"
-        )
-        
+        product = ProductInput(name="测试", cost_price=100.0, category="类目", keyword="关键词")
+
         assert product.notes == ""
 
     def test_product_input_price_rounding(self):
         """测试价格自动四舍五入"""
-        product = ProductInput(
-            name="测试",
-            cost_price=99.999,
-            category="类目",
-            keyword="关键词"
-        )
-        
+        product = ProductInput(name="测试", cost_price=99.999, category="类目", keyword="关键词")
+
         assert product.cost_price == 100.0

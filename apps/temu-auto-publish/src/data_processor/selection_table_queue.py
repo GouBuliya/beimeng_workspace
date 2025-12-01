@@ -81,9 +81,7 @@ class SelectionTableQueue:
 
         rows = self._load_rows()
         if not rows:
-            raise SelectionTableEmptyError(
-                f"选品表 {self.selection_table_path} 无数据，停止运行"
-            )
+            raise SelectionTableEmptyError(f"选品表 {self.selection_table_path} 无数据，停止运行")
 
         batch_rows = rows[:batch_size]
         remaining_rows = rows[batch_size:]
@@ -100,9 +98,7 @@ class SelectionTableQueue:
             start_index,
         )
 
-        return SelectionBatch(
-            rows=batch_rows, total_before_pop=len(rows), start_index=start_index
-        )
+        return SelectionBatch(rows=batch_rows, total_before_pop=len(rows), start_index=start_index)
 
     def iter_batches(
         self, batch_size: int, *, wait_on_empty: bool = False, poll_interval: float = 3.0
@@ -178,13 +174,9 @@ class SelectionTableQueue:
             self._cached_rows = list(rows)
             return list(rows) if copy else rows
         except FileNotFoundError as exc:
-            raise FileNotFoundError(
-                f"选品表不存在: {self.selection_table_path}"
-            ) from exc
+            raise FileNotFoundError(f"选品表不存在: {self.selection_table_path}") from exc
         except Exception as exc:
-            raise SelectionTableFormatError(
-                f"选品表格式异常，无法解析: {exc}"
-            ) from exc
+            raise SelectionTableFormatError(f"选品表格式异常，无法解析: {exc}") from exc
 
     def _write_rows(self, rows: Sequence[ProductSelectionRow]) -> None:
         df = self._rows_to_dataframe(rows)
@@ -203,7 +195,3 @@ class SelectionTableQueue:
     def _default_archive_dir() -> Path:
         app_root = Path(__file__).resolve().parents[3]
         return app_root / "data" / "output" / "processed"
-
-
-
-

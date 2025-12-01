@@ -45,10 +45,9 @@ class FirstEditMediaMixin(FirstEditBase):
                 logger.info("检测到已有视频并已处理,跳过上传")
                 return True
             logger.warning("产品视频上传失败或被跳过")
-            
+
             return False
         except Exception as exc:
             logger.error(f"上传产品视频失败: {exc}")
             logger.info("提示:视频上传功能可能需要在实际环境中调试")
             return False
-

@@ -131,4 +131,3 @@ def verify_password(password: str, hashed: str) -> bool:
         如果密码匹配返回 True
     """
     return bcrypt.checkpw(password.encode(), hashed.encode())
-

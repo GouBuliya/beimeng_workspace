@@ -103,7 +103,9 @@ def first_edit_step_retry(
         async def wrapper(*args, **kwargs):
             page = extract_page(*args, **kwargs)
             pre_action = (
-                pre_retry_action_factory(page) if pre_retry_action_factory else _default_pre_retry_action(page)
+                pre_retry_action_factory(page)
+                if pre_retry_action_factory
+                else _default_pre_retry_action(page)
             )
             policy = _build_policy(
                 base_policy=create_step_retry_policy(pre_retry_action=pre_action),
@@ -146,7 +148,9 @@ def first_edit_stage_retry(
         async def wrapper(*args, **kwargs):
             page = extract_page(*args, **kwargs)
             pre_action = (
-                pre_retry_action_factory(page) if pre_retry_action_factory else _default_pre_retry_action(page)
+                pre_retry_action_factory(page)
+                if pre_retry_action_factory
+                else _default_pre_retry_action(page)
             )
             policy = _build_policy(
                 base_policy=create_stage_retry_policy(pre_retry_action=pre_action),

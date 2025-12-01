@@ -21,6 +21,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 # 加载.env环境变量（强制覆盖系统环境变量）
 try:
     from dotenv import load_dotenv
+
     env_path = Path(__file__).parent / ".env"
     load_dotenv(env_path, override=True)  # 强制覆盖已存在的环境变量
     logger.info(f"✓ 环境变量已从 {env_path} 加载（已覆盖系统环境变量）")
@@ -57,42 +58,42 @@ async def main():
     logger.info("  - 请确保网络畅通")
     logger.info("  - 整个流程预计需要5-10分钟")
     logger.info("")
-    
+
     browser_manager = None
     login_controller = None
-    
+
     try:
         # 1. 初始化登录控制器
         logger.info("步骤1：初始化登录控制器...")
         login_controller = LoginController()
         logger.success("✓ 登录控制器初始化成功")
-        
+
         # 2. 登录（会自动启动浏览器）
         logger.info("\n步骤2：登录妙手ERP...")
-        
+
         # 从.env环境变量读取账号密码
         username = os.getenv("MIAOSHOU_USERNAME")
         password = os.getenv("MIAOSHOU_PASSWORD")
-        
+
         if not username or not password:
             logger.error("❌ 未找到妙手ERP账号配置")
             logger.info("\n请确保.env文件中包含以下配置：")
             logger.info("  MIAOSHOU_USERNAME=你的用户名")
             logger.info("  MIAOSHOU_PASSWORD=你的密码")
             return 1
-        
+
         logger.info(f"  使用账号: {username}")
         logger.warning("⚠️  注意：优先使用Cookie登录模式")
         logger.info("   如果Cookie有效，将跳过账号密码登录")
         logger.info("   如果Cookie失效，将使用.env中的账号自动登录")
-        
+
         login_success = await login_controller.login(
             username=username,
             password=password,
             force=False,  # 优先使用Cookie
-            headless=False
+            headless=False,
         )
-        
+
         if not login_success:
             logger.error("❌ 登录失败，测试终止")
             logger.info("\n可能原因：")
@@ -100,13 +101,13 @@ async def main():
             logger.info("  2. 网络连接问题")
             logger.info("  3. 妙手ERP页面结构变化")
             return 1
-        
+
         logger.success("✓ 登录成功")
-        
+
         # 获取page对象
         page = login_controller.browser_manager.page
         await asyncio.sleep(2)
-        
+
         # 3. 导航到公用采集箱（SOP步骤4.0）
         logger.info("\n步骤3：导航到公用采集箱...")
         miaoshou_ctrl = MiaoshouController()
@@ -114,7 +115,7 @@ async def main():
             logger.error("✗ 导航失败")
             return 1
         logger.success("✓ 导航成功")
-        
+
         # 4. 切换到"全部"tab（SOP步骤4.0）
         logger.info("\n步骤4：切换到「全部」tab...")
         if not await miaoshou_ctrl.switch_tab(page, "all"):
@@ -122,48 +123,48 @@ async def main():
         else:
             logger.success("✓ 已切换到全部tab")
         await page.wait_for_timeout(1000)
-        
+
         # 5. 执行5→20工作流
         logger.info("\n步骤5：执行5→20认领流程...")
         logger.info("----------------------------------------")
         workflow = FiveToTwentyWorkflow()
-        
+
         # 准备测试数据（5条商品数据）
         test_products = [
             {
                 "index": i,
                 "cost": 150.0 + i * 10,
-                "title_suffix": f"A000{i+1}测试型号",
+                "title_suffix": f"A000{i + 1}测试型号",
                 "weight": 5000 + i * 500,  # 5000-7000G
-                "length": 55 + i * 5,       # 55-75cm
-                "width": 54 + i * 5,        # 54-74cm
-                "height": 53 + i * 5,       # 53-73cm
+                "length": 55 + i * 5,  # 55-75cm
+                "width": 54 + i * 5,  # 54-74cm
+                "height": 53 + i * 5,  # 53-73cm
                 # 新增：测试尺寸图和视频URL（使用示例URL）
                 "size_chart_url": "https://img.kwcdn.com/product/fancy/e7e3c9a5-size.jpg",  # 示例尺寸图
                 "video_url": "https://video.kwcdn.com/example.mp4",  # 示例视频
             }
             for i in range(5)
         ]
-        
+
         logger.info("测试数据：")
         for product in test_products:
             logger.info(
-                f"  商品{product['index']+1}: "
+                f"  商品{product['index'] + 1}: "
                 f"成本¥{product['cost']}, "
                 f"型号{product['title_suffix']}, "
                 f"重量{product['weight']}G, "
                 f"尺寸{product['length']}x{product['width']}x{product['height']}cm"
             )
         logger.info("")
-        
+
         # 执行工作流
         result = await workflow.execute(page, test_products)
-        
+
         # 结果
         logger.info("\n" + "=" * 80)
         logger.info("📊 测试结果")
         logger.info("=" * 80)
-        
+
         if result:
             logger.success("✅ 测试通过！5→20认领流程执行成功")
             logger.info("")
@@ -195,10 +196,11 @@ async def main():
             logger.info("  3. 使用Playwright Codegen更新选择器")
             logger.info("")
             return 1
-    
+
     except Exception as e:
         logger.error(f"❌ 测试异常: {e}")
         import traceback
+
         traceback.print_exc()
         logger.info("")
         logger.info("调试信息：")
@@ -206,7 +208,7 @@ async def main():
         logger.info(f"  异常信息: {str(e)}")
         logger.info("")
         return 1
-    
+
     finally:
         if login_controller:
             logger.info("\n清理：准备关闭浏览器...")
@@ -219,4 +221,3 @@ async def main():
 if __name__ == "__main__":
     exit_code = asyncio.run(main())
     sys.exit(exit_code)
-
