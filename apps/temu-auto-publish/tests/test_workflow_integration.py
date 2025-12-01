@@ -74,6 +74,13 @@ class TestEmergencyCleanup:
         workflow._perf_reporter = MagicMock()
         workflow._perf_reporter.print_summary = MagicMock()
 
+        # 初始化稳定性组件属性(新增)
+        workflow._watchdog = None
+        workflow._health_monitor = None
+        workflow._resource_manager = None
+        workflow._checkpoint_cleanup_task = None
+        workflow._session_keeper = None
+
         # Mock browser manager
         mock_browser_manager = AsyncMock()
         mock_browser_manager.close = AsyncMock()
@@ -95,6 +102,13 @@ class TestEmergencyCleanup:
         workflow._perf_tracker = MagicMock()
         workflow._perf_tracker.end_workflow = MagicMock()
         workflow._perf_reporter = MagicMock()
+
+        # 初始化稳定性组件属性(新增)
+        workflow._watchdog = None
+        workflow._health_monitor = None
+        workflow._resource_manager = None
+        workflow._checkpoint_cleanup_task = None
+        workflow._session_keeper = None
 
         # Mock browser manager with failing close
         mock_browser_manager = AsyncMock()
@@ -118,6 +132,13 @@ class TestEmergencyCleanup:
         workflow._perf_reporter = MagicMock()
         workflow.login_ctrl = None
 
+        # 初始化稳定性组件属性(新增)
+        workflow._watchdog = None
+        workflow._health_monitor = None
+        workflow._resource_manager = None
+        workflow._checkpoint_cleanup_task = None
+        workflow._session_keeper = None
+
         # 不应抛出异常
         await workflow._emergency_cleanup("cancelled")
 
@@ -134,6 +155,13 @@ class TestExecuteAsyncTimeout:
         workflow._perf_tracker.end_workflow = MagicMock()
         workflow._perf_reporter = MagicMock()
         workflow.login_ctrl = None
+
+        # 初始化稳定性组件属性(新增)
+        workflow._watchdog = None
+        workflow._health_monitor = None
+        workflow._resource_manager = None
+        workflow._checkpoint_cleanup_task = None
+        workflow._session_keeper = None
 
         # Mock _run to be slow
         async def slow_run():

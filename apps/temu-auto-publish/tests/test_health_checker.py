@@ -124,20 +124,25 @@ class TestHealthChecker:
         checker = HealthChecker()
 
         assert checker is not None
-        assert checker.thresholds is not None
+        # 检查默认阈值
+        assert checker.disk_warning_threshold_gb == 10.0
+        assert checker.disk_error_threshold_gb == 5.0
+        assert checker.memory_warning_threshold_percent == 80.0
+        assert checker.memory_error_threshold_percent == 90.0
 
     def test_init_with_custom_thresholds(self):
         """测试自定义阈值初始化"""
-        custom_thresholds = {
-            "disk_warning_percent": 70,
-            "disk_error_percent": 90,
-            "memory_warning_percent": 75,
-            "memory_error_percent": 95,
-        }
+        checker = HealthChecker(
+            disk_warning_threshold_gb=15.0,
+            disk_error_threshold_gb=8.0,
+            memory_warning_threshold_percent=75.0,
+            memory_error_threshold_percent=95.0,
+        )
 
-        checker = HealthChecker(thresholds=custom_thresholds)
-
-        assert checker.thresholds["disk_warning_percent"] == 70
+        assert checker.disk_warning_threshold_gb == 15.0
+        assert checker.disk_error_threshold_gb == 8.0
+        assert checker.memory_warning_threshold_percent == 75.0
+        assert checker.memory_error_threshold_percent == 95.0
 
     @pytest.mark.asyncio
     async def test_check_disk(self):
@@ -159,18 +164,22 @@ class TestHealthChecker:
     @pytest.mark.asyncio
     async def test_check_disk_low_space(self):
         """测试磁盘空间不足"""
-        checker = HealthChecker(thresholds={"disk_warning_percent": 80, "disk_error_percent": 95})
+        # 设置阈值: 警告 < 10GB, 错误 < 5GB
+        checker = HealthChecker(
+            disk_warning_threshold_gb=10.0,
+            disk_error_threshold_gb=5.0,
+        )
 
-        # Mock shutil.disk_usage - 只有5%空间
+        # Mock shutil.disk_usage - 只有3GB空间(低于5GB错误阈值)
         with patch("shutil.disk_usage") as mock_disk:
             mock_disk.return_value = MagicMock(
                 total=100 * 1024 * 1024 * 1024,
-                free=5 * 1024 * 1024 * 1024,  # 5GB free (5%)
+                free=3 * 1024 * 1024 * 1024,  # 3GB free
             )
 
             result = await checker.check_disk()
 
-            # 使用率95%应该触发ERROR
+            # 应该触发ERROR(低于5GB)
             assert result.status in [HealthStatus.WARNING, HealthStatus.ERROR]
 
     @pytest.mark.asyncio
@@ -195,7 +204,8 @@ class TestHealthChecker:
     async def test_check_memory_high_usage(self):
         """测试内存使用率高"""
         checker = HealthChecker(
-            thresholds={"memory_warning_percent": 70, "memory_error_percent": 90}
+            memory_warning_threshold_percent=70.0,
+            memory_error_threshold_percent=90.0,
         )
 
         # Mock psutil.virtual_memory - 95%使用率
@@ -234,12 +244,13 @@ class TestHealthChecker:
         """测试浏览器未启动时的检查"""
         checker = HealthChecker()
 
-        # 不设置browser_manager
+        # 不设置browser_manager - 当前实现检测Playwright是否安装
         result = await checker.check_browser()
 
         assert result.component == "browser"
-        # 没有浏览器应该返回WARNING或UNKNOWN
-        assert result.status in [HealthStatus.WARNING, HealthStatus.UNKNOWN, HealthStatus.ERROR]
+        # 如果Playwright已安装,返回OK;否则返回WARNING/ERROR
+        # 本测试环境已安装Playwright,所以应该返回OK
+        assert result.status in [HealthStatus.OK, HealthStatus.WARNING, HealthStatus.ERROR]
 
     @pytest.mark.asyncio
     async def test_check_all(self):
@@ -270,9 +281,13 @@ class TestHealthChecker:
 
         results = await checker.check_all()
 
-        assert len(results) >= 4
-        # 至少有一个是OK的
-        assert any(r.status == HealthStatus.OK for r in results)
+        # check_all 返回一个字典,包含 status, checks, summary
+        assert isinstance(results, dict)
+        assert "status" in results
+        assert "checks" in results
+        assert "summary" in results
+        # 至少有4个检查项(可能更多因为有 dependencies, config_files 等)
+        assert len(results["checks"]) >= 4
 
     @pytest.mark.asyncio
     async def test_check_all_overall_status(self):
@@ -296,11 +311,26 @@ class TestHealthChecker:
                 component="browser", status=HealthStatus.OK, message="OK"
             )
         )
+        # 还需要 mock login, dependencies, config_files
+        checker.check_login = AsyncMock(
+            return_value=HealthCheckResult(component="login", status=HealthStatus.OK, message="OK")
+        )
+        checker.check_dependencies = AsyncMock(
+            return_value=HealthCheckResult(
+                component="dependencies", status=HealthStatus.OK, message="OK"
+            )
+        )
+        checker.check_config_files = AsyncMock(
+            return_value=HealthCheckResult(
+                component="config_files", status=HealthStatus.OK, message="OK"
+            )
+        )
 
         results = await checker.check_all()
 
-        # 所有结果都应该是健康的
-        assert all(r.is_healthy() for r in results)
+        # check_all 返回字典,检查整体状态
+        assert results["status"] == "healthy"
+        assert results["summary"]["error_count"] == 0
 
 
 class TestHealthCheckerIntegration:

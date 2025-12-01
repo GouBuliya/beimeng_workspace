@@ -48,13 +48,18 @@ class TimeoutConfig:
         stage3_batch_edit: 批量编辑超时(秒)
         stage4_publish: 发布超时(秒)
         workflow_total: 工作流总超时(秒)
+
+    Note:
+        配置已优化为 24 小时稳定运行模式，超时时间更宽裕，
+        配合自动重试机制确保偶发故障能够恢复。
     """
 
-    stage1_first_edit: int = 900  # 15分钟(保守配置)
-    stage2_claim: int = 600  # 10分钟
-    stage3_batch_edit: int = 1200  # 20分钟
-    stage4_publish: int = 600  # 10分钟
-    workflow_total: int = 3600  # 60分钟总超时
+    # 24 小时稳定运行配置（相比保守配置，超时时间加倍）
+    stage1_first_edit: int = 1800  # 30分钟（原15分钟）
+    stage2_claim: int = 900  # 15分钟（原10分钟）
+    stage3_batch_edit: int = 1800  # 30分钟（原20分钟）
+    stage4_publish: int = 900  # 15分钟（原10分钟）
+    workflow_total: int = 7200  # 120分钟总超时（原60分钟）
 
     def get(self, stage_name: str, default: int = 600) -> int:
         """获取指定阶段的超时时间."""

@@ -751,6 +751,165 @@ class BrowserManager:
         await self.page.screenshot(path=str(screenshot_path), full_page=full_page)
         logger.debug(f"截图已保存: {screenshot_path}")
 
+    async def is_healthy(self, timeout: float = 5.0) -> bool:
+        """检查浏览器是否健康.
+
+        快速检查浏览器连接状态和页面响应能力.
+
+        Args:
+            timeout: 检查超时时间(秒)
+
+        Returns:
+            True 如果浏览器可响应，False 否则
+
+        Examples:
+            >>> if await manager.is_healthy():
+            ...     print("浏览器正常")
+        """
+        try:
+            # 1. 检查基本对象
+            if not self.browser or not self.browser.is_connected():
+                return False
+            if not self.context:
+                return False
+            if not self.page:
+                return False
+
+            # 2. 检查页面响应
+            await asyncio.wait_for(
+                self.page.evaluate("() => true"),
+                timeout=timeout,
+            )
+            return True
+        except Exception:
+            return False
+
+    async def restart(self, preserve_cookies: bool = True) -> bool:
+        """重启浏览器.
+
+        关闭当前浏览器并重新启动，可选择保留 Cookie.
+
+        Args:
+            preserve_cookies: 是否保留 Cookie 和 Storage State
+
+        Returns:
+            是否重启成功
+
+        Examples:
+            >>> success = await manager.restart()
+            >>> if success:
+            ...     print("浏览器已重启")
+        """
+        logger.info("开始重启浏览器...")
+        try:
+            if preserve_cookies:
+                await self.save_storage_state()
+
+            await self.close(save_state=preserve_cookies)
+            await self.start()
+
+            logger.success("浏览器重启成功")
+            return True
+        except Exception as e:
+            logger.error(f"浏览器重启失败: {e}")
+            return False
+
+    async def get_page_count(self) -> int:
+        """获取当前打开的页面数量.
+
+        Returns:
+            页面数量，如果上下文不存在则返回 0
+        """
+        if not self.context:
+            return 0
+        try:
+            return len(self.context.pages)
+        except Exception:
+            return 0
+
+    async def close_extra_pages(self, keep_count: int = 1) -> int:
+        """关闭多余页面.
+
+        保留指定数量的页面，关闭其余页面以释放资源.
+
+        Args:
+            keep_count: 保留的页面数量
+
+        Returns:
+            关闭的页面数量
+
+        Examples:
+            >>> closed = await manager.close_extra_pages(keep_count=1)
+            >>> print(f"已关闭 {closed} 个页面")
+        """
+        if not self.context:
+            return 0
+
+        try:
+            pages = self.context.pages
+            if len(pages) <= keep_count:
+                return 0
+
+            closed = 0
+            # 保留最后 keep_count 个页面
+            pages_to_close = pages[:-keep_count] if keep_count > 0 else pages
+
+            for page in pages_to_close:
+                # 不关闭当前活跃页面
+                if page == self.page:
+                    continue
+                try:
+                    await page.close()
+                    closed += 1
+                except Exception as e:
+                    logger.debug(f"关闭页面失败: {e}")
+
+            if closed > 0:
+                logger.info(f"已关闭 {closed} 个多余页面")
+            return closed
+        except Exception as e:
+            logger.warning(f"关闭多余页面时出错: {e}")
+            return 0
+
+    def get_memory_usage_mb(self) -> int | None:
+        """获取浏览器进程内存占用(MB).
+
+        通过 psutil 查找 Chromium 相关进程的内存使用.
+
+        Returns:
+            内存占用(MB)，如果无法获取则返回 None
+
+        Note:
+            这是一个近似值，可能包含多个浏览器子进程的内存.
+        """
+        try:
+            import psutil
+
+            total_memory = 0
+            for proc in psutil.process_iter(["name", "memory_info"]):
+                try:
+                    proc_name = proc.info.get("name", "").lower()
+                    # 匹配 chromium, chrome, msedge 等浏览器进程
+                    if any(
+                        browser in proc_name
+                        for browser in ("chrom", "chromium", "msedge")
+                    ):
+                        memory_info = proc.info.get("memory_info")
+                        if memory_info:
+                            total_memory += memory_info.rss
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+
+            if total_memory > 0:
+                return total_memory // (1024 * 1024)
+            return None
+        except ImportError:
+            logger.debug("psutil 未安装，无法获取内存使用")
+            return None
+        except Exception as e:
+            logger.debug(f"获取内存使用失败: {e}")
+            return None
+
     async def save_storage_state(self, file_path: str | None = None) -> bool:
         """保存浏览器 Storage State(包含 Cookie,localStorage,sessionStorage).
 

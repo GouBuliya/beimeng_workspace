@@ -570,6 +570,170 @@ class HealthChecker:
 
         return {"status": overall_status, "checks": checks, "summary": summary}
 
+    async def check_browser_process(self, browser_manager=None) -> HealthCheckResult:
+        """检查浏览器进程状态.
+
+        深度检查浏览器进程健康状况，包括连接状态和内存使用.
+
+        Args:
+            browser_manager: 浏览器管理器实例
+
+        Returns:
+            健康检查结果
+        """
+        if browser_manager is None:
+            return HealthCheckResult(
+                component="browser_process",
+                status=HealthStatus.UNKNOWN,
+                message="未提供浏览器管理器",
+                details={"skipped": True},
+            )
+
+        try:
+            # 1. 检查浏览器对象是否存在
+            if not browser_manager.browser:
+                return HealthCheckResult(
+                    component="browser_process",
+                    status=HealthStatus.ERROR,
+                    message="浏览器未启动",
+                    details={"browser_exists": False},
+                )
+
+            # 2. 检查浏览器连接状态
+            if not browser_manager.browser.is_connected():
+                return HealthCheckResult(
+                    component="browser_process",
+                    status=HealthStatus.ERROR,
+                    message="浏览器连接已断开",
+                    details={"connected": False},
+                )
+
+            details = {"browser_exists": True, "connected": True}
+
+            # 3. 检查内存占用(如果方法可用)
+            if hasattr(browser_manager, "get_memory_usage_mb"):
+                memory_mb = browser_manager.get_memory_usage_mb()
+                if memory_mb is not None:
+                    details["memory_mb"] = memory_mb
+
+                    # 内存使用超过 2GB 警告，超过 4GB 错误
+                    if memory_mb > 4096:
+                        return HealthCheckResult(
+                            component="browser_process",
+                            status=HealthStatus.ERROR,
+                            message=f"浏览器内存占用过高: {memory_mb}MB (>4GB)",
+                            details=details,
+                        )
+                    elif memory_mb > 2048:
+                        return HealthCheckResult(
+                            component="browser_process",
+                            status=HealthStatus.WARNING,
+                            message=f"浏览器内存占用较高: {memory_mb}MB (>2GB)",
+                            details=details,
+                        )
+
+            # 4. 检查页面数量
+            if hasattr(browser_manager, "get_page_count"):
+                page_count = await browser_manager.get_page_count()
+                details["page_count"] = page_count
+
+                if page_count > 5:
+                    return HealthCheckResult(
+                        component="browser_process",
+                        status=HealthStatus.WARNING,
+                        message=f"页面数量过多: {page_count}",
+                        details=details,
+                    )
+
+            return HealthCheckResult(
+                component="browser_process",
+                status=HealthStatus.OK,
+                message="浏览器进程正常",
+                details=details,
+            )
+
+        except Exception as e:
+            logger.error(f"浏览器进程检查失败: {e}")
+            return HealthCheckResult(
+                component="browser_process",
+                status=HealthStatus.ERROR,
+                message=f"检查失败: {e!s}",
+                details={"error": str(e)},
+            )
+
+    async def check_page_responsiveness(
+        self,
+        page=None,
+        timeout: float = 5.0,
+    ) -> HealthCheckResult:
+        """检查页面响应性.
+
+        测试页面是否能在指定时间内响应 JavaScript 执行.
+
+        Args:
+            page: Playwright 页面对象
+            timeout: 响应超时时间(秒)
+
+        Returns:
+            健康检查结果
+        """
+        import time
+
+        if page is None:
+            return HealthCheckResult(
+                component="page_responsiveness",
+                status=HealthStatus.UNKNOWN,
+                message="未提供页面对象",
+                details={"skipped": True},
+            )
+
+        try:
+            start = time.perf_counter()
+
+            # 执行简单的 JavaScript 测试响应性
+            result = await asyncio.wait_for(
+                page.evaluate("() => document.readyState"),
+                timeout=timeout,
+            )
+
+            latency_ms = (time.perf_counter() - start) * 1000
+            details = {
+                "latency_ms": round(latency_ms, 2),
+                "page_ready_state": result,
+            }
+
+            # 根据延迟判断状态
+            if latency_ms > 3000:
+                return HealthCheckResult(
+                    component="page_responsiveness",
+                    status=HealthStatus.WARNING,
+                    message=f"页面响应较慢: {latency_ms:.0f}ms",
+                    details=details,
+                )
+            else:
+                return HealthCheckResult(
+                    component="page_responsiveness",
+                    status=HealthStatus.OK,
+                    message=f"页面响应正常: {latency_ms:.0f}ms",
+                    details=details,
+                )
+
+        except asyncio.TimeoutError:
+            return HealthCheckResult(
+                component="page_responsiveness",
+                status=HealthStatus.ERROR,
+                message=f"页面响应超时 ({timeout}s)",
+                details={"timeout": timeout},
+            )
+        except Exception as e:
+            logger.error(f"页面响应检查失败: {e}")
+            return HealthCheckResult(
+                component="page_responsiveness",
+                status=HealthStatus.ERROR,
+                message=f"检查失败: {e!s}",
+                details={"error": str(e)},
+            )
+
     async def check_component(self, component: str, **kwargs) -> HealthCheckResult:
         """检查指定组件.
 
@@ -585,6 +749,8 @@ class HealthChecker:
         """
         check_methods = {
             "browser": self.check_browser,
+            "browser_process": self.check_browser_process,
+            "page_responsiveness": self.check_page_responsiveness,
             "login": self.check_login,
             "network": self.check_network,
             "disk": self.check_disk,

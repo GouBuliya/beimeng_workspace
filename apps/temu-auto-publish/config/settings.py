@@ -181,6 +181,95 @@ class AuthConfig(BaseSettings):
     timeout: float = Field(default=10.0, description="请求超时时间(秒)")
 
 
+# ========== 稳定性配置类 ==========
+
+
+class WatchdogConfig(BaseSettings):
+    """浏览器看门狗配置.
+
+    Attributes:
+        enabled: 是否启用看门狗
+        heartbeat_interval_sec: 心跳检查间隔(秒)
+        health_check_timeout_sec: 健康检查超时(秒)
+        max_recovery_attempts: 单级别最大恢复尝试次数
+        recovery_cooldown_sec: 恢复冷却时间(秒)
+        enable_auto_relogin: 是否自动重新登录
+        page_response_timeout_sec: 页面响应超时(秒)
+        max_consecutive_failures: 最大连续失败次数
+    """
+
+    enabled: bool = Field(default=True, description="是否启用看门狗")
+    heartbeat_interval_sec: int = Field(default=10, ge=5, description="心跳检查间隔(秒),默认10s快速检测崩溃")
+    health_check_timeout_sec: int = Field(default=10, ge=5, description="健康检查超时(秒)")
+    max_recovery_attempts: int = Field(default=3, ge=1, description="单级别最大恢复尝试次数")
+    recovery_cooldown_sec: int = Field(default=60, ge=30, description="恢复冷却时间(秒)")
+    enable_auto_relogin: bool = Field(default=True, description="是否自动重新登录")
+    page_response_timeout_sec: int = Field(default=5, ge=2, description="页面响应超时(秒)")
+    max_consecutive_failures: int = Field(default=10, ge=3, description="最大连续失败次数")
+
+
+class HealthMonitorConfig(BaseSettings):
+    """持续健康监控配置.
+
+    Attributes:
+        enabled: 是否启用健康监控
+        check_interval_sec: 健康检查间隔(秒)
+        alert_threshold: 连续失败N次后触发告警
+        include_browser_check: 是否包含浏览器检查
+        include_network_check: 是否包含网络检查
+        include_disk_check: 是否包含磁盘检查
+        include_memory_check: 是否包含内存检查
+        alert_cooldown_sec: 同一组件告警冷却时间(秒)
+    """
+
+    enabled: bool = Field(default=True, description="是否启用健康监控")
+    check_interval_sec: int = Field(default=60, ge=30, description="健康检查间隔(秒)")
+    alert_threshold: int = Field(default=3, ge=1, description="连续失败N次后触发告警")
+    include_browser_check: bool = Field(default=True, description="是否包含浏览器检查")
+    include_network_check: bool = Field(default=True, description="是否包含网络检查")
+    include_disk_check: bool = Field(default=True, description="是否包含磁盘检查")
+    include_memory_check: bool = Field(default=True, description="是否包含内存检查")
+    alert_cooldown_sec: int = Field(default=300, ge=60, description="同一组件告警冷却时间(秒)")
+
+
+class CheckpointEnhancedConfig(BaseSettings):
+    """检查点增强配置.
+
+    Attributes:
+        enable_atomic_write: 是否使用原子写入
+        enable_file_lock: 是否使用文件锁
+        retention_hours: 检查点保留时间(小时)
+        auto_cleanup_enabled: 是否启用自动清理
+        auto_cleanup_interval_hours: 自动清理检查间隔(小时)
+    """
+
+    enable_atomic_write: bool = Field(default=True, description="是否使用原子写入")
+    enable_file_lock: bool = Field(default=True, description="是否使用文件锁")
+    retention_hours: int = Field(default=24, ge=1, description="检查点保留时间(小时)")
+    auto_cleanup_enabled: bool = Field(default=True, description="是否启用自动清理")
+    auto_cleanup_interval_hours: int = Field(default=1, ge=1, description="自动清理检查间隔(小时)")
+
+
+class ResourceConfig(BaseSettings):
+    """资源管理配置.
+
+    Attributes:
+        max_memory_mb: 最大内存限制(MB)
+        min_disk_free_gb: 最小磁盘空间(GB)
+        max_page_count: 最大页面数
+        max_temp_file_age_hours: 临时文件最大保留时间(小时)
+        gc_trigger_memory_mb: 触发GC的内存阈值(MB)
+        enable_auto_gc: 是否启用自动GC
+    """
+
+    max_memory_mb: int = Field(default=4096, ge=512, description="最大内存限制(MB)")
+    min_disk_free_gb: float = Field(default=5.0, ge=1.0, description="最小磁盘空间(GB)")
+    max_page_count: int = Field(default=3, ge=1, description="最大页面数")
+    max_temp_file_age_hours: int = Field(default=24, ge=1, description="临时文件最大保留时间(小时)")
+    gc_trigger_memory_mb: int = Field(default=3072, ge=512, description="触发GC的内存阈值(MB)")
+    enable_auto_gc: bool = Field(default=True, description="是否启用自动GC")
+
+
 # ========== 主配置类 ==========
 
 
@@ -244,6 +333,12 @@ class Settings(BaseSettings):
     business: BusinessConfig = Field(default_factory=BusinessConfig)
     workflow: WorkflowConfig = Field(default_factory=WorkflowConfig)
     auth: AuthConfig = Field(default_factory=AuthConfig)
+
+    # 稳定性配置
+    watchdog: WatchdogConfig = Field(default_factory=WatchdogConfig)
+    health_monitor: HealthMonitorConfig = Field(default_factory=HealthMonitorConfig)
+    checkpoint: CheckpointEnhancedConfig = Field(default_factory=CheckpointEnhancedConfig)
+    resource: ResourceConfig = Field(default_factory=ResourceConfig)
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -371,6 +466,11 @@ def create_settings(env: str | None = None) -> Settings:
         business=BusinessConfig(**yaml_config.get("business", {})),
         workflow=WorkflowConfig(**yaml_config.get("workflow", {})),
         auth=AuthConfig(**yaml_config.get("auth", {})),
+        # 稳定性配置
+        watchdog=WatchdogConfig(**yaml_config.get("watchdog", {})),
+        health_monitor=HealthMonitorConfig(**yaml_config.get("health_monitor", {})),
+        checkpoint=CheckpointEnhancedConfig(**yaml_config.get("checkpoint", {})),
+        resource=ResourceConfig(**yaml_config.get("resource", {})),
     )
 
     # 确保目录存在

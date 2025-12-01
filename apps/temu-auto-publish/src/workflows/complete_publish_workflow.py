@@ -56,12 +56,19 @@ from ..browser.login_controller import LoginController
 from ..browser.miaoshou_controller import MiaoshouController
 from ..browser.publish_controller import PublishController
 
+# 导入稳定性组件
+from ..core.browser_watchdog import BrowserWatchdog
+from ..core.browser_watchdog import WatchdogConfig as WDConfig
+
 # 导入优化组件
-from ..core.checkpoint_manager import get_checkpoint_manager
+from ..core.checkpoint_manager import CheckpointManager, get_checkpoint_manager
+from ..core.continuous_health_monitor import ContinuousHealthMonitor, MonitorConfig
 from ..core.performance_reporter import ConsoleReporter
 from ..core.performance_tracker import (
     reset_tracker,
 )
+from ..core.resource_manager import ResourceLimits, ResourceManager
+from ..core.session_keeper import SessionKeeper, SessionKeeperConfig
 from ..data_processor.price_calculator import PriceCalculator, PriceResult
 from ..data_processor.product_data_reader import ProductDataReader
 from ..data_processor.selection_table_reader import ProductSelectionRow, SelectionTableReader
@@ -73,6 +80,8 @@ FIRST_EDIT_STAGE_TIMEOUT_MS = 5_000
 
 if TYPE_CHECKING:
     from playwright.async_api import Page
+
+    from ..browser.browser_manager import BrowserManager
 
 
 @dataclass(slots=True)
@@ -264,6 +273,18 @@ class CompletePublishWorkflow:
         self._perf_tracker = reset_tracker("temu_publish")
         self._perf_reporter = ConsoleReporter(self._perf_tracker)
 
+        # 稳定性组件(延迟初始化,在 _run 中创建)
+        self._watchdog: BrowserWatchdog | None = None
+        self._health_monitor: ContinuousHealthMonitor | None = None
+        self._resource_manager: ResourceManager | None = None
+        self._checkpoint_cleanup_task: asyncio.Task | None = None
+        self._session_keeper: SessionKeeper | None = None
+
+        # 24 小时稳定运行配置
+        self._auto_recovery_enabled = True
+        self._max_stage_retries = 3
+        self._close_browser_on_complete = True  # 工作流完成后立即关闭浏览器
+
     def execute(self) -> WorkflowExecutionResult:
         """????, ?? asyncio ??."""
 
@@ -328,6 +349,324 @@ class CompletePublishWorkflow:
             self._perf_reporter.print_summary()
         except Exception as exc:
             logger.debug(f"[EMERGENCY] 性能追踪结束失败: {exc}")
+
+        # 3. 停止稳定性组件
+        await self._cleanup_stability_components()
+
+    async def _safe_cleanup(
+        self,
+        workflow_id: str,
+        stages: list[StageOutcome],
+        errors: list[str],
+    ) -> None:
+        """安全清理资源，确保浏览器正确关闭.
+
+        此方法在 finally 块中调用，确保即使出现异常也能正确清理资源。
+
+        Args:
+            workflow_id: 工作流 ID
+            stages: 已执行的阶段列表
+            errors: 错误列表
+        """
+        cleanup_errors: list[str] = []
+        workflow_failed = errors or any(not stage.success for stage in stages)
+
+        # 1. 停止稳定性组件
+        try:
+            await self._cleanup_stability_components()
+        except Exception as e:
+            cleanup_errors.append(f"稳定性组件清理: {e}")
+            logger.warning(f"[SafeCleanup] 稳定性组件清理失败: {e}")
+
+        # 2. 保存最终状态（性能追踪）
+        try:
+            if workflow_failed:
+                error_msg = "; ".join(errors) if errors else "阶段失败"
+                self._perf_tracker.end_workflow(success=False, error=error_msg)
+            else:
+                self._perf_tracker.end_workflow(success=True)
+            self._perf_reporter.print_summary()
+            self._perf_tracker.save_to_file()
+        except Exception as e:
+            cleanup_errors.append(f"性能追踪保存: {e}")
+            logger.warning(f"[SafeCleanup] 性能追踪保存失败: {e}")
+
+        # 3. 关闭浏览器（关键步骤）
+        if self._close_browser_on_complete and self.login_ctrl and self.login_ctrl.browser_manager:
+            browser_manager = self.login_ctrl.browser_manager
+            try:
+                # 带超时的浏览器关闭（最多 30 秒）
+                async with asyncio.timeout(30):
+                    await browser_manager.close(save_state=True)
+                logger.info("[SafeCleanup] 浏览器已关闭")
+            except TimeoutError:
+                cleanup_errors.append("浏览器关闭超时")
+                logger.error("[SafeCleanup] 浏览器关闭超时（30秒）")
+                # 尝试强制关闭
+                try:
+                    if browser_manager.browser:
+                        await browser_manager.browser.close()
+                except Exception:
+                    pass
+            except Exception as e:
+                cleanup_errors.append(f"浏览器关闭: {e}")
+                logger.error(f"[SafeCleanup] 浏览器关闭失败: {e}")
+        elif workflow_failed:
+            # 失败时输出恢复命令
+            logger.warning("检测到阶段失败,保留浏览器以便继续排查.")
+            logger.info(f"可使用 --resume --checkpoint-id={workflow_id} 从断点恢复")
+
+        # 4. 输出清理报告
+        if cleanup_errors:
+            logger.warning(f"[SafeCleanup] 清理期间发生 {len(cleanup_errors)} 个错误: {cleanup_errors}")
+        else:
+            logger.debug("[SafeCleanup] 资源清理完成")
+
+    async def _retry_stage_with_recovery(
+        self,
+        stage_name: str,
+        stage_func: Callable[[], Awaitable[StageOutcome | tuple[StageOutcome, Any]]],
+        checkpoint_mgr: CheckpointManager,
+        max_retries: int | None = None,
+    ) -> StageOutcome | tuple[StageOutcome, Any]:
+        """带自动恢复的阶段执行包装器.
+
+        当阶段失败时，自动重试指定次数。每次重试前会刷新页面状态。
+
+        Args:
+            stage_name: 阶段名称
+            stage_func: 阶段执行函数
+            checkpoint_mgr: 检查点管理器
+            max_retries: 最大重试次数（默认使用 self._max_stage_retries）
+
+        Returns:
+            阶段执行结果
+        """
+        retries = max_retries if max_retries is not None else self._max_stage_retries
+
+        for attempt in range(retries + 1):
+            try:
+                result = await stage_func()
+
+                # 判断结果类型
+                if isinstance(result, tuple):
+                    outcome = result[0]
+                else:
+                    outcome = result
+
+                if outcome.success:
+                    if attempt > 0:
+                        logger.success(f"[AutoRecovery] 阶段 {stage_name} 在第 {attempt + 1} 次尝试后成功")
+                    return result
+
+                # 阶段失败，检查是否需要重试
+                if attempt < retries and self._auto_recovery_enabled:
+                    logger.warning(
+                        f"[AutoRecovery] 阶段 {stage_name} 失败 (尝试 {attempt + 1}/{retries + 1}): "
+                        f"{outcome.message}"
+                    )
+
+                    # 增加检查点重试计数
+                    await checkpoint_mgr.increment_retry(stage_name)
+
+                    # 等待后重试（递增延迟）
+                    delay = min(5 * (attempt + 1), 30)  # 5s, 10s, 15s... 最多 30s
+                    logger.info(f"[AutoRecovery] 等待 {delay} 秒后重试...")
+                    await asyncio.sleep(delay)
+
+                    # 尝试刷新页面状态
+                    if self.login_ctrl and self.login_ctrl.browser_manager.page:
+                        try:
+                            await self.login_ctrl.browser_manager.page.reload(
+                                wait_until="domcontentloaded"
+                            )
+                            logger.debug("[AutoRecovery] 页面已刷新")
+                        except Exception as e:
+                            logger.warning(f"[AutoRecovery] 页面刷新失败: {e}")
+
+                    continue
+
+                # 最后一次尝试也失败
+                logger.error(
+                    f"[AutoRecovery] 阶段 {stage_name} 在 {retries + 1} 次尝试后仍然失败"
+                )
+                return result
+
+            except Exception as exc:
+                if attempt < retries and self._auto_recovery_enabled:
+                    logger.warning(
+                        f"[AutoRecovery] 阶段 {stage_name} 异常 (尝试 {attempt + 1}/{retries + 1}): {exc}"
+                    )
+                    await asyncio.sleep(5 * (attempt + 1))
+                    continue
+                raise
+
+        # 不应该到达这里
+        return result
+
+    async def _init_stability_components(
+        self,
+        browser_manager: BrowserManager | None = None,
+        login_controller: LoginController | None = None,
+    ) -> None:
+        """初始化稳定性组件.
+
+        Args:
+            browser_manager: 浏览器管理器实例
+            login_controller: 登录控制器实例
+        """
+        # 1. 初始化资源管理器
+        resource_cfg = self.settings.resource
+        self._resource_manager = ResourceManager(
+            limits=ResourceLimits(
+                max_memory_mb=resource_cfg.max_memory_mb,
+                min_disk_free_gb=resource_cfg.min_disk_free_gb,
+                max_page_count=resource_cfg.max_page_count,
+                max_temp_file_age_hours=resource_cfg.max_temp_file_age_hours,
+                gc_trigger_memory_mb=resource_cfg.gc_trigger_memory_mb,
+                enable_auto_gc=resource_cfg.enable_auto_gc,
+            )
+        )
+        logger.info(
+            "[Stability] 资源管理器已初始化 (内存限制: %dMB)",
+            resource_cfg.max_memory_mb,
+        )
+
+        # 2. 初始化浏览器看门狗
+        watchdog_cfg = self.settings.watchdog
+        if watchdog_cfg.enabled and browser_manager:
+            self._watchdog = BrowserWatchdog(
+                browser_manager=browser_manager,
+                login_controller=login_controller,
+                config=WDConfig(
+                    heartbeat_interval_sec=watchdog_cfg.heartbeat_interval_sec,
+                    health_check_timeout_sec=watchdog_cfg.health_check_timeout_sec,
+                    max_recovery_attempts=watchdog_cfg.max_recovery_attempts,
+                    recovery_cooldown_sec=watchdog_cfg.recovery_cooldown_sec,
+                    enable_auto_relogin=watchdog_cfg.enable_auto_relogin,
+                    page_response_timeout_sec=watchdog_cfg.page_response_timeout_sec,
+                    max_consecutive_failures=watchdog_cfg.max_consecutive_failures,
+                ),
+            )
+            await self._watchdog.start()
+            logger.info(
+                "[Stability] 浏览器看门狗已启动 (心跳间隔: %ds)",
+                watchdog_cfg.heartbeat_interval_sec,
+            )
+
+        # 3. 初始化持续健康监控
+        monitor_cfg = self.settings.health_monitor
+        if monitor_cfg.enabled:
+            self._health_monitor = ContinuousHealthMonitor(
+                browser_manager=browser_manager,
+                login_controller=login_controller,
+                config=MonitorConfig(
+                    enabled=True,
+                    check_interval_sec=monitor_cfg.check_interval_sec,
+                    alert_threshold=monitor_cfg.alert_threshold,
+                    include_browser_check=monitor_cfg.include_browser_check,
+                    include_network_check=monitor_cfg.include_network_check,
+                    include_disk_check=monitor_cfg.include_disk_check,
+                    include_memory_check=monitor_cfg.include_memory_check,
+                    alert_cooldown_sec=monitor_cfg.alert_cooldown_sec,
+                ),
+            )
+            await self._health_monitor.start()
+            logger.info(
+                "[Stability] 持续健康监控已启动 (检查间隔: %ds, 告警阈值: %d次)",
+                monitor_cfg.check_interval_sec,
+                monitor_cfg.alert_threshold,
+            )
+
+        # 4. 启动检查点自动清理任务
+        checkpoint_cfg = self.settings.checkpoint
+        if checkpoint_cfg.auto_cleanup_enabled:
+            self._checkpoint_cleanup_task = await CheckpointManager.start_auto_cleanup_task(
+                interval_hours=checkpoint_cfg.auto_cleanup_interval_hours,
+                retention_hours=checkpoint_cfg.retention_hours,
+            )
+            logger.info(
+                "[Stability] 检查点自动清理已启动 (间隔: %dh, 保留: %dh)",
+                checkpoint_cfg.auto_cleanup_interval_hours,
+                checkpoint_cfg.retention_hours,
+            )
+
+        # 5. 启动会话保活（24 小时运行关键组件）
+        session_cfg = getattr(self.settings, "session_keeper", None)
+        if browser_manager and login_controller:
+            refresh_interval = 30  # 默认 30 分钟
+            if session_cfg and hasattr(session_cfg, "refresh_interval_minutes"):
+                refresh_interval = session_cfg.refresh_interval_minutes
+
+            self._session_keeper = SessionKeeper(
+                browser_manager=browser_manager,
+                login_controller=login_controller,
+                config=SessionKeeperConfig(
+                    enabled=True,
+                    refresh_interval_minutes=refresh_interval,
+                    max_refresh_failures=3,
+                    relogin_on_failure=True,
+                ),
+            )
+            await self._session_keeper.start()
+            logger.info(
+                "[Stability] 会话保活已启动 (刷新间隔: %d分钟)",
+                refresh_interval,
+            )
+
+    async def _cleanup_stability_components(self) -> None:
+        """清理稳定性组件."""
+        # 1. 停止会话保活（优先停止，避免刷新干扰关闭流程）
+        if self._session_keeper:
+            try:
+                await self._session_keeper.stop()
+                logger.info("[Stability] 会话保活已停止")
+            except Exception as exc:
+                logger.warning(f"[Stability] 停止会话保活失败: {exc}")
+            self._session_keeper = None
+
+        # 2. 停止看门狗
+        if self._watchdog:
+            try:
+                await self._watchdog.stop()
+                logger.info("[Stability] 浏览器看门狗已停止")
+            except Exception as exc:
+                logger.warning(f"[Stability] 停止看门狗失败: {exc}")
+            self._watchdog = None
+
+        # 3. 停止健康监控
+        if self._health_monitor:
+            try:
+                await self._health_monitor.stop()
+                logger.info("[Stability] 持续健康监控已停止")
+            except Exception as exc:
+                logger.warning(f"[Stability] 停止健康监控失败: {exc}")
+            self._health_monitor = None
+
+        # 4. 停止检查点清理任务
+        if self._checkpoint_cleanup_task:
+            try:
+                self._checkpoint_cleanup_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await self._checkpoint_cleanup_task
+                logger.info("[Stability] 检查点清理任务已停止")
+            except Exception as exc:
+                logger.warning(f"[Stability] 停止清理任务失败: {exc}")
+            self._checkpoint_cleanup_task = None
+
+        # 5. 执行资源清理
+        if self._resource_manager:
+            try:
+                status = await self._resource_manager.enforce_limits()
+                if status.gc_triggered:
+                    logger.info("[Stability] 最终 GC 已执行")
+                if status.temp_files_cleaned > 0:
+                    logger.info(
+                        f"[Stability] 清理临时文件: {status.temp_files_cleaned} 个"
+                    )
+            except Exception as exc:
+                logger.warning(f"[Stability] 资源清理失败: {exc}")
+            self._resource_manager = None
 
     async def _run(self) -> WorkflowExecutionResult:
         workflow_id = (
@@ -410,6 +749,12 @@ class CompletePublishWorkflow:
             page = login_ctrl.browser_manager.page
             if page is None:
                 raise RuntimeError("Playwright page 未初始化")
+
+            # 初始化稳定性组件(登录成功后)
+            await self._init_stability_components(
+                browser_manager=login_ctrl.browser_manager,
+                login_controller=login_ctrl,
+            )
 
             if self.only_stage4_publish:
                 # 跳转 Temu 采集箱页面(仅发布)
@@ -634,25 +979,30 @@ class CompletePublishWorkflow:
 
             total_success = all(stage.success for stage in stages)
 
-            # 结束性能追踪并输出报告
-            self._perf_tracker.end_workflow(success=total_success)
-            self._perf_reporter.print_summary()
-            self._perf_tracker.save_to_file()
-
             if total_success:
                 await checkpoint_mgr.clear_checkpoint()
+                logger.success("工作流执行成功，检查点已清除")
 
             return WorkflowExecutionResult(workflow_id, total_success, stages, errors)
 
+        except Exception as exc:
+            # 全局异常捕获：处理所有未预期的异常
+            logger.error(f"[CRITICAL] 工作流发生未预期异常: {exc}", exc_info=True)
+            errors.append(f"未预期异常: {exc}")
+
+            # 紧急清理
+            await self._emergency_cleanup("unexpected_error")
+
+            return WorkflowExecutionResult(
+                workflow_id=workflow_id,
+                total_success=False,
+                stages=stages,
+                errors=errors,
+            )
+
         finally:
-            # 工作流结束后保持浏览器运行,以便 web 前端继续连接
-            if login_ctrl.browser_manager and login_ctrl.browser_manager.browser:
-                workflow_failed = errors or any(not stage.success for stage in stages)
-                if workflow_failed:
-                    logger.warning("检测到阶段失败,保留浏览器以便继续排查.")
-                    logger.info(f"可使用 --resume --checkpoint-id={workflow_id} 从断点恢复")
-                else:
-                    logger.success("工作流已完成,浏览器保持运行以供 web 前端连接.")
+            # 使用安全清理方法，确保资源正确释放
+            await self._safe_cleanup(workflow_id, stages, errors)
 
     async def _stage_first_edit(
         self,

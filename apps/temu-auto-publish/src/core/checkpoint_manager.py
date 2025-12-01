@@ -10,10 +10,15 @@
     - async def mark_stage_failed(): 标记阶段失败
     - async def clear_checkpoint(): 清除检查点
     - def get_resume_info(): 获取恢复信息
+    - async def _atomic_write_checkpoint(): 原子写入检查点
+    - def acquire_file_lock(): 获取文件锁
+    - def release_file_lock(): 释放文件锁
+    - async def start_auto_cleanup_task(): 启动后台自动清理任务
 @GOTCHAS:
-  - 检查点文件需要定期清理
+  - 检查点文件需要定期清理(默认24小时)
   - 断点恢复依赖数据的可序列化
-  - 并发访问需要考虑锁机制
+  - 使用原子写入防止文件损坏
+  - 文件锁仅在 Unix 系统上有效
 @DEPENDENCIES:
   - 外部: loguru
   - 内部: 无
@@ -133,6 +138,9 @@ class CheckpointManager:
         workflow_id: str,
         workflow_type: str = "complete_publish",
         checkpoint_dir: Path | str | None = None,
+        *,
+        use_atomic_write: bool = True,
+        use_file_lock: bool = True,
     ):
         """初始化检查点管理器
 
@@ -140,6 +148,8 @@ class CheckpointManager:
             workflow_id: 工作流唯一标识
             workflow_type: 工作流类型
             checkpoint_dir: 检查点存储目录(可选)
+            use_atomic_write: 是否使用原子写入(防止文件损坏)
+            use_file_lock: 是否使用文件锁(防止并发写入)
         """
         self.workflow_id = workflow_id
         self.workflow_type = workflow_type
@@ -152,6 +162,11 @@ class CheckpointManager:
         self.checkpoint_file = self.checkpoint_dir / f"{workflow_id}.json"
         self.checkpoint: WorkflowCheckpoint | None = None
         self._lock = asyncio.Lock()
+
+        # 原子写入和文件锁配置
+        self._use_atomic_write = use_atomic_write
+        self._use_file_lock = use_file_lock
+        self._file_lock_handle = None
 
     async def save_checkpoint(
         self,
@@ -385,7 +400,11 @@ class CheckpointManager:
                 return False
 
     async def _write_checkpoint(self) -> None:
-        """写入检查点到磁盘"""
+        """写入检查点到磁盘.
+
+        根据配置使用原子写入或普通写入.
+        原子写入: 先写临时文件，再 rename，防止写入中途失败导致文件损坏.
+        """
         if self.checkpoint is None:
             return
 
@@ -397,9 +416,125 @@ class CheckpointManager:
                 ensure_ascii=False,
                 indent=2,
             )
-            self.checkpoint_file.write_text(content, encoding="utf-8")
+
+            if self._use_atomic_write:
+                # 原子写入: 先写临时文件，再 rename
+                temp_file = self.checkpoint_file.with_suffix(".tmp")
+                try:
+                    temp_file.write_text(content, encoding="utf-8")
+                    # rename 是原子操作(在同一文件系统上)
+                    temp_file.replace(self.checkpoint_file)
+                except Exception:
+                    # 清理临时文件
+                    temp_file.unlink(missing_ok=True)
+                    raise
+            else:
+                # 普通写入
+                self.checkpoint_file.write_text(content, encoding="utf-8")
+
         except Exception as e:
             logger.error(f"写入检查点失败: {e}")
+
+    def acquire_file_lock(self, timeout: float = 10.0) -> bool:
+        """获取文件锁(防止并发写入).
+
+        仅在 Unix 系统上有效，Windows 系统会跳过.
+
+        Args:
+            timeout: 获取锁的超时时间(秒)
+
+        Returns:
+            是否成功获取锁
+        """
+        if not self._use_file_lock:
+            return True
+
+        try:
+            import fcntl
+
+            lock_file = self.checkpoint_file.with_suffix(".lock")
+            lock_file.parent.mkdir(parents=True, exist_ok=True)
+
+            self._file_lock_handle = open(lock_file, "w")
+            fcntl.flock(self._file_lock_handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            logger.debug(f"已获取文件锁: {lock_file}")
+            return True
+        except ImportError:
+            # Windows 系统没有 fcntl
+            logger.debug("fcntl 不可用(Windows系统)，跳过文件锁")
+            return True
+        except BlockingIOError:
+            logger.warning("无法获取文件锁，其他进程正在写入")
+            return False
+        except Exception as e:
+            logger.warning(f"获取文件锁失败: {e}")
+            return False
+
+    def release_file_lock(self) -> None:
+        """释放文件锁."""
+        if self._file_lock_handle is None:
+            return
+
+        try:
+            import fcntl
+
+            fcntl.flock(self._file_lock_handle.fileno(), fcntl.LOCK_UN)
+            self._file_lock_handle.close()
+            self._file_lock_handle = None
+            logger.debug("已释放文件锁")
+        except ImportError:
+            pass
+        except Exception as e:
+            logger.debug(f"释放文件锁失败: {e}")
+        finally:
+            self._file_lock_handle = None
+
+    @classmethod
+    async def start_auto_cleanup_task(
+        cls,
+        interval_hours: int = 1,
+        checkpoint_dir: Path | None = None,
+        retention_hours: int | None = None,
+    ) -> asyncio.Task:
+        """启动后台自动清理任务.
+
+        定期清理过期的检查点文件，防止磁盘空间耗尽.
+
+        Args:
+            interval_hours: 清理检查间隔(小时)
+            checkpoint_dir: 检查点目录
+            retention_hours: 检查点保留时间(小时)
+
+        Returns:
+            后台任务对象(可用于取消)
+
+        Examples:
+            >>> cleanup_task = await CheckpointManager.start_auto_cleanup_task()
+            >>> # ... 工作流执行 ...
+            >>> cleanup_task.cancel()  # 停止清理任务
+        """
+        target_dir = checkpoint_dir or cls.CHECKPOINT_DIR
+        retention = retention_hours or cls.CHECKPOINT_RETENTION_HOURS
+
+        async def cleanup_loop():
+            while True:
+                await asyncio.sleep(interval_hours * 3600)
+                try:
+                    cleaned = await cls.cleanup_old_checkpoints(
+                        checkpoint_dir=target_dir,
+                        retention_hours=retention,
+                    )
+                    if cleaned > 0:
+                        logger.info(f"[AutoCleanup] 已清理 {cleaned} 个过期检查点")
+                except Exception as e:
+                    logger.warning(f"[AutoCleanup] 清理任务异常: {e}")
+
+        task = asyncio.create_task(cleanup_loop(), name="checkpoint_auto_cleanup")
+        logger.info(
+            f"[AutoCleanup] 已启动检查点自动清理任务 "
+            f"(间隔: {interval_hours}h, 保留: {retention}h)"
+        )
+        return task
 
     @classmethod
     async def cleanup_old_checkpoints(
