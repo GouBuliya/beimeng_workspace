@@ -62,16 +62,34 @@ jobs:
             ~\AppData\Local\uv
           key: uv-${{ matrix.os }}-${{ hashFiles('uv.lock') }}
 
-      - name: Sync dependencies
-        shell: ${{ matrix.shell }}
+      - name: Sync dependencies (Windows)
+        if: matrix.os == 'Windows'
+        shell: pwsh
         run: uv sync --extra dev --extra temu
 
-      - name: Install Playwright browsers
-        shell: ${{ matrix.shell }}
+      - name: Sync dependencies (Unix)
+        if: matrix.os != 'Windows'
+        shell: bash
+        run: uv sync --extra dev --extra temu
+
+      - name: Install Playwright browsers (Windows)
+        if: matrix.os == 'Windows'
+        shell: pwsh
         run: uv run playwright install chromium
 
-      - name: Build executable
-        shell: ${{ matrix.shell }}
+      - name: Install Playwright browsers (Unix)
+        if: matrix.os != 'Windows'
+        shell: bash
+        run: uv run playwright install chromium
+
+      - name: Build executable (Windows)
+        if: matrix.os == 'Windows'
+        shell: pwsh
+        run: ${{ matrix.build-cmd }}
+
+      - name: Build executable (Unix)
+        if: matrix.os != 'Windows'
+        shell: bash
         run: ${{ matrix.build-cmd }}
 
       - name: Upload artifact
