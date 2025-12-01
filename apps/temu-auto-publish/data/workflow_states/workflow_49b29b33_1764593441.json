@@ -1,0 +1,11 @@
+{
+  "workflow_id": "workflow_49b29b33_1764593441",
+  "status": "failed",
+  "current_stage": null,
+  "completed_stages": [],
+  "failed_stages": [],
+  "start_time": "2025-12-01T20:50:41.227726",
+  "update_time": "2025-12-01T20:50:41.227872",
+  "context": {},
+  "checkpoint_data": {}
+}

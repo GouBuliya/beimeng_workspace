@@ -67,7 +67,9 @@ class Settings(BaseSettings):
     jwt_refresh_token_expire_days: int = 7
 
     # 服务配置
-    auth_server_host: str = "0.0.0.0"
+    # 生产环境建议使用 "127.0.0.1" 或具体 IP 地址
+    # 开发环境可以使用 "0.0.0.0" 监听所有接口
+    auth_server_host: str = "127.0.0.1"  # nosec B104 - 默认只监听本地
     auth_server_port: int = 8001
     debug: bool = False
 

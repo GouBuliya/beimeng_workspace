@@ -1,0 +1,92 @@
+{
+  "workflow_id": "temu_publish_20251201_203720",
+  "workflow_type": "complete_publish",
+  "current_stage": "stage1_first_edit",
+  "stages": {
+    "stage1_first_edit": {
+      "name": "stage1_first_edit",
+      "status": "completed",
+      "start_time": "2025-12-01T20:42:27.854312",
+      "end_time": "2025-12-01T20:42:27.854316",
+      "data": {
+        "products": [
+          {
+            "index": 16,
+            "product_name": "超大彩色垃圾桶",
+            "model_number": "A075",
+            "owner": "未指定",
+            "title": "健身踏板---2025新款室内瑜伽脚踏板节奏瑜伽踏步板，带防滑底部，用于有氧运动与锻炼设备，助力家庭日常健身训练，功能实用，健身必备辅助器材---有84962个家庭使用 A075",
+            "cost_price": 80.0,
+            "suggested_price": 800.0,
+            "supply_price": 600.0,
+            "real_supply_price": 200.0,
+            "weight_g": 8702,
+            "dimensions_cm": {
+              "length": 92,
+              "width": 77,
+              "height": 63
+            }
+          },
+          {
+            "index": 17,
+            "product_name": "瑜伽踏板",
+            "model_number": "A076",
+            "owner": "未指定",
+            "title": "健身踏板---2025新款室内瑜伽脚踏板节奏瑜伽踏步板，带防滑底部，用于有氧运动与锻炼设备，助力家庭日常健身训练，功能实用，健身必备辅助器材---有84962个家庭使用 A075 A076",
+            "cost_price": 30.0,
+            "suggested_price": 300.0,
+            "supply_price": 225.0,
+            "real_supply_price": 75.0,
+            "weight_g": 7333,
+            "dimensions_cm": {
+              "length": 94,
+              "width": 80,
+              "height": 75
+            }
+          },
+          {
+            "index": 18,
+            "product_name": "午休折叠床",
+            "model_number": "A077",
+            "owner": "未指定",
+            "title": "海运一款便携式折叠床，便于携带，适合户外休闲、办公室午休、户外旅行露营，轻量级设计 A077",
+            "cost_price": 59.0,
+            "suggested_price": 590.0,
+            "supply_price": 442.5,
+            "real_supply_price": 147.5,
+            "weight_g": 8299,
+            "dimensions_cm": {
+              "length": 93,
+              "width": 75,
+              "height": 60
+            }
+          },
+          {
+            "index": 19,
+            "product_name": "双门浴室置物柜",
+            "model_number": "A078",
+            "owner": "未指定",
+            "title": "防水浴室储物柜双门独立式窄型，节省空间的地板架适合小空间浴室 双门设计能遮挡灰尘 独立式窄型结构不占空间 白色外观清新干净 收纳便捷1000个家庭适用 A078",
+            "cost_price": 24.0,
+            "suggested_price": 240.0,
+            "supply_price": 180.0,
+            "real_supply_price": 60.0,
+            "weight_g": 5881,
+            "dimensions_cm": {
+              "length": 80,
+              "width": 60,
+              "height": 50
+            }
+          }
+        ]
+      },
+      "error": null,
+      "retry_count": 0
+    }
+  },
+  "global_data": {},
+  "retry_count": 0,
+  "last_error": null,
+  "created_at": "2025-12-01T20:42:27.854306",
+  "updated_at": "2025-12-01T20:42:27.854311"
+}

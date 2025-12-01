@@ -24,17 +24,15 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import os
-import time
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Awaitable, Callable
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
 from ..core.workflow_timeout import (
-    DEFAULT_STAGE_TIMEOUTS,
     TimeoutConfig,
     WorkflowTimeoutError,
     get_timeout_config,
@@ -57,21 +55,19 @@ from ..browser.image_manager import ImageManager
 from ..browser.login_controller import LoginController
 from ..browser.miaoshou_controller import MiaoshouController
 from ..browser.publish_controller import PublishController
+
+# 导入优化组件
+from ..core.checkpoint_manager import get_checkpoint_manager
+from ..core.performance_reporter import ConsoleReporter
+from ..core.performance_tracker import (
+    reset_tracker,
+)
 from ..data_processor.price_calculator import PriceCalculator, PriceResult
 from ..data_processor.product_data_reader import ProductDataReader
 from ..data_processor.selection_table_reader import ProductSelectionRow, SelectionTableReader
 from .legacy.complete_publish_workflow_v1 import (
     execute_complete_workflow as legacy_execute_complete_workflow,
 )
-
-# 导入优化组件
-from ..core.checkpoint_manager import CheckpointManager, get_checkpoint_manager
-from ..core.performance_tracker import (
-    PerformanceTracker,
-    get_tracker,
-    reset_tracker,
-)
-from ..core.performance_reporter import ConsoleReporter
 
 FIRST_EDIT_STAGE_TIMEOUT_MS = 5_000
 
@@ -193,7 +189,7 @@ class CompletePublishWorkflow:
         checkpoint_id: str | None = None,
         # 新增: 执行轮次与浏览器复用
         execution_round: int = 1,
-        login_ctrl: "LoginController" | None = None,
+        login_ctrl: LoginController | None = None,
         reuse_existing_login: bool = False,
         # 新增: 超时配置
         timeout_config: dict[str, int] | TimeoutConfig | None = None,
@@ -275,10 +271,38 @@ class CompletePublishWorkflow:
         return asyncio.run(self.execute_async())
 
     async def execute_async(self) -> WorkflowExecutionResult:
-        """异步执行工作流入口."""
+        """异步执行工作流入口，带总超时保护."""
 
         logger.info("启动 Temu 发布工作流 (SOTA 异步模式)")
-        return await self._run()
+
+        workflow_timeout = self.timeout_config.get("workflow_total", 3600)
+        logger.info(
+            f"[TIMEOUT] 工作流总超时: {workflow_timeout}s ({workflow_timeout / 60:.1f}分钟)"
+        )
+
+        try:
+            async with with_stage_timeout(
+                "workflow_total",
+                workflow_timeout,
+                on_timeout=lambda: logger.warning("[TIMEOUT] 工作流超时，将触发紧急清理"),
+            ):
+                return await self._run()
+
+        except WorkflowTimeoutError as exc:
+            logger.error(f"[TIMEOUT] 工作流超时异常: {exc}")
+            await self._emergency_cleanup("timeout")
+            # 返回失败结果而非抛出异常，确保上游能正常处理
+            return WorkflowExecutionResult(
+                workflow_id=f"timeout_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+                total_success=False,
+                stages=[],
+                errors=[f"工作流超时 ({workflow_timeout}s): {exc}"],
+            )
+
+        except asyncio.CancelledError:
+            logger.warning("[CANCELLED] 工作流被外部取消")
+            await self._emergency_cleanup("cancelled")
+            raise  # 取消异常需要继续传播
 
     async def _emergency_cleanup(self, reason: str = "timeout") -> None:
         """紧急清理: 超时或取消时调用.
@@ -336,21 +360,10 @@ class CompletePublishWorkflow:
         login_ctrl = self.login_ctrl or LoginController()
         self.login_ctrl = login_ctrl
 
-        # 工作流总超时保护
-        workflow_timeout = self.timeout_config.get("workflow_total", 3600)
-        logger.info(
-            f"[TIMEOUT] 工作流总超时设置: {workflow_timeout}s ({workflow_timeout / 60:.1f}分钟)"
-        )
-
         try:
-            async with with_stage_timeout(
-                "workflow_total",
-                workflow_timeout,
-                on_timeout=lambda: self._emergency_cleanup("timeout"),
-            ):
-                selection_rows: list[ProductSelectionRow] = []
-                staff_name = ""
-                page = None
+            selection_rows: list[ProductSelectionRow] = []
+            staff_name = ""
+            page = None
             miaoshou_ctrl: MiaoshouController | None = None
             first_edit_ctrl: FirstEditController | None = None
             batch_edit_ctrl: BatchEditController | None = None
@@ -787,7 +800,7 @@ class CompletePublishWorkflow:
                 reduced_timeout_ms,
             )
             page.set_default_timeout(reduced_timeout_ms)
-            setattr(page, "_bemg_default_timeout_ms", reduced_timeout_ms)
+            page._bemg_default_timeout_ms = reduced_timeout_ms
             timeout_overridden = True
 
         try:
@@ -959,7 +972,7 @@ class CompletePublishWorkflow:
                     original_timeout_ms,
                 )
                 page.set_default_timeout(original_timeout_ms)
-                setattr(page, "_bemg_default_timeout_ms", original_timeout_ms)
+                page._bemg_default_timeout_ms = original_timeout_ms
 
     def _build_first_edit_hook(
         self,
@@ -968,10 +981,10 @@ class CompletePublishWorkflow:
         sku_image_urls: list[str],
         size_chart_url: str | None,
         product_video_url: str | None,
-    ) -> Callable[["Page"], Awaitable[bool]] | None:
+    ) -> Callable[[Page], Awaitable[bool]] | None:
         """构造首次编辑混合策略的附加操作 hook."""
 
-        hooks: list[Callable[["Page"], Awaitable[bool]]] = []
+        hooks: list[Callable[[Page], Awaitable[bool]]] = []
 
         if sku_image_urls:
             urls_for_hook = [url.strip() for url in sku_image_urls if url and url.strip()]

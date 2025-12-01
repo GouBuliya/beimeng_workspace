@@ -30,9 +30,11 @@ DIST_DIR = Path("dist")
 
 
 def download_file(url: str, dest: Path) -> None:
-    """下载文件"""
+    """下载文件 - 仅允许 HTTPS"""
+    if not url.startswith("https://"):
+        raise ValueError(f"仅允许 HTTPS URL: {url}")
     print(f"下载: {url}")
-    urllib.request.urlretrieve(url, dest)
+    urllib.request.urlretrieve(url, dest)  # nosec B310 - 已验证 HTTPS
     print(f"已保存到: {dest}")
 
 

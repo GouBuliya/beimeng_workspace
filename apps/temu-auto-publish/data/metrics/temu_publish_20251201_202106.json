@@ -1,0 +1,159 @@
+{
+  "id": "temu_publish_20251201_202106",
+  "name": "temu_publish",
+  "status": "success",
+  "start_time": "2025-12-01T20:21:06.770653",
+  "end_time": "2025-12-01T20:26:04.544858",
+  "error": null,
+  "metadata": {},
+  "stages": [
+    {
+      "id": "stg_11aaa8ce",
+      "name": "stage1_first_edit",
+      "display_name": "首次编辑",
+      "order": 1,
+      "status": "success",
+      "start_time": "2025-12-01T20:21:14.710410",
+      "end_time": "2025-12-01T20:23:39.975575",
+      "error": null,
+      "metadata": {},
+      "operations": [
+        {
+          "id": "op_a88eb926",
+          "name": "edit_product_1",
+          "status": "success",
+          "start_time": "2025-12-01T20:21:41.421272",
+          "end_time": "2025-12-01T20:22:07.008718",
+          "error": null,
+          "metadata": {
+            "product_index": 1
+          },
+          "actions": [],
+          "parent_stage_id": "stg_11aaa8ce",
+          "duration_ms": 25587.446,
+          "duration_s": 25.59,
+          "action_count": 0
+        },
+        {
+          "id": "op_792618d3",
+          "name": "edit_product_2",
+          "status": "success",
+          "start_time": "2025-12-01T20:22:07.008796",
+          "end_time": "2025-12-01T20:22:31.842792",
+          "error": null,
+          "metadata": {
+            "product_index": 2
+          },
+          "actions": [],
+          "parent_stage_id": "stg_11aaa8ce",
+          "duration_ms": 24833.996,
+          "duration_s": 24.83,
+          "action_count": 0
+        },
+        {
+          "id": "op_494c4d68",
+          "name": "edit_product_3",
+          "status": "success",
+          "start_time": "2025-12-01T20:22:31.850297",
+          "end_time": "2025-12-01T20:22:59.520626",
+          "error": null,
+          "metadata": {
+            "product_index": 3
+          },
+          "actions": [],
+          "parent_stage_id": "stg_11aaa8ce",
+          "duration_ms": 27670.328999999998,
+          "duration_s": 27.67,
+          "action_count": 0
+        },
+        {
+          "id": "op_f4298add",
+          "name": "edit_product_4",
+          "status": "success",
+          "start_time": "2025-12-01T20:22:59.520693",
+          "end_time": "2025-12-01T20:23:16.235597",
+          "error": null,
+          "metadata": {
+            "product_index": 4
+          },
+          "actions": [],
+          "parent_stage_id": "stg_11aaa8ce",
+          "duration_ms": 16714.904000000002,
+          "duration_s": 16.71,
+          "action_count": 0
+        },
+        {
+          "id": "op_453d741c",
+          "name": "edit_product_5",
+          "status": "success",
+          "start_time": "2025-12-01T20:23:16.235681",
+          "end_time": "2025-12-01T20:23:39.973156",
+          "error": null,
+          "metadata": {
+            "product_index": 5
+          },
+          "actions": [],
+          "parent_stage_id": "stg_11aaa8ce",
+          "duration_ms": 23737.475,
+          "duration_s": 23.74,
+          "action_count": 0
+        }
+      ],
+      "parent_workflow_id": "temu_publish_20251201_202106",
+      "duration_ms": 145265.165,
+      "duration_s": 145.27,
+      "operation_count": 5
+    },
+    {
+      "id": "stg_ada95c85",
+      "name": "stage2_claim",
+      "display_name": "认领",
+      "order": 2,
+      "status": "success",
+      "start_time": "2025-12-01T20:23:39.975672",
+      "end_time": "2025-12-01T20:23:55.093528",
+      "error": null,
+      "metadata": {},
+      "operations": [],
+      "parent_workflow_id": "temu_publish_20251201_202106",
+      "duration_ms": 15117.856,
+      "duration_s": 15.12,
+      "operation_count": 0
+    },
+    {
+      "id": "stg_48a1da3a",
+      "name": "stage3_batch_edit",
+      "display_name": "批量编辑",
+      "order": 3,
+      "status": "success",
+      "start_time": "2025-12-01T20:23:55.093576",
+      "end_time": "2025-12-01T20:25:19.042564",
+      "error": null,
+      "metadata": {},
+      "operations": [],
+      "parent_workflow_id": "temu_publish_20251201_202106",
+      "duration_ms": 83948.988,
+      "duration_s": 83.95,
+      "operation_count": 0
+    },
+    {
+      "id": "stg_e9155bc6",
+      "name": "stage4_publish",
+      "display_name": "发布",
+      "order": 4,
+      "status": "success",
+      "start_time": "2025-12-01T20:25:19.042705",
+      "end_time": "2025-12-01T20:26:04.544796",
+      "error": null,
+      "metadata": {},
+      "operations": [],
+      "parent_workflow_id": "temu_publish_20251201_202106",
+      "duration_ms": 45502.091,
+      "duration_s": 45.5,
+      "operation_count": 0
+    }
+  ],
+  "duration_ms": 297774.205,
+  "duration_s": 297.77,
+  "stage_count": 4
+}

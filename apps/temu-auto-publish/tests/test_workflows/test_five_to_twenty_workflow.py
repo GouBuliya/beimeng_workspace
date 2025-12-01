@@ -631,7 +631,7 @@ class TestFiveToTwentyErrorHandling:
         """测试超时处理"""
         result = {"success": False, "error": "操作超时", "timeout_ms": 30000}
 
-        assert "timeout" in result["error"].lower()
+        assert "超时" in result["error"]
 
     def test_retry_on_failure(self):
         """测试失败重试"""
