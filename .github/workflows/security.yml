@@ -39,8 +39,11 @@ jobs:
           path: ~/.cache/uv
           key: uv-security-${{ runner.os }}-${{ hashFiles('uv.lock') }}
 
+      - name: Sync dependencies
+        run: uv sync --extra dev
+
       - name: Install Bandit
-        run: uv pip install bandit[toml]
+        run: uv pip install --system 'bandit[toml]'
 
       - name: Run Bandit
         run: |
@@ -83,7 +86,7 @@ jobs:
         run: uv sync --extra dev --extra temu
 
       - name: Install pip-audit
-        run: uv pip install pip-audit
+        run: uv pip install --system pip-audit
 
       - name: Run pip-audit
         run: |
