@@ -33,7 +33,7 @@ from urllib.parse import urljoin
 from loguru import logger
 from playwright.async_api import Locator, Page
 
-from ..core.performance import profile
+# 性能追踪已移至工作流层级的 PerformanceTracker
 from ..utils.page_waiter import PageWaiter
 from .first_edit.sku_spec_replace import fill_first_spec_unit, replace_sku_spec_options
 from .first_edit.retry import first_edit_step_retry
@@ -133,7 +133,6 @@ def _fallback_video_url_from_payload(payload: dict[str, Any]) -> str | None:
     return None
 
 
-@profile()
 async def fill_first_edit_dialog_codegen(page: Page, payload: dict[str, Any]) -> bool:
     """使用 Codegen 录制逻辑填写首次编辑弹窗的所有字段.
 

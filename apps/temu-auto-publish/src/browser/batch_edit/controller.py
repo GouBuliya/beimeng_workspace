@@ -38,18 +38,18 @@
 import asyncio
 import json
 from pathlib import Path
-from typing import Any, List
+from typing import TYPE_CHECKING, Any, List, Optional
 
 from loguru import logger
 from playwright.async_api import Page, expect
 
+from ...core.performance_tracker import PerformanceTracker, get_tracker
 from ...data_processor.price_calculator import PriceCalculator
 from ...data_processor.random_generator import RandomDataGenerator
 from ...utils.smart_locator import SmartLocator
 from ...utils.page_waiter import PageWaiter, WaitStrategy
 from ...utils.batch_edit_helpers import (
     retry_on_failure,
-    performance_monitor,
     enhanced_error_handler,
     StepValidator,
     GenericSelectors,
@@ -84,11 +84,27 @@ class BatchEditController:
     # SOP规定的批量编辑数量
     BATCH_SIZE = 20
 
-    def __init__(self, selector_path: str = "config/miaoshou_selectors_batch_edit.json"):
+    def __init__(
+        self,
+        page: Optional[Page] = None,
+        *,
+        selector_path: str = "config/miaoshou_selectors_batch_edit.json",
+        outer_package_image: Optional[str] = None,
+        manual_file_path: Optional[str] = None,
+        collection_owner: Optional[str] = None,
+        miaoshou_controller: Any = None,
+        perf_tracker: Optional[PerformanceTracker] = None,
+    ):
         """初始化批量编辑控制器.
 
         Args:
+            page: 可选的页面对象（兼容旧版调用方式）
             selector_path: 选择器配置文件路径
+            outer_package_image: 外包装图片路径
+            manual_file_path: 说明书文件路径
+            collection_owner: 采集箱负责人
+            miaoshou_controller: 妙手控制器实例（兼容参数）
+            perf_tracker: 可选的性能追踪器实例，用于记录操作耗时
         """
         self.selector_path = Path(selector_path)
         self.selectors = self._load_selectors()
@@ -102,6 +118,16 @@ class BatchEditController:
         # 初始化工具类
         self.price_calculator = PriceCalculator()
         self.random_generator = RandomDataGenerator()
+
+        # 存储扩展参数
+        self._page = page
+        self.outer_package_image = outer_package_image
+        self.manual_file_path = manual_file_path
+        self.collection_owner = collection_owner
+        self._miaoshou_controller = miaoshou_controller
+
+        # 性能追踪器（可选）
+        self._perf_tracker = perf_tracker
 
         logger.info("批量编辑控制器初始化（SOP v2.0，18步流程）")
 
@@ -259,6 +285,22 @@ class BatchEditController:
             logger.error(f"进入批量编辑失败: {e}")
             return False
 
+    async def _track_operation(self, op_name: str):
+        """获取操作追踪的上下文管理器.
+
+        如果有性能追踪器则返回其 operation 上下文，否则返回空上下文。
+        """
+        if self._perf_tracker:
+            return self._perf_tracker.operation(op_name)
+        # 返回一个空的异步上下文管理器
+        from contextlib import asynccontextmanager
+
+        @asynccontextmanager
+        async def _noop():
+            yield
+
+        return _noop()
+
     async def execute_batch_edit_steps(self, page: Page, products_data: List[dict]) -> bool:
         """执行18步批量编辑流程.
 
@@ -271,55 +313,31 @@ class BatchEditController:
         """
         logger.info("开始执行18步批量编辑流程...")
 
+        # 定义步骤列表，每个元素: (步骤名称, 操作函数, 是否需要products_data)
+        steps = [
+            ("step_01_title", lambda: self.step_01_modify_title(page), False),
+            ("step_02_english_title", lambda: self.step_02_english_title(page, products_data), True),
+            ("step_03_category_attrs", lambda: self.step_03_category_attrs(page), False),
+            ("step_04_main_sku", lambda: self.step_04_main_sku(page), False),
+            ("step_05_packaging", lambda: self.step_05_packaging(page), False),
+            ("step_06_origin", lambda: self.step_06_origin(page), False),
+            ("step_07_customization", lambda: self.step_07_customization(page), False),
+            ("step_08_sensitive_attrs", lambda: self.step_08_sensitive_attrs(page), False),
+            ("step_09_weight", lambda: self.step_09_weight(page), False),
+            ("step_10_dimensions", lambda: self.step_10_dimensions(page), False),
+            ("step_11_sku", lambda: self.step_11_sku(page), False),
+            ("step_12_sku_category", lambda: self.step_12_sku_category(page), False),
+            # 步骤13跳过
+            ("step_14_suggested_price", lambda: self.step_14_suggested_price(page, products_data), True),
+            ("step_15_package_list", lambda: self.step_15_package_list(page), False),
+            # 步骤16-17跳过
+            ("step_18_manual_upload", lambda: self.step_18_manual_upload(page), False),
+        ]
+
         try:
-            # 步骤1：修改标题（仅标注不修改）
-            await self.step_01_modify_title(page)
-
-            # 步骤2：填写英文标题
-            await self.step_02_english_title(page, products_data)
-
-            # 步骤3：类目属性
-            await self.step_03_category_attrs(page)
-
-            # 步骤4：主货号（不改动但需预览+保存）
-            await self.step_04_main_sku(page)
-
-            # 步骤5：包装信息
-            await self.step_05_packaging(page)
-
-            # 步骤6：产地信息
-            await self.step_06_origin(page)
-
-            # 步骤7：定制品（不改动但需预览+保存）
-            await self.step_07_customization(page)
-
-            # 步骤8：敏感属性（不改动但需预览+保存）
-            await self.step_08_sensitive_attrs(page)
-
-            # 步骤9：重量
-            await self.step_09_weight(page)
-
-            # 步骤10：尺寸
-            await self.step_10_dimensions(page)
-
-            # 步骤11：SKU
-            await self.step_11_sku(page)
-
-            # 步骤12：SKU类目
-            await self.step_12_sku_category(page)
-
-            # 步骤13：跳过（SOP中标记为跳过）
-
-            # 步骤14：建议售价
-            await self.step_14_suggested_price(page, products_data)
-
-            # 步骤15：包装清单（不改动但需预览+保存）
-            await self.step_15_package_list(page)
-
-            # 步骤16-17：跳过（SOP中标记为跳过）
-
-            # 步骤18：手动上传
-            await self.step_18_manual_upload(page)
+            for step_name, step_func, _ in steps:
+                async with await self._track_operation(step_name):
+                    await step_func()
 
             logger.success("✓ 18步批量编辑流程执行完成")
             return True

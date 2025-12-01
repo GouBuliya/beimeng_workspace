@@ -6,7 +6,7 @@
   - report(): 生成报告
   - watch(): 实时监控（TODO）
 @DEPENDENCIES:
-  - 内部: src.core.metrics_collector
+  - 内部: src.core.performance_tracker
   - 外部: typer, rich
 """
 
@@ -16,11 +16,11 @@ from pathlib import Path
 from typing import Optional
 
 import typer
+from loguru import logger
 from rich.console import Console
 from rich.table import Table
 
 from config.settings import settings
-from src.core.metrics_collector import get_metrics
 
 monitor_app = typer.Typer(
     name="monitor",

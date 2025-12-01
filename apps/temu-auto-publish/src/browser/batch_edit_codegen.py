@@ -55,7 +55,7 @@ from ..core.enhanced_retry import (
     create_step_retry_policy,
     RetryPolicy,
 )
-from ..core.performance import profile
+# 性能追踪已移至工作流层级的 PerformanceTracker
 
 MAX_TITLE_LENGTH = 250
 
@@ -122,7 +122,6 @@ def smart_retry(max_attempts: int = 2, delay: float = 0.5, exceptions: tuple = (
     return enhanced_smart_retry(policy)
 
 
-@profile()
 async def run_batch_edit(
     page: Page,
     payload: dict[str, Any],

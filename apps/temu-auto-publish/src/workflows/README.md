@@ -107,7 +107,7 @@ await execute_complete_workflow(page, products_data, enable_publish=False)
 - 调试单个阶段：直接调用 `_stage_*` 私有方法（需要模拟阶段输入）
 - 运行样例脚本：`python scripts/demo_quick_workflow.py`（计划在阶段2补充）
 - 记录调试数据：开启 `settings.debug` 中的 HTML/截图选项
-- 监控指标：计划在后续阶段引入 `core.metrics_collector`
+- 监控指标：已集成 `core.performance_tracker` 性能追踪系统
 
 ---
 

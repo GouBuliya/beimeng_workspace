@@ -14,7 +14,7 @@
   - TODO: 添加工作流超时控制
   - TODO: 添加并发工作流支持
 @DEPENDENCIES:
-  - 内部: src.core.retry_handler, src.core.metrics_collector
+  - 内部: src.core.retry_handler, src.core.performance_tracker
   - 外部: loguru, playwright
 """
 
@@ -29,7 +29,7 @@ from typing import Any, Callable, Dict, List, Optional
 from loguru import logger
 from playwright.async_api import Page
 
-from src.core.metrics_collector import MetricsCollector, get_metrics
+from src.core.performance_tracker import PerformanceTracker, get_tracker
 from src.core.retry_handler import RetryHandler
 
 
@@ -102,24 +102,24 @@ class WorkflowExecutor:
     def __init__(
         self,
         retry_handler: Optional[RetryHandler] = None,
-        metrics_collector: Optional[MetricsCollector] = None,
+        perf_tracker: Optional[PerformanceTracker] = None,
         state_dir: Optional[Path] = None
     ):
         """初始化执行器.
-        
+
         Args:
             retry_handler: 重试处理器
-            metrics_collector: 指标收集器
+            perf_tracker: 性能追踪器
             state_dir: 状态文件存储目录
         """
         self.retry_handler = retry_handler or RetryHandler()
-        self.metrics = metrics_collector or get_metrics()
+        self.perf_tracker = perf_tracker or get_tracker()
         self.state_dir = state_dir or Path("data/workflow_states")
         self.state_dir.mkdir(parents=True, exist_ok=True)
-        
+
         self.current_workflow_id: Optional[str] = None
         self.current_state: Optional[WorkflowState] = None
-        
+
         logger.debug("工作流执行器已初始化")
     
     async def execute(
@@ -153,20 +153,20 @@ class WorkflowExecutor:
             workflow_id = f"workflow_{uuid.uuid4().hex[:8]}_{int(datetime.now().timestamp())}"
         
         self.current_workflow_id = workflow_id
-        
+
         # 初始化状态
         self.current_state = WorkflowState(workflow_id=workflow_id)
-        
-        # 开始记录指标
+
+        # 开始性能追踪
         if enable_metrics:
-            self.metrics.start_workflow(workflow_id)
-        
+            self.perf_tracker.start_workflow(workflow_id)
+
         logger.info(f"=" * 80)
         logger.info(f"开始执行工作流: {workflow_id}")
         logger.info(f"=" * 80)
-        
+
         start_time = asyncio.get_event_loop().time()
-        
+
         try:
             # 执行工作流（带重试）
             if enable_retry:
@@ -179,38 +179,32 @@ class WorkflowExecutor:
                 )
             else:
                 result = await workflow_func(page, config, workflow_id=workflow_id, **kwargs)
-            
+
             # 更新状态
             self.current_state.status = "completed"
             duration = asyncio.get_event_loop().time() - start_time
-            
-            # 记录指标
+
+            # 结束性能追踪
             if enable_metrics:
-                self.metrics.end_workflow(workflow_id, "success")
-            
+                self.perf_tracker.end_workflow(success=True)
+
             logger.success(f"✓ 工作流完成: {workflow_id}, 耗时: {duration:.2f}秒")
-            
+
             return result
-            
+
         except Exception as e:
             # 更新状态
             self.current_state.status = "failed"
             duration = asyncio.get_event_loop().time() - start_time
-            
-            # 记录错误
+
+            # 结束性能追踪
             if enable_metrics:
-                self.metrics.record_error(
-                    workflow_id,
-                    type(e).__name__,
-                    str(e),
-                    stage=self.current_state.current_stage
-                )
-                self.metrics.end_workflow(workflow_id, "failure")
-            
+                self.perf_tracker.end_workflow(success=False, error=str(e))
+
             logger.error(f"✗ 工作流失败: {workflow_id}, 耗时: {duration:.2f}秒, 错误: {e}")
-            
+
             raise
-            
+
         finally:
             # 保存状态
             if enable_state_save:
