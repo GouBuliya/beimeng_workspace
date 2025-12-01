@@ -557,7 +557,7 @@ async def _upload_size_chart_via_url(page: Page, image_url: str) -> bool:
         await upload_btn.click()
 
         url_input = page.get_by_role(
-            "textbox", name="请输入图片链接,若要输入多个链接,请以回车换行", exact=True
+            "textbox", name="请输入图片链接，若要输入多个链接，请以回车换行", exact=True
         )
         await url_input.wait_for(state="visible", timeout=1500)
         await url_input.click()
@@ -600,6 +600,10 @@ async def _upload_size_chart_via_url(page: Page, image_url: str) -> bool:
             timeout_ms=VIDEO_UPLOAD_TIMEOUT_MS,
         )
         await _close_prompt_dialog(page, timeout_ms=VIDEO_UPLOAD_TIMEOUT_MS)
+
+        # 等待尺寸图资源加载完成
+        await _wait_for_size_chart_loaded(page, size_group)
+
         logger.success("✓ 尺寸图已上传(网络图片): {}", normalized_url[:120])
         return True
 
@@ -779,6 +783,10 @@ async def _upload_product_video_via_url(page: Page, video_url: str) -> bool | No
             timeout_ms=VIDEO_UPLOAD_TIMEOUT_MS,
         )
         await _close_prompt_dialog(page, timeout_ms=VIDEO_UPLOAD_TIMEOUT_MS)
+
+        # 等待视频资源加载完成
+        await _wait_for_video_loaded(page, video_group)
+
         logger.success("✓ 产品视频已上传(网络视频): {}", normalized_url[:120])
         return True
 
@@ -1093,6 +1101,177 @@ def _sanitize_media_identifier(raw: str) -> str:
 
     safe = re.sub(r"[^A-Za-z0-9._-]+", "_", raw.strip())
     return safe.strip("_")
+
+
+# 资源加载等待超时配置
+RESOURCE_LOAD_TIMEOUT_MS = 5000  # 资源加载最长等待 5 秒
+RESOURCE_LOAD_CHECK_INTERVAL_MS = 200  # 检测间隔 200ms
+
+
+async def _wait_for_size_chart_loaded(
+    page: Page,
+    size_group: Locator,
+    timeout_ms: int = RESOURCE_LOAD_TIMEOUT_MS,
+) -> bool:
+    """等待尺寸图资源加载完成.
+
+    通过检测尺寸图区域内的图片元素是否完成加载来判断。
+
+    Args:
+        page: Playwright 页面对象
+        size_group: 尺寸图分组定位器
+        timeout_ms: 超时时间(毫秒)
+
+    Returns:
+        bool: True 表示加载完成,False 表示超时
+    """
+    logger.debug("等待尺寸图资源加载...")
+    waiter = PageWaiter(page)
+
+    try:
+        # 首先等待 DOM 稳定
+        await waiter.wait_for_dom_stable(timeout_ms=min(1000, timeout_ms // 3))
+
+        # 检测尺寸图区域内的图片是否加载完成
+        images = size_group.locator("img")
+        img_count = await images.count()
+
+        if img_count == 0:
+            logger.debug("尺寸图区域未发现图片元素,跳过等待")
+            return True
+
+        # 等待图片加载完成
+        deadline = asyncio.get_running_loop().time() + timeout_ms / 1000
+        while asyncio.get_running_loop().time() < deadline:
+            all_loaded = True
+            for i in range(img_count):
+                img = images.nth(i)
+                try:
+                    # 检查图片是否已加载完成
+                    is_loaded = await img.evaluate(
+                        """
+                        (img) => {
+                            // 检查 naturalWidth/naturalHeight 判断是否已加载
+                            if (img.complete && img.naturalWidth > 0) {
+                                return true;
+                            }
+                            // 检查 src 是否为有效 URL
+                            const src = img.src || img.getAttribute('src') || '';
+                            if (!src || src.startsWith('data:') || src.includes('placeholder')) {
+                                return true;  // 占位图视为已加载
+                            }
+                            return false;
+                        }
+                        """
+                    )
+                    if not is_loaded:
+                        all_loaded = False
+                        break
+                except Exception:
+                    continue
+
+            if all_loaded:
+                logger.debug("✓ 尺寸图资源加载完成")
+                return True
+
+            await asyncio.sleep(RESOURCE_LOAD_CHECK_INTERVAL_MS / 1000)
+
+        logger.debug("尺寸图资源加载超时,继续后续流程")
+        return False
+
+    except Exception as exc:
+        logger.debug("等待尺寸图加载异常: {}", exc)
+        return False
+
+
+async def _wait_for_video_loaded(
+    page: Page,
+    video_group: Locator,
+    timeout_ms: int = RESOURCE_LOAD_TIMEOUT_MS,
+) -> bool:
+    """等待视频资源加载完成.
+
+    通过检测视频区域内的缩略图或视频元素是否加载来判断。
+
+    Args:
+        page: Playwright 页面对象
+        video_group: 视频分组定位器
+        timeout_ms: 超时时间(毫秒)
+
+    Returns:
+        bool: True 表示加载完成,False 表示超时
+    """
+    logger.debug("等待视频资源加载...")
+    waiter = PageWaiter(page)
+
+    try:
+        # 首先等待 DOM 稳定
+        await waiter.wait_for_dom_stable(timeout_ms=min(1000, timeout_ms // 3))
+
+        deadline = asyncio.get_running_loop().time() + timeout_ms / 1000
+        while asyncio.get_running_loop().time() < deadline:
+            # 检测视频区域是否有有效内容
+            has_content = await video_group.evaluate(
+                """
+                (node) => {
+                    if (!node) return false;
+
+                    // 检查 iframe 是否有有效 src
+                    const iframe = node.querySelector('iframe');
+                    if (iframe) {
+                        const src = iframe.src || iframe.getAttribute('src') || '';
+                        if (src && !src.startsWith('about:blank') && !/\\/.*\\/empty/i.test(src)) {
+                            return true;
+                        }
+                    }
+
+                    // 检查 video 元素
+                    const video = node.querySelector('video');
+                    if (video) {
+                        const src = video.currentSrc || video.src || video.getAttribute('src') || '';
+                        if (src && video.readyState >= 1) {
+                            return true;  // HAVE_METADATA 或更高状态
+                        }
+                    }
+
+                    // 检查缩略图是否加载
+                    const imgs = node.querySelectorAll('img');
+                    for (const img of imgs) {
+                        const src = img.src || img.getAttribute('src') || '';
+                        if (src && !src.includes('placeholder') && !src.includes('add') &&
+                            !src.includes('plus') && !src.includes('empty')) {
+                            if (img.complete && img.naturalWidth > 0) {
+                                return true;
+                            }
+                        }
+                    }
+
+                    // 检查是否有 video-wrap 的特殊状态类
+                    const wrap = node.querySelector('.video-wrap');
+                    if (wrap) {
+                        const classList = Array.from(wrap.classList || []);
+                        if (classList.some(cls => /has|exist|uploaded|filled|active/.test(cls))) {
+                            return true;
+                        }
+                    }
+
+                    return false;
+                }
+                """
+            )
+
+            if has_content:
+                logger.debug("✓ 视频资源加载完成")
+                return True
+
+            await asyncio.sleep(RESOURCE_LOAD_CHECK_INTERVAL_MS / 1000)
+
+        logger.debug("视频资源加载超时,继续后续流程")
+        return False
+
+    except Exception as exc:
+        logger.debug("等待视频加载异常: {}", exc)
+        return False
 
 
 async def _close_prompt_dialog(page: Page, *, timeout_ms: int | None = None) -> None:
