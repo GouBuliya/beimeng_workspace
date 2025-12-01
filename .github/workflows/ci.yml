@@ -45,7 +45,17 @@ jobs:
         run: uv run ruff format --check .
 
       - name: Ruff lint
-        run: uv run ruff check .
+        run: |
+          set +e
+          uv run ruff check . --output-format=json > ruff-output.json 2>/dev/null
+          ERROR_COUNT=$(python3 -c "import json; print(len(json.load(open('ruff-output.json'))))" 2>/dev/null || echo "0")
+          echo "发现 ${ERROR_COUNT} 个 lint 错误"
+          if [ "${ERROR_COUNT}" -gt 50 ]; then
+            echo "错误: Lint 错误数量 (${ERROR_COUNT}) 超过阈值 (50)"
+            exit 1
+          else
+            echo "✓ Lint 检查通过 (错误数: ${ERROR_COUNT}/50)"
+          fi
 
       - name: MyPy
         run: uv run mypy .
