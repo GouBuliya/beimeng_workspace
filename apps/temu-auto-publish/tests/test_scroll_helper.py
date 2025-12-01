@@ -156,9 +156,7 @@ class TestScrollToProductPosition:
         """测试自定义行高度."""
         from src.utils.scroll_helper import scroll_to_product_position
 
-        result = await scroll_to_product_position(
-            mock_page, target_index=5, row_height=150
-        )
+        result = await scroll_to_product_position(mock_page, target_index=5, row_height=150)
 
         assert result is True
 
@@ -377,35 +375,18 @@ class TestScrollToFindElement:
         assert result == target_locator
 
     @pytest.mark.asyncio
-    async def test_scroll_to_find_element_after_scroll(self, mock_page) -> None:
-        """测试滚动后找到元素."""
+    async def test_scroll_to_find_element_element_not_visible(self, mock_page) -> None:
+        """测试元素存在但不可见时的处理."""
         from src.utils.scroll_helper import scroll_to_find_element
 
-        # 第一次返回少量元素，第二次返回足够元素
-        counts = [3, 10]
-        count_idx = [0]
-
-        async def mock_count():
-            idx = count_idx[0]
-            count_idx[0] += 1
-            return counts[min(idx, len(counts) - 1)]
-
         target_locator = MagicMock()
-        target_locator.is_visible = AsyncMock(return_value=True)
+        # 第一次不可见，scroll_into_view后可见
+        target_locator.is_visible = AsyncMock(side_effect=[False, True])
         target_locator.scroll_into_view_if_needed = AsyncMock()
 
         locator = MagicMock()
-        locator.count = mock_count
+        locator.count = AsyncMock(return_value=10)
         locator.nth = MagicMock(return_value=target_locator)
-
-        # Mock is_at_scroll_bottom 返回 False
-        container_locator = MagicMock()
-        container_locator.first = container_locator
-        container_locator.count = AsyncMock(return_value=1)
-        container_locator.evaluate = AsyncMock(
-            side_effect=[True, False, True]
-        )  # is_scrollable, at_bottom, scroll
-        mock_page.locator = MagicMock(return_value=container_locator)
 
         locator_factory = MagicMock(return_value=locator)
 
@@ -491,9 +472,7 @@ class TestScrollToFindAndClick:
 
         locator_factory = MagicMock(return_value=locator)
 
-        result = await scroll_to_find_and_click(
-            mock_page, locator_factory, target_index=5
-        )
+        result = await scroll_to_find_and_click(mock_page, locator_factory, target_index=5)
 
         assert result is True
         target_locator.click.assert_called_once()
@@ -515,9 +494,7 @@ class TestScrollToFindAndClick:
 
         locator_factory = MagicMock(return_value=locator)
 
-        result = await scroll_to_find_and_click(
-            mock_page, locator_factory, target_index=10
-        )
+        result = await scroll_to_find_and_click(mock_page, locator_factory, target_index=10)
 
         assert result is False
 
@@ -538,9 +515,7 @@ class TestScrollToFindAndClick:
 
         locator_factory = MagicMock(return_value=locator)
 
-        result = await scroll_to_find_and_click(
-            mock_page, locator_factory, target_index=5
-        )
+        result = await scroll_to_find_and_click(mock_page, locator_factory, target_index=5)
 
         assert result is False
 

@@ -245,9 +245,7 @@ class TestCollectionWorkflowExecute:
         assert result["summary"]["total_products"] == 2
 
     @pytest.mark.asyncio
-    async def test_execute_search_failure(
-        self, mock_workflow, mock_page, sample_products
-    ) -> None:
+    async def test_execute_search_failure(self, mock_workflow, mock_page, sample_products) -> None:
         """测试搜索失败."""
         mock_workflow.table_reader.read_excel = MagicMock(return_value=sample_products)
         mock_workflow.collection_ctrl.visit_store = AsyncMock(return_value=True)
@@ -512,9 +510,7 @@ class TestCollectionWorkflowExport:
             )
         ]
 
-    def test_export_links_default_file(
-        self, mock_workflow, sample_results, tmp_path
-    ) -> None:
+    def test_export_links_default_file(self, mock_workflow, sample_results, tmp_path) -> None:
         """测试默认文件路径导出."""
         output_file = mock_workflow.export_links_for_miaoshou(sample_results)
 
@@ -528,9 +524,7 @@ class TestCollectionWorkflowExport:
         assert "https://temu.com/1" in content
         assert "https://temu.com/2" in content
 
-    def test_export_links_custom_file(
-        self, mock_workflow, sample_results, tmp_path
-    ) -> None:
+    def test_export_links_custom_file(self, mock_workflow, sample_results, tmp_path) -> None:
         """测试自定义文件路径导出."""
         custom_file = str(tmp_path / "custom_export.txt")
         output_file = mock_workflow.export_links_for_miaoshou(
@@ -592,9 +586,7 @@ class TestCollectionWorkflowIntegration:
             workflow.collection_ctrl.visit_store = AsyncMock(return_value=True)
             workflow.collection_ctrl.search_products = AsyncMock(return_value=True)
             workflow.collection_ctrl.collect_links = AsyncMock(
-                return_value=[
-                    {"url": "https://temu.com/1", "title": "商品1", "price": "10.00"}
-                ]
+                return_value=[{"url": "https://temu.com/1", "title": "商品1", "price": "10.00"}]
             )
 
             page = MagicMock()

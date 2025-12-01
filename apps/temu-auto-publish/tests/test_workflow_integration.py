@@ -23,7 +23,9 @@ class TestWorkflowTimeoutIntegration:
 
     def test_timeout_config_initialization_default(self):
         """测试默认超时配置初始化."""
-        with patch.object(CompletePublishWorkflow, "_resolve_image_base_dir", return_value=MagicMock()):
+        with patch.object(
+            CompletePublishWorkflow, "_resolve_image_base_dir", return_value=MagicMock()
+        ):
             workflow = CompletePublishWorkflow.__new__(CompletePublishWorkflow)
             workflow.settings = MagicMock()
             workflow.settings.browser.headless = True
