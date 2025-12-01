@@ -1,5 +1,5 @@
 """
-@PURPOSE: 自动更新.ai/context.json的工具，扫描项目并更新全局上下文
+@PURPOSE: 自动更新.ai/context.json的工具,扫描项目并更新全局上下文
 @OUTLINE:
   - class ContextUpdater: 上下文更新器主类
   - def discover_components(): 发现所有组件
@@ -10,7 +10,7 @@
 """
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -54,7 +54,7 @@ class ContextUpdater:
         if scripts_dir.exists():
             for script_ai_json in scripts_dir.rglob(".ai.json"):
                 script_dir = script_ai_json.parent
-                # 避免重复添加（如果父目录已经在列表中）
+                # 避免重复添加(如果父目录已经在列表中)
                 if script_dir not in [
                     self.workspace_root / c.get("path", "") for c in components["scripts"]
                 ]:
@@ -111,7 +111,7 @@ class ContextUpdater:
 
         # 更新上下文
         context["components"] = components
-        context["last_updated"] = datetime.now(timezone.utc).isoformat()
+        context["last_updated"] = datetime.now(UTC).isoformat()
 
         # 写入文件
         with open(self.context_file, "w") as f:

@@ -3,20 +3,18 @@
 @OUTLINE:
   - TestPublishController: 测试发布控制器主类
   - TestPublishControllerSelectors: 测试选择器加载
-  - TestPublishControllerMethods: 测试发布方法（使用Mock）
+  - TestPublishControllerMethods: 测试发布方法(使用Mock)
 @DEPENDENCIES:
   - 外部: pytest, pytest-asyncio
   - 内部: src.browser.publish_controller, tests.mocks
 """
 
 import json
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-
 from src.browser.publish_controller import PublishController
-from tests.mocks import MockPage, MockLocator
+from tests.mocks import MockLocator, MockPage
 
 
 class TestPublishController:
@@ -74,7 +72,7 @@ class TestPublishControllerSelectors:
 
 
 class TestPublishControllerMethods:
-    """测试发布方法（使用Mock）"""
+    """测试发布方法(使用Mock)"""
 
     @pytest.fixture
     def controller(self, tmp_path):

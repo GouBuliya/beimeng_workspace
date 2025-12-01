@@ -15,7 +15,7 @@
 from __future__ import annotations
 
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Literal
 
 from loguru import logger
@@ -45,16 +45,16 @@ class HealthStatus(BaseModel):
 class HealthChecker:
     """健康检查管理器.
 
-    提供对数据库、Redis 等依赖服务的健康检查功能。
+    提供对数据库,Redis 等依赖服务的健康检查功能.
     """
 
     async def check_database(self) -> CheckResult:
         """检测 PostgreSQL 数据库连接.
 
-        执行简单的 SELECT 1 查询来验证数据库连接是否正常。
+        执行简单的 SELECT 1 查询来验证数据库连接是否正常.
 
         Returns:
-            CheckResult: 检查结果，包含状态、延迟和消息
+            CheckResult: 检查结果,包含状态,延迟和消息
         """
         start_time = time.time()
         try:
@@ -74,16 +74,16 @@ class HealthChecker:
             return CheckResult(
                 status=False,
                 latency_ms=round(latency_ms, 2),
-                message=f"Database connection failed: {str(e)}",
+                message=f"Database connection failed: {e!s}",
             )
 
     async def check_redis(self) -> CheckResult:
         """检测 Redis 连接.
 
-        执行 PING 命令来验证 Redis 连接是否正常。
+        执行 PING 命令来验证 Redis 连接是否正常.
 
         Returns:
-            CheckResult: 检查结果，包含状态、延迟和消息
+            CheckResult: 检查结果,包含状态,延迟和消息
         """
         start_time = time.time()
         try:
@@ -111,17 +111,17 @@ class HealthChecker:
             return CheckResult(
                 status=False,
                 latency_ms=round(latency_ms, 2),
-                message=f"Redis connection failed: {str(e)}",
+                message=f"Redis connection failed: {e!s}",
             )
 
     async def check_overall(self) -> HealthStatus:
         """综合健康检查.
 
-        检查所有依赖服务（数据库、Redis）的健康状态，
-        并返回总体健康状态。
+        检查所有依赖服务(数据库,Redis)的健康状态,
+        并返回总体健康状态.
 
         Returns:
-            HealthStatus: 综合健康状态，包含所有检查结果
+            HealthStatus: 综合健康状态,包含所有检查结果
 
         状态判定规则:
             - healthy: 所有依赖服务正常
@@ -139,16 +139,13 @@ class HealthChecker:
         # 判断总体状态
         all_healthy = all(check.status for check in checks.values())
 
-        if all_healthy:
-            overall_status = "healthy"
-        else:
-            # 任一依赖失败都视为 unhealthy
-            overall_status = "unhealthy"
+        # 任一依赖失败都视为 unhealthy
+        overall_status = "healthy" if all_healthy else "unhealthy"
 
         health_status = HealthStatus(
             status=overall_status,
             checks=checks,
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
         )
 
         if overall_status != "healthy":

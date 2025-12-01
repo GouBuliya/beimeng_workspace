@@ -14,8 +14,9 @@
 
 import asyncio
 import time
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 
 
 # ==================== retry_on_failure 装饰器测试 ====================
@@ -94,7 +95,7 @@ class TestRetryOnFailure:
         with pytest.raises(TypeError):
             await specific_exception_func()
 
-        # TypeError 不会重试，只调用一次
+        # TypeError 不会重试,只调用一次
         assert call_count == 1
 
     @pytest.mark.asyncio
@@ -147,7 +148,7 @@ class TestPerformanceMonitor:
         async with performance_monitor("测试步骤", warn_threshold=10.0):
             await asyncio.sleep(0.01)
 
-        # 应该正常完成，不抛出异常
+        # 应该正常完成,不抛出异常
 
     @pytest.mark.asyncio
     async def test_slow_execution_warning(self):
@@ -169,7 +170,7 @@ class TestPerformanceMonitor:
             async with performance_monitor("异常步骤"):
                 raise ValueError("Test error")
 
-        # 即使有异常，finally 块也应该执行记录耗时
+        # 即使有异常,finally 块也应该执行记录耗时
 
 
 # ==================== take_error_screenshot 函数测试 ====================
@@ -239,8 +240,8 @@ class TestEnhancedErrorHandler:
     @pytest.mark.asyncio
     async def test_timeout_error_handling(self):
         """测试超时错误处理"""
-        from src.utils.batch_edit_helpers import enhanced_error_handler
         from playwright.async_api import TimeoutError as PlaywrightTimeout
+        from src.utils.batch_edit_helpers import enhanced_error_handler
 
         @enhanced_error_handler("超时步骤")
         async def timeout_func(page):
@@ -329,8 +330,8 @@ class TestStepValidator:
     @pytest.mark.asyncio
     async def test_check_page_loaded_timeout(self):
         """测试页面加载超时"""
-        from src.utils.batch_edit_helpers import StepValidator
         from playwright.async_api import TimeoutError as PlaywrightTimeout
+        from src.utils.batch_edit_helpers import StepValidator
 
         page = MagicMock()
         page.wait_for_load_state = AsyncMock(side_effect=PlaywrightTimeout("Timeout"))
@@ -357,8 +358,8 @@ class TestStepValidator:
     @pytest.mark.asyncio
     async def test_check_element_visible_timeout(self):
         """测试元素不可见超时"""
-        from src.utils.batch_edit_helpers import StepValidator
         from playwright.async_api import TimeoutError as PlaywrightTimeout
+        from src.utils.batch_edit_helpers import StepValidator
 
         page = MagicMock()
         mock_element = MagicMock()
@@ -401,9 +402,7 @@ class TestStepValidator:
         page = MagicMock()
         page.locator.return_value.count = AsyncMock(return_value=10)
 
-        result = await StepValidator.check_element_count(
-            page, ".product", 10, description="商品"
-        )
+        result = await StepValidator.check_element_count(page, ".product", 10, description="商品")
 
         assert result is True
 
@@ -477,9 +476,7 @@ class TestGenericSelectors:
         page.locator.return_value.first = mock_element
 
         selectors = [".btn1", ".btn2", ".btn3"]
-        result = await GenericSelectors.try_click_with_fallbacks(
-            page, selectors, "按钮"
-        )
+        result = await GenericSelectors.try_click_with_fallbacks(page, selectors, "按钮")
 
         assert result is True
         mock_element.click.assert_called_once()
@@ -513,9 +510,7 @@ class TestGenericSelectors:
         page.locator.side_effect = locator_side_effect
 
         selectors = [".btn1", ".btn2"]
-        result = await GenericSelectors.try_click_with_fallbacks(
-            page, selectors, "按钮"
-        )
+        result = await GenericSelectors.try_click_with_fallbacks(page, selectors, "按钮")
 
         assert result is True
         mock_element2.click.assert_called_once()
@@ -562,12 +557,12 @@ class TestModuleExports:
     def test_all_exports_available(self):
         """测试所有导出可用"""
         from src.utils.batch_edit_helpers import (
-            retry_on_failure,
-            performance_monitor,
-            enhanced_error_handler,
-            take_error_screenshot,
-            StepValidator,
             GenericSelectors,
+            StepValidator,
+            enhanced_error_handler,
+            performance_monitor,
+            retry_on_failure,
+            take_error_screenshot,
         )
 
         assert callable(retry_on_failure)

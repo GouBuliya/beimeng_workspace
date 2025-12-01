@@ -26,8 +26,8 @@ class FirstEditWorkflowMixin(FirstEditBase):
     ) -> bool:
         """执行首次编辑的完整 SOP 流程.
 
-        优化说明：移除了多余的 wait_for_load_state 调用，
-        仅在入口处等待一次 DOM 加载完成，后续操作依赖各自的等待逻辑。
+        优化说明:移除了多余的 wait_for_load_state 调用,
+        仅在入口处等待一次 DOM 加载完成,后续操作依赖各自的等待逻辑.
         """
         logger.info("=" * 60)
         logger.info("开始执行首次编辑完整流程(SOP 步骤 4)")

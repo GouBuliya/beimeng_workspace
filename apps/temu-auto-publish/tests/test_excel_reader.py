@@ -13,10 +13,9 @@
   - 内部: src.data_processor.excel_reader
 """
 
-import pytest
-from pathlib import Path
-from openpyxl import Workbook
 
+import pytest
+from openpyxl import Workbook
 from src.data_processor.excel_reader import ExcelReader
 from src.models.task import ProductInput
 
@@ -52,7 +51,7 @@ class TestExcelReaderRead:
         wb = Workbook()
         ws = wb.active
 
-        # 添加表头和数据（使用标准列名映射）
+        # 添加表头和数据(使用标准列名映射)
         ws.append(["商品名称", "成本价", "类目", "关键词", "备注"])
         ws.append(["智能手表", 150.0, "电子产品/智能穿戴", "智能手表", "热销款"])
         ws.append(["蓝牙耳机", 80.0, "电子产品/耳机", "蓝牙耳机", ""])
@@ -112,7 +111,7 @@ class TestExcelReaderRead:
         assert products[1].name == "产品2"
 
     def test_read_with_missing_optional_column(self, tmp_path):
-        """测试缺少可选列（备注）"""
+        """测试缺少可选列(备注)"""
         file_path = tmp_path / "products.xlsx"
         wb = Workbook()
         ws = wb.active
@@ -123,13 +122,13 @@ class TestExcelReaderRead:
         wb.save(file_path)
 
         reader = ExcelReader(file_path)
-        # 应该能正常读取，备注字段使用默认值
+        # 应该能正常读取,备注字段使用默认值
         try:
             products = reader.read()
-            # 如果成功，验证数据
+            # 如果成功,验证数据
             assert len(products) >= 0
         except Exception:
-            # 如果失败也是预期行为（取决于实现）
+            # 如果失败也是预期行为(取决于实现)
             pass
 
     def test_read_price_rounding(self, tmp_path):
@@ -156,7 +155,7 @@ class TestExcelReaderEdgeCases:
     """测试边缘情况"""
 
     def test_read_empty_file(self, tmp_path):
-        """测试空文件（只有表头）"""
+        """测试空文件(只有表头)"""
         file_path = tmp_path / "empty.xlsx"
         wb = Workbook()
         ws = wb.active
@@ -197,14 +196,14 @@ class TestExcelReaderEdgeCases:
         ws = wb.active
 
         ws.append(["商品名称", "成本价", "类目", "关键词", "备注"])
-        ws.append(["产品 (特价！)", 100.0, "类目/子类目", "关键词&搜索", "备注：测试"])
+        ws.append(["产品 (特价!)", 100.0, "类目/子类目", "关键词&搜索", "备注:测试"])
         wb.save(file_path)
 
         reader = ExcelReader(file_path)
         products = reader.read()
 
         assert len(products) == 1
-        assert products[0].name == "产品 (特价！)"
+        assert products[0].name == "产品 (特价!)"
         assert products[0].category == "类目/子类目"
 
     def test_read_with_unicode(self, tmp_path):

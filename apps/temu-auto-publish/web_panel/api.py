@@ -10,11 +10,10 @@
   - /health: 环境自检
   - /downloads/sample-selection: 示例选品表下载
 @GOTCHAS:
-  - 认证已集成远程认证服务器，需要配置 AUTH_SERVER_URL 环境变量
-  - 支持本地密码模式（fallback）和远程认证模式
+  - 认证已集成远程认证服务器,需要配置 AUTH_SERVER_URL 环境变量
+  - 支持本地密码模式(fallback)和远程认证模式
 """
 
-# ruff: noqa: B008
 
 from __future__ import annotations
 
@@ -28,9 +27,9 @@ from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from loguru import logger
 from pydantic import BaseModel
 from starlette.middleware.sessions import SessionMiddleware
-from loguru import logger
 
 from .auth_client import get_auth_client
 from .env_settings import (
@@ -104,10 +103,10 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
             auth_client = get_auth_client()
             result = await auth_client.verify_token(token)
             if not result.valid:
-                # 令牌失效（可能被其他设备登录踢出）
+                # 令牌失效(可能被其他设备登录踢出)
                 request.session.clear()
                 raise HTTPException(
-                    status_code=401, detail=result.message or "会话已失效，请重新登录"
+                    status_code=401, detail=result.message or "会话已失效,请重新登录"
                 )
 
     def _login_template(request: Request, *, error: str | None = None) -> HTMLResponse:
@@ -157,7 +156,7 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
         # 检查认证服务器是否可用
         if not await auth_client.health_check():
             logger.error("认证服务器不可用")
-            return _login_template(request, error="认证服务器不可用，请联系管理员")
+            return _login_template(request, error="认证服务器不可用,请联系管理员")
 
         # 远程登录
         token_data = await auth_client.login(username.strip(), password.strip())
@@ -310,7 +309,7 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
     ) -> dict[str, bool]:
         missing = validate_required(payload.entries)
         if missing:
-            labels = "、".join(missing)
+            labels = ",".join(missing)
             raise HTTPException(status_code=400, detail=f"以下配置不能为空: {labels}")
         persist_env_settings(payload.entries)
         return {"ok": True}
@@ -333,7 +332,7 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
         skip: int = Query(default=0, ge=0),
         limit: int = Query(default=100, ge=1, le=1000),
     ) -> dict[str, Any]:
-        """获取用户列表（代理到认证服务器）."""
+        """获取用户列表(代理到认证服务器)."""
         token = request.session.get(SESSION_TOKEN_KEY)
         if not token:
             raise HTTPException(status_code=401, detail="未登录")
@@ -359,7 +358,7 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
         user_data: dict[str, Any],
         _: None = Depends(admin_guard),
     ) -> dict[str, Any]:
-        """创建用户（代理到认证服务器）."""
+        """创建用户(代理到认证服务器)."""
         token = request.session.get(SESSION_TOKEN_KEY)
         if not token:
             raise HTTPException(status_code=401, detail="未登录")
@@ -390,7 +389,7 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
         user_data: dict[str, Any],
         _: None = Depends(admin_guard),
     ) -> dict[str, Any]:
-        """更新用户（代理到认证服务器）."""
+        """更新用户(代理到认证服务器)."""
         token = request.session.get(SESSION_TOKEN_KEY)
         if not token:
             raise HTTPException(status_code=401, detail="未登录")
@@ -422,7 +421,7 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
         user_id: str,
         _: None = Depends(admin_guard),
     ) -> dict[str, Any]:
-        """删除用户（代理到认证服务器）."""
+        """删除用户(代理到认证服务器)."""
         token = request.session.get(SESSION_TOKEN_KEY)
         if not token:
             raise HTTPException(status_code=401, detail="未登录")
@@ -453,7 +452,7 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
         user_id: str,
         _: None = Depends(admin_guard),
     ) -> dict[str, Any]:
-        """强制用户下线（代理到认证服务器）."""
+        """强制用户下线(代理到认证服务器)."""
         token = request.session.get(SESSION_TOKEN_KEY)
         if not token:
             raise HTTPException(status_code=401, detail="未登录")
@@ -586,7 +585,7 @@ def _persist_publish_preferences(repeat_per_batch: int, close_retry: int) -> Non
 
     try:
         if not SELECTOR_FILE.exists():
-            logger.warning("选择器配置文件不存在，跳过发布参数写入: {}", SELECTOR_FILE)
+            logger.warning("选择器配置文件不存在,跳过发布参数写入: {}", SELECTOR_FILE)
             return
 
         data = json.loads(SELECTOR_FILE.read_text(encoding="utf-8"))

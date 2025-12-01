@@ -3,10 +3,10 @@
 @OUTLINE:
   - class SelectorResolver: 根据配置动态创建定位器
   - resolve_locator(): 单个选择器转 Locator
-  - resolve_field(): 字段配置（多个候选）转 Locator 列表
+  - resolve_field(): 字段配置(多个候选)转 Locator 列表
 @GOTCHAS:
   - 支持 get_by_label, get_by_role, get_by_placeholder, get_by_text, css 等类型
-  - 按配置顺序尝试，找到第一个可用的返回
+  - 按配置顺序尝试,找到第一个可用的返回
   - 自动记录成功的选择器命中信息
 @DEPENDENCIES:
   - 内部: utils.selector_hit_recorder
@@ -84,15 +84,15 @@ class SelectorResolver:
         timeout_ms: int = TIMEOUTS.NORMAL,
         context_name: str = "",
     ) -> Locator | None:
-        """解析字段配置，返回第一个可用的 Locator.
+        """解析字段配置,返回第一个可用的 Locator.
 
         Args:
-            field_config: 字段配置，包含 locators 列表.
-            timeout_ms: 等待超时时间（毫秒）.
-            context_name: 业务上下文名称，用于记录选择器命中（如"产品标题输入框"）.
+            field_config: 字段配置,包含 locators 列表.
+            timeout_ms: 等待超时时间(毫秒).
+            context_name: 业务上下文名称,用于记录选择器命中(如"产品标题输入框").
 
         Returns:
-            第一个可见的 Locator，如果都不可用则返回 None.
+            第一个可见的 Locator,如果都不可用则返回 None.
 
         Examples:
             >>> config = {
@@ -126,7 +126,7 @@ class SelectorResolver:
                         )
                         return first
                     except Exception:
-                        # 元素存在但不可见，继续尝试下一个
+                        # 元素存在但不可见,继续尝试下一个
                         continue
             except Exception as e:
                 logger.debug(f"定位器 {loc_config} 解析失败: {e}")
@@ -136,10 +136,10 @@ class SelectorResolver:
         return None
 
     async def resolve_field_list(self, field_config: dict[str, Any]) -> list[Locator]:
-        """解析字段配置，返回所有匹配的 Locator 列表.
+        """解析字段配置,返回所有匹配的 Locator 列表.
 
         Args:
-            field_config: 字段配置，包含 locators 列表.
+            field_config: 字段配置,包含 locators 列表.
 
         Returns:
             所有匹配的 Locator 列表.

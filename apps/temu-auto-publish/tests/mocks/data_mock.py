@@ -12,8 +12,7 @@
 """
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
-from pathlib import Path
+from typing import Any
 
 
 @dataclass
@@ -23,26 +22,26 @@ class MockProductSelectionRow:
     owner: str = "测试负责人"
     product_name: str = "测试产品"
     model_number: str = "A0001"
-    color_spec: Optional[str] = "白色"
+    color_spec: str | None = "白色"
     collect_count: int = 5
-    cost_price: Optional[float] = 15.0
-    spec_unit: Optional[str] = None
-    spec_options: Optional[List[str]] = None
-    variant_costs: Optional[List[float]] = None
-    image_files: Optional[List[str]] = None
+    cost_price: float | None = 15.0
+    spec_unit: str | None = None
+    spec_options: list[str] | None = None
+    variant_costs: list[float] | None = None
+    image_files: list[str] | None = None
     size_chart_image_url: str = "https://example.com/size-chart.jpg"
-    product_video_url: Optional[str] = None
-    sku_image_urls: List[str] = field(default_factory=list)
+    product_video_url: str | None = None
+    sku_image_urls: list[str] = field(default_factory=list)
 
 
 class MockSelectionTableReader:
     """模拟 SelectionTableReader"""
 
-    def __init__(self, products: Optional[List[MockProductSelectionRow]] = None):
+    def __init__(self, products: list[MockProductSelectionRow] | None = None):
         self._products = products or self._default_products()
         self.read_count = 0
 
-    def _default_products(self) -> List[MockProductSelectionRow]:
+    def _default_products(self) -> list[MockProductSelectionRow]:
         """生成默认测试产品"""
         return [
             MockProductSelectionRow(
@@ -57,12 +56,12 @@ class MockSelectionTableReader:
 
     def read_excel(
         self, file_path: str, sheet_name: int = 0, skip_rows: int = 0
-    ) -> List[MockProductSelectionRow]:
+    ) -> list[MockProductSelectionRow]:
         """模拟读取Excel"""
         self.read_count += 1
         return self._products
 
-    def validate_row(self, row: Dict) -> Tuple[bool, Optional[str]]:
+    def validate_row(self, row: dict) -> tuple[bool, str | None]:
         """模拟验证行数据"""
         if not row.get("product_name"):
             return False, "缺少产品名称"
@@ -78,10 +77,10 @@ class MockSelectionTableReader:
 class MockProductDataReader:
     """模拟 ProductDataReader"""
 
-    def __init__(self, products: Optional[List[Dict]] = None):
+    def __init__(self, products: list[dict] | None = None):
         self._products = products or self._default_products()
 
-    def _default_products(self) -> List[Dict]:
+    def _default_products(self) -> list[dict]:
         """生成默认测试产品"""
         return [
             {
@@ -93,11 +92,11 @@ class MockProductDataReader:
             for i in range(1, 6)
         ]
 
-    def read(self, file_path: str) -> List[Dict]:
+    def read(self, file_path: str) -> list[dict]:
         """模拟读取产品数据"""
         return self._products
 
-    def validate(self, data: List[Dict]) -> Tuple[bool, List[str]]:
+    def validate(self, data: list[dict]) -> tuple[bool, list[str]]:
         """模拟验证数据"""
         errors = []
         for i, item in enumerate(data):
@@ -148,7 +147,7 @@ class MockDataConverter:
     def __init__(self):
         self.conversion_count = 0
 
-    def convert_to_workflow_format(self, data: List[Dict]) -> List[Dict]:
+    def convert_to_workflow_format(self, data: list[dict]) -> list[dict]:
         """模拟转换为工作流格式"""
         self.conversion_count += 1
         return [
@@ -162,7 +161,7 @@ class MockDataConverter:
             for i, item in enumerate(data)
         ]
 
-    def convert_from_selection_table(self, products: List[MockProductSelectionRow]) -> List[Dict]:
+    def convert_from_selection_table(self, products: list[MockProductSelectionRow]) -> list[dict]:
         """模拟从选品表转换"""
         self.conversion_count += 1
         return [
@@ -181,7 +180,7 @@ class MockTitleGenerator:
 
     def __init__(self, prefix: str = ""):
         self._prefix = prefix
-        self.generated_titles: List[str] = []
+        self.generated_titles: list[str] = []
 
     def generate(self, keyword: str, model_number: str) -> str:
         """模拟生成标题"""
@@ -195,42 +194,42 @@ class MockTitleGenerator:
 
     def generate_english_title(self, chinese_title: str) -> str:
         """模拟生成英文标题"""
-        # 简单模拟：将中文标题转换为英文
+        # 简单模拟:将中文标题转换为英文
         return f"English Title for {chinese_title}"
 
 
 class MockExcelReader:
     """模拟 Excel 读取器"""
 
-    def __init__(self, data: Optional[List[List[Any]]] = None):
+    def __init__(self, data: list[list[Any]] | None = None):
         self._data = data or [
             ["关键词", "型号", "成本", "库存"],
             ["药箱收纳盒", "A0001", 15.0, 100],
             ["厨房收纳架", "A0002", 25.0, 50],
         ]
 
-    def read(self, file_path: str, sheet_name: int = 0) -> List[List[Any]]:
+    def read(self, file_path: str, sheet_name: int = 0) -> list[list[Any]]:
         """模拟读取Excel"""
         return self._data
 
-    def read_as_dict(self, file_path: str, sheet_name: int = 0) -> List[Dict]:
+    def read_as_dict(self, file_path: str, sheet_name: int = 0) -> list[dict]:
         """模拟读取Excel为字典列表"""
         if len(self._data) < 2:
             return []
         headers = self._data[0]
-        return [dict(zip(headers, row)) for row in self._data[1:]]
+        return [dict(zip(headers, row, strict=False)) for row in self._data[1:]]
 
 
 class MockMetricsCollector:
     """模拟 MetricsCollector"""
 
     def __init__(self):
-        self.workflows: Dict[str, Dict] = {}
-        self.metrics: List[Dict] = []
-        self.counters: Dict[str, float] = {}
-        self.gauges: Dict[str, float] = {}
+        self.workflows: dict[str, dict] = {}
+        self.metrics: list[dict] = []
+        self.counters: dict[str, float] = {}
+        self.gauges: dict[str, float] = {}
 
-    def start_workflow(self, workflow_id: Optional[str] = None) -> str:
+    def start_workflow(self, workflow_id: str | None = None) -> str:
         """模拟开始工作流"""
         wid = workflow_id or f"mock_workflow_{len(self.workflows)}"
         self.workflows[wid] = {"status": "running", "stages": {}}
@@ -259,7 +258,7 @@ class MockMetricsCollector:
         """模拟递增计数器"""
         self.counters[name] = self.counters.get(name, 0) + value
 
-    def get_statistics(self) -> Dict[str, Any]:
+    def get_statistics(self) -> dict[str, Any]:
         """获取统计信息"""
         return {
             "total_workflows": len(self.workflows),

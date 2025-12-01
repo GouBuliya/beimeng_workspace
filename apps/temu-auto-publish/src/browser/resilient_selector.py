@@ -1,5 +1,5 @@
 """
-@PURPOSE: 弹性选择器 - 自动降级策略，提高元素定位的稳定性
+@PURPOSE: 弹性选择器 - 自动降级策略,提高元素定位的稳定性
 @OUTLINE:
   - @dataclass SelectorChain: 选择器链配置
   - @dataclass SelectorHitMetrics: 选择器命中统计
@@ -25,13 +25,13 @@ import asyncio
 import time
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Callable, Awaitable
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 if TYPE_CHECKING:
-    from playwright.async_api import Locator, Page, Frame
+    from playwright.async_api import Frame, Locator, Page
 
 
 @dataclass
@@ -56,15 +56,15 @@ class SelectorChain:
 
     @property
     def all_selectors(self) -> list[str]:
-        """获取所有选择器（主选择器 + 降级选择器）"""
-        return [self.primary] + self.fallbacks
+        """获取所有选择器(主选择器 + 降级选择器)"""
+        return [self.primary, *self.fallbacks]
 
 
 @dataclass
 class SelectorHitMetrics:
     """选择器命中统计
 
-    用于分析哪些选择器最有效，指导选择器顺序优化。
+    用于分析哪些选择器最有效,指导选择器顺序优化.
     """
 
     chain_key: str
@@ -284,22 +284,22 @@ class ResilientLocator:
 
     @classmethod
     def _normalize_wait_state(cls, requested: str | None, default_state: str) -> str:
-        """确保等待状态合法，非法值回退到可见状态."""
+        """确保等待状态合法,非法值回退到可见状态."""
         candidate = requested or default_state
         if candidate in cls.ALLOWED_WAIT_STATES:
             return candidate
-        logger.debug(f"非法 wait_state={candidate!r}，回退为 visible")
+        logger.debug(f"非法 wait_state={candidate!r},回退为 visible")
         return "visible"
 
     @classmethod
     def _compute_timeout_per_selector(cls, total_timeout: int, selector_count: int) -> int:
-        """计算单个选择器的等待时间，避免过小导致瞬时超时."""
+        """计算单个选择器的等待时间,避免过小导致瞬时超时."""
         if selector_count <= 0:
             return total_timeout
         per_selector = max(total_timeout // selector_count, 1)
         if per_selector < cls.MIN_TIMEOUT_PER_SELECTOR_MS:
             logger.debug(
-                "分配给单个选择器的超时过低({}ms)，提升至安全下限 {}ms",
+                "分配给单个选择器的超时过低({}ms),提升至安全下限 {}ms",
                 per_selector,
                 cls.MIN_TIMEOUT_PER_SELECTOR_MS,
             )
@@ -327,7 +327,7 @@ class ResilientLocator:
 
     @staticmethod
     def _log_failure_context(chain: SelectorChain, timeout_per: int, failures: list[str]) -> None:
-        """输出失败上下文，便于调试."""
+        """输出失败上下文,便于调试."""
         if not failures:
             logger.error(f"所有选择器均失败: {chain.description}")
             return
@@ -355,7 +355,7 @@ class ResilientLocator:
             key: 选择器链的键
 
         Returns:
-            选择器链，不存在则返回 None
+            选择器链,不存在则返回 None
         """
         return self._chains.get(key)
 
@@ -372,11 +372,11 @@ class ResilientLocator:
         Args:
             page: Playwright Page 或 Frame 对象
             key: 选择器链的键
-            timeout: 总超时时间(毫秒)，默认使用链配置
-            wait_state: 等待状态，默认使用链配置
+            timeout: 总超时时间(毫秒),默认使用链配置
+            wait_state: 等待状态,默认使用链配置
 
         Returns:
-            定位到的元素，失败则返回 None
+            定位到的元素,失败则返回 None
         """
         chain = self._chains.get(key)
         if chain is None:
@@ -396,7 +396,7 @@ class ResilientLocator:
             self._metrics[key] = SelectorHitMetrics(chain_key=key)
         metrics = self._metrics[key]
         if self._is_target_closed(page):
-            logger.error("页面已关闭/分离，无法定位 {}", chain.description)
+            logger.error("页面已关闭/分离,无法定位 {}", chain.description)
             return None
         failures: list[str] = []
 
@@ -442,17 +442,17 @@ class ResilientLocator:
     ) -> Locator | None:
         """使用单个选择器定位元素
 
-        用于不在预定义链中的临时选择器。
+        用于不在预定义链中的临时选择器.
 
         Args:
             page: Playwright Page 或 Frame 对象
             selector: CSS 选择器
             timeout: 超时时间(毫秒)
             wait_state: 等待状态
-            description: 描述（用于日志）
+            description: 描述(用于日志)
 
         Returns:
-            定位到的元素，失败则返回 None
+            定位到的元素,失败则返回 None
         """
         try:
             locator = page.locator(selector)
@@ -494,7 +494,7 @@ class ResilientLocator:
         )
         failures: list[str] = []
         if self._is_target_closed(page):
-            logger.error("页面已关闭/分离，无法批量定位 {}", chain.description)
+            logger.error("页面已关闭/分离,无法批量定位 {}", chain.description)
             return []
 
         for selector in chain.all_selectors:
@@ -598,13 +598,13 @@ class ResilientLocator:
             key: 选择器链的键
             option_text: 选项文本
             timeout: 超时时间(毫秒)
-            option_chain_key: 选项列表的选择器链键，None 时仅使用文本匹配
+            option_chain_key: 选项列表的选择器链键,None 时仅使用文本匹配
 
         Returns:
             是否成功选择
         """
         if self._is_target_closed(page):
-            logger.error("页面已关闭/分离，无法选择选项 {}", option_text)
+            logger.error("页面已关闭/分离,无法选择选项 {}", option_text)
             return False
 
         option_timeout = timeout or 3000
@@ -645,7 +645,7 @@ class ResilientLocator:
         """获取选择器命中统计
 
         Args:
-            key: 选择器链的键，为空则返回所有统计
+            key: 选择器链的键,为空则返回所有统计
 
         Returns:
             统计数据字典
@@ -698,7 +698,7 @@ class ResilientLocator:
                     {
                         "key": key,
                         "type": "add_selectors",
-                        "message": f"成功率仅 {metrics.success_rate:.1%}，建议添加更多降级选择器",
+                        "message": f"成功率仅 {metrics.success_rate:.1%},建议添加更多降级选择器",
                         "success_rate": metrics.success_rate,
                         "misses": metrics.misses,
                     }
@@ -725,7 +725,7 @@ async def resilient_locate(
     key: str,
     **kwargs,
 ) -> Locator | None:
-    """便捷函数：弹性定位元素
+    """便捷函数:弹性定位元素
 
     Args:
         page: Playwright Page 或 Frame 对象
@@ -743,7 +743,7 @@ async def resilient_click(
     key: str,
     **kwargs,
 ) -> bool:
-    """便捷函数：弹性定位并点击
+    """便捷函数:弹性定位并点击
 
     Args:
         page: Playwright Page 或 Frame 对象
@@ -758,10 +758,10 @@ async def resilient_click(
 
 # 导出
 __all__ = [
+    "ResilientLocator",
     "SelectorChain",
     "SelectorHitMetrics",
-    "ResilientLocator",
     "get_resilient_locator",
-    "resilient_locate",
     "resilient_click",
+    "resilient_locate",
 ]

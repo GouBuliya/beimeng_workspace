@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
-
 from src.data_processor.selection_table_queue import (
     SelectionTableEmptyError,
     SelectionTableFormatError,

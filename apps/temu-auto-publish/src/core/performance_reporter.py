@@ -1,7 +1,7 @@
 """
 @PURPOSE: 性能报告生成器 - 提供控制台美化输出和汇总报告
 @OUTLINE:
-  - class ConsoleReporter: 控制台报告器，提供实时输出和汇总报告
+  - class ConsoleReporter: 控制台报告器,提供实时输出和汇总报告
   - format_duration(): 格式化时间显示
   - create_progress_bar(): 创建进度条
 @GOTCHAS:
@@ -29,7 +29,7 @@ def format_duration(seconds: float | None) -> str:
         seconds: 秒数
 
     Returns:
-        str: 格式化后的时间字符串，如 "1.23s" 或 "2m 30s"
+        str: 格式化后的时间字符串,如 "1.23s" 或 "2m 30s"
     """
     if seconds is None:
         return "N/A"
@@ -54,7 +54,7 @@ def create_progress_bar(percentage: float, width: int = 20) -> str:
         width: 进度条宽度
 
     Returns:
-        str: 进度条字符串，如 "████████░░░░░░░░░░░░"
+        str: 进度条字符串,如 "████████░░░░░░░░░░░░"
     """
     if percentage < 0:
         percentage = 0
@@ -69,7 +69,7 @@ def create_progress_bar(percentage: float, width: int = 20) -> str:
 class ConsoleReporter:
     """控制台报告器
 
-    提供实时输出和工作流结束后的汇总报告。
+    提供实时输出和工作流结束后的汇总报告.
 
     Example:
         >>> from .performance_tracker import PerformanceTracker
@@ -82,7 +82,7 @@ class ConsoleReporter:
     SEPARATOR = "═" * 60
     THIN_SEPARATOR = "─" * 60
 
-    def __init__(self, tracker: "PerformanceTracker"):
+    def __init__(self, tracker: PerformanceTracker):
         """初始化报告器
 
         Args:
@@ -110,7 +110,7 @@ class ConsoleReporter:
     def print_summary(self) -> None:
         """打印工作流汇总报告
 
-        在工作流结束后调用，显示：
+        在工作流结束后调用,显示:
         - 工作流基本信息
         - 各阶段耗时和占比
         - 进度条可视化

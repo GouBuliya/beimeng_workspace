@@ -1,5 +1,5 @@
 """
-测试批量编辑18步完整流程（集成Excel数据）
+测试批量编辑18步完整流程(集成Excel数据)
 
 运行方式:
     uv run python scripts/test_batch_edit_with_excel.py
@@ -9,6 +9,7 @@ import asyncio
 import os
 import sys
 from pathlib import Path
+
 from dotenv import load_dotenv
 
 # 添加项目根目录到路径
@@ -17,10 +18,10 @@ workspace_root = project_root.parent.parent
 sys.path.insert(0, str(project_root))
 sys.path.insert(0, str(workspace_root))
 
-# 先导入logger（在加载环境变量前）
+# 先导入logger(在加载环境变量前)
 from packages.common.logger import logger
 
-# 加载环境变量（优先从项目根目录，其次从workspace根目录）
+# 加载环境变量(优先从项目根目录,其次从workspace根目录)
 env_paths = [
     project_root / ".env",  # apps/temu-auto-publish/.env
     workspace_root / ".env",  # beimeng_workspace/.env
@@ -35,20 +36,20 @@ for env_path in env_paths:
         break
 
 if not env_loaded:
-    logger.warning(f"⚠️ 环境变量文件不存在，尝试过的路径: {[str(p) for p in env_paths]}")
+    logger.warning(f"⚠️ 环境变量文件不存在,尝试过的路径: {[str(p) for p in env_paths]}")
 
-from src.browser.login_controller import LoginController
 from src.browser.batch_edit_controller_v2 import BatchEditController
+from src.browser.login_controller import LoginController
 from src.data_processor.product_data_reader import ProductDataReader
 
 
-async def test_batch_edit_with_excel(product_name: str = None, manual_pdf_path: str = None):
+async def test_batch_edit_with_excel(product_name: str | None = None, manual_pdf_path: str | None = None):
     """
-    测试批量编辑18步流程（集成Excel数据）
+    测试批量编辑18步流程(集成Excel数据)
 
     Args:
-        product_name: 产品名称，用于从Excel读取数据
-        manual_pdf_path: 产品说明书PDF文件路径（可选）
+        product_name: 产品名称,用于从Excel读取数据
+        manual_pdf_path: 产品说明书PDF文件路径(可选)
     """
     # 获取登录凭据
     username = os.getenv("MIAOSHOU_USERNAME")
@@ -59,7 +60,7 @@ async def test_batch_edit_with_excel(product_name: str = None, manual_pdf_path: 
         return
 
     logger.info("=" * 80)
-    logger.info("🎯 测试批量编辑18步流程（集成Excel数据）")
+    logger.info("🎯 测试批量编辑18步流程(集成Excel数据)")
     logger.info("=" * 80)
 
     if product_name:
@@ -75,10 +76,10 @@ async def test_batch_edit_with_excel(product_name: str = None, manual_pdf_path: 
 
     try:
         # ========================================
-        # 第1步：登录
+        # 第1步:登录
         # ========================================
         logger.info("\n" + "=" * 60)
-        logger.info("第1步：登录")
+        logger.info("第1步:登录")
         logger.info("=" * 60)
 
         login_controller = LoginController()
@@ -95,10 +96,10 @@ async def test_batch_edit_with_excel(product_name: str = None, manual_pdf_path: 
         await page.wait_for_timeout(3000)
 
         # ========================================
-        # 第2步：进入批量编辑
+        # 第2步:进入批量编辑
         # ========================================
         logger.info("\n" + "=" * 60)
-        logger.info("第2步：进入批量编辑")
+        logger.info("第2步:进入批量编辑")
         logger.info("=" * 60)
 
         batch_controller = BatchEditController(page)
@@ -112,10 +113,10 @@ async def test_batch_edit_with_excel(product_name: str = None, manual_pdf_path: 
         await page.wait_for_timeout(5000)
 
         # ========================================
-        # 第3步：执行18步批量编辑
+        # 第3步:执行18步批量编辑
         # ========================================
         logger.info("\n" + "=" * 60)
-        logger.info("第3步：执行18步批量编辑")
+        logger.info("第3步:执行18步批量编辑")
         logger.info("=" * 60)
 
         results = {"total": 18, "success": 0, "failed": 0, "steps": []}
@@ -156,7 +157,7 @@ async def test_batch_edit_with_excel(product_name: str = None, manual_pdf_path: 
 
         for step_num, step_name, step_func in steps:
             logger.info(f"\n{'─' * 60}")
-            logger.info(f"🔄 执行步骤 {step_num}：{step_name}")
+            logger.info(f"🔄 执行步骤 {step_num}:{step_name}")
             logger.info(f"{'─' * 60}")
 
             try:
@@ -175,9 +176,9 @@ async def test_batch_edit_with_excel(product_name: str = None, manual_pdf_path: 
                         {"step": step_num, "name": step_name, "status": "failed"}
                     )
 
-                    # 失败后是否继续？
+                    # 失败后是否继续?
                     # 这里选择继续执行后续步骤
-                    logger.warning(f"⚠️ 继续执行下一步...")
+                    logger.warning("⚠️ 继续执行下一步...")
 
             except Exception as e:
                 logger.error(f"❌ 步骤 {step_num} {step_name} 异常: {e}")
@@ -190,7 +191,7 @@ async def test_batch_edit_with_excel(product_name: str = None, manual_pdf_path: 
             await page.wait_for_timeout(1000)
 
         # ========================================
-        # 第4步：输出测试报告
+        # 第4步:输出测试报告
         # ========================================
         logger.info("\n" + "=" * 80)
         logger.info("📊 测试报告")
@@ -211,9 +212,9 @@ async def test_batch_edit_with_excel(product_name: str = None, manual_pdf_path: 
                 logger.info(f"      错误: {step_result['error']}")
 
         if results["failed"] == 0:
-            logger.success("\n🎉 所有18步均执行成功！")
+            logger.success("\n🎉 所有18步均执行成功!")
         else:
-            logger.warning(f"\n⚠️ 有 {results['failed']} 步执行失败，请检查日志")
+            logger.warning(f"\n⚠️ 有 {results['failed']} 步执行失败,请检查日志")
 
         # 等待一会儿以便观察结果
         logger.info("\n等待10秒后关闭浏览器...")
@@ -237,5 +238,5 @@ if __name__ == "__main__":
     # product_name = "卫生间收纳柜"
     # manual_pdf_path = "/path/to/manual.pdf"
 
-    # 或者使用默认值（无产品名称，无说明书）
+    # 或者使用默认值(无产品名称,无说明书)
     asyncio.run(test_batch_edit_with_excel(product_name=None, manual_pdf_path=None))

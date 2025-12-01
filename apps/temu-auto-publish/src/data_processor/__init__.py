@@ -1,5 +1,5 @@
 """
-@PURPOSE: 数据处理模块，负责Excel读取、价格计算、标题生成等数据处理逻辑
+@PURPOSE: 数据处理模块,负责Excel读取,价格计算,标题生成等数据处理逻辑
 @OUTLINE:
   - ExcelReader: Excel读取器
   - PriceCalculator, PriceResult: 价格计算

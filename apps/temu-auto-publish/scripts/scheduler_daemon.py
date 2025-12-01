@@ -19,16 +19,13 @@
 """
 
 import argparse
-import asyncio
 import atexit
-import json
 import os
 import signal
 import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
 
 import yaml
 from apscheduler.schedulers.blocking import BlockingScheduler
@@ -39,7 +36,6 @@ from loguru import logger
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from config.settings import settings
 
 
 class SchedulerDaemon:
@@ -64,9 +60,9 @@ class SchedulerDaemon:
 
     def __init__(
         self,
-        config_path: Optional[Path] = None,
-        pid_file: Optional[Path] = None,
-        log_file: Optional[Path] = None,
+        config_path: Path | None = None,
+        pid_file: Path | None = None,
+        log_file: Path | None = None,
     ):
         """初始化守护进程.
 
@@ -94,7 +90,7 @@ class SchedulerDaemon:
 
         logger.info("定时任务守护进程已初始化")
 
-    def _load_config(self) -> Dict:
+    def _load_config(self) -> dict:
         """加载配置文件.
 
         Returns:
@@ -105,7 +101,7 @@ class SchedulerDaemon:
             return {}
 
         try:
-            with open(self.config_path, "r", encoding="utf-8") as f:
+            with open(self.config_path, encoding="utf-8") as f:
                 config = yaml.safe_load(f)
             logger.info(f"✓ 已加载配置文件: {self.config_path}")
             return config or {}
@@ -124,7 +120,7 @@ class SchedulerDaemon:
 
         try:
             # 检查锁文件中的PID是否还在运行
-            with open(self.job_lock_file, "r") as f:
+            with open(self.job_lock_file) as f:
                 pid = int(f.read().strip())
 
             # 检查进程是否存在
@@ -165,17 +161,17 @@ class SchedulerDaemon:
         except Exception as e:
             logger.error(f"释放任务锁失败: {e}")
 
-    def execute_job(self, job_config: Dict):
+    def execute_job(self, job_config: dict):
         """执行任务.
 
         Args:
             job_config: 任务配置
         """
         job_name = job_config.get("name", "unknown")
-        logger.info(f"=" * 60)
+        logger.info("=" * 60)
         logger.info(f"开始执行任务: {job_name}")
         logger.info(f"时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        logger.info(f"=" * 60)
+        logger.info("=" * 60)
 
         # 检查任务是否启用
         if not job_config.get("enabled", False):
@@ -198,7 +194,7 @@ class SchedulerDaemon:
             if "input_type" in job_config:
                 cmd.extend(["--type", job_config["input_type"]])
 
-            if "staff_name" in job_config and job_config["staff_name"]:
+            if job_config.get("staff_name"):
                 cmd.extend(["--staff-name", job_config["staff_name"]])
 
             if not job_config.get("enable_batch_edit", True):
@@ -235,9 +231,9 @@ class SchedulerDaemon:
             # 释放锁
             self._release_lock()
 
-            logger.info(f"=" * 60)
+            logger.info("=" * 60)
             logger.info(f"任务 {job_name} 执行完成")
-            logger.info(f"=" * 60 + "\n")
+            logger.info("=" * 60 + "\n")
 
     def add_jobs_from_config(self):
         """从配置文件添加所有任务."""
@@ -358,7 +354,7 @@ class SchedulerDaemon:
 
         try:
             # 读取PID
-            with open(self.pid_file, "r") as f:
+            with open(self.pid_file) as f:
                 pid = int(f.read().strip())
 
             # 发送SIGTERM信号
@@ -391,7 +387,7 @@ class SchedulerDaemon:
             return
 
         try:
-            with open(self.pid_file, "r") as f:
+            with open(self.pid_file) as f:
                 pid = int(f.read().strip())
 
             print(f"✓ 守护进程正在运行 (PID: {pid})")
@@ -406,8 +402,8 @@ class SchedulerDaemon:
 
             # 显示最近的日志
             if self.log_file.exists():
-                print(f"\n最近的日志 (最后10行):")
-                with open(self.log_file, "r", encoding="utf-8") as f:
+                print("\n最近的日志 (最后10行):")
+                with open(self.log_file, encoding="utf-8") as f:
                     lines = f.readlines()
                     for line in lines[-10:]:
                         print(f"  {line.rstrip()}")
@@ -425,7 +421,7 @@ class SchedulerDaemon:
             return False
 
         try:
-            with open(self.pid_file, "r") as f:
+            with open(self.pid_file) as f:
                 pid = int(f.read().strip())
 
             # 检查进程是否存在

@@ -11,13 +11,9 @@
   - 内部: src.data_processor.selection_table_reader
 """
 
-import json
-import tempfile
-from pathlib import Path
 
 import pandas as pd
 import pytest
-
 from src.data_processor.selection_table_reader import (
     ProductSelectionRow,
     SelectionTableReader,

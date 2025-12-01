@@ -13,7 +13,7 @@ from .base import TIMEOUTS, FirstEditBase
 
 
 class FirstEditLogisticsMixin(FirstEditBase):
-    """封装物流信息相关的设置流程。"""
+    """封装物流信息相关的设置流程."""
 
     async def navigate_to_logistics_tab(self, page: Page) -> bool:
         """切换到物流信息 Tab.
@@ -43,7 +43,7 @@ class FirstEditLogisticsMixin(FirstEditBase):
 
         Args:
             page: Playwright 页面对象.
-            weight: 包裹重量（克）.
+            weight: 包裹重量(克).
 
         Returns:
             是否设置成功.
@@ -102,9 +102,9 @@ class FirstEditLogisticsMixin(FirstEditBase):
 
         Args:
             page: Playwright 页面对象.
-            length: 包裹长度（厘米）.
-            width: 包裹宽度（厘米）.
-            height: 包裹高度（厘米）.
+            length: 包裹长度(厘米).
+            width: 包裹宽度(厘米).
+            height: 包裹高度(厘米).
 
         Returns:
             是否设置成功.

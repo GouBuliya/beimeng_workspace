@@ -1,5 +1,5 @@
 """
-@PURPOSE: AI标题生成器，用于从5个原始标题生成5个优化的新标题
+@PURPOSE: AI标题生成器,用于从5个原始标题生成5个优化的新标题
 @OUTLINE:
   - class AITitleGenerator: AI标题生成主类
   - async def generate_titles(): 调用AI生成新标题
@@ -7,7 +7,7 @@
   - async def _call_openai_api(): 调用OpenAI API
   - async def _call_anthropic_api(): 调用Anthropic API
 @GOTCHAS:
-  - AI调用可能失败，需要实现fallback机制
+  - AI调用可能失败,需要实现fallback机制
   - 必须确保生成5个不同的标题
   - 型号后缀在AI生成后自动追加
 @DEPENDENCIES:
@@ -18,7 +18,6 @@
 
 import asyncio
 import os
-from typing import List, Optional
 
 from loguru import logger
 
@@ -28,7 +27,7 @@ try:
     OPENAI_AVAILABLE = True
 except ImportError:
     OPENAI_AVAILABLE = False
-    logger.warning("openai 库未安装，OpenAI 功能不可用")
+    logger.warning("openai 库未安装,OpenAI 功能不可用")
 
 try:
     import anthropic
@@ -36,13 +35,13 @@ try:
     ANTHROPIC_AVAILABLE = True
 except ImportError:
     ANTHROPIC_AVAILABLE = False
-    logger.warning("anthropic 库未安装，Anthropic 功能不可用")
+    logger.warning("anthropic 库未安装,Anthropic 功能不可用")
 
 
 class AITitleGenerator:
     """AI标题生成器.
 
-    使用AI（OpenAI/Anthropic）从5个原始标题生成5个优化的新标题。
+    使用AI(OpenAI/Anthropic)从5个原始标题生成5个优化的新标题.
 
     Attributes:
         provider: AI提供商 ('openai' 或 'anthropic')
@@ -58,39 +57,39 @@ class AITitleGenerator:
         ['新标题1 A0049型号', '新标题2 A0049型号', ...]
     """
 
-    # 固定的AI提示词模板（批量模式 - 5个标题）
-    PROMPT_TEMPLATE = """提取上面5个商品标题中的高频热搜词，写5个新的中文标题，
-不要出现药品，急救等医疗相关的词汇
-符合欧美人的阅读习惯，符合TEMU/亚马逊平台规则，提高搜索流量
+    # 固定的AI提示词模板(批量模式 - 5个标题)
+    PROMPT_TEMPLATE = """提取上面5个商品标题中的高频热搜词,写5个新的中文标题,
+不要出现药品,急救等医疗相关的词汇
+符合欧美人的阅读习惯,符合TEMU/亚马逊平台规则,提高搜索流量
 
-原标题：
+原标题:
 {titles}
 
-请生成5个不同的新标题，每个标题独立且有差异。
-每行一个标题，不要编号，不要其他说明文字。"""
+请生成5个不同的新标题,每个标题独立且有差异.
+每行一个标题,不要编号,不要其他说明文字."""
 
-    # 单个标题的AI提示词模板（逐个模式 - 1个标题）
-    SINGLE_PROMPT_TEMPLATE = """请基于下面的商品标题，生成一个优化的新中文标题：
+    # 单个标题的AI提示词模板(逐个模式 - 1个标题)
+    SINGLE_PROMPT_TEMPLATE = """请基于下面的商品标题,生成一个优化的新中文标题:
 
-原标题：{title}
+原标题:{title}
 
-要求：
+要求:
 1. 提取标题中的高频热搜词
-2. 生成一个新的中文标题（必须是中文，不要英文）
-3. 如果原标题是英文，请翻译成中文
-4. 不要出现药品、急救等医疗相关的词汇
+2. 生成一个新的中文标题(必须是中文,不要英文)
+3. 如果原标题是英文,请翻译成中文
+4. 不要出现药品,急救等医疗相关的词汇
 5. 符合欧美人的阅读习惯
 6. 符合TEMU/亚马逊平台规则
 7. 优化搜索流量
 
-重要：输出必须是中文标题，不要包含编号、说明文字。"""
+重要:输出必须是中文标题,不要包含编号,说明文字."""
 
     def __init__(
         self,
         provider: str = "openai",
-        api_key: Optional[str] = None,
-        model: Optional[str] = None,
-        base_url: Optional[str] = None,
+        api_key: str | None = None,
+        model: str | None = None,
+        base_url: str | None = None,
         max_retries: int = 3,
         timeout: int = 30,
     ):
@@ -98,17 +97,17 @@ class AITitleGenerator:
 
         Args:
             provider: AI提供商 ('openai' 或 'anthropic')
-            api_key: API密钥（如果为None，从环境变量读取）
-            model: 模型名称（如果为None，使用默认模型）
-            base_url: API基础URL（支持OpenAI兼容接口，如通义千问）
+            api_key: API密钥(如果为None,从环境变量读取)
+            model: 模型名称(如果为None,使用默认模型)
+            base_url: API基础URL(支持OpenAI兼容接口,如通义千问)
             max_retries: 最大重试次数
-            timeout: 超时时间（秒）
+            timeout: 超时时间(秒)
         """
         self.provider = provider.lower()
         self.max_retries = max_retries
         self.timeout = timeout
 
-        # 获取API密钥（优先使用DASHSCOPE_API_KEY，兼容OPENAI_API_KEY）
+        # 获取API密钥(优先使用DASHSCOPE_API_KEY,兼容OPENAI_API_KEY)
         if api_key:
             self.api_key = api_key
         elif self.provider == "openai":
@@ -129,7 +128,7 @@ class AITitleGenerator:
         else:
             self.model = ""
 
-        # 设置base_url（支持OpenAI兼容接口）
+        # 设置base_url(支持OpenAI兼容接口)
         if base_url:
             self.base_url = base_url
         else:
@@ -142,7 +141,7 @@ class AITitleGenerator:
         else:
             logger.info(f"AI标题生成器初始化: provider={self.provider}, model={self.model}")
 
-    def _build_prompt(self, original_titles: List[str]) -> str:
+    def _build_prompt(self, original_titles: list[str]) -> str:
         """构建AI提示词.
 
         Args:
@@ -159,7 +158,7 @@ class AITitleGenerator:
 
         return prompt
 
-    async def _call_openai_api(self, prompt: str) -> List[str]:
+    async def _call_openai_api(self, prompt: str) -> list[str]:
         """调用OpenAI API生成标题.
 
         Args:
@@ -180,7 +179,7 @@ class AITitleGenerator:
         logger.debug(f"调用OpenAI API: model={self.model}")
 
         try:
-            # 创建客户端，支持自定义base_url（OpenAI兼容接口）
+            # 创建客户端,支持自定义base_url(OpenAI兼容接口)
             client_params = {"api_key": self.api_key, "timeout": self.timeout}
             if self.base_url:
                 client_params["base_url"] = self.base_url
@@ -191,7 +190,7 @@ class AITitleGenerator:
             response = await client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": "你是一个专业的电商产品标题优化专家。"},
+                    {"role": "system", "content": "你是一个专业的电商产品标题优化专家."},
                     {"role": "user", "content": prompt},
                 ],
                 temperature=0.7,
@@ -201,17 +200,17 @@ class AITitleGenerator:
             # 解析响应
             content = response.choices[0].message.content.strip()
 
-            # 按行分割，获取5个标题
+            # 按行分割,获取5个标题
             titles = [line.strip() for line in content.split("\n") if line.strip()]
 
-            # 去除可能的编号（如：1. 、一、等）
+            # 去除可能的编号(如:1. ,一,等)
             cleaned_titles = []
             for title in titles:
-                # 去除开头的数字、点、空格
+                # 去除开头的数字,点,空格
                 import re
 
-                cleaned = re.sub(r"^\d+[\.\)、]\s*", "", title)
-                cleaned = re.sub(r"^[一二三四五]\s*[、．.]\s*", "", cleaned)
+                cleaned = re.sub(r"^\d+[\.\),]\s*", "", title)
+                cleaned = re.sub(r"^[一二三四五]\s*[,．.]\s*", "", cleaned)
                 if cleaned:
                     cleaned_titles.append(cleaned)
 
@@ -227,7 +226,7 @@ class AITitleGenerator:
             logger.error(f"OpenAI API调用失败: {e}")
             raise
 
-    async def _call_anthropic_api(self, prompt: str) -> List[str]:
+    async def _call_anthropic_api(self, prompt: str) -> list[str]:
         """调用Anthropic API生成标题.
 
         Args:
@@ -257,7 +256,7 @@ class AITitleGenerator:
             # 解析响应
             content = response.content[0].text.strip()
 
-            # 按行分割，获取5个标题
+            # 按行分割,获取5个标题
             titles = [line.strip() for line in content.split("\n") if line.strip()]
 
             # 去除可能的编号
@@ -265,8 +264,8 @@ class AITitleGenerator:
             for title in titles:
                 import re
 
-                cleaned = re.sub(r"^\d+[\.\)、]\s*", "", title)
-                cleaned = re.sub(r"^[一二三四五]\s*[、．.]\s*", "", cleaned)
+                cleaned = re.sub(r"^\d+[\.\),]\s*", "", title)
+                cleaned = re.sub(r"^[一二三四五]\s*[,．.]\s*", "", cleaned)
                 if cleaned:
                     cleaned_titles.append(cleaned)
 
@@ -282,19 +281,19 @@ class AITitleGenerator:
             raise
 
     async def generate_titles(
-        self, original_titles: List[str], model_number: str = "", use_ai: bool = True
-    ) -> List[str]:
+        self, original_titles: list[str], model_number: str = "", use_ai: bool = True
+    ) -> list[str]:
         """生成5个新标题.
 
-        从5个原始标题中提取关键词，生成5个优化的新标题，并自动添加型号后缀。
+        从5个原始标题中提取关键词,生成5个优化的新标题,并自动添加型号后缀.
 
         Args:
             original_titles: 5个原始标题列表
-            model_number: 型号后缀（如：A0049型号）
-            use_ai: 是否使用AI生成（False则返回原标题+型号）
+            model_number: 型号后缀(如:A0049型号)
+            use_ai: 是否使用AI生成(False则返回原标题+型号)
 
         Returns:
-            5个新生成的标题（已包含型号后缀）
+            5个新生成的标题(已包含型号后缀)
 
         Examples:
             >>> generator = AITitleGenerator()
@@ -314,9 +313,9 @@ class AITitleGenerator:
             else:
                 original_titles = original_titles[:5]
 
-        # 如果不使用AI，直接返回原标题+型号
+        # 如果不使用AI,直接返回原标题+型号
         if not use_ai:
-            logger.info("未启用AI，直接使用原标题")
+            logger.info("未启用AI,直接使用原标题")
             result = []
             for title in original_titles:
                 if model_number:
@@ -325,7 +324,7 @@ class AITitleGenerator:
                     result.append(title)
             return result
 
-        # 使用AI生成标题（带重试）
+        # 使用AI生成标题(带重试)
         new_titles = None
         for attempt in range(self.max_retries):
             try:
@@ -342,19 +341,19 @@ class AITitleGenerator:
                 else:
                     raise Exception(f"不支持的AI提供商: {self.provider}")
 
-                logger.success(f"✓ AI生成标题成功")
+                logger.success("✓ AI生成标题成功")
                 break
 
             except Exception as e:
-                logger.warning(f"AI生成失败（尝试 {attempt + 1}/{self.max_retries}）: {e}")
+                logger.warning(f"AI生成失败(尝试 {attempt + 1}/{self.max_retries}): {e}")
                 if attempt < self.max_retries - 1:
                     await asyncio.sleep(2**attempt)  # 指数退避
                 else:
-                    logger.error("AI生成失败，使用降级方案")
+                    logger.error("AI生成失败,使用降级方案")
 
-        # 如果AI生成失败，使用降级方案
+        # 如果AI生成失败,使用降级方案
         if not new_titles:
-            logger.warning("⚠️ AI生成失败，使用原标题作为降级方案")
+            logger.warning("⚠️ AI生成失败,使用原标题作为降级方案")
             new_titles = original_titles
 
         # 为每个标题添加型号后缀
@@ -378,17 +377,17 @@ class AITitleGenerator:
     async def generate_single_title(
         self, original_title: str, model_number: str = "", use_ai: bool = True
     ) -> str:
-        """生成单个新标题（逐个模式）.
+        """生成单个新标题(逐个模式).
 
-        为单个产品生成优化的标题。每次调用都是独立的AI对话。
+        为单个产品生成优化的标题.每次调用都是独立的AI对话.
 
         Args:
             original_title: 单个原始标题
-            model_number: 型号后缀（如：A0001型号）
-            use_ai: 是否使用AI生成（False则返回原标题+型号）
+            model_number: 型号后缀(如:A0001型号)
+            use_ai: 是否使用AI生成(False则返回原标题+型号)
 
         Returns:
-            新生成的标题（已包含型号后缀）
+            新生成的标题(已包含型号后缀)
 
         Examples:
             >>> generator = AITitleGenerator()
@@ -402,15 +401,15 @@ class AITitleGenerator:
         logger.info(f"开始生成单个标题: use_ai={use_ai}, model_number={model_number}")
         logger.debug(f"原始标题: {original_title}")
 
-        # 如果不使用AI，直接返回原标题+型号
+        # 如果不使用AI,直接返回原标题+型号
         if not use_ai:
-            logger.info("未启用AI，直接使用原标题")
+            logger.info("未启用AI,直接使用原标题")
             if model_number:
                 return f"{original_title} {model_number}"
             else:
                 return original_title
 
-        # 使用AI生成标题（带重试）
+        # 使用AI生成标题(带重试)
         new_title = None
         for attempt in range(self.max_retries):
             try:
@@ -422,12 +421,12 @@ class AITitleGenerator:
 
                 # 调用对应的API
                 if self.provider == "openai":
-                    # 调用OpenAI API，返回单个标题
+                    # 调用OpenAI API,返回单个标题
                     result_list = await self._call_openai_api(prompt)
                     # 取第一个结果
                     new_title = result_list[0] if result_list else original_title
                 elif self.provider == "anthropic":
-                    # 调用Anthropic API，返回单个标题
+                    # 调用Anthropic API,返回单个标题
                     result_list = await self._call_anthropic_api(prompt)
                     # 取第一个结果
                     new_title = result_list[0] if result_list else original_title
@@ -438,24 +437,21 @@ class AITitleGenerator:
                 break
 
             except Exception as e:
-                logger.warning(f"AI生成失败（尝试 {attempt + 1}/{self.max_retries}）: {e}")
+                logger.warning(f"AI生成失败(尝试 {attempt + 1}/{self.max_retries}): {e}")
                 if attempt < self.max_retries - 1:
                     await asyncio.sleep(2**attempt)  # 指数退避
                 else:
-                    logger.error("AI生成失败，使用降级方案（原标题）")
+                    logger.error("AI生成失败,使用降级方案(原标题)")
 
-        # 如果AI生成失败，使用降级方案
+        # 如果AI生成失败,使用降级方案
         if not new_title:
-            logger.warning("⚠️ AI生成失败，使用原标题作为降级方案")
+            logger.warning("⚠️ AI生成失败,使用原标题作为降级方案")
             new_title = original_title
 
         # 添加型号后缀
         if model_number:
             # 确保型号后缀不重复
-            if model_number not in new_title:
-                result = f"{new_title} {model_number}"
-            else:
-                result = new_title
+            result = f"{new_title} {model_number}" if model_number not in new_title else new_title
         else:
             result = new_title
 
@@ -466,8 +462,8 @@ class AITitleGenerator:
 
 # 便捷函数
 async def generate_titles_simple(
-    original_titles: List[str], model_number: str = "", provider: str = "openai"
-) -> List[str]:
+    original_titles: list[str], model_number: str = "", provider: str = "openai"
+) -> list[str]:
     """简化的标题生成函数.
 
     Args:

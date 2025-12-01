@@ -1,12 +1,12 @@
 """
-@PURPOSE: 选择器命中记录器，用于记录运行时成功匹配的选择器及代码位置，便于后续优化选择器顺序.
+@PURPOSE: 选择器命中记录器,用于记录运行时成功匹配的选择器及代码位置,便于后续优化选择器顺序.
 @OUTLINE:
-  - class SelectorHitRecorder: 单例记录器，收集命中信息
-  - record_selector_hit(): 全局便捷函数，记录选择器命中
-  - export_selector_report(): 全局便捷函数，导出报告
+  - class SelectorHitRecorder: 单例记录器,收集命中信息
+  - record_selector_hit(): 全局便捷函数,记录选择器命中
+  - export_selector_report(): 全局便捷函数,导出报告
 @GOTCHAS:
-  - 使用 inspect 模块获取调用位置，需要根据调用深度调整 frame 层级
-  - 报告文件名包含时间戳，避免覆盖历史记录
+  - 使用 inspect 模块获取调用位置,需要根据调用深度调整 frame 层级
+  - 报告文件名包含时间戳,避免覆盖历史记录
 @DEPENDENCIES:
   - 内部: loguru
   - 外部: inspect, json, pathlib
@@ -27,8 +27,8 @@ from loguru import logger
 class SelectorHitRecorder:
     """选择器命中记录器单例类.
 
-    用于在运行时记录哪个选择器最终成功匹配，以及对应的代码位置，
-    便于后续分析和优化选择器顺序。
+    用于在运行时记录哪个选择器最终成功匹配,以及对应的代码位置,
+    便于后续分析和优化选择器顺序.
     """
 
     _instance: SelectorHitRecorder | None = None
@@ -72,11 +72,11 @@ class SelectorHitRecorder:
         """记录一次选择器命中.
 
         Args:
-            selector: 成功匹配的选择器（字符串或配置字典）.
+            selector: 成功匹配的选择器(字符串或配置字典).
             selector_list: 完整的选择器候选列表.
             selector_index: 成功选择器在列表中的索引.
-            context_name: 业务上下文名称，如"类目选择器"、"重量输入框".
-            stack_depth: 调用栈深度，用于获取正确的调用位置（默认2层）.
+            context_name: 业务上下文名称,如"类目选择器","重量输入框".
+            stack_depth: 调用栈深度,用于获取正确的调用位置(默认2层).
         """
         if not self._enabled:
             return
@@ -96,7 +96,7 @@ class SelectorHitRecorder:
             line_number = frame.f_lineno
             function_name = frame.f_code.co_name
 
-            # 简化文件路径（只保留相对路径部分）
+            # 简化文件路径(只保留相对路径部分)
             try:
                 file_path_obj = Path(file_path)
                 # 尝试获取相对于 src 目录的路径
@@ -112,7 +112,7 @@ class SelectorHitRecorder:
             # 生成唯一的位置标识
             location_key = f"{relative_path}:{function_name}:{context_name}"
 
-            # 序列化选择器（处理字典类型）
+            # 序列化选择器(处理字典类型)
             def serialize_selector(sel: str | dict[str, Any]) -> str:
                 if isinstance(sel, dict):
                     return json.dumps(sel, ensure_ascii=False)
@@ -135,7 +135,7 @@ class SelectorHitRecorder:
 
             self._hits[location_key] = hit_info
 
-            # 如果不是第一个选择器成功，记录优化建议
+            # 如果不是第一个选择器成功,记录优化建议
             if selector_index > 0:
                 logger.debug(
                     "[选择器记录] {} 可优化: 索引 {} 命中 (非首位)",
@@ -160,7 +160,7 @@ class SelectorHitRecorder:
         return self._hits.copy()
 
     def get_optimizable_items(self) -> dict[str, dict[str, Any]]:
-        """获取可优化的项目（成功索引 > 0 的记录）.
+        """获取可优化的项目(成功索引 > 0 的记录).
 
         Returns:
             需要优化的命中记录字典.
@@ -224,7 +224,7 @@ def record_selector_hit(
     index: int,
     context: str = "",
 ) -> None:
-    """全局便捷函数：记录选择器命中.
+    """全局便捷函数:记录选择器命中.
 
     Args:
         selector: 成功匹配的选择器.
@@ -251,7 +251,7 @@ def record_selector_hit(
 def export_selector_report(
     output_dir: str | Path = "D:/codespace/beimeng_workspace/data/temp",
 ) -> Path:
-    """全局便捷函数：导出选择器命中报告.
+    """全局便捷函数:导出选择器命中报告.
 
     Args:
         output_dir: 输出目录路径.

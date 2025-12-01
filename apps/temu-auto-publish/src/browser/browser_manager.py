@@ -1,12 +1,12 @@
 """
-@PURPOSE: 浏览器管理器, 使用 Playwright 管理浏览器实例, 支持反检测、Cookie 管理与版本一致性校验
+@PURPOSE: 浏览器管理器, 使用 Playwright 管理浏览器实例, 支持反检测,Cookie 管理与版本一致性校验
 @OUTLINE:
   - class BrowserManager: 浏览器管理器主类
   - async def start(): 启动浏览器, 应用统一配置并校验版本
-  - async def close(): 关闭浏览器（自动保存 Storage State）
+  - async def close(): 关闭浏览器(自动保存 Storage State)
   - async def save_cookies(): 保存 Cookie
   - async def load_cookies(): 加载 Cookie
-  - async def save_storage_state(): 保存 Storage State（Cookie + localStorage + sessionStorage）
+  - async def save_storage_state(): 保存 Storage State(Cookie + localStorage + sessionStorage)
   - async def screenshot(): 截图
   - async def _launch_chromium(): 优先使用具备编解码器的 Chromium 渠道
   - def _assert_version_consistency(): 校验 Playwright 与浏览器版本
@@ -15,7 +15,7 @@
   - def prepare_page(): 对外暴露的页面初始化
 @GOTCHAS:
   - 必须使用 async/await 异步操作
-  - 关闭浏览器时会自动保存 Storage State（可通过 save_state=False 禁用）
+  - 关闭浏览器时会自动保存 Storage State(可通过 save_state=False 禁用)
   - 反检测配置在 browser_config.json 中
 @DEPENDENCIES:
   - 外部: playwright
@@ -41,14 +41,14 @@ from playwright.async_api import (
     async_playwright,
 )
 
-from .browser_settings import BrowserSettings
 from ..utils.page_waiter import PageWaiter, WaitStrategy
+from .browser_settings import BrowserSettings
 
 
 class BrowserManager:
     """浏览器管理器.
 
-    管理 Playwright 浏览器实例的创建、配置和销毁。
+    管理 Playwright 浏览器实例的创建,配置和销毁.
 
     Attributes:
         config: 浏览器配置
@@ -108,7 +108,7 @@ class BrowserManager:
             if candidate.exists():
                 return candidate
 
-        # Fallback: 退回到项目根目录的推断路径，便于日志定位
+        # Fallback: 退回到项目根目录的推断路径,便于日志定位
         return resolved_via_settings
 
     def load_config(self) -> None:
@@ -313,7 +313,7 @@ class BrowserManager:
 
         default_timeout = self.config.get("timeouts", {}).get("default", 30000)
         self.page.set_default_timeout(default_timeout)
-        setattr(self.page, "_bemg_default_timeout_ms", default_timeout)
+        self.page._bemg_default_timeout_ms = default_timeout
 
         self._assert_version_consistency(settings)
         logger.success(f"浏览器已启动 (headless={headless})")
@@ -388,8 +388,8 @@ class BrowserManager:
     def _patch_page_wait(self, page: Page) -> None:
         """为页面注入智能等待逻辑, 减少硬编码延迟.
 
-        注意: 此方法会在 page 上注册 _bemg_cleanup_waiter 清理回调，
-        必须在 close() 时调用以避免内存泄漏。
+        注意: 此方法会在 page 上注册 _bemg_cleanup_waiter 清理回调,
+        必须在 close() 时调用以避免内存泄漏.
         """
 
         if getattr(page, "_bemg_smart_wait_patched", False):
@@ -405,7 +405,7 @@ class BrowserManager:
             if timeout <= 0:
                 return
 
-            # 如果 waiter 已被清理，回退到原始等待
+            # 如果 waiter 已被清理,回退到原始等待
             if waiter is None:
                 await original_wait_for_timeout(timeout)
                 return
@@ -433,7 +433,7 @@ class BrowserManager:
                 await original_wait_for_timeout(remaining)
 
         def cleanup_page_waiter() -> None:
-            """清理 PageWaiter 资源，释放内存引用."""
+            """清理 PageWaiter 资源,释放内存引用."""
             nonlocal waiter
             if hasattr(page, "_bemg_original_wait_for_timeout"):
                 try:
@@ -462,7 +462,7 @@ class BrowserManager:
             return
 
         if not self.context:
-            logger.debug("浏览器上下文未初始化，跳过资源阻断")
+            logger.debug("浏览器上下文未初始化,跳过资源阻断")
             return
 
         blocked_types = {str(t).lower() for t in cfg.get("blocked_resource_types", [])}
@@ -471,7 +471,7 @@ class BrowserManager:
         log_blocked = bool(cfg.get("log_blocked", False))
 
         if not blocked_types and not blocked_url_globs:
-            logger.debug("资源阻断未配置 block 列表，跳过")
+            logger.debug("资源阻断未配置 block 列表,跳过")
             return
 
         def _match_any(url: str, patterns: list[str]) -> bool:
@@ -495,11 +495,11 @@ class BrowserManager:
 
                 await route.continue_()
             except Exception as exc:  # pragma: no cover - 运行时保护
-                logger.warning(f"处理资源阻断失败，放行当前请求: {exc}")
+                logger.warning(f"处理资源阻断失败,放行当前请求: {exc}")
                 await route.continue_()
 
         await self.context.route("**/*", handle_route)
-        setattr(self, "_resource_blocking_applied", True)
+        self._resource_blocking_applied = True
         logger.info(
             f"资源阻断已启用: types={','.join(sorted(blocked_types)) or '-'}, "
             f"blocked={len(blocked_url_globs)}, allow={len(allow_url_globs)}",
@@ -512,7 +512,7 @@ class BrowserManager:
         if not cfg.get("enabled"):
             return
         if not self.context:
-            logger.debug("浏览器上下文未初始化，跳过 tracing")
+            logger.debug("浏览器上下文未初始化,跳过 tracing")
             return
 
         screenshots = bool(cfg.get("screenshots", True))
@@ -530,7 +530,7 @@ class BrowserManager:
                 f"snapshots={snapshots}, sources={sources})"
             )
         except Exception as exc:  # pragma: no cover - 运行时保护
-            logger.warning(f"开启 tracing 失败，已跳过: {exc}")
+            logger.warning(f"开启 tracing 失败,已跳过: {exc}")
 
     def get_timing_config(self) -> dict[str, Any]:
         """获取时序配置."""
@@ -752,16 +752,16 @@ class BrowserManager:
         logger.debug(f"截图已保存: {screenshot_path}")
 
     async def save_storage_state(self, file_path: str | None = None) -> bool:
-        """保存浏览器 Storage State（包含 Cookie、localStorage、sessionStorage）.
+        """保存浏览器 Storage State(包含 Cookie,localStorage,sessionStorage).
 
         Args:
-            file_path: Storage State 文件路径，如果不指定则使用配置文件中的路径
+            file_path: Storage State 文件路径,如果不指定则使用配置文件中的路径
 
         Returns:
             是否成功保存
         """
         if not self.context:
-            logger.warning("浏览器上下文未初始化，无法保存 Storage State")
+            logger.warning("浏览器上下文未初始化,无法保存 Storage State")
             return False
 
         try:
@@ -783,26 +783,26 @@ class BrowserManager:
             return False
 
     async def close(self, save_state: bool = True) -> None:
-        """关闭浏览器，确保所有资源被正确释放.
+        """关闭浏览器,确保所有资源被正确释放.
 
         Args:
-            save_state: 是否在关闭前保存 Storage State（默认 True）
+            save_state: 是否在关闭前保存 Storage State(默认 True)
 
         注意:
-            - 使用 try-finally 确保即使某个资源关闭失败，其他资源也会被清理
-            - 每个资源关闭都有独立的超时控制，防止卡死
+            - 使用 try-finally 确保即使某个资源关闭失败,其他资源也会被清理
+            - 每个资源关闭都有独立的超时控制,防止卡死
             - 清理顺序: PageWaiter → Page → Context → Browser → Playwright
         """
         errors: list[tuple[str, Exception]] = []
 
-        # 1. 保存 Storage State（非关键，失败不影响关闭）
+        # 1. 保存 Storage State(非关键,失败不影响关闭)
         if save_state and self.context:
             try:
                 await self.save_storage_state()
             except Exception as exc:
                 logger.warning(f"关闭前保存 Storage State 失败: {exc}")
 
-        # 2. 停止 Tracing（非关键）
+        # 2. 停止 Tracing(非关键)
         tracing_cfg = self.tracing_config or {}
         if tracing_cfg.get("enabled") and self.context:
             trace_path = tracing_cfg.get("path")
@@ -814,23 +814,23 @@ class BrowserManager:
                     logger.info(f"Tracing 已保存: {path_obj}")
                 else:
                     await self.context.tracing.stop()
-                    logger.info("Tracing 已停止（未指定保存路径）")
+                    logger.info("Tracing 已停止(未指定保存路径)")
             except Exception as exc:
                 logger.warning(f"停止 tracing 失败: {exc}")
 
-        # 3. 清理 PageWaiter（防止内存泄漏）
+        # 3. 清理 PageWaiter(防止内存泄漏)
         if self.page and hasattr(self.page, "_bemg_cleanup_waiter"):
             try:
                 self.page._bemg_cleanup_waiter()
             except Exception as exc:
                 logger.debug(f"清理 PageWaiter 失败: {exc}")
 
-        # 4. 关闭 Page（带超时）
+        # 4. 关闭 Page(带超时)
         try:
             if self.page:
                 try:
                     await asyncio.wait_for(self.page.close(), timeout=5.0)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     errors.append(("page", TimeoutError("page.close() 超时 (5s)")))
                     logger.warning("page.close() 超时 (5s)")
                 except Exception as exc:
@@ -839,12 +839,12 @@ class BrowserManager:
         finally:
             self.page = None
 
-        # 5. 关闭 Context（带超时）
+        # 5. 关闭 Context(带超时)
         try:
             if self.context:
                 try:
                     await asyncio.wait_for(self.context.close(), timeout=5.0)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     errors.append(("context", TimeoutError("context.close() 超时 (5s)")))
                     logger.warning("context.close() 超时 (5s)")
                 except Exception as exc:
@@ -853,12 +853,12 @@ class BrowserManager:
         finally:
             self.context = None
 
-        # 6. 关闭 Browser（带超时，时间稍长）
+        # 6. 关闭 Browser(带超时,时间稍长)
         try:
             if self.browser:
                 try:
                     await asyncio.wait_for(self.browser.close(), timeout=10.0)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     errors.append(("browser", TimeoutError("browser.close() 超时 (10s)")))
                     logger.warning("browser.close() 超时 (10s)")
                 except Exception as exc:
@@ -867,12 +867,12 @@ class BrowserManager:
         finally:
             self.browser = None
 
-        # 7. 停止 Playwright（必须执行，否则进程残留）
+        # 7. 停止 Playwright(必须执行,否则进程残留)
         try:
             if self.playwright:
                 try:
                     await asyncio.wait_for(self.playwright.stop(), timeout=5.0)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     errors.append(("playwright", TimeoutError("playwright.stop() 超时 (5s)")))
                     logger.warning("playwright.stop() 超时 (5s)")
                 except Exception as exc:

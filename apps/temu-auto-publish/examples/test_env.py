@@ -1,5 +1,5 @@
 """
-@PURPOSE: 环境测试脚本，测试依赖是否正确安装
+@PURPOSE: 环境测试脚本,测试依赖是否正确安装
 @OUTLINE:
   - def test_imports(): 测试所有必需的导入
   - def test_paths(): 测试路径配置
@@ -171,11 +171,11 @@ def main():
             all_passed = False
 
     if all_passed:
-        print("\n✓ 所有测试通过！环境配置正确。")
+        print("\n✓ 所有测试通过!环境配置正确.")
         return 0
     else:
-        print("\n✗ 部分测试失败，请检查依赖安装。")
-        print("\n运行以下命令安装依赖：")
+        print("\n✗ 部分测试失败,请检查依赖安装.")
+        print("\n运行以下命令安装依赖:")
         print("  uv sync --extra temu --extra dev")
         return 1
 

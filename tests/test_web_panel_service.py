@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import io
+import re
 import sys
+import threading
 from concurrent.futures import Future
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
-import re
-import threading
 
 import pytest
 
@@ -15,6 +15,7 @@ APP_ROOT = Path(__file__).resolve().parents[1] / "apps" / "temu-auto-publish"
 if str(APP_ROOT) not in sys.path:
     sys.path.insert(0, str(APP_ROOT))
 
+import web_panel.service as service  # noqa: E402
 from web_panel.models import RunState, WorkflowOptions  # noqa: E402
 from web_panel.service import (  # noqa: E402
     SelectionFileStore,
@@ -22,7 +23,6 @@ from web_panel.service import (  # noqa: E402
     SelectionTableFormatError,
     WorkflowTaskManager,
 )
-import web_panel.service as service  # noqa: E402
 
 
 class SyncExecutor:
@@ -222,7 +222,7 @@ def test_manager_run_continuous_success_and_errors(tmp_path, monkeypatch):
 
 def test_logs_and_status_are_copied():
     manager = WorkflowTaskManager()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     message = SimpleNamespace(
         record={"time": now, "level": SimpleNamespace(name="INFO"), "message": "hello"}
     )

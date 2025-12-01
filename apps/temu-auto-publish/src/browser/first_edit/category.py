@@ -13,7 +13,7 @@ from .base import TIMEOUTS, FirstEditBase
 
 
 class FirstEditCategoryMixin(FirstEditBase):
-    """提供首次编辑时的类目核对逻辑。"""
+    """提供首次编辑时的类目核对逻辑."""
 
     async def check_category(self, page: Page) -> tuple[bool, str]:
         """核对商品类目是否合规(SOP 步骤 4.3).

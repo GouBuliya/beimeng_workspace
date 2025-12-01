@@ -1,7 +1,7 @@
 """
-@PURPOSE: 提供应用配置的基类和工具，基于Pydantic Settings实现
+@PURPOSE: 提供应用配置的基类和工具,基于Pydantic Settings实现
 @OUTLINE:
-  - class BaseAppConfig: 应用配置基类，支持环境变量和.env文件
+  - class BaseAppConfig: 应用配置基类,支持环境变量和.env文件
   - get_absolute_path(): 将相对路径转换为绝对路径
   - ensure_directories(): 确保配置的目录存在
 @DEPENDENCIES:
@@ -19,7 +19,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class BaseAppConfig(BaseSettings):
     """应用配置基类
 
-    所有应用配置应继承此类，获得：
+    所有应用配置应继承此类,获得:
     - 自动从环境变量加载
     - .env 文件支持
     - 类型验证
@@ -52,7 +52,7 @@ class BaseAppConfig(BaseSettings):
         """保存配置到文件
 
         Args:
-            file_path: 文件路径（支持 .json, .yaml, .toml）
+            file_path: 文件路径(支持 .json, .yaml, .toml)
         """
         import json
 

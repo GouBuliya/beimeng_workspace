@@ -1,12 +1,12 @@
 """
-@PURPOSE: 用户管理路由，提供用户 CRUD 和强制下线等管理员功能
+@PURPOSE: 用户管理路由,提供用户 CRUD 和强制下线等管理员功能
 @OUTLINE:
-  - GET /users: 获取用户列表（管理员）
-  - POST /users: 创建用户（管理员）
-  - GET /users/{user_id}: 获取用户详情（管理员）
-  - PUT /users/{user_id}: 更新用户（管理员）
-  - DELETE /users/{user_id}: 删除用户（管理员）
-  - POST /users/{user_id}/force-logout: 强制用户下线（管理员）
+  - GET /users: 获取用户列表(管理员)
+  - POST /users: 创建用户(管理员)
+  - GET /users/{user_id}: 获取用户详情(管理员)
+  - PUT /users/{user_id}: 更新用户(管理员)
+  - DELETE /users/{user_id}: 删除用户(管理员)
+  - POST /users/{user_id}/force-logout: 强制用户下线(管理员)
 @DEPENDENCIES:
   - 内部: app.users.service, app.auth.deps
   - 外部: fastapi
@@ -39,7 +39,7 @@ async def list_users(
     skip: int = Query(default=0, ge=0, description="跳过数量"),
     limit: int = Query(default=100, ge=1, le=1000, description="限制数量"),
 ) -> UserList:
-    """获取用户列表（管理员）.
+    """获取用户列表(管理员).
 
     Args:
         _: 当前管理员用户
@@ -79,7 +79,7 @@ async def create_user(
     _: Annotated[User, Depends(get_current_superuser)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> UserDetail:
-    """创建用户（管理员）.
+    """创建用户(管理员).
 
     Args:
         user_data: 用户创建数据
@@ -117,7 +117,7 @@ async def get_user(
     _: Annotated[User, Depends(get_current_superuser)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> UserDetail:
-    """获取用户详情（管理员）.
+    """获取用户详情(管理员).
 
     Args:
         user_id: 用户 ID
@@ -157,7 +157,7 @@ async def update_user(
     current_user: Annotated[User, Depends(get_current_superuser)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> UserDetail:
-    """更新用户（管理员）.
+    """更新用户(管理员).
 
     Args:
         user_id: 用户 ID
@@ -210,7 +210,7 @@ async def delete_user(
     current_user: Annotated[User, Depends(get_current_superuser)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> MessageResponse:
-    """删除用户（管理员）.
+    """删除用户(管理员).
 
     Args:
         user_id: 用户 ID
@@ -246,7 +246,7 @@ async def force_logout_user(
     _: Annotated[User, Depends(get_current_superuser)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> MessageResponse:
-    """强制用户下线（管理员）.
+    """强制用户下线(管理员).
 
     Args:
         user_id: 用户 ID

@@ -2,7 +2,7 @@
 @PURPOSE: 使用可重试的方式执行首次编辑弹窗填写, 提供JS注入与调试能力
 @OUTLINE:
   - class FirstEditPayload: 首次编辑数据模型
-  - class FirstEditExecutor: 负责注入数据、保存并输出调试信息
+  - class FirstEditExecutor: 负责注入数据,保存并输出调试信息
 @DEPENDENCIES:
   - 内部: first_edit_controller, debug_tools
   - 外部: pydantic, playwright, tenacity
@@ -10,9 +10,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Awaitable, Callable
+from typing import Any
 
 from loguru import logger
 from playwright.async_api import Page
@@ -93,7 +94,7 @@ class FirstEditExecutor:
             await self._controller.close_dialog(page)
             return False
         except Exception as err:
-            # 捕获其他所有异常（如 RuntimeError），避免异常向上传播导致降级未触发
+            # 捕获其他所有异常(如 RuntimeError),避免异常向上传播导致降级未触发
             logger.error("填写首次编辑弹窗异常: {}", err)
             await capture_debug_artifacts(page, step="fill_exception", output_dir=self._debug_dir)
             await self._controller.close_dialog(page)

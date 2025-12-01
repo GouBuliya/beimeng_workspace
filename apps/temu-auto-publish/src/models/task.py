@@ -1,8 +1,8 @@
 """
-@PURPOSE: 定义任务数据模型，从Excel读取到任务生成的所有数据结构
+@PURPOSE: 定义任务数据模型,从Excel读取到任务生成的所有数据结构
 @OUTLINE:
   - class ProductInput: 选品表单行数据模型
-  - class TaskProduct: 任务商品数据模型（包含价格计算结果）
+  - class TaskProduct: 任务商品数据模型(包含价格计算结果)
   - class TaskData: 完整任务数据模型
 @DEPENDENCIES:
   - 外部: pydantic
@@ -15,11 +15,11 @@ from pydantic import BaseModel, Field, field_validator
 class ProductInput(BaseModel):
     """选品表单行数据模型.
 
-    从 Excel 读取的原始数据。
+    从 Excel 读取的原始数据.
 
     Attributes:
         name: 商品名称
-        cost_price: 成本价（元）
+        cost_price: 成本价(元)
         category: 商品类目路径
         keyword: 站内搜索关键词
         notes: 备注信息
@@ -51,16 +51,16 @@ class ProductInput(BaseModel):
 class TaskProduct(BaseModel):
     """任务产品数据.
 
-    处理后的产品数据，用于 Playwright 浏览器自动化执行。
+    处理后的产品数据,用于 Playwright 浏览器自动化执行.
 
     Attributes:
-        id: 产品ID（格式：P001, P002, ...）
+        id: 产品ID(格式:P001, P002, ...)
         keyword: 搜索关键词
         original_name: 原始商品名称
         ai_title: AI 生成的标题
         cost_price: 成本价
-        suggested_price: 建议售价（成本价 × 7.5）
-        supply_price: 供货价（成本价 × 10）
+        suggested_price: 建议售价(成本价 × 7.5)
+        supply_price: 供货价(成本价 × 10)
         category: 类目路径
         search_count: 需要采集的同款数量
         status: 产品状态
@@ -95,12 +95,12 @@ class TaskProduct(BaseModel):
 class TaskData(BaseModel):
     """任务数据.
 
-    完整的任务信息，包含所有待处理的产品。
+    完整的任务信息,包含所有待处理的产品.
 
     Attributes:
-        task_id: 任务ID（格式：YYYYMMDD_HHMMSS）
-        created_at: 创建时间（ISO 8601）
-        status: 任务状态（pending|processing|completed|failed）
+        task_id: 任务ID(格式:YYYYMMDD_HHMMSS)
+        created_at: 创建时间(ISO 8601)
+        status: 任务状态(pending|processing|completed|failed)
         products: 产品列表
         statistics: 统计信息
 

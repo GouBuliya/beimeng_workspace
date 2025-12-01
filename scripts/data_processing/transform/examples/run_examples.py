@@ -9,7 +9,6 @@
   - 标准库: json, subprocess, sys, pathlib
 """
 
-import json
 import subprocess
 import sys
 from pathlib import Path
@@ -24,7 +23,7 @@ def main() -> None:
 
     # 示例 1: 转换为大写
     print("1. 转换为大写:")
-    print(f"   命令: cat sample_data.json | python main.py")
+    print("   命令: cat sample_data.json | python main.py")
     with open(sample_data_path) as f:
         result = subprocess.run(
             [sys.executable, str(script_dir.parent / "main.py")],
@@ -37,7 +36,7 @@ def main() -> None:
 
     # 示例 2: 转换为小写
     print("2. 转换为小写:")
-    print(f"   命令: python main.py -i sample_data.json --operation lowercase")
+    print("   命令: python main.py -i sample_data.json --operation lowercase")
     result = subprocess.run(
         [
             sys.executable,
@@ -55,7 +54,7 @@ def main() -> None:
 
     # 示例 3: 反转字符串
     print("3. 反转字符串:")
-    print(f"   命令: python main.py -i sample_data.json --operation reverse")
+    print("   命令: python main.py -i sample_data.json --operation reverse")
     result = subprocess.run(
         [
             sys.executable,

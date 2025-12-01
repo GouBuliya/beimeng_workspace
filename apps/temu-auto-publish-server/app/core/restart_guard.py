@@ -14,7 +14,7 @@
 from __future__ import annotations
 
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from loguru import logger
 
@@ -24,20 +24,20 @@ from .redis_client import get_redis
 class RestartGuard:
     """重启保护器.
 
-    使用 Redis 记录服务重启历史，检测并告警重启循环。
+    使用 Redis 记录服务重启历史,检测并告警重启循环.
     """
 
     # Redis 键
     RESTART_HISTORY_KEY = "restart:history"
 
     # 配置参数
-    RESTART_WINDOW_SECONDS = 300  # 时间窗口：5 分钟
+    RESTART_WINDOW_SECONDS = 300  # 时间窗口:5 分钟
     MAX_RESTARTS = 5  # 最大重启次数
 
     async def record_startup(self) -> None:
         """记录本次启动时间到 Redis.
 
-        将当前时间戳添加到 Redis 列表中，用于后续检测重启循环。
+        将当前时间戳添加到 Redis 列表中,用于后续检测重启循环.
         """
         try:
             redis_client = await get_redis()
@@ -58,11 +58,11 @@ class RestartGuard:
     async def check_restart_loop(self) -> bool:
         """检测是否陷入重启循环.
 
-        检查最近 5 分钟内的重启次数，如果超过阈值则返回 False
-        并记录告警日志。
+        检查最近 5 分钟内的重启次数,如果超过阈值则返回 False
+        并记录告警日志.
 
         Returns:
-            bool: True 表示正常启动，False 表示检测到重启循环
+            bool: True 表示正常启动,False 表示检测到重启循环
         """
         try:
             count = await self.get_restart_count(self.RESTART_WINDOW_SECONDS)
@@ -83,7 +83,7 @@ class RestartGuard:
                 return False
 
             elif count >= self.MAX_RESTARTS - 1:
-                # 接近阈值，发出警告
+                # 接近阈值,发出警告
                 logger.warning(
                     f"重启次数接近阈值: "
                     f"{count}/{self.MAX_RESTARTS} "
@@ -101,7 +101,7 @@ class RestartGuard:
         """获取指定时间窗口内的重启次数.
 
         Args:
-            window_seconds: 时间窗口（秒）
+            window_seconds: 时间窗口(秒)
 
         Returns:
             int: 窗口内的重启次数
@@ -143,7 +143,7 @@ class RestartGuard:
             limit: 返回最近 N 条记录
 
         Returns:
-            list: 重启历史列表，每项包含 timestamp 和 formatted_time
+            list: 重启历史列表,每项包含 timestamp 和 formatted_time
         """
         try:
             redis_client = await get_redis()
@@ -156,7 +156,7 @@ class RestartGuard:
             for timestamp_str in reversed(history):  # 最新的在前
                 try:
                     timestamp = float(timestamp_str)
-                    dt = datetime.fromtimestamp(timestamp, tz=timezone.utc)
+                    dt = datetime.fromtimestamp(timestamp, tz=UTC)
                     result.append(
                         {
                             "timestamp": timestamp_str,
@@ -175,7 +175,7 @@ class RestartGuard:
     async def clear_history(self) -> bool:
         """清除重启历史记录.
 
-        运维工具方法，用于手动清除重启历史。
+        运维工具方法,用于手动清除重启历史.
 
         Returns:
             bool: 是否清除成功

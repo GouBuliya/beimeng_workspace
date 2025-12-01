@@ -10,7 +10,6 @@
   - 内部: src.data_processor.title_generator
 """
 
-import pytest
 
 from src.data_processor.title_generator import TitleGenerator
 
@@ -73,7 +72,7 @@ class TestTitleGeneratorModes:
         """测试API模式回退"""
         generator = TitleGenerator(mode="api")
 
-        # API未实现，应该回退
+        # API未实现,应该回退
         title = generator.generate("智能手表", "手表")
 
         assert len(title) > 0
@@ -125,7 +124,7 @@ class TestTitleGeneratorModelSuffix:
             ["测试产品"], model_prefix="A", start_number=1, add_modifiers=False
         )
 
-        # 不应该包含修饰词（大部分情况）
+        # 不应该包含修饰词(大部分情况)
         assert "A0001型号" in titles[0]
 
     def test_generate_with_model_suffix_multiple_products(self):
@@ -175,7 +174,7 @@ class TestTitleGeneratorRules:
         """测试特殊字符处理"""
         generator = TitleGenerator(mode="rule")
 
-        title = generator.generate_by_rule("产品【特殊】名称", "关键词")
+        title = generator.generate_by_rule("产品[特殊]名称", "关键词")
 
         # 应该清理特殊字符
         assert len(title) > 0
@@ -187,7 +186,7 @@ class TestTitleGeneratorRules:
         title = generator.generate_by_rule("测试产品", "测试")
 
         # 应该包含修饰语
-        assert "【" in title
+        assert "[" in title
 
 
 class TestTitleGeneratorPrompt:
@@ -235,7 +234,7 @@ class TestTitleGeneratorFallback:
 
         title = generator.generate_by_api("测试产品", "测试")
 
-        # 由于API未实现，应该返回规则生成的结果
+        # 由于API未实现,应该返回规则生成的结果
         assert len(title) > 0
 
 

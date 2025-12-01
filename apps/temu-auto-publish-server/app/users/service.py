@@ -150,7 +150,7 @@ class UserService:
 
         if user_data.is_active is not None:
             user.is_active = user_data.is_active
-            # 如果禁用用户，强制下线
+            # 如果禁用用户,强制下线
             if not user_data.is_active:
                 await self.force_logout(user_id)
 

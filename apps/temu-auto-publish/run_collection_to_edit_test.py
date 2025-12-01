@@ -1,7 +1,7 @@
 """
-采集到首次编辑完整流程测试（端到端）
+采集到首次编辑完整流程测试(端到端)
 
-功能：
+功能:
 1. 测试从Excel选品表到妙手首次编辑的完整自动化流程
 2. 包含所有5个阶段的集成测试
 3. 生成详细的执行报告
@@ -23,8 +23,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from loguru import logger
-
-from src.browser.browser_manager import BrowserManager
 from src.browser.login_controller import LoginController
 from src.data_processor.selection_table_reader import SelectionTableReader
 from src.workflows.collection_to_edit_workflow import CollectionToEditWorkflow
@@ -39,7 +37,7 @@ async def main(args):
         logger.debug("🔧 调试模式已启用")
 
     logger.info("\n" + "=" * 100)
-    logger.info(" " * 20 + "【采集到编辑完整流程测试】")
+    logger.info(" " * 20 + "[采集到编辑完整流程测试]")
     logger.info("=" * 100 + "\n")
 
     # 加载.env环境变量
@@ -55,11 +53,11 @@ async def main(args):
         logger.warning(f"⚠️  加载.env失败: {e}")
 
     # 获取账号信息
-    temu_url = os.getenv("TEMU_SHOP_URL", "https://agentseller.temu.com/")
-    temu_username = os.getenv("TEMU_USERNAME")
-    temu_password = os.getenv("TEMU_PASSWORD")
+    os.getenv("TEMU_SHOP_URL", "https://agentseller.temu.com/")
+    os.getenv("TEMU_USERNAME")
+    os.getenv("TEMU_PASSWORD")
 
-    miaoshou_url = os.getenv("MIAOSHOU_URL", "https://erp.91miaoshou.com/sub_account/users")
+    os.getenv("MIAOSHOU_URL", "https://erp.91miaoshou.com/sub_account/users")
     miaoshou_username = os.getenv("MIAOSHOU_USERNAME")
     miaoshou_password = os.getenv("MIAOSHOU_PASSWORD")
 
@@ -77,7 +75,7 @@ async def main(args):
     )
 
     if not selection_table.exists():
-        logger.warning("⚠️  选品表不存在，创建示例选品表...")
+        logger.warning("⚠️  选品表不存在,创建示例选品表...")
         reader = SelectionTableReader()
         selection_table.parent.mkdir(parents=True, exist_ok=True)
         reader.create_sample_excel(str(selection_table), num_samples=2)
@@ -92,7 +90,7 @@ async def main(args):
         logger.info("步骤1: 初始化并登录妙手ERP")
         logger.info("─" * 80 + "\n")
 
-        # 创建登录控制器（会自动创建browser_manager）
+        # 创建登录控制器(会自动创建browser_manager)
         login_controller = LoginController()
 
         # 登录妙手ERP
@@ -128,11 +126,11 @@ async def main(args):
 
         # 显示结果
         logger.info("\n" + "=" * 100)
-        logger.info(" " * 35 + "【测试结果】")
+        logger.info(" " * 35 + "[测试结果]")
         logger.info("=" * 100)
 
         if result["success"]:
-            logger.success("✅ 测试通过！完整流程执行成功")
+            logger.success("✅ 测试通过!完整流程执行成功")
             logger.info(f"\n报告文件: {result['report_file']}")
         else:
             logger.error("❌ 测试失败")
@@ -146,7 +144,7 @@ async def main(args):
 
         # 等待用户查看
         if not args.no_wait:
-            logger.info(">>> 测试完成，浏览器将在5秒后关闭...")
+            logger.info(">>> 测试完成,浏览器将在5秒后关闭...")
             await asyncio.sleep(5)
 
         return result["success"]
@@ -164,25 +162,25 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="采集到编辑完整流程测试")
 
     parser.add_argument(
-        "--selection", type=str, help="Excel选品表路径（默认: data/input/selection.xlsx）"
+        "--selection", type=str, help="Excel选品表路径(默认: data/input/selection.xlsx)"
     )
 
     parser.add_argument(
         "--skip-collection",
         action="store_true",
         default=True,
-        help="跳过Temu采集，使用简化模式（默认: True）",
+        help="跳过Temu采集,使用简化模式(默认: True)",
     )
 
-    parser.add_argument("--debug", action="store_true", help="启用调试模式，显示详细日志")
+    parser.add_argument("--debug", action="store_true", help="启用调试模式,显示详细日志")
 
     parser.add_argument(
         "--debug-breakpoint",
         action="store_true",
-        help="启用断点调试模式（逐步执行，按'n'继续下一步）",
+        help="启用断点调试模式(逐步执行,按'n'继续下一步)",
     )
 
-    parser.add_argument("--no-wait", action="store_true", help="测试完成后不等待，立即关闭")
+    parser.add_argument("--no-wait", action="store_true", help="测试完成后不等待,立即关闭")
 
     parser.add_argument("--filter-user", action="store_true", help="在妙手采集箱中筛选当前用户")
 
@@ -190,14 +188,14 @@ if __name__ == "__main__":
         "--enable-validation",
         action="store_true",
         default=True,
-        help="启用采集结果验证（默认: 启用）",
+        help="启用采集结果验证(默认: 启用)",
     )
 
     parser.add_argument(
         "--enable-plugin",
         action="store_true",
         default=True,
-        help="启用妙手插件自动采集（默认: 启用）",
+        help="启用妙手插件自动采集(默认: 启用)",
     )
 
     args = parser.parse_args()

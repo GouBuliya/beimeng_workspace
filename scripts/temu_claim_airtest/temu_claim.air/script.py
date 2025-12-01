@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Airtest automation for Temu claim workflow."""
 
 from __future__ import annotations
@@ -92,7 +91,7 @@ def claim_once() -> None:
     wait_and_touch("temu_checkbox", timeout=float(ARGS.get("temu_checkbox_timeout", 5)))
     wait_and_touch("confirm_button", timeout=float(ARGS.get("confirm_button_timeout", 5)))
 
-    # 某些场景会出现额外的“关闭”按钮，尝试点击一次即可。
+    # 某些场景会出现额外的“关闭”按钮,尝试点击一次即可.
     try:
         close_template = load_template("close_button")
     except FileNotFoundError:

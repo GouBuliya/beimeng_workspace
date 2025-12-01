@@ -12,8 +12,7 @@
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-
-from tests.mocks import MockPage, MockLocator
+from tests.mocks import MockLocator, MockPage
 
 
 class TestMiaoshouClaim:
@@ -211,7 +210,7 @@ class TestClaimErrorHandling:
         """测试认领失败结果"""
         result = {
             "success": False,
-            "error": "认领失败：产品已被其他用户认领",
+            "error": "认领失败:产品已被其他用户认领",
             "product_id": "12345",
         }
 

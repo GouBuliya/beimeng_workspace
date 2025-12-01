@@ -12,14 +12,12 @@ import sys
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
 
 class TestGetRuntimeBase:
     """测试 get_runtime_base 函数."""
 
     def test_normal_environment(self) -> None:
-        """测试正常 Python 环境（非打包）."""
+        """测试正常 Python 环境(非打包)."""
         from src.utils.runtime_paths import get_runtime_base
 
         # 清除缓存

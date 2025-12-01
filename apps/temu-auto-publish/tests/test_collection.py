@@ -8,12 +8,10 @@
 
 import asyncio
 import os
-from dotenv import load_dotenv
-from pathlib import Path
 
-from src.browser.browser_manager import BrowserManager
-from src.browser.login_controller import LoginController
+from dotenv import load_dotenv
 from src.browser.collection_controller import CollectionController
+from src.browser.login_controller import LoginController
 
 
 async def test_collection():
@@ -44,7 +42,7 @@ async def test_collection():
             print("❌ 登录失败")
             return
 
-        # 步骤1：访问店铺
+        # 步骤1:访问店铺
         print("\n" + "=" * 60)
         print("2. 访问前端店铺...")
         print("=" * 60)
@@ -52,7 +50,7 @@ async def test_collection():
             print("❌ 访问店铺失败")
             return
 
-        # 步骤2-3：搜索并采集
+        # 步骤2-3:搜索并采集
         print("\n" + "=" * 60)
         print("3. 搜索并采集商品...")
         print("=" * 60)
@@ -79,7 +77,7 @@ async def test_collection():
 
         # 等待查看结果
         print("\n" + "=" * 60)
-        print("测试完成！浏览器将在10秒后关闭...")
+        print("测试完成!浏览器将在10秒后关闭...")
         print("=" * 60)
         await page.wait_for_timeout(10000)
 

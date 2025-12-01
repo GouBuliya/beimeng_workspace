@@ -1,5 +1,5 @@
 """
-@PURPOSE: FastAPI 应用入口，认证服务器主程序
+@PURPOSE: FastAPI 应用入口,认证服务器主程序
 @OUTLINE:
   - create_app(): FastAPI 应用工厂
   - lifespan(): 应用生命周期管理 (含优雅关闭)
@@ -7,8 +7,8 @@
   - active_requests_tracker: 中间件追踪活跃请求数
 @GOTCHAS:
   - 应用启动时会自动创建数据库表
-  - 如果没有管理员用户，会自动创建默认管理员
-  - 支持优雅关闭，等待活跃请求完成 (最多 30 秒)
+  - 如果没有管理员用户,会自动创建默认管理员
+  - 支持优雅关闭,等待活跃请求完成 (最多 30 秒)
 @DEPENDENCIES:
   - 内部: app.core.*, app.auth.router, app.users.router
   - 外部: fastapi, uvicorn
@@ -17,11 +17,10 @@
 from __future__ import annotations
 
 import asyncio
-import signal
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
 
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 from sqlalchemy import select
@@ -46,7 +45,7 @@ active_requests = 0
 async def init_admin_user() -> None:
     """初始化管理员用户.
 
-    如果数据库中没有管理员用户，则创建默认管理员。
+    如果数据库中没有管理员用户,则创建默认管理员.
     """
     async with async_session_maker() as session:
         # 检查是否已有管理员
@@ -152,7 +151,7 @@ def create_app() -> FastAPI:
     # 活跃请求追踪中间件
     @app.middleware("http")
     async def track_active_requests(request: Request, call_next):
-        """追踪活跃请求数量，用于优雅关闭."""
+        """追踪活跃请求数量,用于优雅关闭."""
         global active_requests
 
         active_requests += 1
@@ -181,8 +180,8 @@ def create_app() -> FastAPI:
     async def health_check() -> dict[str, str]:
         """轻量级健康检查端点 (Liveness Probe).
 
-        仅检查进程是否存活，不检查依赖服务。
-        用于 Docker/K8s 的 liveness probe。
+        仅检查进程是否存活,不检查依赖服务.
+        用于 Docker/K8s 的 liveness probe.
 
         Returns:
             dict: 固定返回 {"status": "ok"}
@@ -193,8 +192,8 @@ def create_app() -> FastAPI:
     async def readiness_check():
         """深度健康检查端点 (Readiness Probe).
 
-        检查所有关键依赖服务（数据库、Redis）的连接状态。
-        用于 Docker/K8s 的 readiness probe 和负载均衡器。
+        检查所有关键依赖服务(数据库,Redis)的连接状态.
+        用于 Docker/K8s 的 readiness probe 和负载均衡器.
 
         Returns:
             HealthStatus: 包含所有依赖检查结果的综合健康状态

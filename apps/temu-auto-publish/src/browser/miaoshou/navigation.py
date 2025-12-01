@@ -14,12 +14,11 @@ from loguru import logger
 from playwright.async_api import Frame, Page
 
 from ...utils.page_load_decorator import (
-    PAGE_TIMEOUTS,
     wait_dom_loaded,
     wait_network_idle,
 )
 from .base import MiaoshouControllerBase
-from .navigation_codegen import fallback_apply_user_filter, fallback_switch_tab
+from .navigation_codegen import fallback_apply_user_filter
 
 
 class MiaoshouNavigationMixin(MiaoshouControllerBase):
@@ -42,11 +41,11 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
         "text='首次编辑'",
         "text='编辑'",
     )
-    # 商品行选择器（用于基于行定位编辑按钮）
+    # 商品行选择器(用于基于行定位编辑按钮)
     _ROW_SELECTOR: ClassVar[str] = ".pro-virtual-table__row-body"
-    # vue-recycle-scroller 虚拟滚动行选择器（包含 transform 信息）
+    # vue-recycle-scroller 虚拟滚动行选择器(包含 transform 信息)
     _VIRTUAL_ROW_SELECTOR: ClassVar[str] = ".vue-recycle-scroller__item-view"
-    # 商品行高度（像素）
+    # 商品行高度(像素)
     _ROW_HEIGHT: ClassVar[int] = 128
 
     async def navigate_to_collection_box(self, page: Page, use_sidebar: bool = False) -> bool:
@@ -98,7 +97,7 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                 logger.success("Navigation to shared collection box succeeded")
                 logger.debug("Waiting for page to settle...")
 
-                # 激进优化: 合并两个等待，总超时 3s
+                # 激进优化: 合并两个等待,总超时 3s
                 try:
                     logger.debug("Waiting for main content and interactive elements...")
                     await page.wait_for_selector(
@@ -109,7 +108,7 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                     logger.debug("Page elements loaded")
                 except Exception as e:
                     logger.warning(f"Content wait timed out: {e}")
-                    # 激进优化: 移除 networkidle 等待，直接继续
+                    # 激进优化: 移除 networkidle 等待,直接继续
 
                 await self._ensure_popups_closed(page)
 
@@ -335,7 +334,7 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                                 "Header close failed ({}, scope={}): {}", selector, scope_name, exc
                             )
 
-            # 针对 .jx-overlay-message-box（如“提示”“知道了”）的兜底处理
+            # 针对 .jx-overlay-message-box(如“提示”“知道了”)的兜底处理
             for scope_name, scope in scopes:
                 try:
                     message_box = scope.locator(
@@ -387,7 +386,7 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
             return False
 
     async def _ensure_popups_closed(self, page: Page, attempts: int = 4) -> None:
-        """Best-effort dismissal of blocking popups（例如“我知道了”提示）."""
+        """Best-effort dismissal of blocking popups(例如“我知道了”提示)."""
 
         for attempt in range(attempts):
             closed = await self.close_popup_if_exists(page)
@@ -412,10 +411,8 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
         selection_locator = page.locator(
             ".jx-checkbox.is-checked, .el-checkbox.is-checked, .ant-checkbox-checked"
         )
-        try:
+        with suppress(Exception):
             await selection_locator.first.wait_for(state="visible", timeout=timeout)
-        except Exception:
-            pass
 
     async def _wait_for_table_refresh(self, page: Page, timeout: int = 2_000) -> None:
         """Wait for the product table to update. 激进优化: 5000 -> 2000, 移除 networkidle"""
@@ -496,10 +493,10 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
         """
         logger.info("Switching to tab: {}", tab_name)
 
-        # 调试：输出当前页面URL和HTML快照
+        # 调试:输出当前页面URL和HTML快照
         logger.warning(f"🔍 DEBUG Current page URL: {page.url}")
 
-        # 调试：尝试截图
+        # 调试:尝试截图
         try:
             screenshot_path = f"data/temp/screenshots/debug_tab_switch_{tab_name}.png"
             await page.screenshot(path=screenshot_path, full_page=True)
@@ -507,7 +504,7 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
         except Exception as e:
             logger.warning(f"Screenshot failed: {e}")
 
-        # 调试：输出页面上所有可能相关的元素
+        # 调试:输出页面上所有可能相关的元素
         try:
             all_text = await page.locator("body").inner_text()
             if "全部" in all_text:
@@ -626,10 +623,7 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
         """Check if the given button text contains any expected labels."""
 
         normalized_text = (button_text or "").strip().lower()
-        for label in labels:
-            if label and label.lower() in normalized_text:
-                return True
-        return False
+        return any(label and label.lower() in normalized_text for label in labels)
 
     async def search_products(
         self,
@@ -772,19 +766,19 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
         page: Page,
         index: int,
         *,
-        enable_scroll: bool = True,  # 默认启用（JS 内部处理滚动）
+        enable_scroll: bool = True,  # 默认启用(JS 内部处理滚动)
     ) -> bool:
         """Click the edit button of a product at a specific index.
 
-        通过 JavaScript 自动滚动到目标位置并点击编辑按钮：
+        通过 JavaScript 自动滚动到目标位置并点击编辑按钮:
         1. JS 滚动容器到 index * ROW_HEIGHT 位置
-        2. 等待 DOM 更新（vue-recycle-scroller 重新渲染）
+        2. 等待 DOM 更新(vue-recycle-scroller 重新渲染)
         3. 点击视口中第一行的编辑按钮
 
         Args:
             page: Active Playwright page instance.
             index: Zero-based index of the product in the grid (全局索引).
-            enable_scroll: 保留参数，但 JS 内部会自动处理滚动
+            enable_scroll: 保留参数,但 JS 内部会自动处理滚动
 
         Returns:
             True when the edit button was clicked, otherwise False.
@@ -810,28 +804,28 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
             return False
 
     async def _click_edit_button_by_js(self, page: Page, index: int) -> bool:
-        """使用 JavaScript 直接定位并点击第 index 个商品的编辑按钮。
+        """使用 JavaScript 直接定位并点击第 index 个商品的编辑按钮.
 
-        通过 JS 滚动页面/容器到目标位置，然后点击编辑按钮。
-        支持 page-mode（页面级滚动）和容器级滚动两种模式。
+        通过 JS 滚动页面/容器到目标位置,然后点击编辑按钮.
+        支持 page-mode(页面级滚动)和容器级滚动两种模式.
 
         Args:
             page: Playwright 页面对象
-            index: 目标商品索引（全局索引，0-based）
+            index: 目标商品索引(全局索引,0-based)
 
         Returns:
             是否成功点击
         """
         try:
-            # JavaScript：滚动到目标位置，然后点击编辑按钮
+            # JavaScript:滚动到目标位置,然后点击编辑按钮
             js_code = """
             async (index) => {
                 const DEFAULT_ROW_HEIGHT = 128;
-                
-                // 检查是否为 page-mode（页面级滚动）
+
+                // 检查是否为 page-mode(页面级滚动)
                 const recycleScroller = document.querySelector('.vue-recycle-scroller');
                 const isPageMode = recycleScroller && recycleScroller.classList.contains('page-mode');
-                
+
                 // 获取所有可见行的辅助函数
                 const getVisibleRows = () => {
                     const rows = document.querySelectorAll('.vue-recycle-scroller__item-view');
@@ -847,8 +841,8 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                     visibleRows.sort((a, b) => a.y - b.y);
                     return visibleRows;
                 };
-                
-                // 动态检测实际行高（通过测量相邻行的Y差值）
+
+                // 动态检测实际行高(通过测量相邻行的Y差值)
                 const detectRowHeight = () => {
                     const visibleRows = getVisibleRows();
                     if (visibleRows.length >= 2) {
@@ -868,25 +862,25 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                     }
                     return DEFAULT_ROW_HEIGHT;
                 };
-                
+
                 const ROW_HEIGHT = detectRowHeight();
                 const targetScrollTop = index * ROW_HEIGHT;
-                
+
                 let scrollerInfo = '';
                 let actualScrollTop = 0;
-                
+
                 if (isPageMode) {
-                    // page-mode：滚动整个页面或找到真正的滚动父容器
+                    // page-mode:滚动整个页面或找到真正的滚动父容器
                     scrollerInfo = 'page-mode';
-                    
+
                     // 尝试找到有 overflow 的父容器
                     let scrollParent = recycleScroller.parentElement;
                     let foundScrollable = false;
-                    
+
                     while (scrollParent && scrollParent !== document.body) {
                         const style = window.getComputedStyle(scrollParent);
                         const overflowY = style.overflowY;
-                        if ((overflowY === 'auto' || overflowY === 'scroll') && 
+                        if ((overflowY === 'auto' || overflowY === 'scroll') &&
                             scrollParent.scrollHeight > scrollParent.clientHeight) {
                             // 找到可滚动的父容器
                             scrollParent.scrollTop = targetScrollTop;
@@ -898,8 +892,8 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                         }
                         scrollParent = scrollParent.parentElement;
                     }
-                    
-                    // 如果没找到滚动父容器，滚动整个页面
+
+                    // 如果没找到滚动父容器,滚动整个页面
                     if (!foundScrollable) {
                         window.scrollTo({ top: targetScrollTop, behavior: 'instant' });
                         await new Promise(r => setTimeout(r, 500));
@@ -907,7 +901,7 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                         scrollerInfo = 'window';
                     }
                 } else {
-                    // 非 page-mode：滚动容器本身
+                    // 非 page-mode:滚动容器本身
                     if (recycleScroller) {
                         recycleScroller.scrollTop = targetScrollTop;
                         await new Promise(r => setTimeout(r, 500));
@@ -915,20 +909,20 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                         scrollerInfo = 'vue-recycle-scroller';
                     }
                 }
-                
-                // 重新获取可见行（滚动后）
+
+                // 重新获取可见行(滚动后)
                 const rows = document.querySelectorAll('.vue-recycle-scroller__item-view');
                 const visibleRows = getVisibleRows();
-                
+
                 // 根据可见行推断索引的辅助函数
                 const inferRowIndex = (y) => Math.round(y / ROW_HEIGHT);
-                
+
                 // 直接使用 index * ROW_HEIGHT 计算目标 translateY
                 let targetRow = null;
                 let targetTranslateY = index * ROW_HEIGHT;
                 let matchedY = -1;
-                
-                // 方法1: 基于Y坐标匹配（容差为行高的70%）
+
+                // 方法1: 基于Y坐标匹配(容差为行高的70%)
                 for (const item of visibleRows) {
                     const diff = Math.abs(item.y - targetTranslateY);
                     if (diff < ROW_HEIGHT * 0.7) {
@@ -937,8 +931,8 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                         break;
                     }
                 }
-                
-                // 方法2: 基于推断索引匹配（更健壮的匹配方式）
+
+                // 方法2: 基于推断索引匹配(更健壮的匹配方式)
                 if (!targetRow) {
                     for (const item of visibleRows) {
                         const inferredIdx = inferRowIndex(item.y);
@@ -949,11 +943,11 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                         }
                     }
                 }
-                
-                // 如果匹配失败，记录所有可见行的 Y 值用于调试
+
+                // 如果匹配失败,记录所有可见行的 Y 值用于调试
                 if (!targetRow) {
-                    return { 
-                        success: false, 
+                    return {
+                        success: false,
                         error: `Target Y=${targetTranslateY} not found in visible rows`,
                         scrollerInfo,
                         isPageMode,
@@ -965,24 +959,24 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                         detectedRowHeight: ROW_HEIGHT
                     };
                 }
-                
-                // 在行内查找编辑按钮（精确匹配 J_commonCollectBoxEdit）
+
+                // 在行内查找编辑按钮(精确匹配 J_commonCollectBoxEdit)
                 const editBtn = targetRow.querySelector('.J_commonCollectBoxEdit');
-                
+
                 if (!editBtn) {
-                    return { 
-                        success: false, 
+                    return {
+                        success: false,
                         error: 'Edit button (.J_commonCollectBoxEdit) not found in target row',
                         scrollerInfo,
                         matchedY
                     };
                 }
-                
+
                 // 强制点击
                 editBtn.click();
-                
-                return { 
-                    success: true, 
+
+                return {
+                    success: true,
                     scrollerInfo,
                     isPageMode,
                     targetScrollTop,
@@ -998,7 +992,7 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
 
             if result.get("success"):
                 logger.success(
-                    f"✓ JS 点击编辑按钮成功，索引={index}, 容器={result.get('scrollerInfo')}, "
+                    f"✓ JS 点击编辑按钮成功,索引={index}, 容器={result.get('scrollerInfo')}, "
                     f"page-mode={result.get('isPageMode')}, scrollTop={result.get('actualScrollTop')}px, "
                     f"匹配Y={result.get('matchedY')}px"
                 )
@@ -1023,13 +1017,13 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
         edit_selectors: tuple[str, ...],
         index: int,
     ) -> bool:
-        """在指定的商品行内查找并点击编辑按钮。
+        """在指定的商品行内查找并点击编辑按钮.
 
         Args:
             page: Playwright 页面对象
             row: 商品行 Locator
             edit_selectors: 编辑按钮选择器列表
-            index: 商品索引（用于日志）
+            index: 商品索引(用于日志)
 
         Returns:
             是否成功点击
@@ -1051,14 +1045,14 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                     await button.wait_for(state="visible", timeout=2_000)
                     await button.click()
                     logger.success(
-                        "✓ 基于行定位成功点击编辑按钮，索引: {}, 选择器: {}", index, selector
+                        "✓ 基于行定位成功点击编辑按钮,索引: {}, 选择器: {}", index, selector
                     )
                     return True
                 except Exception as exc:
                     logger.debug(f"行内编辑按钮 {selector} 点击失败: {exc}")
                     continue
 
-            logger.debug(f"在行内未找到编辑按钮，索引: {index}")
+            logger.debug(f"在行内未找到编辑按钮,索引: {index}")
             return False
         except Exception as exc:
             logger.debug(f"行内点击编辑按钮异常: {exc}")

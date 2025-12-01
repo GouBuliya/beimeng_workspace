@@ -1,7 +1,7 @@
 """
 @PURPOSE: 自定义安装器, 将 TemuWebPanel.exe 拷贝到目标目录并创建桌面快捷方式
 @OUTLINE:
-  - Typer CLI: 安装目录、是否创建快捷方式
+  - Typer CLI: 安装目录,是否创建快捷方式
   - 复制打包内置的 TemuWebPanel.exe 到目标目录
   - 通过 PowerShell 创建桌面快捷方式
 """
@@ -224,7 +224,7 @@ def install(
         _create_shortcut(installed_exe, shortcut_path)
         typer.echo("Shortcut created successfully")
 
-    typer.echo("Temu Web Panel 安装完成，可通过快捷方式或安装目录运行。")
+    typer.echo("Temu Web Panel 安装完成,可通过快捷方式或安装目录运行.")
 
 
 if __name__ == "__main__":

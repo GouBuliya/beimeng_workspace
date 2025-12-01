@@ -1,5 +1,5 @@
 """
-@PURPOSE: 测试批量编辑缺失步骤的单元测试（步骤4/7/8/15）
+@PURPOSE: 测试批量编辑缺失步骤的单元测试(步骤4/7/8/15)
 @OUTLINE:
   - test_step_04_main_sku(): 测试主货号步骤
   - test_step_07_customization(): 测试定制品步骤
@@ -24,7 +24,7 @@ from src.browser.batch_edit_controller import BatchEditController
 
 
 class TestBatchEditMissingSteps:
-    """测试批量编辑缺失步骤（SOP步骤7.4/7.7/7.8/7.15）."""
+    """测试批量编辑缺失步骤(SOP步骤7.4/7.7/7.8/7.15)."""
 
     def setup_method(self):
         """初始化测试环境."""
@@ -45,7 +45,7 @@ class TestBatchEditMissingSteps:
             assert callable(method), f"方法 {step_name} 不可调用"
 
     def test_step_04_main_sku_signature(self):
-        """测试步骤4（主货号）的方法签名."""
+        """测试步骤4(主货号)的方法签名."""
         import inspect
 
         method = self.controller.step_04_main_sku
@@ -58,7 +58,7 @@ class TestBatchEditMissingSteps:
         )
 
     def test_step_07_customization_signature(self):
-        """测试步骤7（定制品）的方法签名."""
+        """测试步骤7(定制品)的方法签名."""
         import inspect
 
         method = self.controller.step_07_customization
@@ -71,7 +71,7 @@ class TestBatchEditMissingSteps:
         )
 
     def test_step_08_sensitive_attrs_signature(self):
-        """测试步骤8（敏感属性）的方法签名."""
+        """测试步骤8(敏感属性)的方法签名."""
         import inspect
 
         method = self.controller.step_08_sensitive_attrs
@@ -84,7 +84,7 @@ class TestBatchEditMissingSteps:
         )
 
     def test_step_15_package_list_signature(self):
-        """测试步骤15（包装清单）的方法签名."""
+        """测试步骤15(包装清单)的方法签名."""
         import inspect
 
         method = self.controller.step_15_package_list
@@ -165,8 +165,8 @@ class TestBatchEditMissingSteps:
         assert "step_15_package_list" in module_doc, "@OUTLINE应包含step_15_package_list"
 
     def test_18_steps_complete(self):
-        """测试18步是否全部定义（包括跳过的步骤）."""
-        # 实际实现的步骤（SOP中有些步骤标记为跳过）
+        """测试18步是否全部定义(包括跳过的步骤)."""
+        # 实际实现的步骤(SOP中有些步骤标记为跳过)
         implemented_steps = [
             "step_01_modify_title",
             "step_02_english_title",
@@ -180,18 +180,18 @@ class TestBatchEditMissingSteps:
             "step_10_dimensions",
             "step_11_sku",
             "step_12_sku_category",
-            # step_13 跳过（SOP标记）
+            # step_13 跳过(SOP标记)
             "step_14_suggested_price",
             "step_15_package_list",  # 新增
-            # step_16-17 跳过（SOP标记）
+            # step_16-17 跳过(SOP标记)
             "step_18_manual_upload",
         ]
 
         for step_name in implemented_steps:
             assert hasattr(self.controller, step_name), f"缺失步骤: {step_name}"
 
-        # 验证共有18个实现的步骤（算上跳过的，总共18步）
-        assert len(implemented_steps) == 15, "应实现15个步骤（其他3步SOP标记跳过）"
+        # 验证共有18个实现的步骤(算上跳过的,总共18步)
+        assert len(implemented_steps) == 15, "应实现15个步骤(其他3步SOP标记跳过)"
 
 
 class TestMissingStepsImplementation:
@@ -263,10 +263,10 @@ class TestMissingStepsImplementation:
         for method in missing_steps:
             source = inspect.getsource(method)
 
-            # 验证包含logger.info（步骤开始）
+            # 验证包含logger.info(步骤开始)
             assert "logger.info" in source, f"{method.__name__}应记录info日志"
 
-            # 验证包含logger.success（步骤完成）
+            # 验证包含logger.success(步骤完成)
             assert "logger.success" in source, f"{method.__name__}应记录success日志"
 
 

@@ -1,5 +1,5 @@
 """
-@PURPOSE: 生产级图片管理模块，负责商品图片的删除、上传和验证（SOP步骤4.3、4.4）
+@PURPOSE: 生产级图片管理模块,负责商品图片的删除,上传和验证(SOP步骤4.3,4.4)
 @OUTLINE:
   - class ImageManager: 图片管理主类
   - async def delete_image(): 删除指定图片
@@ -12,7 +12,7 @@
   - 图片操作需要在"产品图片"tab中进行
   - 使用网络图片URL上传比本地上传更快
   - 批量操作需要等待UI更新
-  - 删除操作不可逆，需要确认
+  - 删除操作不可逆,需要确认
 @TECH_DEBT:
   - TODO: 添加AI视觉检测图片匹配度
   - TODO: 支持图片压缩和优化
@@ -29,7 +29,7 @@ import time
 from collections.abc import Sequence
 from contextlib import suppress
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 from urllib.parse import urlparse
 
 from loguru import logger
@@ -45,10 +45,10 @@ def _elapsed_ms(start: float) -> int:
 
 
 class ImageManager:
-    """生产级图片管理器（SOP步骤4.3、4.4）.
+    """生产级图片管理器(SOP步骤4.3,4.4).
 
-    负责商品图片和视频的完整管理：
-    - 删除不匹配图片（头图/轮播图/SKU图）
+    负责商品图片和视频的完整管理:
+    - 删除不匹配图片(头图/轮播图/SKU图)
     - 上传网络图片URL
     - 上传视频URL
     - 验证图片格式和大小
@@ -56,8 +56,8 @@ class ImageManager:
 
     Attributes:
         selectors: 选择器配置字典
-        max_retries: 最大重试次数（默认3次）
-        retry_delay: 重试延迟秒数（默认2秒）
+        max_retries: 最大重试次数(默认3次)
+        retry_delay: 重试延迟秒数(默认2秒)
 
     Examples:
         >>> manager = ImageManager()
@@ -73,10 +73,10 @@ class ImageManager:
     # 支持的视频格式
     SUPPORTED_VIDEO_FORMATS = {".mp4", ".avi", ".mov", ".webm"}
 
-    # 图片大小限制（字节）
+    # 图片大小限制(字节)
     MAX_IMAGE_SIZE = 3 * 1024 * 1024  # 3MB
 
-    # 视频大小限制（字节）
+    # 视频大小限制(字节)
     MAX_VIDEO_SIZE = 100 * 1024 * 1024  # 100MB
 
     def __init__(
@@ -101,10 +101,10 @@ class ImageManager:
         self.max_retries = max_retries
         self.retry_delay = retry_delay
 
-        # URL 验证结果缓存（性能优化：避免重复验证）
+        # URL 验证结果缓存(性能优化:避免重复验证)
         self._url_validation_cache: dict[str, tuple[bool, str]] = {}
 
-        logger.info(f"图片管理器初始化完成（重试{max_retries}次，延迟{retry_delay}秒）")
+        logger.info(f"图片管理器初始化完成(重试{max_retries}次,延迟{retry_delay}秒)")
 
     def _load_selectors(self) -> dict:
         """加载选择器配置.
@@ -166,7 +166,7 @@ class ImageManager:
                 await label.scroll_into_view_if_needed()
             await label.wait_for(state="visible", timeout=TIMEOUTS.NORMAL)
             await label.click()
-            # await page.wait_for_timeout(300)  # 已注释：不必要的等待
+            # await page.wait_for_timeout(300)  # 已注释:不必要的等待
             logger.success("✓ 已切换到产品图片Tab")
             return True
         except Exception as exc:
@@ -180,7 +180,7 @@ class ImageManager:
             page: Playwright页面对象
 
         Returns:
-            图片信息字典：{
+            图片信息字典:{
                 "main_images": [{"index": 0, "src": "url", "alt": "text"}],
                 "carousel_images": [...],
                 "sku_images": [...]
@@ -227,10 +227,10 @@ class ImageManager:
         try:
             result = urlparse(url)
             if not all([result.scheme, result.netloc]):
-                return False, "URL格式无效：缺少协议或域名"
+                return False, "URL格式无效:缺少协议或域名"
 
             if result.scheme not in ["http", "https"]:
-                return False, f"不支持的协议: {result.scheme}（仅支持http/https）"
+                return False, f"不支持的协议: {result.scheme}(仅支持http/https)"
 
             return True, ""
 
@@ -238,7 +238,7 @@ class ImageManager:
             return False, f"URL解析错误: {e!s}"
 
     def validate_image_url(self, url: str) -> tuple[bool, str]:
-        """验证图片URL（带缓存优化）.
+        """验证图片URL(带缓存优化).
 
         Args:
             url: 图片URL
@@ -250,7 +250,7 @@ class ImageManager:
             >>> manager.validate_image_url("https://example.com/image.jpg")
             (True, "")
         """
-        # 性能优化：使用缓存避免重复验证
+        # 性能优化:使用缓存避免重复验证
         if url in self._url_validation_cache:
             return self._url_validation_cache[url]
 
@@ -266,7 +266,7 @@ class ImageManager:
         if not any(path.endswith(ext) for ext in self.SUPPORTED_IMAGE_FORMATS):
             result = (
                 False,
-                f"不支持的图片格式。支持的格式: {', '.join(self.SUPPORTED_IMAGE_FORMATS)}",
+                f"不支持的图片格式.支持的格式: {', '.join(self.SUPPORTED_IMAGE_FORMATS)}",
             )
             self._url_validation_cache[url] = result
             return result
@@ -297,7 +297,7 @@ class ImageManager:
 
         if not any(path.endswith(ext) for ext in self.SUPPORTED_VIDEO_FORMATS):
             return False, (
-                f"不支持的视频格式。支持的格式: {', '.join(self.SUPPORTED_VIDEO_FORMATS)}"
+                f"不支持的视频格式.支持的格式: {', '.join(self.SUPPORTED_VIDEO_FORMATS)}"
             )
 
         return True, ""
@@ -309,8 +309,8 @@ class ImageManager:
 
         Args:
             page: Playwright页面对象
-            image_index: 图片索引（从0开始）
-            image_type: 图片类型（"main"主图/"carousel"轮播图/"sku" SKU图）
+            image_index: 图片索引(从0开始)
+            image_type: 图片类型("main"主图/"carousel"轮播图/"sku" SKU图)
 
         Returns:
             是否删除成功
@@ -325,7 +325,7 @@ class ImageManager:
             True
         """
         if image_type not in ["main", "carousel", "sku"]:
-            raise ValueError(f"不支持的图片类型: {image_type}。支持的类型: main, carousel, sku")
+            raise ValueError(f"不支持的图片类型: {image_type}.支持的类型: main, carousel, sku")
 
         logger.info(f"删除图片: type={image_type}, index={image_index}")
 
@@ -335,16 +335,16 @@ class ImageManager:
                 return False
 
             # TODO: 需要使用Codegen获取实际的删除按钮选择器
-            # 框架代码：
+            # 框架代码:
             # 1. 定位到指定图片
             # 2. 悬停显示删除按钮
             # 3. 点击删除按钮
-            # 4. 确认删除（如果有确认弹窗）
+            # 4. 确认删除(如果有确认弹窗)
 
             logger.warning("删除图片功能需要Codegen验证选择器 - 需要实际录制操作获取准确的元素定位")
 
             # 等待删除操作完成
-            # await page.wait_for_timeout(200)  # 已注释：不必要的等待
+            # await page.wait_for_timeout(200)  # 已注释:不必要的等待
 
             logger.success(f"✓ 图片删除成功: {image_type}[{image_index}]")
             return True
@@ -443,7 +443,7 @@ class ImageManager:
             )
             target_count = row_count
 
-        # SKU 图片上传必须串行执行（UI 弹窗交互不支持并发）
+        # SKU 图片上传必须串行执行(UI 弹窗交互不支持并发)
         uploads = 0
         for index in range(target_count):
             url = sanitized_urls[index]
@@ -471,13 +471,13 @@ class ImageManager:
     async def upload_image_from_url(
         self, page: Page, image_url: str, image_type: str = "size_chart", retry_count: int = 0
     ) -> bool:
-        """通过URL上传图片（SOP步骤4.4）.
+        """通过URL上传图片(SOP步骤4.4).
 
         Args:
             page: Playwright页面对象
             image_url: 图片URL
-            image_type: 图片类型（"main"主图/"carousel"轮播图/"sku"SKU图/"size_chart"尺寸图）
-            retry_count: 当前重试次数（内部使用）
+            image_type: 图片类型("main"主图/"carousel"轮播图/"sku"SKU图/"size_chart"尺寸图)
+            retry_count: 当前重试次数(内部使用)
 
         Returns:
             是否上传成功
@@ -501,8 +501,8 @@ class ImageManager:
                 return False
 
             # TODO: 需要使用Codegen获取实际的"使用网络图片"按钮选择器
-            # SOP要求：选择「使用网络图片」功能
-            # 框架代码：
+            # SOP要求:选择「使用网络图片」功能
+            # 框架代码:
             # 1. 点击对应类型的上传区域
             # 2. 选择"使用网络图片"选项
             # 3. 输入URL
@@ -512,13 +512,13 @@ class ImageManager:
             logger.warning("上传图片功能需要Codegen验证选择器 - 需要实际录制「使用网络图片」操作")
 
             # 等待上传完成
-            # await page.wait_for_timeout(500)  # 已注释：不必要的等待
+            # await page.wait_for_timeout(500)  # 已注释:不必要的等待
 
             logger.success(f"✓ 图片上传成功: {image_type}")
             return True
 
         except Exception as e:
-            logger.error(f"上传图片失败（第{retry_count + 1}次尝试）: {e}")
+            logger.error(f"上传图片失败(第{retry_count + 1}次尝试): {e}")
 
             # 自动重试机制
             if retry_count < self.max_retries - 1:
@@ -530,16 +530,16 @@ class ImageManager:
                     page, image_url, image_type, retry_count + 1
                 )
             else:
-                logger.error(f"上传图片最终失败（已重试{self.max_retries}次）")
+                logger.error(f"上传图片最终失败(已重试{self.max_retries}次)")
                 return False
 
     async def upload_video_from_url(self, page: Page, video_url: str, retry_count: int = 0) -> bool:
-        """通过URL上传视频（SOP步骤4.4）.
+        """通过URL上传视频(SOP步骤4.4).
 
         Args:
             page: Playwright页面对象
             video_url: 视频URL
-            retry_count: 当前重试次数（内部使用）
+            retry_count: 当前重试次数(内部使用)
 
         Returns:
             是否上传成功
@@ -565,26 +565,26 @@ class ImageManager:
 
             logger.info("切换到「产品视频」Tab...")
             await page.locator(video_tab_selector).click()
-            # await page.wait_for_timeout(300)  # 已注释：不必要的等待
+            # await page.wait_for_timeout(300)  # 已注释:不必要的等待
 
             # TODO: 需要使用Codegen获取实际的视频上传选择器
-            # 框架代码：
+            # 框架代码:
             # 1. 点击上传视频按钮
             # 2. 选择"使用网络视频"或"输入URL"
             # 3. 输入视频URL
             # 4. 确认上传
-            # 5. 等待上传和处理完成（视频可能需要更长时间）
+            # 5. 等待上传和处理完成(视频可能需要更长时间)
 
             logger.warning("上传视频功能需要Codegen验证选择器 - 需要实际录制视频上传操作")
 
             # 视频上传和处理需要更长时间
-            # await page.wait_for_timeout(1000)  # 已注释：不必要的等待
+            # await page.wait_for_timeout(1000)  # 已注释:不必要的等待
 
             logger.success("✓ 视频上传成功")
             return True
 
         except Exception as e:
-            logger.error(f"上传视频失败（第{retry_count + 1}次尝试）: {e}")
+            logger.error(f"上传视频失败(第{retry_count + 1}次尝试): {e}")
 
             # 自动重试机制
             if retry_count < self.max_retries - 1:
@@ -594,7 +594,7 @@ class ImageManager:
                 await asyncio.sleep(self.retry_delay)
                 return await self.upload_video_from_url(page, video_url, retry_count + 1)
             else:
-                logger.error(f"上传视频最终失败（已重试{self.max_retries}次）")
+                logger.error(f"上传视频最终失败(已重试{self.max_retries}次)")
                 return False
 
     async def batch_upload_images(
@@ -604,7 +604,7 @@ class ImageManager:
 
         Args:
             page: Playwright页面对象
-            image_urls: 图片URL列表，格式: [{"url": "...", "type": "carousel"}, ...]
+            image_urls: 图片URL列表,格式: [{"url": "...", "type": "carousel"}, ...]
 
         Returns:
             统计结果: {"success": 成功数, "failed": 失败数, "total": 总数}
@@ -624,7 +624,7 @@ class ImageManager:
         success_count = 0
         failed_count = 0
 
-        # 图片上传必须串行执行（UI 弹窗交互不支持并发）
+        # 图片上传必须串行执行(UI 弹窗交互不支持并发)
         for i, image_info in enumerate(image_urls, 1):
             url = image_info.get("url", "")
             img_type = image_info.get("type", "carousel")
@@ -712,7 +712,7 @@ class ImageManager:
         )
         try:
             if await image_items.count() == 0:
-                logger.debug("SKU 区域没有现有图片，无需清理")
+                logger.debug("SKU 区域没有现有图片,无需清理")
                 return True
         except Exception:
             logger.warning("无法统计 SKU 图片数量, 假定需要清理")
@@ -738,7 +738,7 @@ class ImageManager:
     async def _wait_for_sku_cleanup(
         self, page: Page, sku_section: Locator, timeout: int = TIMEOUTS.SLOW * 5
     ) -> None:
-        """等待 SKU 图列表清空或成功提示出现（智能等待）."""
+        """等待 SKU 图列表清空或成功提示出现(智能等待)."""
         wait_start = time.perf_counter()
         selector = ".picture-draggable-list .image-item, .picture-draggable-list img"
 
@@ -773,7 +773,7 @@ class ImageManager:
     async def _wait_for_total_sku_images(
         self, sku_section: Locator, expected: int, timeout: int = TIMEOUTS.SLOW * 5
     ) -> bool:
-        """等待 SKU 区域图片数量达到预期（智能等待）."""
+        """等待 SKU 区域图片数量达到预期(智能等待)."""
         if expected <= 0:
             return True
 
@@ -817,7 +817,7 @@ class ImageManager:
         slot_hint: str,
         timeout: int = TIMEOUTS.SLOW * 5,
     ) -> bool:
-        """等待单个 SKU 行的图片数量增加（智能等待）."""
+        """等待单个 SKU 行的图片数量增加(智能等待)."""
         # 使用指数退避轮询策略
         poll_interval = 0.05  # 初始 50ms
         max_interval = 0.2  # 最大 200ms
@@ -950,11 +950,11 @@ class ImageManager:
         image_url: str,
         *,
         row: Locator | None = None,
-        slot_hint: Optional[str] = None,
+        slot_hint: str | None = None,
     ) -> bool:
         """使用网络图片入口上传单张 SKU 图."""
 
-        # URL编码处理（处理中文路径）
+        # URL编码处理(处理中文路径)
         from urllib.parse import quote, urlparse, urlunparse
 
         try:
@@ -973,7 +973,7 @@ class ImageManager:
             logger.debug(f"SKU图片URL编码: {image_url} -> {encoded_url}")
             image_url = encoded_url
         except Exception as e:
-            logger.warning(f"SKU图片URL编码失败，使用原始URL: {e}")
+            logger.warning(f"SKU图片URL编码失败,使用原始URL: {e}")
 
         picture_scope = (row or page).locator(".picture-draggable-list").first
         if not await picture_scope.count():
@@ -1016,13 +1016,13 @@ class ImageManager:
                 await save_to_space_checkbox.click()
                 logger.debug("已勾选『同时保存图片到妙手图片空间』")
         except Exception as exc:
-            logger.debug("勾选保存到图片空间失败（可能已勾选）: {}", exc)
+            logger.debug("勾选保存到图片空间失败(可能已勾选): {}", exc)
 
         try:
             confirm_btn = page.get_by_role("button", name="确定").first
             await confirm_btn.wait_for(state="visible", timeout=TIMEOUTS.NORMAL)
             await confirm_btn.click()
-            # 点击确定后直接返回成功，不再检测图片数量变化（检测不可靠）
+            # 点击确定后直接返回成功,不再检测图片数量变化(检测不可靠)
             logger.debug("{} 上传请求已提交", slot_hint or "SKU图片")
             return True
         except Exception as exc:

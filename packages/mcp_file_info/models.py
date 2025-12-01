@@ -9,8 +9,6 @@
 """
 
 from dataclasses import dataclass, field
-from typing import Any
-
 
 # 支持的元信息字段定义
 METADATA_FIELDS = {
@@ -20,11 +18,11 @@ METADATA_FIELDS = {
     },
     "OUTLINE": {
         "required": True,
-        "description": "文件的结构大纲，包括主要类/函数/模块",
+        "description": "文件的结构大纲,包括主要类/函数/模块",
     },
     "GOTCHAS": {
         "required": False,
-        "description": "易出错点、注意事项、常见陷阱",
+        "description": "易出错点,注意事项,常见陷阱",
     },
     "TECH_DEBT": {
         "required": False,
@@ -32,7 +30,7 @@ METADATA_FIELDS = {
     },
     "DEPENDENCIES": {
         "required": False,
-        "description": "关键依赖关系（内部/外部模块）",
+        "description": "关键依赖关系(内部/外部模块)",
     },
     "CHANGELOG": {
         "required": False,
@@ -54,7 +52,7 @@ class MetadataField:
     """单个元信息字段模型.
 
     Attributes:
-        name: 字段名称（如 PURPOSE, OUTLINE）
+        name: 字段名称(如 PURPOSE, OUTLINE)
         value: 字段内容
         required: 是否为必填字段
         description: 字段描述
@@ -75,7 +73,7 @@ class FileMetadata:
         has_metadata: 是否包含元信息
         fields: 元信息字段字典
         raw_content: 原始注释内容
-        error: 错误信息（如果解析失败）
+        error: 错误信息(如果解析失败)
     """
 
     file_path: str
@@ -91,7 +89,7 @@ class FileMetadata:
             field_name: 字段名称
 
         Returns:
-            字段值，如果不存在则返回空字符串
+            字段值,如果不存在则返回空字符串
         """
         return self.fields.get(field_name, "")
 

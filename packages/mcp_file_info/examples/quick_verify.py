@@ -7,8 +7,8 @@ from pathlib import Path
 # 添加项目根目录到路径
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from packages.mcp_file_info.parser import FileInfoParser
 from packages.mcp_file_info.config import SUPPORTED_EXTENSIONS
+from packages.mcp_file_info.parser import FileInfoParser
 
 print("=" * 60)
 print("MCP File Info - 功能验证")
@@ -66,5 +66,5 @@ if sample_files:
     print(f"  - 成功提取元信息: {success_count}/{len(results)}")
 
 print("\n" + "=" * 60)
-print("✨ 所有测试完成！")
+print("✨ 所有测试完成!")
 print("=" * 60)

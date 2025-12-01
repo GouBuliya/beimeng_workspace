@@ -10,13 +10,11 @@
 """
 
 import asyncio
-from typing import Optional
 
 import typer
 from rich.console import Console
 from rich.table import Table
-
-from src.core.health_checker import HealthStatus, get_health_checker
+from src.core.health_checker import get_health_checker
 
 health_app = typer.Typer(
     name="health",
@@ -28,7 +26,7 @@ console = Console()
 
 @health_app.command("check")
 def check(
-    component: Optional[str] = typer.Option(
+    component: str | None = typer.Option(
         None,
         "--component",
         "-c",
@@ -81,7 +79,7 @@ async def _check_component(health_checker, component: str):
         return result.to_dict()
     except ValueError as e:
         console.print(f"[red]✗ {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 def _display_health_result(result, single_component: bool = False):

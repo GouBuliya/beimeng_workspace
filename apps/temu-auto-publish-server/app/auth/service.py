@@ -3,7 +3,7 @@
 @OUTLINE:
   - class AuthService: 认证服务类
     - register(): 用户注册
-    - authenticate(): 用户认证（登录）
+    - authenticate(): 用户认证(登录)
     - create_tokens(): 创建访问和刷新令牌
     - refresh_tokens(): 刷新令牌
     - logout(): 用户登出
@@ -18,7 +18,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from loguru import logger
 from sqlalchemy import select
@@ -35,7 +35,7 @@ from app.core.security import (
 )
 from app.models.user import User
 
-from .schemas import Token, TokenVerifyResponse, UserRegister, UserResponse
+from .schemas import Token, TokenVerifyResponse, UserRegister
 
 settings = get_settings()
 
@@ -102,7 +102,7 @@ class AuthService:
             password: 密码
 
         Returns:
-            User | None: 验证通过返回用户对象，否则返回 None
+            User | None: 验证通过返回用户对象,否则返回 None
         """
         user = await self.get_user_by_username(username)
         if not user:
@@ -120,7 +120,7 @@ class AuthService:
     async def create_tokens(self, user: User) -> Token:
         """为用户创建访问令牌和刷新令牌.
 
-        这会使该用户之前的所有会话失效（单设备登录限制）。
+        这会使该用户之前的所有会话失效(单设备登录限制).
 
         Args:
             user: 用户对象
@@ -134,9 +134,9 @@ class AuthService:
         access_token, access_jti, access_expires = create_access_token(user_id)
 
         # 创建刷新令牌
-        refresh_token, refresh_jti, refresh_expires = create_refresh_token(user_id)
+        refresh_token, _refresh_jti, _refresh_expires = create_refresh_token(user_id)
 
-        # 在 Redis 中创建会话（会自动清除旧会话）
+        # 在 Redis 中创建会话(会自动清除旧会话)
         await self.session_manager.create_session(
             user_id=user_id,
             jti=access_jti,
@@ -146,7 +146,7 @@ class AuthService:
         )
 
         # 计算过期秒数
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         expires_in = int((access_expires - now).total_seconds())
 
         logger.info(f"为用户创建令牌: username={user.username}, expires_in={expires_in}s")
@@ -165,7 +165,7 @@ class AuthService:
             refresh_token: 刷新令牌
 
         Returns:
-            Token | None: 新的令牌，验证失败返回 None
+            Token | None: 新的令牌,验证失败返回 None
         """
         payload = decode_token(refresh_token)
         if not payload:
@@ -181,7 +181,7 @@ class AuthService:
         return await self.create_tokens(user)
 
     async def logout(self, token: str) -> bool:
-        """用户登出，使当前令牌失效.
+        """用户登出,使当前令牌失效.
 
         Args:
             token: 访问令牌
@@ -211,7 +211,7 @@ class AuthService:
         if not payload:
             return TokenVerifyResponse(valid=False, message="令牌无效或已过期")
 
-        # 验证会话是否在 Redis 中有效（单设备检查）
+        # 验证会话是否在 Redis 中有效(单设备检查)
         session = await self.session_manager.validate_session(payload.jti)
         if not session:
             return TokenVerifyResponse(valid=False, message="会话已失效或被新登录替代")
@@ -282,7 +282,7 @@ class AuthService:
         user.hashed_password = get_password_hash(new_password)
         await self.db.commit()
 
-        # 使所有会话失效，要求重新登录
+        # 使所有会话失效,要求重新登录
         await self.session_manager.invalidate_all_sessions(str(user.id))
 
         logger.info(f"用户密码已修改: username={user.username}")

@@ -4,7 +4,7 @@
   - monitor_app: Typer 监控命令组
   - stats(): 显示统计信息
   - report(): 生成报告
-  - watch(): 实时监控（TODO）
+  - watch(): 实时监控(TODO)
 @DEPENDENCIES:
   - 内部: src.core.performance_tracker
   - 外部: typer, rich
@@ -13,14 +13,12 @@
 import json
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional
 
 import typer
+from config.settings import settings
 from loguru import logger
 from rich.console import Console
 from rich.table import Table
-
-from config.settings import settings
 
 monitor_app = typer.Typer(
     name="monitor",
@@ -32,8 +30,8 @@ console = Console()
 
 @monitor_app.command("stats")
 def stats(
-    last: Optional[str] = typer.Option(None, "--last", help="时间范围（如: 1h, 24h, 7d）"),
-    workflow_id: Optional[str] = typer.Option(None, "--workflow", help="指定工作流ID"),
+    last: str | None = typer.Option(None, "--last", help="时间范围(如: 1h, 24h, 7d)"),
+    workflow_id: str | None = typer.Option(None, "--workflow", help="指定工作流ID"),
 ):
     """显示统计信息.
 
@@ -145,8 +143,8 @@ def report(
     output: Path = typer.Option(
         Path("data/reports/report.csv"), "--output", "-o", help="输出文件路径"
     ),
-    format: str = typer.Option("csv", "--format", "-f", help="输出格式（csv/json）"),
-    last: Optional[str] = typer.Option(None, "--last", help="时间范围"),
+    format: str = typer.Option("csv", "--format", "-f", help="输出格式(csv/json)"),
+    last: str | None = typer.Option(None, "--last", help="时间范围"),
 ):
     """生成指标报告.
 
@@ -228,7 +226,7 @@ def _parse_time_range(time_str: str) -> datetime:
     """解析时间范围字符串.
 
     Args:
-        time_str: 时间范围（如: 1h, 24h, 7d）
+        time_str: 时间范围(如: 1h, 24h, 7d)
 
     Returns:
         截止时间

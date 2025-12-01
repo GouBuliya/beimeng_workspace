@@ -24,10 +24,9 @@ from playwright.async_api import Frame, Locator, Page
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 from ...utils.page_load_decorator import (
-    LoadState,
     PAGE_TIMEOUTS,
+    LoadState,
     ensure_page_loaded,
-    with_network_idle,
 )
 from ...utils.page_waiter import PageWaiter
 from .navigation import MiaoshouNavigationMixin
@@ -93,8 +92,8 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
         try:
             logger.debug(f"Refreshing collection box page at {self._COLLECTION_BOX_URL}")
             await page.goto(self._COLLECTION_BOX_URL, wait_until="domcontentloaded")
-            # 性能优化：networkidle 改为短等待，避免长时间阻塞
-            # 原因：networkidle 可能永远无法触发，且大部分情况下 domcontentloaded 已足够
+            # 性能优化:networkidle 改为短等待,避免长时间阻塞
+            # 原因:networkidle 可能永远无法触发,且大部分情况下 domcontentloaded 已足够
             with suppress(Exception):
                 await page.wait_for_timeout(300)
         except Exception as exc:
@@ -103,11 +102,11 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
         await self._wait_for_rows(page)
 
         if filter_owner:
-            logger.info("尝试按负责人筛选：{}", filter_owner)
+            logger.info("尝试按负责人筛选:{}", filter_owner)
             try:
                 filtered = await self.filter_and_search(page, filter_owner)
                 if not filtered:
-                    logger.warning("负责人筛选逻辑返回 False：{}", filter_owner)
+                    logger.warning("负责人筛选逻辑返回 False:{}", filter_owner)
                 await self._wait_for_rows(page)
             except Exception as exc:
                 logger.warning("负责人筛选失败({}): {}", filter_owner, exc)
@@ -115,7 +114,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
     async def _wait_for_rows(self, page: Page, *, timeout: int = 1_000) -> bool:
         """Wait until the collection box table rows are rendered.
 
-        性能优化：timeout 从 1500ms 减少到 1000ms
+        性能优化:timeout 从 1500ms 减少到 1000ms
         """
         rows = page.locator(self._ROW_SELECTOR)
         try:
@@ -135,7 +134,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
     ) -> None:
         """Wait for dropdown containers matching ``selectors`` to reach ``state``.
 
-        性能优化：timeout 从 400ms 减少到 250ms
+        性能优化:timeout 从 400ms 减少到 250ms
         """
         dropdown = page.locator(selectors)
         with suppress(Exception):
@@ -189,11 +188,11 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
     _PAGE_SIZE: ClassVar[int] = 20  # 每页显示商品数量
 
     async def _jump_to_page_for_claim(self, page: Page, target_page: int) -> bool:
-        """跳转到指定页码（用于认领流程）。
+        """跳转到指定页码(用于认领流程).
 
         Args:
             page: Playwright 页面对象
-            target_page: 目标页码（从1开始）
+            target_page: 目标页码(从1开始)
 
         Returns:
             是否成功跳转
@@ -222,12 +221,12 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                 await waiter.wait_for_dom_stable(timeout_ms=800)
                 with suppress(Exception):
                     await self._wait_for_rows(page)
-                logger.info("认领流程：已跳转到第 {} 页", target_page)
+                logger.info("认领流程:已跳转到第 {} 页", target_page)
                 return True
             except Exception as exc:
                 logger.debug("翻页失败 selector={}: {}", selector, exc)
 
-        logger.warning("认领流程：无法跳转到第 {} 页", target_page)
+        logger.warning("认领流程:无法跳转到第 {} 页", target_page)
         return False
 
     async def select_products_for_claim(
@@ -236,14 +235,14 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
         count: int = 5,
         indexes: Sequence[int] | None = None,
         *,
-        enable_scroll: bool = False,  # 默认禁用滚动，使用直接定位
+        enable_scroll: bool = False,  # 默认禁用滚动,使用直接定位
     ) -> bool:
         """Select the first ``count`` products before starting a claim batch.
 
-        支持跨页勾选：当索引超过每页容量（20条）时自动翻页。
+        支持跨页勾选:当索引超过每页容量(20条)时自动翻页.
         1. 按页码分组目标索引
-        2. 对每页：先翻页，再用页内相对索引勾选
-        3. 获取所有可见行（translateY >= 0）
+        2. 对每页:先翻页,再用页内相对索引勾选
+        3. 获取所有可见行(translateY >= 0)
         4. 按 translateY 排序得到视觉顺序
         5. 直接点击目标行的复选框
 
@@ -251,7 +250,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
             page: Active Playwright page instance.
             count: Number of products to select.
             indexes: Specific indexes to select (optional, 绝对索引).
-            enable_scroll: 是否启用滚动（默认禁用）
+            enable_scroll: 是否启用滚动(默认禁用)
 
         Returns:
             True when all target products were selected, otherwise False.
@@ -298,7 +297,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
 
             # 如果需要翻页
             if target_page != current_page:
-                logger.info(f"需要跳转到第 {target_page} 页（当前第 {current_page} 页）")
+                logger.info(f"需要跳转到第 {target_page} 页(当前第 {current_page} 页)")
                 if await self._jump_to_page_for_claim(page, target_page):
                     current_page = target_page
                 else:
@@ -306,7 +305,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                     return False
 
             # 使用页内相对索引勾选
-            logger.info(f"第 {target_page} 页，勾选页内索引: {page_relative_indexes}")
+            logger.info(f"第 {target_page} 页,勾选页内索引: {page_relative_indexes}")
             page_selected = await self._select_checkboxes_by_js(page, page_relative_indexes)
             selected += page_selected
 
@@ -314,7 +313,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                 logger.warning(
                     f"第 {target_page} 页勾选不完整: {page_selected}/{len(page_relative_indexes)}"
                 )
-                # 如果启用滚动，尝试滚动方式补充勾选
+                # 如果启用滚动,尝试滚动方式补充勾选
                 if enable_scroll:
                     for rel_idx in page_relative_indexes[page_selected:]:
                         from ...utils.scroll_helper import scroll_to_product_position
@@ -336,14 +335,14 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
         return selected == len(target_indexes)
 
     async def _select_checkboxes_by_js(self, page: Page, indexes: list[int]) -> int:
-        """使用 JavaScript 批量勾选复选框（带自动滚动）。
+        """使用 JavaScript 批量勾选复选框(带自动滚动).
 
-        支持 page-mode（页面级滚动）和容器级滚动两种模式。
-        通过动态检测行高偏移来精确定位目标行。
+        支持 page-mode(页面级滚动)和容器级滚动两种模式.
+        通过动态检测行高偏移来精确定位目标行.
 
         Args:
             page: Playwright 页面对象
-            indexes: 目标索引列表（全局索引）
+            indexes: 目标索引列表(全局索引)
 
         Returns:
             成功勾选的数量
@@ -352,12 +351,12 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
             js_code = """
             async (indexes) => {
                 const MAX_SCROLL_ATTEMPTS = 8;
-                const DEFAULT_ROW_HEIGHT = 128;  // 默认值，会被动态检测覆盖
-                
-                // 检查是否为 page-mode（页面级滚动）
+                const DEFAULT_ROW_HEIGHT = 128;  // 默认值,会被动态检测覆盖
+
+                // 检查是否为 page-mode(页面级滚动)
                 const recycleScroller = document.querySelector('.vue-recycle-scroller');
                 const isPageMode = recycleScroller && recycleScroller.classList.contains('page-mode');
-                
+
                 // 获取所有可见行
                 const getVisibleRows = () => {
                     const rows = document.querySelectorAll('.vue-recycle-scroller__item-view');
@@ -373,8 +372,8 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                     visibleRows.sort((a, b) => a.y - b.y);
                     return visibleRows;
                 };
-                
-                // 动态检测实际行高（通过测量相邻行的Y差值）
+
+                // 动态检测实际行高(通过测量相邻行的Y差值)
                 const detectRowHeight = () => {
                     const visibleRows = getVisibleRows();
                     if (visibleRows.length >= 2) {
@@ -387,7 +386,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                             }
                         }
                         if (diffs.length > 0) {
-                            // 取中位数作为行高（更稳定）
+                            // 取中位数作为行高(更稳定)
                             diffs.sort((a, b) => a - b);
                             const median = diffs[Math.floor(diffs.length / 2)];
                             return median;
@@ -402,14 +401,14 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                     }
                     return DEFAULT_ROW_HEIGHT;
                 };
-                
+
                 // 检测实际行高
                 const ROW_HEIGHT = detectRowHeight();
-                
+
                 // 查找所有可能的滚动容器
                 const findAllScrollContainers = () => {
                     const containers = [];
-                    
+
                     // 1. 尝试找 .main-container 或类似的容器
                     const mainContainer = document.querySelector('.main-container') ||
                                          document.querySelector('.app-main') ||
@@ -418,14 +417,14 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                     if (mainContainer && mainContainer.scrollHeight > mainContainer.clientHeight) {
                         containers.push(mainContainer);
                     }
-                    
+
                     // 2. 从 recycleScroller 向上查找所有可滚动容器
                     if (recycleScroller) {
                         let parent = recycleScroller.parentElement;
                         while (parent && parent !== document.body && parent !== document.documentElement) {
                             const style = window.getComputedStyle(parent);
                             const overflowY = style.overflowY;
-                            if ((overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'overlay') && 
+                            if ((overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'overlay') &&
                                 parent.scrollHeight > parent.clientHeight) {
                                 if (!containers.includes(parent)) {
                                     containers.push(parent);
@@ -434,14 +433,14 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                             parent = parent.parentElement;
                         }
                     }
-                    
+
                     return containers;
                 };
-                
+
                 // 滚动所有可能的容器
                 const scrollAllContainers = async (delta) => {
                     const containers = findAllScrollContainers();
-                    
+
                     // 同时滚动所有容器
                     for (const container of containers) {
                         const oldScrollTop = container.scrollTop;
@@ -449,11 +448,11 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         // 触发 scroll 事件
                         container.dispatchEvent(new Event('scroll', { bubbles: true }));
                     }
-                    
+
                     // 也尝试滚动 window
                     window.scrollBy({ top: delta, behavior: 'instant' });
-                    
-                    // 模拟 wheel 事件（某些虚拟滚动库依赖此事件）
+
+                    // 模拟 wheel 事件(某些虚拟滚动库依赖此事件)
                     if (recycleScroller) {
                         const wheelEvent = new WheelEvent('wheel', {
                             deltaY: delta,
@@ -462,19 +461,19 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         });
                         recycleScroller.dispatchEvent(wheelEvent);
                     }
-                    
+
                     await new Promise(r => setTimeout(r, 400));
                 };
-                
+
                 let selected = 0;
                 const results = [];
                 let debugInfo = { containers: findAllScrollContainers().length, detectedRowHeight: ROW_HEIGHT };
-                
+
                 // 根据可见行推断索引的辅助函数
                 const inferRowIndex = (y) => {
                     return Math.round(y / ROW_HEIGHT);
                 };
-                
+
                 for (const idx of indexes) {
                     const targetTranslateY = idx * ROW_HEIGHT;
                     let targetRow = null;
@@ -482,18 +481,18 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                     let attempts = 0;
                     let lastMaxY = -1;
                     let scrolledTotal = 0;
-                    
+
                     // 循环滚动直到目标行可见
                     while (!targetRow && attempts < MAX_SCROLL_ATTEMPTS) {
                         const visibleRows = getVisibleRows();
-                        
+
                         if (visibleRows.length === 0) {
                             attempts++;
                             await scrollAllContainers(ROW_HEIGHT * 3);
                             continue;
                         }
-                        
-                        // 方法1: 基于Y坐标精确匹配（容差为行高的70%）
+
+                        // 方法1: 基于Y坐标精确匹配(容差为行高的70%)
                         for (const item of visibleRows) {
                             const diff = Math.abs(item.y - targetTranslateY);
                             if (diff < ROW_HEIGHT * 0.7) {
@@ -502,8 +501,8 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                                 break;
                             }
                         }
-                        
-                        // 方法2: 基于推断索引匹配（更健壮的匹配方式）
+
+                        // 方法2: 基于推断索引匹配(更健壮的匹配方式)
                         if (!targetRow) {
                             for (const item of visibleRows) {
                                 const inferredIdx = inferRowIndex(item.y);
@@ -514,18 +513,18 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                                 }
                             }
                         }
-                        
+
                         if (targetRow) break;
-                        
-                        // 目标行不可见，需要滚动
+
+                        // 目标行不可见,需要滚动
                         const maxVisibleY = Math.max(...visibleRows.map(r => r.y));
                         const minVisibleY = Math.min(...visibleRows.map(r => r.y));
-                        
+
                         if (targetTranslateY > maxVisibleY) {
-                            // 目标在下方，向下滚动
+                            // 目标在下方,向下滚动
                             let scrollAmount;
                             if (maxVisibleY === lastMaxY) {
-                                // 滚动卡住，尝试更大的滚动量
+                                // 滚动卡住,尝试更大的滚动量
                                 scrollAmount = ROW_HEIGHT * 5;
                             } else {
                                 scrollAmount = targetTranslateY - maxVisibleY + ROW_HEIGHT * 3;
@@ -534,25 +533,25 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                             scrolledTotal += scrollAmount;
                             lastMaxY = maxVisibleY;
                         } else if (targetTranslateY < minVisibleY) {
-                            // 目标在上方，向上滚动
+                            // 目标在上方,向上滚动
                             const scrollAmount = targetTranslateY - minVisibleY - ROW_HEIGHT * 2;
                             await scrollAllContainers(scrollAmount);
                             scrolledTotal += scrollAmount;
                         } else {
-                            // 目标应该在范围内但没找到，微调
+                            // 目标应该在范围内但没找到,微调
                             await scrollAllContainers(ROW_HEIGHT);
                             scrolledTotal += ROW_HEIGHT;
                         }
-                        
+
                         attempts++;
                     }
-                    
+
                     if (!targetRow) {
                         const finalVisibleRows = getVisibleRows();
-                        results.push({ 
-                            idx, 
-                            success: false, 
-                            error: 'Target row not found after scroll attempts', 
+                        results.push({
+                            idx,
+                            success: false,
+                            error: 'Target row not found after scroll attempts',
                             visibleYs: finalVisibleRows.map(r => r.y),
                             inferredIdxs: finalVisibleRows.map(r => inferRowIndex(r.y)),
                             targetY: targetTranslateY,
@@ -562,12 +561,12 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         });
                         continue;
                     }
-                    
-                    // 在行内精确查找复选框（固定左侧选择列）
+
+                    // 在行内精确查找复选框(固定左侧选择列)
                     const checkbox = targetRow.querySelector('.is-selection-column .jx-checkbox__inner') ||
                                     targetRow.querySelector('.is-selection-column .jx-checkbox') ||
                                     targetRow.querySelector('.jx-checkbox__inner');
-                    
+
                     if (checkbox) {
                         checkbox.click();
                         selected++;
@@ -576,7 +575,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         results.push({ idx, success: false, error: 'Checkbox not found', matchedY, attempts });
                     }
                 }
-                
+
                 return { selected, isPageMode, results, debugInfo };
             }
             """
@@ -605,17 +604,17 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
             return 0
 
     async def _click_checkbox_by_js(self, page: Page, index: int) -> bool:
-        """使用 JavaScript 滚动到目标位置并点击复选框。"""
+        """使用 JavaScript 滚动到目标位置并点击复选框."""
         try:
             js_code = """
             async (index) => {
                 const DEFAULT_ROW_HEIGHT = 128;
-                
+
                 const scroller = document.querySelector('.vue-recycle-scroller') ||
                                 document.querySelector('.vue-recycle-scroller__item-wrapper')?.parentElement;
-                
+
                 if (!scroller) return false;
-                
+
                 // 获取可见行
                 const getVisibleRows = () => {
                     const rows = document.querySelectorAll('.vue-recycle-scroller__item-view');
@@ -631,7 +630,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                     visibleRows.sort((a, b) => a.y - b.y);
                     return visibleRows;
                 };
-                
+
                 // 动态检测实际行高
                 const detectRowHeight = () => {
                     const visibleRows = getVisibleRows();
@@ -652,21 +651,21 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                     }
                     return DEFAULT_ROW_HEIGHT;
                 };
-                
+
                 const ROW_HEIGHT = detectRowHeight();
-                
+
                 // 滚动到目标位置
                 scroller.scrollTop = index * ROW_HEIGHT;
                 await new Promise(r => setTimeout(r, 200));
-                
+
                 // 重新获取可见行
                 const visibleRows = getVisibleRows();
                 if (visibleRows.length === 0) return false;
-                
+
                 // 基于索引推断找到目标行
                 const targetY = index * ROW_HEIGHT;
                 let targetRow = null;
-                
+
                 // 方法1: Y坐标匹配
                 for (const item of visibleRows) {
                     if (Math.abs(item.y - targetY) < ROW_HEIGHT * 0.7) {
@@ -674,7 +673,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         break;
                     }
                 }
-                
+
                 // 方法2: 基于推断索引匹配
                 if (!targetRow) {
                     for (const item of visibleRows) {
@@ -685,10 +684,10 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         }
                     }
                 }
-                
+
                 // 回退: 使用第一个可见行
                 if (!targetRow) targetRow = visibleRows[0].row;
-                
+
                 const checkbox = targetRow.querySelector('.jx-checkbox__inner') ||
                                 targetRow.querySelector('.jx-checkbox');
                 if (checkbox) {
@@ -709,16 +708,16 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
         *,
         target: str = "claim_button",
     ) -> dict[str, Any]:
-        """使用 JavaScript 直接定位并点击行内目标元素（认领按钮或复选框）。
+        """使用 JavaScript 直接定位并点击行内目标元素(认领按钮或复选框).
 
-        复用首次编辑的定位逻辑（动态行高检测、translateY 定位等），
-        目标可选：
-        - target="claim_button"：点击行内"认领到"按钮并选择下拉第一项
-        - target="checkbox"：点击行内复选框（用于批量勾选）
+        复用首次编辑的定位逻辑(动态行高检测,translateY 定位等),
+        目标可选:
+        - target="claim_button":点击行内"认领到"按钮并选择下拉第一项
+        - target="checkbox":点击行内复选框(用于批量勾选)
 
         Args:
             page: Playwright 页面对象
-            index: 目标商品索引（全局索引，0-based）
+            index: 目标商品索引(全局索引,0-based)
             target: "claim_button" 或 "checkbox"
 
         Returns:
@@ -728,11 +727,11 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
             js_code = """
             async ({ index, target }) => {
                 const DEFAULT_ROW_HEIGHT = 128;
-                
-                // 检查是否为 page-mode（页面级滚动）
+
+                // 检查是否为 page-mode(页面级滚动)
                 const recycleScroller = document.querySelector('.vue-recycle-scroller');
                 const isPageMode = recycleScroller && recycleScroller.classList.contains('page-mode');
-                
+
                 // 获取所有可见行的辅助函数
                 const getVisibleRows = () => {
                     const rows = document.querySelectorAll('.vue-recycle-scroller__item-view');
@@ -748,8 +747,8 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                     visibleRows.sort((a, b) => a.y - b.y);
                     return visibleRows;
                 };
-                
-                // 动态检测实际行高（通过测量相邻行的Y差值）
+
+                // 动态检测实际行高(通过测量相邻行的Y差值)
                 const detectRowHeight = () => {
                     const visibleRows = getVisibleRows();
                     if (visibleRows.length >= 2) {
@@ -769,24 +768,24 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                     }
                     return DEFAULT_ROW_HEIGHT;
                 };
-                
+
                 const ROW_HEIGHT = detectRowHeight();
                 const targetScrollTop = index * ROW_HEIGHT;
-                
+
                 let scrollerInfo = '';
                 let actualScrollTop = 0;
-                
+
                 if (isPageMode) {
-                    // page-mode：滚动整个页面或找到真正的滚动父容器
+                    // page-mode:滚动整个页面或找到真正的滚动父容器
                     scrollerInfo = 'page-mode';
-                    
+
                     let scrollParent = recycleScroller.parentElement;
                     let foundScrollable = false;
-                    
+
                     while (scrollParent && scrollParent !== document.body) {
                         const style = window.getComputedStyle(scrollParent);
                         const overflowY = style.overflowY;
-                        if ((overflowY === 'auto' || overflowY === 'scroll') && 
+                        if ((overflowY === 'auto' || overflowY === 'scroll') &&
                             scrollParent.scrollHeight > scrollParent.clientHeight) {
                             scrollParent.scrollTop = targetScrollTop;
                             await new Promise(r => setTimeout(r, 500));
@@ -797,7 +796,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         }
                         scrollParent = scrollParent.parentElement;
                     }
-                    
+
                     if (!foundScrollable) {
                         window.scrollTo({ top: targetScrollTop, behavior: 'instant' });
                         await new Promise(r => setTimeout(r, 500));
@@ -812,19 +811,19 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         scrollerInfo = 'vue-recycle-scroller';
                     }
                 }
-                
-                // 重新获取可见行（滚动后）
+
+                // 重新获取可见行(滚动后)
                 const visibleRows = getVisibleRows();
-                
+
                 // 根据可见行推断索引的辅助函数
                 const inferRowIndex = (y) => Math.round(y / ROW_HEIGHT);
-                
+
                 // 计算目标 translateY
                 let targetRow = null;
                 let targetTranslateY = index * ROW_HEIGHT;
                 let matchedY = -1;
-                
-                // 方法1: 基于Y坐标匹配（容差为行高的70%）
+
+                // 方法1: 基于Y坐标匹配(容差为行高的70%)
                 for (const item of visibleRows) {
                     const diff = Math.abs(item.y - targetTranslateY);
                     if (diff < ROW_HEIGHT * 0.7) {
@@ -833,7 +832,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         break;
                     }
                 }
-                
+
                 // 方法2: 基于推断索引匹配
                 if (!targetRow) {
                     for (const item of visibleRows) {
@@ -845,10 +844,10 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         }
                     }
                 }
-                
+
                 if (!targetRow) {
-                    return { 
-                        success: false, 
+                    return {
+                        success: false,
                         error: `Target Y=${targetTranslateY} not found in visible rows`,
                         scrollerInfo,
                         isPageMode,
@@ -859,8 +858,8 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         detectedRowHeight: ROW_HEIGHT
                     };
                 }
-                
-                // 如果只需要点击复选框，直接处理后返回
+
+                // 如果只需要点击复选框,直接处理后返回
                 if (target === 'checkbox') {
                     const checkboxSelectors = [
                         '.is-fixed-left.is-selection-column .jx-checkbox__inner',
@@ -901,18 +900,18 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         };
                     }
                 }
-                
+
                 // 在行内查找"认领到"按钮
-                // 选择器优先级：包含"认领到"文本的按钮
+                // 选择器优先级:包含"认领到"文本的按钮
                 const claimBtnSelectors = [
                     'button.jx-button.is-text span:has-text("认领到")',
                     'button.pro-button.is-text',
                     'button[aria-haspopup="menu"]',
                     '.jx-tooltip__trigger.pro-button',
                 ];
-                
+
                 let claimBtn = null;
-                
+
                 // 方法1: 通过文本内容查找
                 const allButtons = targetRow.querySelectorAll('button');
                 for (const btn of allButtons) {
@@ -922,7 +921,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         break;
                     }
                 }
-                
+
                 // 方法2: 通过选择器查找
                 if (!claimBtn) {
                     for (const selector of claimBtnSelectors) {
@@ -935,21 +934,21 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         } catch (e) {}
                     }
                 }
-                
+
                 if (!claimBtn) {
-                    return { 
-                        success: false, 
+                    return {
+                        success: false,
                         error: 'Claim button not found in target row',
                         scrollerInfo,
                         matchedY,
                         buttonsFound: allButtons.length
                     };
                 }
-                
-                // 获取按钮关联的下拉菜单 ID（通过 aria-controls 属性）
+
+                // 获取按钮关联的下拉菜单 ID(通过 aria-controls 属性)
                 const ariaControls = claimBtn.getAttribute('aria-controls');
-                
-                // 模拟鼠标悬浮在"认领到"按钮上（hover 触发下拉菜单）
+
+                // 模拟鼠标悬浮在"认领到"按钮上(hover 触发下拉菜单)
                 const hoverEvents = ['mouseenter', 'mouseover', 'pointerenter'];
                 for (const eventType of hoverEvents) {
                     const event = new MouseEvent(eventType, {
@@ -959,33 +958,33 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                     });
                     claimBtn.dispatchEvent(event);
                 }
-                
-                // 等待下拉菜单出现（hover 触发需要时间）
+
+                // 等待下拉菜单出现(hover 触发需要时间)
                 await new Promise(r => setTimeout(r, 600));
-                
+
                 // 优先通过 aria-controls 关联的 ID 查找下拉菜单
                 let dropdown = null;
-                
+
                 if (ariaControls) {
                     // 通过 ID 精确定位关联的下拉菜单
                     dropdown = document.getElementById(ariaControls);
                     if (dropdown && dropdown.offsetParent === null) {
-                        // 菜单存在但不可见，再等待一下
+                        // 菜单存在但不可见,再等待一下
                         await new Promise(r => setTimeout(r, 400));
                         dropdown = document.getElementById(ariaControls);
                     }
                 }
-                
-                // 如果通过 aria-controls 找不到，使用备用选择器
+
+                // 如果通过 aria-controls 找不到,使用备用选择器
                 if (!dropdown || dropdown.offsetParent === null) {
                     const dropdownSelectors = [
                         '.el-dropdown-menu:not([style*="display: none"])',
-                        '.jx-dropdown-menu:not([style*="display: none"])', 
+                        '.jx-dropdown-menu:not([style*="display: none"])',
                         '.pro-dropdown__menu:not([style*="display: none"])',
                         '[role="menu"][aria-hidden="false"]',
                         '.jx-popper[aria-hidden="false"]',
                     ];
-                    
+
                     for (const selector of dropdownSelectors) {
                         const found = document.querySelector(selector);
                         if (found && found.offsetParent !== null) {
@@ -995,7 +994,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                     }
                 }
 
-                // 如果仍未出现，下拉可能需要点击触发，尝试点击后再查找
+                // 如果仍未出现,下拉可能需要点击触发,尝试点击后再查找
                 if (!dropdown || dropdown.offsetParent === null) {
                     try {
                         claimBtn.click();
@@ -1004,12 +1003,12 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
 
                     const clickDropdownSelectors = [
                         '.el-dropdown-menu:not([style*="display: none"])',
-                        '.jx-dropdown-menu:not([style*="display: none"])', 
+                        '.jx-dropdown-menu:not([style*="display: none"])',
                         '.pro-dropdown__menu:not([style*="display: none"])',
                         '[role="menu"][aria-hidden="false"]',
                         '.jx-popper[aria-hidden="false"]',
                     ];
-                    
+
                     for (const selector of clickDropdownSelectors) {
                         const found = document.querySelector(selector);
                         if (found && found.offsetParent !== null) {
@@ -1018,10 +1017,10 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         }
                     }
                 }
-                
+
                 if (!dropdown) {
-                    return { 
-                        success: false, 
+                    return {
+                        success: false,
                         error: 'Dropdown menu not found after clicking claim button',
                         scrollerInfo,
                         matchedY,
@@ -1029,15 +1028,15 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         ariaControls: ariaControls || 'none'
                     };
                 }
-                
-                // 点击下拉菜单的第一个选项（应该是 "Temu全托管" 之类的）
+
+                // 点击下拉菜单的第一个选项(应该是 "Temu全托管" 之类的)
                 const optionSelectors = [
                     '.el-dropdown-menu__item',
                     '.jx-dropdown-menu__item',
                     '[role="menuitem"]',
                     'li',
                 ];
-                
+
                 let firstOption = null;
                 for (const selector of optionSelectors) {
                     const options = dropdown.querySelectorAll(selector);
@@ -1046,10 +1045,10 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         break;
                     }
                 }
-                
+
                 if (!firstOption) {
-                    return { 
-                        success: false, 
+                    return {
+                        success: false,
                         error: 'No option found in dropdown menu',
                         scrollerInfo,
                         matchedY,
@@ -1058,12 +1057,12 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         dropdownId: dropdown.id || 'unknown'
                     };
                 }
-                
+
                 // 点击第一个选项
                 firstOption.click();
-                
-                return { 
-                    success: true, 
+
+                return {
+                    success: true,
                     scrollerInfo,
                     isPageMode,
                     targetScrollTop,
@@ -1081,12 +1080,12 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
             if result.get("success"):
                 if target == "checkbox":
                     logger.success(
-                        f"✓ JS 勾选成功，索引={index}, 容器={result.get('scrollerInfo')}, "
+                        f"✓ JS 勾选成功,索引={index}, 容器={result.get('scrollerInfo')}, "
                         f"匹配Y={result.get('matchedY')}"
                     )
                 else:
                     logger.success(
-                        f"✓ JS 点击认领按钮成功，索引={index}, 容器={result.get('scrollerInfo')}, "
+                        f"✓ JS 点击认领按钮成功,索引={index}, 容器={result.get('scrollerInfo')}, "
                         f"page-mode={result.get('isPageMode')}, 匹配Y={result.get('matchedY')}px, "
                         f"选项={result.get('optionText')}"
                     )
@@ -1109,9 +1108,9 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
         *,
         repeat_per_product: int = 5,
     ) -> tuple[int, int, int]:
-        """使用 JS 定位逻辑逐行认领商品。
+        """使用 JS 定位逻辑逐行认领商品.
 
-        复用首次编辑的定位逻辑，对每个索引：
+        复用首次编辑的定位逻辑,对每个索引:
         1. 滚动到目标行
         2. 点击该行的"认领到"按钮
         3. 选择下拉菜单第一项
@@ -1120,7 +1119,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
         Args:
             page: Playwright 页面对象
             indexes: 要认领的商品索引列表
-            repeat_per_product: 每个商品点击认领的次数（默认5次）
+            repeat_per_product: 每个商品点击认领的次数(默认5次)
 
         Returns:
             (成功商品数, 失败商品数, 成功点击总数) 元组
@@ -1131,7 +1130,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
         waiter = PageWaiter(page)
 
         async def _wait_for_virtual_list_ready() -> bool:
-            """等待虚拟滚动列表重新加载完成。"""
+            """等待虚拟滚动列表重新加载完成."""
             for _ in range(10):  # 最多等待 5 秒
                 try:
                     has_rows = await page.evaluate("""
@@ -1154,14 +1153,14 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
             return False
 
         for idx in indexes:
-            logger.info(f"正在认领索引 {idx} 的商品（共 {repeat_per_product} 次）...")
+            logger.info(f"正在认领索引 {idx} 的商品(共 {repeat_per_product} 次)...")
             product_success = 0
             current_idx = idx
 
             for click_num in range(repeat_per_product):
                 # 每次点击前确保虚拟列表已加载
                 if click_num > 0 and not await _wait_for_virtual_list_ready():
-                    logger.warning(f"索引 {idx} 第 {click_num + 1} 次: 虚拟列表未就绪，尝试继续")
+                    logger.warning(f"索引 {idx} 第 {click_num + 1} 次: 虚拟列表未就绪,尝试继续")
 
                 result = await self._click_claim_button_in_row_by_js(page, current_idx)
 
@@ -1173,7 +1172,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         f"选项={result.get('optionText')}"
                     )
                     await waiter.wait_for_dom_stable(timeout_ms=800)
-                    # 认领后行可能移除，后续固定使用首行索引防止漂移
+                    # 认领后行可能移除,后续固定使用首行索引防止漂移
                     current_idx = 0
                 else:
                     logger.warning(
@@ -1196,7 +1195,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                     f"✗ 索引 {idx} 认领未达标: {product_success}/{repeat_per_product} 次成功"
                 )
 
-            # 每个商品处理完后，等待页面稳定再处理下一个
+            # 每个商品处理完后,等待页面稳定再处理下一个
             await _wait_for_virtual_list_ready()
 
         logger.info(
@@ -1210,7 +1209,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
         page: Page,
         indexes: Sequence[int],
     ) -> tuple[int, int]:
-        """使用 JS 逐行勾选复选框（复用行定位逻辑）."""
+        """使用 JS 逐行勾选复选框(复用行定位逻辑)."""
 
         success_count = 0
         fail_count = 0
@@ -1268,17 +1267,17 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
         return success_count, fail_count
 
     async def _find_row_by_translate_y(self, page: Page, index: int):
-        """通过 translateY 值定位 vue-recycle-scroller 中的行。
+        """通过 translateY 值定位 vue-recycle-scroller 中的行.
 
-        vue-recycle-scroller 使用 transform: translateY(N*ROW_HEIGHT) 来定位行。
-        滚动后，目标行的 translateY 应该接近 0（在视口顶部）。
+        vue-recycle-scroller 使用 transform: translateY(N*ROW_HEIGHT) 来定位行.
+        滚动后,目标行的 translateY 应该接近 0(在视口顶部).
 
         Args:
             page: Playwright 页面对象
             index: 目标商品索引
 
         Returns:
-            找到的行 Locator，或 None
+            找到的行 Locator,或 None
         """
         import re
 
@@ -1290,7 +1289,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
             if count == 0:
                 return None
 
-            # 找到 translateY 最小且 >= 0 的行（视口中的第一行）
+            # 找到 translateY 最小且 >= 0 的行(视口中的第一行)
             min_translate_y = float("inf")
             target_row = None
 
@@ -1302,7 +1301,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                     match = re.search(r"translateY\((-?\d+(?:\.\d+)?)\s*(?:px)?\s*\)", style)
                     translate_y = float(match.group(1)) if match else -9999
 
-                    # 跳过被回收的行（translateY = -9999px）
+                    # 跳过被回收的行(translateY = -9999px)
                     if translate_y < 0:
                         continue
 
@@ -1314,7 +1313,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                     continue
 
             if target_row:
-                logger.debug(f"找到目标行，translateY={min_translate_y}px")
+                logger.debug(f"找到目标行,translateY={min_translate_y}px")
                 return target_row.locator(self._ROW_SELECTOR).first
 
             return None
@@ -1323,7 +1322,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
             return None
 
     async def _find_first_visible_row(self, page: Page):
-        """找到视口内的第一个可见行。"""
+        """找到视口内的第一个可见行."""
         try:
             rows = page.locator(self._ROW_SELECTOR)
             count = await rows.count()
@@ -1758,10 +1757,8 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                     if text and not any(word in text for word in confirm_keywords):
                         continue
 
-                    try:
+                    with suppress(Exception):
                         await button.scroll_into_view_if_needed()
-                    except Exception:
-                        pass
 
                     try:
                         if not await button.is_enabled():
@@ -1878,7 +1875,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                                 break
 
                             logger.debug(
-                                "未立即找到下拉菜单项，尝试第 {} 次点击按钮展开", attempt + 1
+                                "未立即找到下拉菜单项,尝试第 {} 次点击按钮展开", attempt + 1
                             )
                             await claim_button.click(force=True)
                             await self._wait_for_claim_dropdown(page, state="visible", timeout=300)
@@ -1890,7 +1887,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                     await self._wait_for_claim_dropdown(page, state="hidden", timeout=300)
                     temu_destination_selected = True
                 else:
-                    logger.debug("Temu全托管已在首次迭代选定，跳过下拉菜单点击")
+                    logger.debug("Temu全托管已在首次迭代选定,跳过下拉菜单点击")
                     await self._wait_for_idle(page, timeout_ms=150)
 
                 if not await self._click_claim_confirmation_button(page):
@@ -1912,7 +1909,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
 
         if success_count > 0:
             if success_count < repeat:
-                logger.warning(f"认领流程已成功执行 {success_count}/{repeat} 次，仍有部分尝试失败")
+                logger.warning(f"认领流程已成功执行 {success_count}/{repeat} 次,仍有部分尝试失败")
             else:
                 logger.success("简化版认领流程执行完成")
             return True
@@ -2039,7 +2036,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
 
             logger.debug("认领进度条状态: completed={}", progress_ready)
 
-            # 尝试关闭弹窗，最多重试3次
+            # 尝试关闭弹窗,最多重试3次
             max_retries = 3
             for attempt in range(max_retries):
                 close_button: Locator | None = await self._locate_progress_close_button(dialog)
@@ -2068,14 +2065,10 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         continue
                     return False
 
-                try:
+                with suppress(Exception):
                     await close_button.scroll_into_view_if_needed()
-                except Exception:
-                    pass
-                try:
+                with suppress(Exception):
                     await close_button.hover()
-                except Exception:
-                    pass
 
                 try:
                     await close_button.click(force=True)
@@ -2092,7 +2085,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                     await dialog.wait_for(state="hidden", timeout=1_200)
                     dialog_closed = True
                 except PlaywrightTimeoutError:
-                    logger.debug("认领进度弹窗未立即隐藏，尝试等待 DOM 移除")
+                    logger.debug("认领进度弹窗未立即隐藏,尝试等待 DOM 移除")
                     with suppress(PlaywrightTimeoutError):
                         await dialog.wait_for(state="detached", timeout=1_000)
                         dialog_closed = True
@@ -2102,10 +2095,10 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                     return True
 
                 logger.debug(
-                    "认领进度弹窗关闭失败，准备重试 attempt={}/{}", attempt + 1, max_retries
+                    "认领进度弹窗关闭失败,准备重试 attempt={}/{}", attempt + 1, max_retries
                 )
 
-            logger.debug("认领进度弹窗关闭失败，已达最大重试次数")
+            logger.debug("认领进度弹窗关闭失败,已达最大重试次数")
             return False
         except PlaywrightTimeoutError as exc:
             logger.debug(f"等待认领进度弹窗关闭时超时: {exc}")
@@ -2268,7 +2261,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                 logger.debug(f"判定关闭按钮归属弹窗失败: {exc}")
                 is_descendant = False
             if not is_descendant:
-                logger.debug("定位到关闭按钮但不属于批量认领弹窗，跳过")
+                logger.debug("定位到关闭按钮但不属于批量认领弹窗,跳过")
                 continue
 
             return button

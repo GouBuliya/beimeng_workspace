@@ -15,10 +15,9 @@
 """
 
 import asyncio
-import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
-from dataclasses import dataclass
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from src.data_processor.ai_title_generator import AITitleGenerator, generate_titles_simple
 
 
@@ -48,7 +47,7 @@ class TestAITitleGenerator:
         assert generator.timeout == 60
 
     def test_init_with_base_url(self):
-        """测试自定义base_url（兼容接口）"""
+        """测试自定义base_url(兼容接口)"""
         generator = AITitleGenerator(
             provider="openai",
             api_key="test-key",
@@ -82,7 +81,7 @@ class TestAITitleGenerator:
         # 验证提示词包含关键要求
         assert "高频热搜词" in prompt
         assert "5个新的中文标题" in prompt
-        assert "不要出现药品，急救等医疗相关的词汇" in prompt
+        assert "不要出现药品,急救等医疗相关的词汇" in prompt
         assert "符合欧美人的阅读习惯" in prompt
 
     @pytest.mark.asyncio
@@ -116,7 +115,7 @@ class TestAITitleGenerator:
                 original_titles, model_number=model_number, use_ai=True
             )
 
-            # 应该返回降级标题（原标题+型号）
+            # 应该返回降级标题(原标题+型号)
             assert len(new_titles) == 5
             for i, title in enumerate(new_titles):
                 assert original_titles[i] in title
@@ -227,7 +226,7 @@ class TestAITitleGeneratorMocked:
 
     @pytest.mark.asyncio
     async def test_api_response_parsing(self):
-        """测试API响应解析（去除编号）"""
+        """测试API响应解析(去除编号)"""
         generator = AITitleGenerator(provider="openai", api_key="test-key")
 
         # 模拟带编号的响应
@@ -282,9 +281,9 @@ class TestAITitleGeneratorMocked:
 
 
 class TestAITitleGeneratorIntegration:
-    """AI标题生成器集成测试（需要真实API密钥）."""
+    """AI标题生成器集成测试(需要真实API密钥)."""
 
-    @pytest.mark.skip(reason="需要真实API密钥，手动测试")
+    @pytest.mark.skip(reason="需要真实API密钥,手动测试")
     @pytest.mark.asyncio
     async def test_real_openai_call(self):
         """使用真实OpenAI API测试."""
@@ -310,11 +309,11 @@ class TestAITitleGeneratorIntegration:
             # 验证包含型号
             assert "A0049型号" in title
 
-        print("\n生成的标题：")
+        print("\n生成的标题:")
         for i, title in enumerate(new_titles):
             print(f"{i + 1}. {title}")
 
-    @pytest.mark.skip(reason="需要真实API密钥，手动测试")
+    @pytest.mark.skip(reason="需要真实API密钥,手动测试")
     @pytest.mark.asyncio
     async def test_real_anthropic_call(self):
         """使用真实Anthropic API测试."""
@@ -340,7 +339,7 @@ class TestAITitleGeneratorIntegration:
             # 验证包含型号
             assert "A0050型号" in title
 
-        print("\n生成的标题：")
+        print("\n生成的标题:")
         for i, title in enumerate(new_titles):
             print(f"{i + 1}. {title}")
 
@@ -350,7 +349,7 @@ def test_generate_titles_simple_function():
     original_titles = ["标题1", "标题2", "标题3", "标题4", "标题5"]
     model_number = "A0049型号"
 
-    # 由于是async函数，需要在事件循环中运行
+    # 由于是async函数,需要在事件循环中运行
     result = asyncio.run(
         generate_titles_simple(original_titles, model_number=model_number, provider="openai")
     )

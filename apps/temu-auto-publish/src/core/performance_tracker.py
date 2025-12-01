@@ -2,17 +2,17 @@
 @PURPOSE: 性能追踪器核心模块 - 提供层级化的性能监控能力
 @OUTLINE:
   - class ExecutionStatus: 执行状态枚举
-  - class ActionMetrics: Action 级别指标（最细粒度）
+  - class ActionMetrics: Action 级别指标(最细粒度)
   - class OperationMetrics: Operation 级别指标
   - class StageMetrics: Stage 级别指标
-  - class WorkflowMetrics: Workflow 级别指标（根节点）
+  - class WorkflowMetrics: Workflow 级别指标(根节点)
   - class PerformanceTracker: 核心追踪器类
   - get_tracker(): 获取全局追踪器实例
   - reset_tracker(): 重置全局追踪器
   - track_operation(): Operation 装饰器
   - track_action(): Action 装饰器
 @GOTCHAS:
-  - PerformanceTracker 是单例模式，使用 get_tracker() 获取
+  - PerformanceTracker 是单例模式,使用 get_tracker() 获取
   - 必须先调用 start_workflow() 才能使用 stage/operation/action
   - 装饰器会自动检测同步/异步函数
 @DEPENDENCIES:
@@ -26,11 +26,12 @@ import asyncio
 import functools
 import time
 import uuid
+from collections.abc import Callable
 from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Optional, TypeVar
+from typing import Any, TypeVar
 
 from loguru import logger
 from pydantic import BaseModel, Field, computed_field
@@ -50,32 +51,32 @@ class ExecutionStatus(str, Enum):
 
 
 class ActionMetrics(BaseModel):
-    """Action 级别指标 - 代表原子操作（最细粒度）
+    """Action 级别指标 - 代表原子操作(最细粒度)
 
-    例如: 点击按钮、填写表单、等待元素等
+    例如: 点击按钮,填写表单,等待元素等
     """
 
     id: str = Field(default_factory=lambda: f"act_{uuid.uuid4().hex[:8]}")
     name: str
     status: ExecutionStatus = ExecutionStatus.PENDING
-    start_time: Optional[datetime] = None
-    end_time: Optional[datetime] = None
-    error: Optional[str] = None
+    start_time: datetime | None = None
+    end_time: datetime | None = None
+    error: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
-    parent_operation_id: Optional[str] = None
+    parent_operation_id: str | None = None
 
     @computed_field
     @property
-    def duration_ms(self) -> Optional[float]:
-        """持续时间（毫秒）"""
+    def duration_ms(self) -> float | None:
+        """持续时间(毫秒)"""
         if self.start_time and self.end_time:
             return (self.end_time - self.start_time).total_seconds() * 1000
         return None
 
     @computed_field
     @property
-    def duration_s(self) -> Optional[float]:
-        """持续时间（秒），保留2位小数"""
+    def duration_s(self) -> float | None:
+        """持续时间(秒),保留2位小数"""
         if self.duration_ms is not None:
             return round(self.duration_ms / 1000, 2)
         return None
@@ -84,32 +85,32 @@ class ActionMetrics(BaseModel):
 class OperationMetrics(BaseModel):
     """Operation 级别指标 - 代表业务操作
 
-    例如: 编辑单个产品、执行一个批量编辑步骤
+    例如: 编辑单个产品,执行一个批量编辑步骤
     包含多个 Actions
     """
 
     id: str = Field(default_factory=lambda: f"op_{uuid.uuid4().hex[:8]}")
     name: str
     status: ExecutionStatus = ExecutionStatus.PENDING
-    start_time: Optional[datetime] = None
-    end_time: Optional[datetime] = None
-    error: Optional[str] = None
+    start_time: datetime | None = None
+    end_time: datetime | None = None
+    error: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
     actions: list[ActionMetrics] = Field(default_factory=list)
-    parent_stage_id: Optional[str] = None
+    parent_stage_id: str | None = None
 
     @computed_field
     @property
-    def duration_ms(self) -> Optional[float]:
-        """持续时间（毫秒）"""
+    def duration_ms(self) -> float | None:
+        """持续时间(毫秒)"""
         if self.start_time and self.end_time:
             return (self.end_time - self.start_time).total_seconds() * 1000
         return None
 
     @computed_field
     @property
-    def duration_s(self) -> Optional[float]:
-        """持续时间（秒），保留2位小数"""
+    def duration_s(self) -> float | None:
+        """持续时间(秒),保留2位小数"""
         if self.duration_ms is not None:
             return round(self.duration_ms / 1000, 2)
         return None
@@ -124,7 +125,7 @@ class OperationMetrics(BaseModel):
 class StageMetrics(BaseModel):
     """Stage 级别指标 - 代表工作流阶段
 
-    例如: 首次编辑阶段、认领阶段、批量编辑阶段
+    例如: 首次编辑阶段,认领阶段,批量编辑阶段
     包含多个 Operations
     """
 
@@ -133,25 +134,25 @@ class StageMetrics(BaseModel):
     display_name: str  # 用于显示的友好名称
     order: int = 0  # 阶段顺序
     status: ExecutionStatus = ExecutionStatus.PENDING
-    start_time: Optional[datetime] = None
-    end_time: Optional[datetime] = None
-    error: Optional[str] = None
+    start_time: datetime | None = None
+    end_time: datetime | None = None
+    error: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
     operations: list[OperationMetrics] = Field(default_factory=list)
-    parent_workflow_id: Optional[str] = None
+    parent_workflow_id: str | None = None
 
     @computed_field
     @property
-    def duration_ms(self) -> Optional[float]:
-        """持续时间（毫秒）"""
+    def duration_ms(self) -> float | None:
+        """持续时间(毫秒)"""
         if self.start_time and self.end_time:
             return (self.end_time - self.start_time).total_seconds() * 1000
         return None
 
     @computed_field
     @property
-    def duration_s(self) -> Optional[float]:
-        """持续时间（秒），保留2位小数"""
+    def duration_s(self) -> float | None:
+        """持续时间(秒),保留2位小数"""
         if self.duration_ms is not None:
             return round(self.duration_ms / 1000, 2)
         return None
@@ -164,7 +165,7 @@ class StageMetrics(BaseModel):
 
 
 class WorkflowMetrics(BaseModel):
-    """Workflow 级别指标 - 代表完整工作流执行（根节点）
+    """Workflow 级别指标 - 代表完整工作流执行(根节点)
 
     例如: temu_publish 完整发布工作流
     包含多个 Stages
@@ -175,24 +176,24 @@ class WorkflowMetrics(BaseModel):
     )
     name: str = "temu_publish"
     status: ExecutionStatus = ExecutionStatus.PENDING
-    start_time: Optional[datetime] = None
-    end_time: Optional[datetime] = None
-    error: Optional[str] = None
+    start_time: datetime | None = None
+    end_time: datetime | None = None
+    error: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
     stages: list[StageMetrics] = Field(default_factory=list)
 
     @computed_field
     @property
-    def duration_ms(self) -> Optional[float]:
-        """持续时间（毫秒）"""
+    def duration_ms(self) -> float | None:
+        """持续时间(毫秒)"""
         if self.start_time and self.end_time:
             return (self.end_time - self.start_time).total_seconds() * 1000
         return None
 
     @computed_field
     @property
-    def duration_s(self) -> Optional[float]:
-        """持续时间（秒），保留2位小数"""
+    def duration_s(self) -> float | None:
+        """持续时间(秒),保留2位小数"""
         if self.duration_ms is not None:
             return round(self.duration_ms / 1000, 2)
         return None
@@ -222,7 +223,7 @@ class WorkflowMetrics(BaseModel):
         """获取汇总数据
 
         Returns:
-            dict: 包含总耗时、各阶段耗时和占比的汇总信息
+            dict: 包含总耗时,各阶段耗时和占比的汇总信息
         """
         percentages = self.calculate_percentages()
         stages_summary = []
@@ -251,7 +252,7 @@ class WorkflowMetrics(BaseModel):
 class PerformanceTracker:
     """性能追踪器 - 统一的性能监控入口
 
-    提供三种使用方式：
+    提供三种使用方式:
     1. 上下文管理器: async with tracker.stage("name"):
     2. 装饰器: @tracker.track_operation("name")
     3. 显式调用: tracker.start_workflow(); tracker.end_workflow()
@@ -273,19 +274,19 @@ class PerformanceTracker:
             workflow_name: 工作流名称
         """
         self.workflow_name = workflow_name
-        self.workflow: Optional[WorkflowMetrics] = None
-        self._current_stage: Optional[StageMetrics] = None
-        self._current_operation: Optional[OperationMetrics] = None
-        self._current_action: Optional[ActionMetrics] = None
+        self.workflow: WorkflowMetrics | None = None
+        self._current_stage: StageMetrics | None = None
+        self._current_operation: OperationMetrics | None = None
+        self._current_action: ActionMetrics | None = None
         self._perf_counters: dict[str, float] = {}  # 高精度计时器
 
     # ========== Workflow 级别 ==========
 
-    def start_workflow(self, workflow_id: Optional[str] = None) -> str:
+    def start_workflow(self, workflow_id: str | None = None) -> str:
         """开始工作流追踪
 
         Args:
-            workflow_id: 可选的工作流ID，不提供则自动生成
+            workflow_id: 可选的工作流ID,不提供则自动生成
 
         Returns:
             str: 工作流ID
@@ -302,12 +303,12 @@ class PerformanceTracker:
         logger.info(f"[Performance] 工作流开始: {self.workflow.id}")
         return self.workflow.id
 
-    def end_workflow(self, success: bool = True, error: Optional[str] = None) -> None:
+    def end_workflow(self, success: bool = True, error: str | None = None) -> None:
         """结束工作流追踪
 
         Args:
             success: 是否成功
-            error: 错误信息（如果失败）
+            error: 错误信息(如果失败)
         """
         if not self.workflow:
             logger.warning("[Performance] 未找到活跃的工作流")
@@ -333,16 +334,16 @@ class PerformanceTracker:
         """Stage 级别的异步上下文管理器
 
         Args:
-            name: 阶段名称（用于标识，如 "stage1_first_edit"）
-            display_name: 显示名称（用于报告，如 "首次编辑"）
-            order: 阶段顺序（用于排序）
+            name: 阶段名称(用于标识,如 "stage1_first_edit")
+            display_name: 显示名称(用于报告,如 "首次编辑")
+            order: 阶段顺序(用于排序)
 
         Example:
             >>> async with tracker.stage("stage1", "首次编辑", order=1):
             ...     await do_first_edit()
         """
         if not self.workflow:
-            logger.warning("[Performance] 未找到活跃的工作流，请先调用 start_workflow()")
+            logger.warning("[Performance] 未找到活跃的工作流,请先调用 start_workflow()")
             yield
             return
 
@@ -423,7 +424,7 @@ class PerformanceTracker:
             ...     await edit_product()
         """
         if not self._current_stage:
-            logger.debug(f"[Performance] 未在 Stage 内，跳过 Operation 记录: {name}")
+            logger.debug(f"[Performance] 未在 Stage 内,跳过 Operation 记录: {name}")
             yield
             return
 
@@ -457,7 +458,7 @@ class PerformanceTracker:
     def operation_sync(self, name: str, **metadata):
         """Operation 级别的同步上下文管理器"""
         if not self._current_stage:
-            logger.debug(f"[Performance] 未在 Stage 内，跳过 Operation 记录: {name}")
+            logger.debug(f"[Performance] 未在 Stage 内,跳过 Operation 记录: {name}")
             yield
             return
 
@@ -535,7 +536,7 @@ class PerformanceTracker:
             ...     await page.click("#submit")
         """
         if not self._current_operation:
-            logger.debug(f"[Performance] 未在 Operation 内，跳过 Action 记录: {name}")
+            logger.debug(f"[Performance] 未在 Operation 内,跳过 Action 记录: {name}")
             yield
             return
 
@@ -567,7 +568,7 @@ class PerformanceTracker:
     def action_sync(self, name: str, **metadata):
         """Action 级别的同步上下文管理器"""
         if not self._current_operation:
-            logger.debug(f"[Performance] 未在 Operation 内，跳过 Action 记录: {name}")
+            logger.debug(f"[Performance] 未在 Operation 内,跳过 Action 记录: {name}")
             yield
             return
 
@@ -653,11 +654,11 @@ class PerformanceTracker:
             return "{}"
         return self.workflow.model_dump_json(indent=indent)
 
-    def save_to_file(self, path: Optional[Path] = None) -> Path:
+    def save_to_file(self, path: Path | None = None) -> Path:
         """保存到文件
 
         Args:
-            path: 文件路径，不提供则使用默认路径
+            path: 文件路径,不提供则使用默认路径
 
         Returns:
             Path: 保存的文件路径
@@ -679,7 +680,7 @@ class PerformanceTracker:
         """获取汇总数据
 
         Returns:
-            dict: 汇总信息，包含各阶段耗时和占比
+            dict: 汇总信息,包含各阶段耗时和占比
         """
         if not self.workflow:
             return {}
@@ -696,7 +697,7 @@ class PerformanceTracker:
 
 # ========== 全局单例 ==========
 
-_global_tracker: Optional[PerformanceTracker] = None
+_global_tracker: PerformanceTracker | None = None
 
 
 def get_tracker(workflow_name: str = "temu_publish") -> PerformanceTracker:
@@ -728,11 +729,11 @@ def reset_tracker(workflow_name: str = "temu_publish") -> PerformanceTracker:
     return _global_tracker
 
 
-# ========== 便捷装饰器（使用全局追踪器）==========
+# ========== 便捷装饰器(使用全局追踪器)==========
 
 
 def track_operation(name: str, **metadata) -> Callable[[F], F]:
-    """便捷的 Operation 装饰器（使用全局追踪器）
+    """便捷的 Operation 装饰器(使用全局追踪器)
 
     Example:
         >>> @track_operation("my_operation")
@@ -743,7 +744,7 @@ def track_operation(name: str, **metadata) -> Callable[[F], F]:
 
 
 def track_action(name: str, **metadata) -> Callable[[F], F]:
-    """便捷的 Action 装饰器（使用全局追踪器）
+    """便捷的 Action 装饰器(使用全局追踪器)
 
     Example:
         >>> @track_action("my_action")

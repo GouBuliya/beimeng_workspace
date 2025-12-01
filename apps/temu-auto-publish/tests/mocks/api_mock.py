@@ -8,7 +8,6 @@
   - 外部: unittest.mock
 """
 
-from typing import Any, Dict, List, Optional
 from dataclasses import dataclass, field
 
 
@@ -46,7 +45,7 @@ class MockOpenAIResponse:
     object: str = "chat.completion"
     created: int = 1234567890
     model: str = "gpt-3.5-turbo"
-    choices: List[MockOpenAIChoice] = field(default_factory=lambda: [MockOpenAIChoice()])
+    choices: list[MockOpenAIChoice] = field(default_factory=lambda: [MockOpenAIChoice()])
     usage: MockOpenAIUsage = field(default_factory=MockOpenAIUsage)
 
     @classmethod
@@ -61,11 +60,11 @@ class MockOpenAIChatCompletions:
     def __init__(self, default_response: str = "Generated title for product"):
         self.default_response = default_response
         self.call_count = 0
-        self.last_messages: Optional[List[Dict]] = None
-        self.last_model: Optional[str] = None
+        self.last_messages: list[dict] | None = None
+        self.last_model: str | None = None
 
     async def create(
-        self, model: str = "gpt-3.5-turbo", messages: List[Dict[str, str]] = None, **kwargs
+        self, model: str = "gpt-3.5-turbo", messages: list[dict[str, str]] | None = None, **kwargs
     ) -> MockOpenAIResponse:
         """模拟创建聊天完成"""
         self.call_count += 1
@@ -74,7 +73,7 @@ class MockOpenAIChatCompletions:
         return MockOpenAIResponse.create(self.default_response)
 
     def create_sync(
-        self, model: str = "gpt-3.5-turbo", messages: List[Dict[str, str]] = None, **kwargs
+        self, model: str = "gpt-3.5-turbo", messages: list[dict[str, str]] | None = None, **kwargs
     ) -> MockOpenAIResponse:
         """同步版本"""
         self.call_count += 1
@@ -109,10 +108,10 @@ class MockHTTPResponse:
     status_code: int = 200
     text: str = ""
     content: bytes = b""
-    headers: Dict[str, str] = field(default_factory=dict)
-    json_data: Optional[Dict] = None
+    headers: dict[str, str] = field(default_factory=dict)
+    json_data: dict | None = None
 
-    def json(self) -> Dict:
+    def json(self) -> dict:
         """返回JSON数据"""
         return self.json_data or {}
 
@@ -131,9 +130,9 @@ class MockHTTPClient:
     """模拟 HTTP 客户端 (aiohttp/httpx)"""
 
     def __init__(self):
-        self.responses: Dict[str, MockHTTPResponse] = {}
+        self.responses: dict[str, MockHTTPResponse] = {}
         self.default_response = MockHTTPResponse()
-        self.request_history: List[Dict] = []
+        self.request_history: list[dict] = []
 
     def set_response(self, url: str, response: MockHTTPResponse) -> None:
         """设置特定URL的响应"""

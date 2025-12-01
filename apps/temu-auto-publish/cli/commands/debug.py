@@ -12,14 +12,13 @@
   - 外部: typer, rich
 """
 
-from pathlib import Path
-from typing import Optional
+
+from datetime import datetime
 
 import typer
+from config.settings import settings
 from rich.console import Console
 from rich.table import Table
-
-from config.settings import settings
 
 debug_app = typer.Typer(
     name="debug",
@@ -61,7 +60,7 @@ def enable(
             settings.debug.enable_timing = True
             console.print("[green]✓[/green] 已启用计时")
 
-    console.print("\n[yellow]⚠[/yellow] 调试功能会影响性能，生产环境请谨慎使用")
+    console.print("\n[yellow]⚠[/yellow] 调试功能会影响性能,生产环境请谨慎使用")
 
 
 @debug_app.command("disable")
@@ -141,13 +140,13 @@ def list_debug_files(
     else:
         total_str = f"{total_size / (1024 * 1024):.1f} MB"
 
-    console.print(f"\n共 {len(files)} 个文件，总大小: {total_str}")
+    console.print(f"\n共 {len(files)} 个文件,总大小: {total_str}")
 
 
 @debug_app.command("clean")
 def clean(
     days: int = typer.Option(7, "--days", help="保留天数"),
-    force: bool = typer.Option(False, "--force", help="强制删除（不确认）"),
+    force: bool = typer.Option(False, "--force", help="强制删除(不确认)"),
 ):
     """清理旧的调试文件.
 
@@ -178,8 +177,8 @@ def clean(
 
     # 确认
     if not force:
-        console.print(f"将删除 {len(files_to_delete)} 个文件（超过 {days} 天）")
-        confirm = typer.confirm("确认删除？")
+        console.print(f"将删除 {len(files_to_delete)} 个文件(超过 {days} 天)")
+        confirm = typer.confirm("确认删除?")
         if not confirm:
             console.print("已取消")
             return

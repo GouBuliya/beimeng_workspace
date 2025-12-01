@@ -1,7 +1,7 @@
 """
-商品采集功能测试脚本（SOP步骤1-3）
+商品采集功能测试脚本(SOP步骤1-3)
 
-功能：
+功能:
 1. 测试选品表读取
 2. 测试Temu店铺访问
 3. 测试商品搜索和采集
@@ -20,7 +20,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from loguru import logger
-
 from src.browser.browser_manager import BrowserManager
 from src.browser.login_controller import LoginController
 from src.data_processor.selection_table_reader import SelectionTableReader
@@ -30,7 +29,7 @@ from src.workflows.collection_workflow import CollectionWorkflow
 async def test_selection_table_reader():
     """测试1: 选品表读取功能."""
     logger.info("\n" + "=" * 80)
-    logger.info("【测试1】选品表读取功能")
+    logger.info("[测试1]选品表读取功能")
     logger.info("=" * 80 + "\n")
 
     reader = SelectionTableReader()
@@ -65,7 +64,7 @@ async def test_selection_table_reader():
 async def test_collection_workflow():
     """测试2: 完整采集工作流."""
     logger.info("\n" + "=" * 80)
-    logger.info("【测试2】完整采集工作流")
+    logger.info("[测试2]完整采集工作流")
     logger.info("=" * 80 + "\n")
 
     # 加载.env环境变量
@@ -86,7 +85,7 @@ async def test_collection_workflow():
     temu_password = os.getenv("TEMU_PASSWORD")
 
     if not temu_username or not temu_password:
-        logger.error("✗ 未配置TEMU账号信息（TEMU_USERNAME, TEMU_PASSWORD）")
+        logger.error("✗ 未配置TEMU账号信息(TEMU_USERNAME, TEMU_PASSWORD)")
         logger.info("  请在.env文件中配置Temu账号信息")
         return False
 
@@ -114,7 +113,7 @@ async def test_collection_workflow():
         selection_table = Path(__file__).parent / "data" / "input" / "sample_selection.xlsx"
 
         if not selection_table.exists():
-            logger.warning("⚠️  选品表不存在，先创建示例选品表")
+            logger.warning("⚠️  选品表不存在,先创建示例选品表")
             reader = SelectionTableReader()
             reader.create_sample_excel(str(selection_table), num_samples=2)
 
@@ -131,7 +130,7 @@ async def test_collection_workflow():
 
         # 显示结果
         logger.info("\n" + "=" * 80)
-        logger.info("【采集结果】")
+        logger.info("[采集结果]")
         logger.info("=" * 80)
         logger.info(f"总产品数: {result['summary']['total_products']}")
         logger.info(f"成功: {result['summary']['success']}")
@@ -146,7 +145,7 @@ async def test_collection_workflow():
 
             collection_results = [
                 CollectionResult(
-                    product=None,  # 简化，从dict重建
+                    product=None,  # 简化,从dict重建
                     collected_links=p["collected_links"],
                     success=p["success"],
                 )
@@ -163,7 +162,7 @@ async def test_collection_workflow():
         logger.info("=" * 80 + "\n")
 
         # 等待用户查看
-        logger.info(">>> 测试完成，浏览器将在5秒后关闭...")
+        logger.info(">>> 测试完成,浏览器将在5秒后关闭...")
         await asyncio.sleep(5)
 
         return True
@@ -186,7 +185,7 @@ async def main():
     test1_ok = await test_selection_table_reader()
 
     if not test1_ok:
-        logger.error("❌ 测试1失败，停止后续测试")
+        logger.error("❌ 测试1失败,停止后续测试")
         return
 
     logger.success("✅ 测试1通过\n")
@@ -194,7 +193,7 @@ async def main():
     # 询问是否继续测试2
     logger.info("─" * 80)
     logger.info("测试2将启动浏览器并执行真实采集流程")
-    logger.info("需要配置Temu账号信息（.env文件）")
+    logger.info("需要配置Temu账号信息(.env文件)")
     logger.info("─" * 80)
 
     # 自动继续测试2
@@ -214,7 +213,7 @@ async def main():
     logger.info("\n" + "=" * 100)
     logger.info(" " * 35 + "测试总结")
     logger.info("=" * 100)
-    logger.success("✅ 所有测试通过！")
+    logger.success("✅ 所有测试通过!")
     logger.info("=" * 100 + "\n")
 
 

@@ -1,7 +1,7 @@
 """
-@PURPOSE: 测试批量编辑前3个步骤（验证预览→保存流程）
+@PURPOSE: 测试批量编辑前3个步骤(验证预览→保存流程)
 @OUTLINE:
-  - 快速验证脚本，只测试前3步
+  - 快速验证脚本,只测试前3步
   - 验证每步都正确执行"点击预览→点击保存"
   - 用于快速调试和验证
 """
@@ -10,6 +10,7 @@ import asyncio
 import os
 import sys
 from pathlib import Path
+
 from dotenv import load_dotenv
 
 # 添加项目根目录到路径
@@ -19,16 +20,16 @@ sys.path.insert(0, str(project_root))
 # 加载环境变量
 load_dotenv(project_root / ".env")
 
-from src.browser.browser_manager import BrowserManager
-from src.browser.login_controller import LoginController
 from src.browser.batch_edit_controller_v2 import BatchEditController
+from src.browser.login_controller import LoginController
+
 from packages.common.logger import logger
 
 
 async def main():
     """测试批量编辑的前3个步骤."""
     logger.info("=" * 80)
-    logger.info("🧪 测试批量编辑前3步（标题、英语标题、类目属性）")
+    logger.info("🧪 测试批量编辑前3步(标题,英语标题,类目属性)")
     logger.info("=" * 80)
 
     login_controller = None
@@ -36,7 +37,7 @@ async def main():
     try:
         # 1. 登录
         logger.info("\n" + "=" * 80)
-        logger.info("📋 阶段1：登录妙手ERP")
+        logger.info("📋 阶段1:登录妙手ERP")
         logger.info("=" * 80)
 
         # 从环境变量获取登录信息
@@ -45,7 +46,7 @@ async def main():
 
         if not username or not password:
             logger.error(
-                "❌ 未找到登录凭据，请设置 MIAOSHOU_USERNAME 和 MIAOSHOU_PASSWORD 环境变量"
+                "❌ 未找到登录凭据,请设置 MIAOSHOU_USERNAME 和 MIAOSHOU_PASSWORD 环境变量"
             )
             return
 
@@ -63,7 +64,7 @@ async def main():
 
         # 2. 导航到批量编辑并选择产品
         logger.info("\n" + "=" * 80)
-        logger.info("📋 阶段2：导航到批量编辑")
+        logger.info("📋 阶段2:导航到批量编辑")
         logger.info("=" * 80)
         batch_controller = BatchEditController(page)
 
@@ -75,7 +76,7 @@ async def main():
 
         # 3. 执行前3个步骤
         logger.info("\n" + "=" * 80)
-        logger.info("📋 阶段3：执行前3个步骤")
+        logger.info("📋 阶段3:执行前3个步骤")
         logger.info("=" * 80)
 
         steps_to_test = [
@@ -88,7 +89,7 @@ async def main():
 
         for method_name, step_label in steps_to_test:
             logger.info(f"\n{'=' * 60}")
-            logger.info(f"🧪 测试步骤：{step_label}")
+            logger.info(f"🧪 测试步骤:{step_label}")
             logger.info(f"{'=' * 60}")
 
             try:
@@ -120,12 +121,12 @@ async def main():
             status = "✅ 成功" if result else "❌ 失败"
             logger.info(f"  {step_label}: {status}")
 
-        logger.info(f"\n总计：{success}/{total} 步成功")
+        logger.info(f"\n总计:{success}/{total} 步成功")
 
         if success == total:
-            logger.success(f"\n🎉 所有测试步骤都成功！预览→保存流程工作正常")
+            logger.success("\n🎉 所有测试步骤都成功!预览→保存流程工作正常")
         else:
-            logger.warning(f"\n⚠️ 部分步骤失败，请检查日志")
+            logger.warning("\n⚠️ 部分步骤失败,请检查日志")
 
         # 等待查看结果
         logger.info("\n等待10秒后关闭浏览器...")

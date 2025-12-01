@@ -2,16 +2,15 @@
 @PURPOSE: 测试 first_edit/workflow.py 首次编辑工作流
 @OUTLINE:
   - class TestFirstEditWorkflowMixin: 完整首次编辑流程测试
-  - 测试流程编排、错误处理、步骤执行顺序
+  - 测试流程编排,错误处理,步骤执行顺序
 @DEPENDENCIES:
   - 外部: pytest, pytest-asyncio
   - 内部: src.browser.first_edit.workflow, tests.mocks
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
-
 from tests.mocks.browser_mock import MockLocator, MockPage
 
 
@@ -30,12 +29,12 @@ class TestFirstEditWorkflowMixin:
     def workflow_mixin(self):
         """创建工作流混入实例.
 
-        由于 FirstEditWorkflowMixin 是混入类，需要继承使用。
-        这里使用 patch 来模拟其方法。
+        由于 FirstEditWorkflowMixin 是混入类,需要继承使用.
+        这里使用 patch 来模拟其方法.
         """
         from src.browser.first_edit.workflow import FirstEditWorkflowMixin
 
-        # 创建实例，使用临时配置路径
+        # 创建实例,使用临时配置路径
         with patch.object(
             FirstEditWorkflowMixin,
             "_load_selectors",
@@ -95,7 +94,7 @@ class TestFirstEditWorkflowMixin:
 
         assert result is False
         workflow_mixin.edit_title.assert_called_once()
-        # 标题失败后，后续步骤不应执行
+        # 标题失败后,后续步骤不应执行
         workflow_mixin.set_sku_price.assert_not_called()
 
     @pytest.mark.asyncio
@@ -148,7 +147,7 @@ class TestFirstEditWorkflowMixin:
     async def test_complete_first_edit_weight_failure_continues(
         self, workflow_mixin, mock_page: MockPage
     ) -> None:
-        """测试重量设置失败时流程继续（非致命错误）."""
+        """测试重量设置失败时流程继续(非致命错误)."""
         workflow_mixin.edit_title = AsyncMock(return_value=True)
         workflow_mixin.set_sku_price = AsyncMock(return_value=True)
         workflow_mixin.set_sku_stock = AsyncMock(return_value=True)
@@ -174,7 +173,7 @@ class TestFirstEditWorkflowMixin:
     async def test_complete_first_edit_dimensions_failure_continues(
         self, workflow_mixin, mock_page: MockPage
     ) -> None:
-        """测试尺寸设置失败时流程继续（非致命错误）."""
+        """测试尺寸设置失败时流程继续(非致命错误)."""
         workflow_mixin.edit_title = AsyncMock(return_value=True)
         workflow_mixin.set_sku_price = AsyncMock(return_value=True)
         workflow_mixin.set_sku_stock = AsyncMock(return_value=True)
@@ -220,7 +219,7 @@ class TestFirstEditWorkflowMixin:
             dimensions=(10.0, 8.0, 5.0),
         )
 
-        # ValueError 被捕获，流程继续
+        # ValueError 被捕获,流程继续
         assert result is True
 
     @pytest.mark.asyncio
@@ -367,7 +366,7 @@ class TestFirstEditBase:
 
         # 使用实际的选择器文件
         base = FirstEditBase(selector_path="config/miaoshou_selectors_v2.json")
-        # 如果文件存在，应该加载成功
+        # 如果文件存在,应该加载成功
         assert isinstance(base.selectors, dict)
 
     def test_selector_loading_with_invalid_path(self) -> None:
@@ -404,7 +403,7 @@ class TestFirstEditBase:
         with patch.object(FirstEditBase, "_load_selectors", return_value={}):
             base = FirstEditBase()
 
-        # 第一个不可见，第二个可见
+        # 第一个不可见,第二个可见
         mock_page.set_mock_locator("selector1", MockLocator(is_visible=False, count=1))
         mock_page.set_mock_locator("selector2", MockLocator(is_visible=True, count=1))
 
@@ -458,7 +457,7 @@ class TestFirstEditBase:
         with patch.object(FirstEditBase, "_load_selectors", return_value={}):
             base = FirstEditBase()
 
-        # 只有 1 个元素，但请求第 2 个
+        # 只有 1 个元素,但请求第 2 个
         mock_page.set_mock_locator("selector1", MockLocator(is_visible=True, count=1))
 
         result = await base.find_visible_element(

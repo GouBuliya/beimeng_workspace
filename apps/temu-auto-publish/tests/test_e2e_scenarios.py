@@ -6,7 +6,7 @@
   - TestE2EDataIsolation: 数据隔离测试
   - TestE2ECleanup: 环境清理测试
 @GOTCHAS:
-  - 这些测试需要真实环境，标记为integration
+  - 这些测试需要真实环境,标记为integration
   - 使用Mock进行单元级别测试
 @DEPENDENCIES:
   - 外部: pytest, pytest-asyncio
@@ -14,17 +14,14 @@
 """
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
-from typing import Dict, Any, List
 
 import pytest
-
 from tests.mocks import (
-    MockPage,
+    MockBatchEditController,
     MockBrowserManager,
     MockLoginController,
     MockMiaoshouController,
-    MockBatchEditController,
+    MockPage,
     MockPublishController,
 )
 
@@ -129,7 +126,7 @@ class TestE2EErrorRecovery:
         result = await controller.login("user", "pass")
         assert result is False
 
-        # 重试登录（模拟成功）
+        # 重试登录(模拟成功)
         controller._login_success = True
         result = await controller.login("user", "pass", force=True)
         assert result is True
@@ -158,7 +155,7 @@ class TestE2EErrorRecovery:
         # 模拟部分步骤失败
         result = await controller.execute_batch_edit_steps(page, [])
 
-        # 即使部分失败，也应该返回结果
+        # 即使部分失败,也应该返回结果
         assert "steps_completed" in result
 
     @pytest.mark.asyncio
@@ -189,7 +186,7 @@ class TestE2EErrorRecovery:
         try:
             result = await asyncio.wait_for(operation_with_timeout(), timeout=1.0)
             assert result["success"] is True
-        except asyncio.TimeoutError:
+        except TimeoutError:
             # 重试
             result = await operation_with_timeout()
             assert result["success"] is True

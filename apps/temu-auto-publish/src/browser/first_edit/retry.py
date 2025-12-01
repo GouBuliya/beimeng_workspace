@@ -1,22 +1,22 @@
 """
-@PURPOSE: 提供首次编辑流程的统一重试装饰器，封装重试策略与恢复动作
+@PURPOSE: 提供首次编辑流程的统一重试装饰器,封装重试策略与恢复动作
 @OUTLINE:
-  - def first_edit_step_retry(): 单步操作重试装饰器，可在布尔失败时触发重试
-  - def first_edit_stage_retry(): 阶段级重试装饰器，适合整段流程包裹
+  - def first_edit_step_retry(): 单步操作重试装饰器,可在布尔失败时触发重试
+  - def first_edit_stage_retry(): 阶段级重试装饰器,适合整段流程包裹
   - def extract_page(): 从调用参数中提取 Playwright Page 对象
 @DEPENDENCIES:
   - 内部: ...core.enhanced_retry.smart_retry, create_step_retry_policy, create_stage_retry_policy
   - 外部: playwright.async_api.Page, loguru.logger
 @GOTCHAS:
-  - 布尔返回 False 时会触发重试，确保调用者幂等
-  - pre_retry_action 默认等待页面加载，若需要自定义恢复动作可传入工厂
+  - 布尔返回 False 时会触发重试,确保调用者幂等
+  - pre_retry_action 默认等待页面加载,若需要自定义恢复动作可传入工厂
 """
 
 from __future__ import annotations
 
 import asyncio
 import functools
-from typing import Awaitable, Callable, Iterable
+from collections.abc import Awaitable, Callable, Iterable
 
 from loguru import logger
 from playwright.async_api import Page
@@ -25,6 +25,8 @@ from ...core.enhanced_retry import (
     RetryPolicy,
     create_stage_retry_policy,
     create_step_retry_policy,
+)
+from ...core.enhanced_retry import (
     smart_retry as enhanced_smart_retry,
 )
 from ...utils.page_waiter import PageWaiter
@@ -168,4 +170,4 @@ def first_edit_stage_retry(
     return decorator
 
 
-__all__ = ["first_edit_step_retry", "first_edit_stage_retry", "extract_page"]
+__all__ = ["extract_page", "first_edit_stage_retry", "first_edit_step_retry"]

@@ -12,7 +12,7 @@
   - async def _click_save(): 点击保存修改按钮
 @GOTCHAS:
   - 避免使用动态 ID 选择器(如 #jx-id-6368-578)
-  - 优先使用 get_by_label、get_by_role、get_by_placeholder 等稳定定位器
+  - 优先使用 get_by_label,get_by_role,get_by_placeholder 等稳定定位器
   - 跳过图片/视频上传部分,由 FirstEditController 的 upload_* 方法处理
   - 尺寸图上传仅支持网络图片URL,需确保外链可直接访问
 @DEPENDENCIES:
@@ -23,11 +23,13 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
 import re
+from collections.abc import Callable, Sequence
 from functools import wraps
 from pathlib import Path
-from typing import Any, Callable, Optional, Sequence, TypeVar
+from typing import Any, TypeVar
 from urllib.parse import urljoin
 
 from loguru import logger
@@ -35,8 +37,8 @@ from playwright.async_api import Locator, Page
 
 # 性能追踪已移至工作流层级的 PerformanceTracker
 from ..utils.page_waiter import PageWaiter
-from .first_edit.sku_spec_replace import fill_first_spec_unit, replace_sku_spec_options
 from .first_edit.retry import first_edit_step_retry
+from .first_edit.sku_spec_replace import fill_first_spec_unit, replace_sku_spec_options
 
 # 激进优化: 进一步最小化超时时间
 DEFAULT_PRIMARY_TIMEOUT_MS = 200  # 激进: 300 -> 200
@@ -73,15 +75,15 @@ def _resolve_page(args: tuple[Any, ...], kwargs: dict[str, Any]) -> Page | None:
 
 
 def smart_retry(max_attempts: int = 2, delay: float = 0.5, exceptions: tuple = (Exception,)):
-    """智能重试装饰器,用于关键操作的自动重试。
+    """智能重试装饰器,用于关键操作的自动重试.
 
     Args:
-        max_attempts: 最大尝试次数(默认2次,即1次重试)。
-        delay: 重试间隔秒数(默认0.5秒)。
-        exceptions: 需要捕获并重试的异常类型元组。
+        max_attempts: 最大尝试次数(默认2次,即1次重试).
+        delay: 重试间隔秒数(默认0.5秒).
+        exceptions: 需要捕获并重试的异常类型元组.
 
     Returns:
-        装饰后的函数。
+        装饰后的函数.
     """
 
     def decorator(func: Callable[..., T]) -> Callable[..., T]:
@@ -180,11 +182,11 @@ async def fill_first_edit_dialog_codegen(page: Page, payload: dict[str, Any]) ->
     logger.info("=" * 60)
 
     try:
-        # 优化：弹窗检测超时从 3000ms 减少到 1500ms
+        # 优化:弹窗检测超时从 3000ms 减少到 1500ms
         await page.wait_for_selector(".jx-overlay-dialog", state="visible", timeout=1500)
         logger.success("✓ 编辑弹窗已加载")
 
-        # 0. 填写规格名称/规格单位（如果提供了 spec_unit）
+        # 0. 填写规格名称/规格单位(如果提供了 spec_unit)
         spec_unit = (payload.get("spec_unit") or "").strip()
         if not spec_unit:
             specs_payload = payload.get("specs") or []
@@ -195,14 +197,14 @@ async def fill_first_edit_dialog_codegen(page: Page, payload: dict[str, Any]) ->
         if spec_unit:
             unit_success = await fill_first_spec_unit(page, spec_unit)
             if not unit_success:
-                logger.warning("⚠️ 规格单位填写失败，继续后续流程")
+                logger.warning("⚠️ 规格单位填写失败,继续后续流程")
 
-        # 0. 替换 SKU 规格选项（如果提供了 spec_array）
+        # 0. 替换 SKU 规格选项(如果提供了 spec_array)
         spec_array = payload.get("spec_array") or payload.get("sku_spec_array")
         if spec_array:
             spec_success = await replace_sku_spec_options(page, spec_array)
             if not spec_success:
-                logger.warning("⚠️ SKU 规格替换失败，继续后续流程")
+                logger.warning("⚠️ SKU 规格替换失败,继续后续流程")
 
         # 1. 填写标题
         if not await _fill_title(page, payload.get("title", "")):
@@ -217,41 +219,41 @@ async def fill_first_edit_dialog_codegen(page: Page, payload: dict[str, Any]) ->
         if not await _fill_supplier_link(page, payload.get("supplier_link", "")):
             return False
 
-        # 5. 上传尺寸图（仅支持网络图片URL）
+        # 5. 上传尺寸图(仅支持网络图片URL)
         size_chart_image_url = (payload.get("size_chart_image_url") or "").strip()
         if size_chart_image_url:
             logger.info("开始通过网络图片上传尺寸图...")
             upload_success = await _upload_size_chart_via_url(page, size_chart_image_url)
             if upload_success:
-                logger.success("✓ 尺寸图上传成功（网络图片）")
+                logger.success("✓ 尺寸图上传成功(网络图片)")
             else:
-                logger.warning("⚠️ 尺寸图网络图片上传失败，继续后续流程")
+                logger.warning("⚠️ 尺寸图网络图片上传失败,继续后续流程")
         else:
-            logger.warning("⚠️ 未提供尺寸图URL，跳过尺寸图上传")
+            logger.warning("⚠️ 未提供尺寸图URL,跳过尺寸图上传")
 
-        # 6. 上传产品视频（仅支持网络视频URL）
+        # 6. 上传产品视频(仅支持网络视频URL)
         product_video_url = (payload.get("product_video_url") or "").strip()
         if not product_video_url:
             fallback_video_url = _fallback_video_url_from_payload(payload)
             if fallback_video_url:
                 product_video_url = fallback_video_url
-                logger.info("未提供视频URL，使用 OSS 默认视频: {}", product_video_url)
+                logger.info("未提供视频URL,使用 OSS 默认视频: {}", product_video_url)
             else:
-                logger.warning("⚠️ 未提供有效视频URL，跳过视频上传")
+                logger.warning("⚠️ 未提供有效视频URL,跳过视频上传")
 
         if product_video_url:
             logger.info("开始通过网络视频上传产品视频...")
             video_result = await _upload_product_video_via_url(page, product_video_url)
             if video_result is True:
-                logger.success("✓ 产品视频上传成功（网络视频）")
+                logger.success("✓ 产品视频上传成功(网络视频)")
             elif video_result is None:
-                logger.info("已存在产品视频，跳过上传步骤。")
+                logger.info("已存在产品视频,跳过上传步骤.")
             else:
-                logger.warning("⚠️ 产品视频网络上传失败，继续后续流程")
+                logger.warning("⚠️ 产品视频网络上传失败,继续后续流程")
         else:
-            logger.warning("⚠️ 未提供视频URL，跳过视频上传")
+            logger.warning("⚠️ 未提供视频URL,跳过视频上传")
 
-        # 注意：SKU 图片同步已移至 workflow 层的 post_fill_hook 统一处理，避免重复上传
+        # 注意:SKU 图片同步已移至 workflow 层的 post_fill_hook 统一处理,避免重复上传
 
         # 7. 保存修改
         if not await _click_save(page):
@@ -307,7 +309,7 @@ async def _fill_title(page: Page, title: str) -> bool:
 
 @first_edit_step_retry(max_attempts=3)
 async def _fill_basic_specs(page: Page, payload: dict[str, Any]) -> bool:
-    """填写价格、库存、重量、尺寸等基础字段."""
+    """填写价格,库存,重量,尺寸等基础字段."""
 
     try:
         logger.info("填写基础规格字段...")
@@ -355,12 +357,12 @@ async def _fill_variant_rows(
     row_count = await rows.count()
     if row_count == 0:
         await _dump_dialog_snapshot(page, "variant_rows_missing.html")
-        logger.error("✗ 未找到规格行，无法填写多规格数据")
+        logger.error("✗ 未找到规格行,无法填写多规格数据")
         return False
 
     for index, variant in enumerate(variants):
         if index >= row_count:
-            logger.warning("⚠️ 规格行数量不足，忽略多余的规格数据 (row={})", index + 1)
+            logger.warning("⚠️ 规格行数量不足,忽略多余的规格数据 (row={})", index + 1)
             break
 
         row = rows.nth(index)
@@ -522,7 +524,7 @@ async def _upload_size_chart_via_url(page: Page, image_url: str) -> bool:
     """通过网络图片URL上传尺寸图."""
 
     if not image_url:
-        logger.info("未提供尺寸图URL，跳过网络图片上传")
+        logger.info("未提供尺寸图URL,跳过网络图片上传")
         return False
 
     logger.debug("使用网络图片上传尺寸图: {}", image_url[:120])
@@ -530,7 +532,7 @@ async def _upload_size_chart_via_url(page: Page, image_url: str) -> bool:
     try:
         normalized_url = _normalize_input_url(image_url)
         if not normalized_url:
-            logger.warning("提供的尺寸图URL无效，跳过上传: {}", image_url)
+            logger.warning("提供的尺寸图URL无效,跳过上传: {}", image_url)
             return False
 
         size_group = page.get_by_role("group", name="尺寸图表 :", exact=True)
@@ -555,7 +557,7 @@ async def _upload_size_chart_via_url(page: Page, image_url: str) -> bool:
         await upload_btn.click()
 
         url_input = page.get_by_role(
-            "textbox", name="请输入图片链接，若要输入多个链接，请以回车换行", exact=True
+            "textbox", name="请输入图片链接,若要输入多个链接,请以回车换行", exact=True
         )
         await url_input.wait_for(state="visible", timeout=1500)
         await url_input.click()
@@ -598,7 +600,7 @@ async def _upload_size_chart_via_url(page: Page, image_url: str) -> bool:
             timeout_ms=VIDEO_UPLOAD_TIMEOUT_MS,
         )
         await _close_prompt_dialog(page, timeout_ms=VIDEO_UPLOAD_TIMEOUT_MS)
-        logger.success("✓ 尺寸图已上传（网络图片）: {}", normalized_url[:120])
+        logger.success("✓ 尺寸图已上传(网络图片): {}", normalized_url[:120])
         return True
 
     except Exception as exc:
@@ -612,16 +614,16 @@ async def _upload_product_video_via_url(page: Page, video_url: str) -> bool | No
     """通过网络视频URL上传产品视频.
 
     Returns:
-        bool | None: 上传成功返回 True，出现错误返回 False，若检测到已有视频并跳过返回 None。
+        bool | None: 上传成功返回 True,出现错误返回 False,若检测到已有视频并跳过返回 None.
     """
 
     if not video_url:
-        logger.info("未提供视频URL，跳过网络视频上传")
+        logger.info("未提供视频URL,跳过网络视频上传")
         return False
 
     normalized_url = _normalize_input_url(video_url)
     if not normalized_url:
-        logger.warning("提供的视频URL无效，跳过上传: {}", video_url)
+        logger.warning("提供的视频URL无效,跳过上传: {}", video_url)
         return False
 
     logger.debug("使用网络视频上传产品视频: {}", normalized_url[:120])
@@ -629,14 +631,12 @@ async def _upload_product_video_via_url(page: Page, video_url: str) -> bool | No
     try:
         dialog = page.get_by_role("dialog")
         if await dialog.count():
-            try:
+            with contextlib.suppress(Exception):
                 await dialog.first.evaluate("el => { el.scrollTop = 0; }")
-            except Exception:
-                pass
 
         video_group = page.get_by_role("group", name="产品视频 :", exact=True)
         if not await video_group.count():
-            logger.warning("未找到产品视频分组，跳过视频上传")
+            logger.warning("未找到产品视频分组,跳过视频上传")
             await _capture_html(page, "data/debug/html/video_missing_group.html")
             return False
 
@@ -694,7 +694,7 @@ async def _upload_product_video_via_url(page: Page, video_url: str) -> bool | No
                     """
                 )
                 if has_existing_video:
-                    logger.info("检测到已有产品视频，跳过上传步骤。")
+                    logger.info("检测到已有产品视频,跳过上传步骤.")
                     return None
             except Exception as exc:
                 logger.debug("检测现有视频状态失败: {}", exc)
@@ -749,7 +749,7 @@ async def _upload_product_video_via_url(page: Page, video_url: str) -> bool | No
         await target_input.press("ControlOrMeta+a")
         await target_input.fill(normalized_url)
 
-        # 取消勾选"同时保存图片到妙手图片空间"（视频上传弹窗）
+        # 取消勾选"同时保存图片到妙手图片空间"(视频上传弹窗)
         try:
             scope = video_dialog if video_dialog is not None else page
             save_to_space_checkbox = scope.get_by_text("同时保存图片到妙手图片空间", exact=True)
@@ -757,7 +757,7 @@ async def _upload_product_video_via_url(page: Page, video_url: str) -> bool | No
                 await save_to_space_checkbox.click()
                 logger.debug("已取消勾选『同时保存图片到妙手图片空间』")
         except Exception as exc:
-            logger.debug("取消勾选保存到图片空间失败（可能已取消勾选）: {}", exc)
+            logger.debug("取消勾选保存到图片空间失败(可能已取消勾选): {}", exc)
 
         confirm_btn = (
             video_dialog.get_by_role("button", name="确定")
@@ -779,7 +779,7 @@ async def _upload_product_video_via_url(page: Page, video_url: str) -> bool | No
             timeout_ms=VIDEO_UPLOAD_TIMEOUT_MS,
         )
         await _close_prompt_dialog(page, timeout_ms=VIDEO_UPLOAD_TIMEOUT_MS)
-        logger.success("✓ 产品视频已上传（网络视频）: {}", normalized_url[:120])
+        logger.success("✓ 产品视频已上传(网络视频): {}", normalized_url[:120])
         return True
 
     except Exception as exc:
@@ -798,7 +798,7 @@ async def _handle_existing_video_prompt(page: Page) -> bool:
     if not await dialog_locator.count():
         return False
 
-    # 已注释逻辑，不再自动确认删除
+    # 已注释逻辑,不再自动确认删除
     return False
 
 
@@ -858,7 +858,7 @@ async def _wait_first_visible(
     primary_timeout: int = DEFAULT_PRIMARY_TIMEOUT_MS,
     fallback_timeout: int = FALLBACK_TIMEOUT_MS,
 ) -> Locator | None:
-    """返回第一个可见元素，首个候选使用较长超时，后续快速失败."""
+    """返回第一个可见元素,首个候选使用较长超时,后续快速失败."""
 
     for index, candidate in enumerate(candidates):
         if candidate is None:
@@ -876,7 +876,7 @@ async def _wait_first_visible(
 
 
 async def _wait_for_visibility(locator: Locator, timeout: int) -> Locator | None:
-    """等待单个定位器可见，失败时返回 None."""
+    """等待单个定位器可见,失败时返回 None."""
 
     try:
         await locator.wait_for(state="visible", timeout=timeout)
@@ -888,7 +888,7 @@ async def _wait_for_visibility(locator: Locator, timeout: int) -> Locator | None
 async def _wait_button_completion(
     button: Locator, page: Page | None = None, timeout_ms: int = 1_000
 ) -> None:
-    """等待按钮被禁用或从页面移除，用于确认操作完成."""
+    """等待按钮被禁用或从页面移除,用于确认操作完成."""
 
     waiter = PageWaiter(page) if page else None
 
@@ -922,7 +922,7 @@ async def _wait_button_completion(
 async def _collect_input_candidates(
     scope: Locator, *, exclude_selector: str | None = None
 ) -> list[dict[str, Any]]:
-    """收集范围内的输入框候选，提取标识文本用于关键字匹配."""
+    """收集范围内的输入框候选,提取标识文本用于关键字匹配."""
 
     inputs = scope.locator("input[type='number'], input[type='text']")
     count = await inputs.count()
@@ -1047,7 +1047,7 @@ async def _first_visible(candidates: list[Locator | None], timeout: int = 1_000)
 
 
 def _normalize_input_url(raw_text: str) -> str:
-    """清理输入文本并确保返回可用 URL（必要时对路径做编码）。"""
+    """清理输入文本并确保返回可用 URL(必要时对路径做编码)."""
     from urllib.parse import quote, urlparse, urlunparse
 
     if not raw_text:
@@ -1089,14 +1089,14 @@ def _normalize_input_url(raw_text: str) -> str:
 
 
 def _sanitize_media_identifier(raw: str) -> str:
-    """将型号标识转为可用于媒体文件名的安全字符串。"""
+    """将型号标识转为可用于媒体文件名的安全字符串."""
 
     safe = re.sub(r"[^A-Za-z0-9._-]+", "_", raw.strip())
     return safe.strip("_")
 
 
-async def _close_prompt_dialog(page: Page, *, timeout_ms: Optional[int] = None) -> None:
-    """如果存在提示弹窗则关闭，以防阻塞后续步骤."""
+async def _close_prompt_dialog(page: Page, *, timeout_ms: int | None = None) -> None:
+    """如果存在提示弹窗则关闭,以防阻塞后续步骤."""
 
     prompt = page.get_by_role("dialog", name=re.compile("提示"))
     try:
@@ -1104,13 +1104,11 @@ async def _close_prompt_dialog(page: Page, *, timeout_ms: Optional[int] = None) 
             close_btn = prompt.get_by_label("关闭此对话框")
             if await close_btn.count():
                 await close_btn.first.click()
-                try:
+                with contextlib.suppress(Exception):
                     await prompt.wait_for(
                         state="hidden",
                         timeout=timeout_ms or DEFAULT_PRIMARY_TIMEOUT_MS,
                     )
-                except Exception:
-                    pass
     except Exception:
         pass
 
@@ -1124,7 +1122,7 @@ async def _acknowledge_prompt(
 ) -> None:
     """点击提示弹窗中的确认按钮."""
 
-    # 已注释，不再主动确认提示弹窗
+    # 已注释,不再主动确认提示弹窗
     return
 
 
@@ -1161,7 +1159,7 @@ async def _ensure_dialog_closed(
     page: Page,
     *,
     name_pattern: str,
-    dialog: Optional[Locator] = None,
+    dialog: Locator | None = None,
     timeout_ms: int = VIDEO_UPLOAD_TIMEOUT_MS,
 ) -> None:
     """确保指定名称的对话框关闭."""
@@ -1185,7 +1183,7 @@ async def _ensure_dialog_closed(
 
 
 async def _capture_html(page: Page, path: str) -> None:
-    """写出当前页面 HTML，便于调试。"""
+    """写出当前页面 HTML,便于调试."""
 
     try:
         html = await page.content()
@@ -1198,20 +1196,20 @@ async def _capture_html(page: Page, path: str) -> None:
 
 
 async def upload_size_chart_via_url(page: Page, image_url: str) -> bool:
-    """公开的尺寸图上传入口，供其他模块复用。"""
+    """公开的尺寸图上传入口,供其他模块复用."""
 
     return await _upload_size_chart_via_url(page, image_url)
 
 
 async def upload_product_video_via_url(page: Page, video_url: str) -> bool | None:
-    """公开的产品视频上传入口，供其他模块复用。"""
+    """公开的产品视频上传入口,供其他模块复用."""
 
     return await _upload_product_video_via_url(page, video_url)
 
 
 async def _wait_for_dialog(
     page: Page, *, name_pattern: str, timeout_ms: int = VIDEO_UPLOAD_TIMEOUT_MS
-) -> Optional[Locator]:
+) -> Locator | None:
     """等待并返回匹配名称的 dialog."""
 
     dialog = page.get_by_role("dialog", name=re.compile(name_pattern))

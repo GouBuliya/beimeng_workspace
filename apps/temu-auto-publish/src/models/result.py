@@ -19,18 +19,18 @@ from pydantic import BaseModel, Field
 class BrowserResult(BaseModel):
     """浏览器操作执行结果基类.
 
-    使用 Playwright 执行浏览器自动化的通用结果结构。
+    使用 Playwright 执行浏览器自动化的通用结果结构.
 
     Attributes:
         task_id: 任务ID
-        operation: 操作名称（search|edit|publish）
-        status: 执行状态（success|failed|pending）
+        operation: 操作名称(search|edit|publish)
+        status: 执行状态(success|failed|pending)
         result: 结果数据
-        execution_time: 执行耗时（秒）
+        execution_time: 执行耗时(秒)
         completed_at: 完成时间
         error_message: 错误信息
         logs: 执行日志
-        screenshot_path: 错误截图路径（如果有）
+        screenshot_path: 错误截图路径(如果有)
     """
 
     task_id: str = Field(..., description="任务ID")

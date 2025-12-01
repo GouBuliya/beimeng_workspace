@@ -1,5 +1,5 @@
 """
-@PURPOSE: 实现完整的商品采集工作流（SOP步骤1-3）
+@PURPOSE: 实现完整的商品采集工作流(SOP步骤1-3)
 @OUTLINE:
   - class CollectionWorkflow: 采集工作流控制器
   - async def execute(): 执行完整采集流程
@@ -14,17 +14,15 @@
   - 外部: playwright, loguru
 @RELATED: five_to_twenty_workflow.py, full_publish_workflow.py
 @CHANGELOG:
-  - 2025-11-01: 初始创建，实现完整采集工作流
+  - 2025-11-01: 初始创建,实现完整采集工作流
 """
 
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
 
 from loguru import logger
 from playwright.async_api import Page
-
 from src.browser.collection_controller import CollectionController
 from src.data_processor.selection_table_reader import (
     ProductSelectionRow,
@@ -46,9 +44,9 @@ class CollectionResult:
     def __init__(
         self,
         product: ProductSelectionRow,
-        collected_links: List[Dict],
+        collected_links: list[dict],
         success: bool = True,
-        error: Optional[str] = None,
+        error: str | None = None,
     ):
         self.product = product
         self.collected_links = collected_links
@@ -56,7 +54,7 @@ class CollectionResult:
         self.error = error
         self.timestamp = datetime.now().isoformat()
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         """转换为字典."""
         return {
             "product": {
@@ -74,9 +72,9 @@ class CollectionResult:
 
 
 class CollectionWorkflow:
-    """商品采集工作流（SOP步骤1-3）.
+    """商品采集工作流(SOP步骤1-3).
 
-    负责执行完整的商品采集流程：
+    负责执行完整的商品采集流程:
     1. 读取选品表
     2. 访问Temu前端店铺
     3. 逐个产品搜索和采集
@@ -91,11 +89,11 @@ class CollectionWorkflow:
         >>> print(f"成功采集 {len(results)} 个产品")
     """
 
-    def __init__(self, output_dir: Optional[str] = None):
+    def __init__(self, output_dir: str | None = None):
         """初始化采集工作流.
 
         Args:
-            output_dir: 输出目录（保存采集结果）
+            output_dir: 输出目录(保存采集结果)
         """
         self.collection_ctrl = CollectionController()
         self.table_reader = SelectionTableReader()
@@ -117,17 +115,17 @@ class CollectionWorkflow:
         selection_table_path: str,
         skip_visit_store: bool = False,
         save_report: bool = True,
-    ) -> Dict:
+    ) -> dict:
         """执行完整采集流程.
 
         Args:
             page: Playwright页面对象
             selection_table_path: 选品表Excel文件路径
-            skip_visit_store: 是否跳过访问店铺步骤（如果已在店铺页面）
+            skip_visit_store: 是否跳过访问店铺步骤(如果已在店铺页面)
             save_report: 是否保存采集报告
 
         Returns:
-            采集结果字典，包含：
+            采集结果字典,包含:
             - products: 采集的产品列表
             - summary: 汇总统计
             - report_file: 报告文件路径
@@ -143,14 +141,14 @@ class CollectionWorkflow:
             10
         """
         logger.info("\n" + "=" * 80)
-        logger.info("【商品采集工作流】开始执行（SOP步骤1-3）")
+        logger.info("[商品采集工作流]开始执行(SOP步骤1-3)")
         logger.info("=" * 80 + "\n")
 
         # 读取选品表
         logger.info(f">>> 读取选品表: {selection_table_path}")
         try:
             products = self.table_reader.read_excel(selection_table_path)
-            logger.success(f"✓ 选品表读取成功，共 {len(products)} 个产品")
+            logger.success(f"✓ 选品表读取成功,共 {len(products)} 个产品")
         except Exception as e:
             logger.error(f"✗ 读取选品表失败: {e}")
             raise
@@ -166,17 +164,17 @@ class CollectionWorkflow:
         # SOP步骤1: 访问前端店铺
         if not skip_visit_store:
             logger.info("\n" + "▶" * 60)
-            logger.info("【SOP步骤1】访问Temu前端店铺")
+            logger.info("[SOP步骤1]访问Temu前端店铺")
             logger.info("▶" * 60 + "\n")
 
             if not await self.collection_ctrl.visit_store(page):
                 logger.error("✗ 访问店铺失败")
                 raise RuntimeError("无法访问Temu店铺")
         else:
-            logger.info("⏭️  跳过访问店铺步骤（假设已在店铺页面）")
+            logger.info("⏭️  跳过访问店铺步骤(假设已在店铺页面)")
 
         # 逐个产品采集
-        collection_results: List[CollectionResult] = []
+        collection_results: list[CollectionResult] = []
 
         for i, product in enumerate(products):
             logger.info("\n" + "─" * 80)
@@ -211,7 +209,7 @@ class CollectionWorkflow:
 
         # 显示汇总
         logger.info("\n" + "=" * 80)
-        logger.info("【采集工作流】完成")
+        logger.info("[采集工作流]完成")
         logger.info("=" * 80)
         logger.info(f"总产品数: {summary['total_products']}")
         logger.info(f"成功: {summary['success']} ({summary['success_rate']:.1f}%)")
@@ -230,7 +228,7 @@ class CollectionWorkflow:
     async def _collect_single_product(
         self, page: Page, product: ProductSelectionRow
     ) -> CollectionResult:
-        """采集单个产品（SOP步骤2-3）.
+        """采集单个产品(SOP步骤2-3).
 
         Args:
             page: Playwright页面对象
@@ -245,7 +243,7 @@ class CollectionWorkflow:
 
             if not await self.collection_ctrl.search_products(page, product.product_name):
                 return CollectionResult(
-                    product=product, collected_links=[], success=False, error="搜索失败，未找到商品"
+                    product=product, collected_links=[], success=False, error="搜索失败,未找到商品"
                 )
 
             # SOP步骤3: 采集N个同款商品链接
@@ -260,14 +258,14 @@ class CollectionWorkflow:
                     product=product,
                     collected_links=[],
                     success=False,
-                    error="采集失败，未获取到链接",
+                    error="采集失败,未获取到链接",
                 )
 
             # 成功
             logger.info(f"✓ 成功采集 {len(collected_links)} 个链接")
 
-            # 可选：添加到妙手采集箱
-            # 注意：这一步可能需要妙手插件支持，暂时跳过
+            # 可选:添加到妙手采集箱
+            # 注意:这一步可能需要妙手插件支持,暂时跳过
             # await self.collection_ctrl.add_to_collection_box(page, [link["url"] for link in collected_links])
 
             return CollectionResult(product=product, collected_links=collected_links, success=True)
@@ -278,7 +276,7 @@ class CollectionWorkflow:
                 product=product, collected_links=[], success=False, error=str(e)
             )
 
-    def _generate_summary(self, results: List[CollectionResult]) -> Dict:
+    def _generate_summary(self, results: list[CollectionResult]) -> dict:
         """生成汇总统计.
 
         Args:
@@ -301,7 +299,7 @@ class CollectionWorkflow:
             "average_links_per_product": (total_links / success) if success > 0 else 0,
         }
 
-    def save_report(self, results: List[CollectionResult], summary: Dict) -> str:
+    def save_report(self, results: list[CollectionResult], summary: dict) -> str:
         """保存采集报告.
 
         Args:
@@ -328,15 +326,15 @@ class CollectionWorkflow:
         return str(report_file)
 
     def export_links_for_miaoshou(
-        self, results: List[CollectionResult], output_file: Optional[str] = None
+        self, results: list[CollectionResult], output_file: str | None = None
     ) -> str:
         """导出链接列表供妙手ERP导入.
 
-        生成一个包含所有采集链接的文本文件，便于手动导入到妙手ERP。
+        生成一个包含所有采集链接的文本文件,便于手动导入到妙手ERP.
 
         Args:
             results: 采集结果列表
-            output_file: 输出文件路径（可选）
+            output_file: 输出文件路径(可选)
 
         Returns:
             输出文件路径

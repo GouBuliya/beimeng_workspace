@@ -15,8 +15,7 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
-from tests.mocks import MockPage, MockBrowserManager
+from tests.mocks import MockPage
 
 
 class TestFiveToTwentyWorkflow:
@@ -77,9 +76,9 @@ class TestFiveToTwentyWorkflowInit:
 
     def test_init_controllers_created(self):
         """测试控制器是否正确创建."""
-        from src.workflows.five_to_twenty_workflow import FiveToTwentyWorkflow
-        from src.browser.miaoshou_controller import MiaoshouController
         from src.browser.first_edit_controller import FirstEditController
+        from src.browser.miaoshou_controller import MiaoshouController
+        from src.workflows.five_to_twenty_workflow import FiveToTwentyWorkflow
 
         workflow = FiveToTwentyWorkflow()
 
@@ -331,7 +330,6 @@ class TestFiveToTwentyExecution:
     @pytest.mark.asyncio
     async def test_execute_five_to_twenty(self, mock_page, sample_products):
         """测试执行5→20工作流"""
-        from src.workflows.five_to_twenty_workflow import execute_five_to_twenty_workflow
 
         with patch(
             "src.workflows.five_to_twenty_workflow.execute_five_to_twenty_workflow"
@@ -351,7 +349,6 @@ class TestFiveToTwentyExecution:
     @pytest.mark.asyncio
     async def test_execute_with_fewer_products(self, mock_page):
         """测试少于5个产品"""
-        products = [{"keyword": "产品1", "model_number": "A0001", "cost": 10}]
 
         # 应该能处理少于5个产品的情况
         result = {
@@ -491,7 +488,7 @@ class TestFiveToTwentyClaim:
         claims_per_product = 4
         expected_total = initial_products + (initial_products * (claims_per_product - 1))
 
-        # 5个产品，每个认领4次（包括原始），总共20个
+        # 5个产品,每个认领4次(包括原始),总共20个
         assert expected_total == 20
 
     def test_claim_formula(self):
@@ -506,7 +503,7 @@ class TestFiveToTwentyClaim:
 
     def test_claim_sequence(self):
         """测试认领顺序"""
-        # 每个产品认领3次（加上原始共4次）
+        # 每个产品认领3次(加上原始共4次)
         product_id = "12345"
         claim_sequence = [{"product_id": product_id, "claim_number": i} for i in range(1, 5)]
 
@@ -639,7 +636,7 @@ class TestFiveToTwentyErrorHandling:
         retry_count = 0
         success = False
 
-        for i in range(max_retries):
+        for _i in range(max_retries):
             retry_count += 1
             if retry_count >= 2:  # 模拟第二次成功
                 success = True

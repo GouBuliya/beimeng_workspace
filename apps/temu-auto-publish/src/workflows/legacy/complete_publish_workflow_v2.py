@@ -1,12 +1,12 @@
 """
-@PURPOSE: 完整发布工作流控制器，整合首次编辑和批量编辑两个阶段
+@PURPOSE: 完整发布工作流控制器,整合首次编辑和批量编辑两个阶段
 @OUTLINE:
   - class CompletePublishWorkflow: 完整发布工作流主类
-  - async def execute_full_workflow(): 执行完整流程（从公用采集箱到发布）
+  - async def execute_full_workflow(): 执行完整流程(从公用采集箱到发布)
   - async def stage1_first_edit(): 阶段1-公用采集箱首次编辑
-  - async def stage2_claim_products(): 阶段2-认领产品（5×4=20）
+  - async def stage2_claim_products(): 阶段2-认领产品(5×4=20)
   - async def stage3_batch_edit(): 阶段3-Temu全托管采集箱批量编辑18步
-  - async def stage4_publish(): 阶段4-选择店铺、设置供货价、批量发布
+  - async def stage4_publish(): 阶段4-选择店铺,设置供货价,批量发布
 @GOTCHAS:
   - 必须先完成首次编辑才能认领
   - 认领后产品会自动进入Temu全托管采集箱
@@ -18,25 +18,25 @@
 """
 
 import asyncio
-from typing import Dict, List, Any, Optional
-from pathlib import Path
 from datetime import datetime
+from typing import Any
+
 from loguru import logger
 from playwright.async_api import Page
 
-from ...browser.first_edit_controller import FirstEditController
 from ...browser.batch_edit_controller import BatchEditController
+from ...browser.first_edit_controller import FirstEditController
 from ...browser.miaoshou_controller import MiaoshouController
 
 
 class CompletePublishWorkflow:
-    """完整发布工作流（公用采集箱→Temu全托管采集箱→发布）.
+    """完整发布工作流(公用采集箱→Temu全托管采集箱→发布).
 
-    实现从首次编辑到最终发布的完整自动化流程：
-    1. 公用采集箱首次编辑（5个产品）
-    2. 认领4次（生成20个产品）
+    实现从首次编辑到最终发布的完整自动化流程:
+    1. 公用采集箱首次编辑(5个产品)
+    2. 认领4次(生成20个产品)
     3. Temu全托管采集箱批量编辑18步
-    4. 选择店铺、设置供货价、批量发布
+    4. 选择店铺,设置供货价,批量发布
 
     Attributes:
         page: Playwright页面对象
@@ -52,7 +52,7 @@ class CompletePublishWorkflow:
     # 流程常量
     FIRST_EDIT_COUNT = 5  # 首次编辑产品数量
     CLAIM_TIMES = 4  # 每个产品认领次数
-    BATCH_EDIT_COUNT = 20  # 批量编辑产品数量（5×4）
+    BATCH_EDIT_COUNT = 20  # 批量编辑产品数量(5×4)
 
     def __init__(self, page: Page):
         """初始化工作流控制器.
@@ -68,13 +68,13 @@ class CompletePublishWorkflow:
         logger.info("完整发布工作流已初始化")
 
     async def execute_full_workflow(
-        self, product_data_list: List[Dict[str, Any]], username: Optional[str] = None
-    ) -> Dict[str, Any]:
+        self, product_data_list: list[dict[str, Any]], username: str | None = None
+    ) -> dict[str, Any]:
         """执行完整的发布流程.
 
         Args:
-            product_data_list: 产品数据列表（至少5个）
-            username: 创建人用户名（用于筛选），可选
+            product_data_list: 产品数据列表(至少5个)
+            username: 创建人用户名(用于筛选),可选
 
         Returns:
             执行结果字典
@@ -93,8 +93,8 @@ class CompletePublishWorkflow:
         }
 
         try:
-            # 阶段1：公用采集箱首次编辑
-            logger.info("📝 阶段1/4：公用采集箱首次编辑")
+            # 阶段1:公用采集箱首次编辑
+            logger.info("📝 阶段1/4:公用采集箱首次编辑")
             logger.info("-" * 70)
 
             stage1_result = await self.stage1_first_edit(
@@ -103,26 +103,26 @@ class CompletePublishWorkflow:
             result["stages"]["stage1_first_edit"] = stage1_result
 
             if not stage1_result["success"]:
-                logger.error("✗ 阶段1失败，终止流程")
+                logger.error("✗ 阶段1失败,终止流程")
                 return result
 
-            logger.success(f"✓ 阶段1完成：已编辑{stage1_result['edited_count']}个产品\n")
+            logger.success(f"✓ 阶段1完成:已编辑{stage1_result['edited_count']}个产品\n")
 
-            # 阶段2：认领产品（5×4=20）
-            logger.info("🔄 阶段2/4：认领产品")
+            # 阶段2:认领产品(5×4=20)
+            logger.info("🔄 阶段2/4:认领产品")
             logger.info("-" * 70)
 
             stage2_result = await self.stage2_claim_products(stage1_result["edited_products"])
             result["stages"]["stage2_claim"] = stage2_result
 
             if not stage2_result["success"]:
-                logger.error("✗ 阶段2失败，终止流程")
+                logger.error("✗ 阶段2失败,终止流程")
                 return result
 
-            logger.success(f"✓ 阶段2完成：已认领{stage2_result['total_claimed']}个产品\n")
+            logger.success(f"✓ 阶段2完成:已认领{stage2_result['total_claimed']}个产品\n")
 
-            # 阶段3：Temu全托管采集箱批量编辑18步
-            logger.info("⚙️ 阶段3/4：批量编辑18步")
+            # 阶段3:Temu全托管采集箱批量编辑18步
+            logger.info("⚙️ 阶段3/4:批量编辑18步")
             logger.info("-" * 70)
 
             stage3_result = await self.stage3_batch_edit(
@@ -131,19 +131,19 @@ class CompletePublishWorkflow:
             result["stages"]["stage3_batch_edit"] = stage3_result
 
             if not stage3_result["success"]:
-                logger.warning("⚠️ 阶段3部分失败，但继续流程")
+                logger.warning("⚠️ 阶段3部分失败,但继续流程")
             else:
-                logger.success(f"✓ 阶段3完成：18步中{stage3_result['success_count']}步成功\n")
+                logger.success(f"✓ 阶段3完成:18步中{stage3_result['success_count']}步成功\n")
 
-            # 阶段4：选择店铺、设置供货价、批量发布
-            logger.info("🚢 阶段4/4：选择店铺、设置供货价、批量发布")
+            # 阶段4:选择店铺,设置供货价,批量发布
+            logger.info("🚢 阶段4/4:选择店铺,设置供货价,批量发布")
             logger.info("-" * 70)
 
             stage4_result = await self.stage4_publish(product_data_list[0].get("supply_price"))
             result["stages"]["stage4_publish"] = stage4_result
 
             if stage4_result["success"]:
-                logger.success("✓ 阶段4完成：产品已发布\n")
+                logger.success("✓ 阶段4完成:产品已发布\n")
                 result["total_success"] = True
             else:
                 logger.error("✗ 阶段4失败\n")
@@ -171,11 +171,11 @@ class CompletePublishWorkflow:
         return result
 
     async def stage1_first_edit(
-        self, product_data_list: List[Dict[str, Any]], username: Optional[str] = None
-    ) -> Dict[str, Any]:
-        """阶段1：公用采集箱首次编辑.
+        self, product_data_list: list[dict[str, Any]], username: str | None = None
+    ) -> dict[str, Any]:
+        """阶段1:公用采集箱首次编辑.
 
-        包括：
+        包括:
         - 导航到公用采集箱
         - AI生成标题
         - 核对类目
@@ -184,8 +184,8 @@ class CompletePublishWorkflow:
         - 保存
 
         Args:
-            product_data_list: 产品数据列表（5个）
-            username: 创建人用户名（用于筛选）
+            product_data_list: 产品数据列表(5个)
+            username: 创建人用户名(用于筛选)
 
         Returns:
             阶段执行结果
@@ -207,11 +207,11 @@ class CompletePublishWorkflow:
                 await all_tab.click()
                 await self.page.wait_for_timeout(1500)
             except:
-                logger.warning("切换tab失败，继续...")
+                logger.warning("切换tab失败,继续...")
 
-            # 3. 如果提供了用户名，进行筛选
+            # 3. 如果提供了用户名,进行筛选
             if username:
-                logger.info(f"筛选创建人：{username}...")
+                logger.info(f"筛选创建人:{username}...")
                 try:
                     # 点击创建人下拉框
                     creator_select = self.page.locator(".jx-select").nth(0)
@@ -237,27 +237,27 @@ class CompletePublishWorkflow:
 
                     logger.info("✓ 已筛选用户产品")
                 except Exception as e:
-                    logger.warning(f"筛选失败: {e}，继续...")
+                    logger.warning(f"筛选失败: {e},继续...")
 
             # 4. 检查产品列表
             logger.info("检查产品列表...")
 
-            # 简化版：假设前5个产品已经存在并可编辑
-            # 实际场景中这里应该：
+            # 简化版:假设前5个产品已经存在并可编辑
+            # 实际场景中这里应该:
             # 1. 使用MiaoshouController.click_edit_product_by_index()打开产品
-            # 2. 使用FirstEditController的方法完成编辑（AI标题、类目、图片等）
+            # 2. 使用FirstEditController的方法完成编辑(AI标题,类目,图片等)
             # 3. 保存并关闭
 
             logger.info(f"📝 模拟编辑前{len(product_data_list)}个产品...")
-            logger.info("   （实际使用时会调用FirstEditController完成具体编辑）")
+            logger.info("   (实际使用时会调用FirstEditController完成具体编辑)")
 
             for i, product_data in enumerate(product_data_list):
                 try:
                     logger.info(f"\n  产品{i + 1}: {product_data.get('title', f'产品{i + 1}')}")
-                    logger.info(f"    - AI标题生成... ✓")
-                    logger.info(f"    - 类目核对... ✓")
-                    logger.info(f"    - 图片管理... ✓")
-                    logger.info(f"    - 重量尺寸... ✓")
+                    logger.info("    - AI标题生成... ✓")
+                    logger.info("    - 类目核对... ✓")
+                    logger.info("    - 图片管理... ✓")
+                    logger.info("    - 重量尺寸... ✓")
 
                     result["edited_count"] += 1
                     result["edited_products"].append(
@@ -279,10 +279,10 @@ class CompletePublishWorkflow:
 
         return result
 
-    async def stage2_claim_products(self, edited_products: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """阶段2：认领产品（5×4=20）.
+    async def stage2_claim_products(self, edited_products: list[dict[str, Any]]) -> dict[str, Any]:
+        """阶段2:认领产品(5×4=20).
 
-        对每个产品认领4次，生成20个产品副本。
+        对每个产品认领4次,生成20个产品副本.
 
         Args:
             edited_products: 已编辑的产品列表
@@ -293,11 +293,11 @@ class CompletePublishWorkflow:
         result = {"success": False, "total_claimed": 0, "message": ""}
 
         try:
-            logger.info(f"📋 模拟认领{len(edited_products)}个产品，每个认领{self.CLAIM_TIMES}次...")
-            logger.info("   （实际使用时需要在公用采集箱点击'认领到→Temu全托管'）")
+            logger.info(f"📋 模拟认领{len(edited_products)}个产品,每个认领{self.CLAIM_TIMES}次...")
+            logger.info("   (实际使用时需要在公用采集箱点击'认领到→Temu全托管')")
 
-            # 简化版：模拟认领过程
-            # 实际场景中应该：
+            # 简化版:模拟认领过程
+            # 实际场景中应该:
             # 1. 切换到公用采集箱的「已认领」tab
             # 2. 找到对应产品的"认领到"按钮
             # 3. 选择"Temu全托管"
@@ -315,7 +315,7 @@ class CompletePublishWorkflow:
                         logger.info(f"    - 第{j + 1}次认领... ✓")
                         await self.page.wait_for_timeout(50)  # 模拟认领时间
 
-                    logger.success(f"  ✓ 产品{i + 1}认领完成（{self.CLAIM_TIMES}次）")
+                    logger.success(f"  ✓ 产品{i + 1}认领完成({self.CLAIM_TIMES}次)")
 
                 except Exception as e:
                     logger.error(f"  ✗ 产品{i + 1}认领失败: {e}")
@@ -326,9 +326,9 @@ class CompletePublishWorkflow:
             result["message"] = f"已认领{claimed_count}/{len(edited_products) * self.CLAIM_TIMES}次"
 
             if result["success"]:
-                logger.success(f"✓ 所有产品认领完成，共{claimed_count}次")
+                logger.success(f"✓ 所有产品认领完成,共{claimed_count}次")
             else:
-                logger.warning(f"⚠️ 部分认领失败，成功{claimed_count}次")
+                logger.warning(f"⚠️ 部分认领失败,成功{claimed_count}次")
 
         except Exception as e:
             logger.error(f"阶段2执行失败: {e}")
@@ -336,11 +336,11 @@ class CompletePublishWorkflow:
 
         return result
 
-    async def stage3_batch_edit(self, product_data: Dict[str, Any]) -> Dict[str, Any]:
-        """阶段3：Temu全托管采集箱批量编辑18步.
+    async def stage3_batch_edit(self, product_data: dict[str, Any]) -> dict[str, Any]:
+        """阶段3:Temu全托管采集箱批量编辑18步.
 
         Args:
-            product_data: 产品数据（用于获取成本价等信息）
+            product_data: 产品数据(用于获取成本价等信息)
 
         Returns:
             阶段执行结果
@@ -370,11 +370,11 @@ class CompletePublishWorkflow:
 
         return result
 
-    async def stage4_publish(self, supply_price: Optional[float] = None) -> Dict[str, Any]:
-        """阶段4：选择店铺、设置供货价、批量发布.
+    async def stage4_publish(self, supply_price: float | None = None) -> dict[str, Any]:
+        """阶段4:选择店铺,设置供货价,批量发布.
 
         Args:
-            supply_price: 供货价，可选
+            supply_price: 供货价,可选
 
         Returns:
             阶段执行结果
@@ -390,7 +390,7 @@ class CompletePublishWorkflow:
                 await self.page.goto(temu_box_url)
                 await self.page.wait_for_timeout(2000)
 
-            # 1. 选择店铺（SOP步骤8）
+            # 1. 选择店铺(SOP步骤8)
             logger.info("1. 选择店铺...")
             try:
                 select_shop_btn = self.page.locator("button:has-text('选择店铺')").first
@@ -398,7 +398,7 @@ class CompletePublishWorkflow:
                     await select_shop_btn.click()
                     await self.page.wait_for_timeout(1500)
 
-                    # 选择第一个店铺（实际使用时需要指定具体店铺）
+                    # 选择第一个店铺(实际使用时需要指定具体店铺)
                     logger.info("  ℹ️ 实际使用时需要选择具体店铺")
 
                     # 确认
@@ -413,9 +413,9 @@ class CompletePublishWorkflow:
             except Exception as e:
                 logger.warning(f"  ⚠️ 选择店铺失败: {e}")
 
-            # 2. 设置供货价（SOP步骤9）
+            # 2. 设置供货价(SOP步骤9)
             if supply_price:
-                logger.info(f"2. 设置供货价：¥{supply_price}...")
+                logger.info(f"2. 设置供货价:¥{supply_price}...")
                 try:
                     set_price_btn = self.page.locator("button:has-text('设置供货价')").first
                     if await set_price_btn.count() > 0:
@@ -442,7 +442,7 @@ class CompletePublishWorkflow:
                 except Exception as e:
                     logger.warning(f"  ⚠️ 设置供货价失败: {e}")
 
-            # 3. 批量发布（SOP步骤10）
+            # 3. 批量发布(SOP步骤10)
             logger.info("3. 批量发布...")
             try:
                 publish_btn = self.page.locator("button:has-text('批量发布')").first
@@ -485,9 +485,9 @@ class CompletePublishWorkflow:
 if __name__ == "__main__":
 
     async def test():
-        from browser_manager import BrowserManager
-        from login_controller import LoginController
         import os
+
+        from login_controller import LoginController
 
         # 登录
         login_ctrl = LoginController()

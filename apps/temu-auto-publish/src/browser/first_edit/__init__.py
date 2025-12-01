@@ -1,4 +1,3 @@
-# ruff: noqa: N999
 """
 @PURPOSE: 首次编辑模块入口,导出核心控制器和能力混入.
 @OUTLINE:

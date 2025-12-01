@@ -14,7 +14,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import typer
-
 from src.utils.selector_hit_recorder import export_selector_report
 from src.workflows.complete_publish_workflow import CompletePublishWorkflow
 
@@ -83,7 +82,7 @@ def run(
         )
         workflow.execute()
     finally:
-        # 无论成功或失败，都导出选择器命中报告
+        # 无论成功或失败,都导出选择器命中报告
         export_selector_report("D:/codespace/beimeng_workspace/data/temp")
 
 

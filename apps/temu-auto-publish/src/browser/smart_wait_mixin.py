@@ -1,5 +1,5 @@
 """
-@PURPOSE: 统一的智能等待策略混入类，替代所有硬编码等待
+@PURPOSE: 统一的智能等待策略混入类,替代所有硬编码等待
 @OUTLINE:
   - class SmartWaitMixin: 智能等待混入类
     - async def adaptive_wait(): 自适应等待
@@ -19,8 +19,9 @@ from __future__ import annotations
 
 import asyncio
 import time
-from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Callable, Awaitable
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
@@ -64,18 +65,18 @@ class AdaptiveWaitConfig:
     - dom_stable_interval_ms: 10 -> 15 (降低 CPU 负担)
     """
 
-    min_wait_ms: int = 10  # 平衡: 最小等待稍微增加，减少空转
+    min_wait_ms: int = 10  # 平衡: 最小等待稍微增加,减少空转
     max_wait_ms: int = 300  # 保持: 最大等待限制
     network_idle_timeout_ms: int = 80  # 平衡: 减少网络空闲超时误判
     dom_stable_timeout_ms: int = 80  # 平衡: 减少 DOM 稳定超时误判
     dom_stable_checks: int = 1  # 保持: 单次检查
     dom_stable_interval_ms: int = 15  # 平衡: 降低采样频率减少 CPU 负担
-    # 学习因子：根据历史数据调整等待时间
+    # 学习因子:根据历史数据调整等待时间
     learning_factor: float = 0.2
 
 
 class SmartWaitMixin:
-    """统一的智能等待混入类，替代所有硬编码等待
+    """统一的智能等待混入类,替代所有硬编码等待
 
     特点:
     1. 自适应等待 - 基于历史数据动态调整等待时间
@@ -110,7 +111,7 @@ class SmartWaitMixin:
 
         Args:
             page: Playwright Page 对象
-            operation: 操作标识（用于统计和缓存）
+            operation: 操作标识(用于统计和缓存)
             min_ms: 最小等待时间(毫秒)
             max_ms: 最大等待时间(毫秒)
             wait_for_network: 是否等待网络空闲
@@ -153,7 +154,7 @@ class SmartWaitMixin:
                 results = await asyncio.gather(*tasks, return_exceptions=True)
                 success = all(r is True for r in results if not isinstance(r, Exception))
             else:
-                # 如果没有任何检测条件，至少等待最小时间
+                # 如果没有任何检测条件,至少等待最小时间
                 await asyncio.sleep(min_wait / 1000)
 
         except Exception as exc:
@@ -174,7 +175,7 @@ class SmartWaitMixin:
         return elapsed_ms
 
     async def _wait_for_network_quiet(self, page: Page, timeout_ms: int = 500) -> bool:
-        """等待网络请求静止（非阻塞式）
+        """等待网络请求静止(非阻塞式)
 
         Args:
             page: Playwright Page 对象
@@ -187,8 +188,8 @@ class SmartWaitMixin:
             await page.wait_for_load_state("networkidle", timeout=timeout_ms)
             return True
         except PlaywrightTimeoutError:
-            # 超时不阻塞，继续执行
-            logger.debug(f"网络空闲等待超时 ({timeout_ms}ms)，继续执行")
+            # 超时不阻塞,继续执行
+            logger.debug(f"网络空闲等待超时 ({timeout_ms}ms),继续执行")
             return False
         except Exception as exc:
             logger.debug(f"网络空闲等待异常: {exc}")
@@ -203,7 +204,7 @@ class SmartWaitMixin:
     ) -> bool:
         """等待 DOM 在多次采样内保持稳定
 
-        通过对比DOM快照来检测页面是否稳定，避免在动态加载过程中进行操作。
+        通过对比DOM快照来检测页面是否稳定,避免在动态加载过程中进行操作.
 
         Args:
             page: Playwright Page 对象
@@ -226,7 +227,7 @@ class SmartWaitMixin:
             try:
                 snapshot = await self._capture_dom_snapshot(page)
             except Exception:
-                # JavaScript执行失败，跳过本次采样
+                # JavaScript执行失败,跳过本次采样
                 await asyncio.sleep(poll_interval / 1000)
                 continue
 
@@ -271,7 +272,7 @@ class SmartWaitMixin:
         checks: int = 2,
         interval_ms: int = 100,
     ) -> bool:
-        """等待特定元素稳定（位置和尺寸不变）
+        """等待特定元素稳定(位置和尺寸不变)
 
         Args:
             locator: Playwright Locator 对象
@@ -312,7 +313,7 @@ class SmartWaitMixin:
     def _boxes_equal(
         box1: dict[str, float], box2: dict[str, float], tolerance: float = 1.0
     ) -> bool:
-        """比较两个边界框是否相等（允许容差）"""
+        """比较两个边界框是否相等(允许容差)"""
         for key in ("x", "y", "width", "height"):
             if abs(box1.get(key, 0) - box2.get(key, 0)) > tolerance:
                 return False
@@ -341,7 +342,7 @@ class SmartWaitMixin:
         async def check_condition(cond: Callable) -> bool:
             try:
                 return await asyncio.wait_for(cond(page), timeout=timeout_ms / 1000)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 return False
             except Exception:
                 return False
@@ -352,10 +353,7 @@ class SmartWaitMixin:
 
         bool_results = [r if isinstance(r, bool) else False for r in results]
 
-        if require_all:
-            overall = all(bool_results)
-        else:
-            overall = any(bool_results)
+        overall = all(bool_results) if require_all else any(bool_results)
 
         return overall, bool_results
 
@@ -396,12 +394,12 @@ class SmartWaitMixin:
         }
 
     def reset_wait_cache(self) -> None:
-        """重置等待时间缓存（用于新场景）"""
+        """重置等待时间缓存(用于新场景)"""
         self._wait_cache.clear()
         self._wait_metrics.clear()
 
 
-# 便捷函数：直接使用而无需继承
+# 便捷函数:直接使用而无需继承
 _global_wait_mixin: SmartWaitMixin | None = None
 
 
@@ -422,7 +420,7 @@ async def smart_wait(
     wait_for_network: bool = True,
     wait_for_dom: bool = True,
 ) -> float:
-    """便捷函数：执行智能等待
+    """便捷函数:执行智能等待
 
     Args:
         page: Playwright Page 对象

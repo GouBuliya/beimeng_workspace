@@ -2,10 +2,10 @@
 @PURPOSE: CLI 主入口 - Temu 自动发布系统命令行工具
 @OUTLINE:
   - app: Typer 主应用
-  - 集成所有命令组（workflow/monitor/debug/config）
+  - 集成所有命令组(workflow/monitor/debug/config)
   - 版本信息和帮助
 @GOTCHAS:
-  - 使用前需要配置登录凭证（.env文件）
+  - 使用前需要配置登录凭证(.env文件)
   - 确保 Playwright 浏览器已安装
 @DEPENDENCIES:
   - 内部: cli.commands.*
@@ -16,7 +16,6 @@ import sys
 from pathlib import Path
 
 import typer
-from loguru import logger
 from rich.console import Console
 
 # 添加项目根目录到 Python 路径
@@ -124,7 +123,7 @@ def status():
     if username:
         console.print(f"  用户名: ✓ {username}")
     else:
-        console.print(f"  用户名: ✗ 未配置")
+        console.print("  用户名: ✗ 未配置")
         console.print("  [yellow]请在 .env 文件中设置 MIAOSHOU_USERNAME/TEMU_USERNAME[/yellow]")
 
 
@@ -137,7 +136,7 @@ def setup():
     """
     console.print("\n[bold cyan]🛠️  Temu 自动发布系统 - 初始化向导[/bold cyan]\n")
 
-    console.print("此向导将帮助你完成初始配置。\n")
+    console.print("此向导将帮助你完成初始配置.\n")
 
     # 1. 检查环境
     console.print("[bold]步骤 1/4:[/bold] 检查环境")
@@ -157,7 +156,7 @@ def setup():
     try:
         import playwright
 
-        console.print(f"  ✓ Playwright 已安装")
+        console.print("  ✓ Playwright 已安装")
     except ImportError:
         console.print("  ✗ Playwright 未安装")
         console.print("    运行: pip install playwright && playwright install chromium")
@@ -194,7 +193,7 @@ ENVIRONMENT=development
     # 4. 测试登录
     console.print("\n[bold]步骤 4/4:[/bold] 测试登录")
 
-    test_login = typer.confirm("  是否测试登录？")
+    test_login = typer.confirm("  是否测试登录?")
 
     if test_login:
         console.print("  测试登录中...")
@@ -202,7 +201,7 @@ ENVIRONMENT=development
         console.print("  [yellow]登录测试功能正在开发中...[/yellow]")
 
     # 完成
-    console.print("\n[bold green]✓ 初始化完成！[/bold green]")
+    console.print("\n[bold green]✓ 初始化完成![/bold green]")
     console.print("\n下一步:")
     console.print("  1. 查看状态: [cyan]temu-auto-publish status[/cyan]")
     console.print("  2. 执行工作流: [cyan]temu-auto-publish workflow run[/cyan]")
@@ -213,18 +212,18 @@ ENVIRONMENT=development
 def main():
     """Temu 自动发布系统 v2.0 - SOTA 工业级命令行工具.
 
-    主要功能：
+    主要功能:
       - workflow: 执行和管理工作流
       - monitor: 监控和指标分析
       - debug: 调试功能管理
       - config: 配置管理
 
-    快速开始：
+    快速开始:
       1. 初始化: temu-auto-publish setup
       2. 查看状态: temu-auto-publish status
       3. 执行工作流: temu-auto-publish workflow run
 
-    文档：
+    文档:
       https://github.com/your-org/temu-auto-publish
     """
     pass

@@ -22,7 +22,7 @@ class UserCreate(BaseModel):
 
     username: str = Field(..., min_length=3, max_length=50, description="用户名")
     password: str = Field(..., min_length=6, max_length=100, description="密码")
-    email: EmailStr | None = Field(default=None, description="邮箱（可选）")
+    email: EmailStr | None = Field(default=None, description="邮箱(可选)")
     is_active: bool = Field(default=True, description="是否激活")
     is_superuser: bool = Field(default=False, description="是否是管理员")
 

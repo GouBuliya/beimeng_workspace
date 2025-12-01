@@ -1,14 +1,14 @@
 """
-@PURPOSE: 实现文件元信息解析器，提取文件头部的元数据注释
+@PURPOSE: 实现文件元信息解析器,提取文件头部的元数据注释
 @OUTLINE:
   - class FileInfoParser: 文件元信息解析器主类
   - _extract_comment_block(): 提取注释块
   - _parse_metadata_fields(): 解析元信息字段
   - _normalize_content(): 规范化内容
 @GOTCHAS:
-  - 不同语言的注释语法不同，需要正确识别
+  - 不同语言的注释语法不同,需要正确识别
   - 多行字段的内容需要保持缩进关系
-  - 某些注释可能不包含元信息，需要区分
+  - 某些注释可能不包含元信息,需要区分
 @DEPENDENCIES:
   - 内部: .models, .config
   - 外部: pathlib, re
@@ -17,14 +17,14 @@
 import re
 from pathlib import Path
 
-from .config import COMMENT_PATTERNS, ParserConfig, SUPPORTED_EXTENSIONS
+from .config import COMMENT_PATTERNS, SUPPORTED_EXTENSIONS, ParserConfig
 from .models import METADATA_FIELDS, FileMetadata
 
 
 class FileInfoParser:
     """文件元信息解析器.
 
-    从源代码文件头部提取并解析元数据注释。
+    从源代码文件头部提取并解析元数据注释.
 
     Attributes:
         config: 解析器配置
@@ -39,7 +39,7 @@ class FileInfoParser:
         """初始化解析器.
 
         Args:
-            config: 解析器配置，如果为None则使用默认配置
+            config: 解析器配置,如果为None则使用默认配置
         """
         self.config = config or ParserConfig()
 
@@ -91,7 +91,7 @@ class FileInfoParser:
             # 解析元信息字段
             fields = self._parse_metadata_fields(comment_block)
 
-            # 检查是否真的包含元信息（至少有一个字段）
+            # 检查是否真的包含元信息(至少有一个字段)
             has_metadata = len(fields) > 0
 
             return FileMetadata(
@@ -105,7 +105,7 @@ class FileInfoParser:
             return FileMetadata(
                 file_path=str(file_path),
                 has_metadata=False,
-                error=f"解析错误: {str(e)}",
+                error=f"解析错误: {e!s}",
             )
 
     def _read_file_head(self, file_path: Path) -> str:
@@ -115,18 +115,18 @@ class FileInfoParser:
             file_path: 文件路径
 
         Returns:
-            文件头部内容（最多 max_lines_to_read 行）
+            文件头部内容(最多 max_lines_to_read 行)
         """
         lines = []
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 for i, line in enumerate(f):
                     if i >= self.config.max_lines_to_read:
                         break
                     lines.append(line)
         except UnicodeDecodeError:
             # 尝试其他编码
-            with open(file_path, "r", encoding="latin-1") as f:
+            with open(file_path, encoding="latin-1") as f:
                 for i, line in enumerate(f):
                     if i >= self.config.max_lines_to_read:
                         break
@@ -142,7 +142,7 @@ class FileInfoParser:
             extension: 文件扩展名
 
         Returns:
-            提取的注释内容（去除注释标记）
+            提取的注释内容(去除注释标记)
         """
         patterns = COMMENT_PATTERNS.get(extension, [])
 
@@ -169,7 +169,7 @@ class FileInfoParser:
             content: 文件内容
             start: 开始标记
             end: 结束标记
-            line_prefix: 行前缀（如 * 号）
+            line_prefix: 行前缀(如 * 号)
 
         Returns:
             提取的注释内容
@@ -191,9 +191,9 @@ class FileInfoParser:
             lines = comment.split("\n")
             cleaned_lines = []
             for line in lines:
-                # 先检查原始行（可能有前导空格）
+                # 先检查原始行(可能有前导空格)
                 trimmed = line.lstrip()
-                # 检查是否以行前缀开头（去除空格后）
+                # 检查是否以行前缀开头(去除空格后)
                 prefix_stripped = line_prefix.strip()
                 if trimmed.startswith(prefix_stripped):
                     # 移除前缀并继续处理
@@ -230,7 +230,7 @@ class FileInfoParser:
                 comment_line = stripped[len(marker) :].lstrip()
                 comment_lines.append(comment_line)
             elif started and stripped:
-                # 遇到非注释的非空行，停止
+                # 遇到非注释的非空行,停止
                 break
             elif started and not stripped:
                 # 空行也加入
@@ -265,10 +265,10 @@ class FileInfoParser:
                 current_field = match.group(1)
                 current_value = [match.group(2)] if match.group(2) else []
             elif current_field and line.strip():
-                # 续行（属于当前字段）
+                # 续行(属于当前字段)
                 current_value.append(line.strip())
             elif current_field and not line.strip():
-                # 空行也加入（保持格式）
+                # 空行也加入(保持格式)
                 current_value.append("")
 
         # 保存最后一个字段

@@ -12,7 +12,6 @@
 """
 
 from datetime import datetime
-from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -99,9 +98,9 @@ class TestLogFormatters:
 
     def test_format_json_with_context(self) -> None:
         """测试 JSON 格式化器带上下文."""
-        from src.utils.logger_setup import format_json
-
         import json
+
+        from src.utils.logger_setup import format_json
 
         record = {
             "time": datetime.now(),
@@ -127,9 +126,9 @@ class TestLogFormatters:
 
     def test_format_json_with_exception(self) -> None:
         """测试 JSON 格式化器带异常信息."""
-        from src.utils.logger_setup import format_json
-
         import json
+
+        from src.utils.logger_setup import format_json
 
         exception_mock = MagicMock()
         exception_mock.type = ValueError
@@ -315,7 +314,7 @@ class TestSetupLogger:
 
     def test_setup_logger_import(self) -> None:
         """测试模块导入时自动配置."""
-        # 模块已在之前导入，验证不会抛异常
+        # 模块已在之前导入,验证不会抛异常
         from src.utils import logger_setup
 
         assert logger_setup is not None

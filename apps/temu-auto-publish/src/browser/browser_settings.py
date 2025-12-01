@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import os
 import sys
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -28,14 +28,14 @@ def detect_base_dir() -> Path:
     """
 
     if hasattr(sys, "_MEIPASS"):
-        return Path(getattr(sys, "_MEIPASS"))
+        return Path(sys._MEIPASS)
     if getattr(sys, "frozen", False):
         return Path(sys.executable).resolve().parent
     return Path(__file__).resolve().parents[2]
 
 
 class BrowserSettings(BaseSettings):
-    """浏览器配置, 统一 Playwright 路径、版本预期与运行参数.
+    """浏览器配置, 统一 Playwright 路径,版本预期与运行参数.
 
     Attributes:
         browser_name: 浏览器类型.

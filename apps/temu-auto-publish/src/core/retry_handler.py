@@ -21,13 +21,12 @@
 """
 
 import asyncio
-import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from functools import wraps
-from typing import Any, Callable, Optional, Tuple, Type
+from typing import Any
 
 from loguru import logger
-
 
 # ========== 错误分类 ==========
 
@@ -39,19 +38,19 @@ class RetryableError(Exception):
 
 
 class NetworkError(RetryableError):
-    """网络错误（可重试）."""
+    """网络错误(可重试)."""
 
     pass
 
 
 class ElementNotFoundError(RetryableError):
-    """元素未找到错误（可重试）."""
+    """元素未找到错误(可重试)."""
 
     pass
 
 
 class TimeoutError(RetryableError):
-    """超时错误（可重试）."""
+    """超时错误(可重试)."""
 
     pass
 
@@ -63,13 +62,13 @@ class NonRetryableError(Exception):
 
 
 class ValidationError(NonRetryableError):
-    """验证错误（不可重试）."""
+    """验证错误(不可重试)."""
 
     pass
 
 
 class ConfigurationError(NonRetryableError):
-    """配置错误（不可重试）."""
+    """配置错误(不可重试)."""
 
     pass
 
@@ -84,9 +83,9 @@ class RetryConfig:
     Attributes:
         enabled: 是否启用重试
         max_attempts: 最大重试次数
-        initial_delay: 初始延迟（秒）
+        initial_delay: 初始延迟(秒)
         backoff_factor: 退避因子
-        max_delay: 最大延迟（秒）
+        max_delay: 最大延迟(秒)
         retryable_exceptions: 可重试的异常类型
 
     Examples:
@@ -100,7 +99,7 @@ class RetryConfig:
     initial_delay: float = 1.0
     backoff_factor: float = 2.0
     max_delay: float = 60.0
-    retryable_exceptions: Tuple[Type[Exception], ...] = (
+    retryable_exceptions: tuple[type[Exception], ...] = (
         RetryableError,
         ConnectionError,
         TimeoutError,
@@ -110,10 +109,10 @@ class RetryConfig:
         """计算指数退避延迟.
 
         Args:
-            attempt: 当前尝试次数（从1开始）
+            attempt: 当前尝试次数(从1开始)
 
         Returns:
-            延迟时间（秒）
+            延迟时间(秒)
         """
         delay = self.initial_delay * (self.backoff_factor ** (attempt - 1))
         return min(delay, self.max_delay)
@@ -130,23 +129,23 @@ class RetryHandler:
         >>> await handler.execute(some_async_func, arg1, arg2)
     """
 
-    def __init__(self, config: Optional[RetryConfig] = None):
+    def __init__(self, config: RetryConfig | None = None):
         """初始化重试处理器.
 
         Args:
-            config: 重试配置，默认使用 RetryConfig()
+            config: 重试配置,默认使用 RetryConfig()
         """
         self.config = config or RetryConfig()
 
     async def execute(
-        self, func: Callable, *args, cleanup_func: Optional[Callable] = None, **kwargs
+        self, func: Callable, *args, cleanup_func: Callable | None = None, **kwargs
     ) -> Any:
         """执行函数并在失败时重试.
 
         Args:
             func: 要执行的异步函数
             *args: 位置参数
-            cleanup_func: 清理函数（重试前调用）
+            cleanup_func: 清理函数(重试前调用)
             **kwargs: 关键字参数
 
         Returns:
@@ -208,14 +207,14 @@ def retry_with_backoff(
     max_attempts: int = 3,
     initial_delay: float = 1.0,
     backoff_factor: float = 2.0,
-    retryable_exceptions: Optional[Tuple[Type[Exception], ...]] = None,
-    cleanup_func: Optional[Callable] = None,
+    retryable_exceptions: tuple[type[Exception], ...] | None = None,
+    cleanup_func: Callable | None = None,
 ):
-    """重试装饰器（支持指数退避）.
+    """重试装饰器(支持指数退避).
 
     Args:
         max_attempts: 最大重试次数
-        initial_delay: 初始延迟（秒）
+        initial_delay: 初始延迟(秒)
         backoff_factor: 退避因子
         retryable_exceptions: 可重试的异常类型
         cleanup_func: 清理函数
@@ -252,7 +251,7 @@ def retry_with_backoff(
 
 # 便捷函数
 def create_retry_handler(max_attempts: int = 3, backoff_factor: float = 2.0) -> RetryHandler:
-    """创建重试处理器（便捷方法）.
+    """创建重试处理器(便捷方法).
 
     Args:
         max_attempts: 最大重试次数

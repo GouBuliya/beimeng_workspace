@@ -1,5 +1,5 @@
 """
-@PURPOSE: 数据处理流程整合，提供统一的数据处理接口
+@PURPOSE: 数据处理流程整合,提供统一的数据处理接口
 @OUTLINE:
   - class DataProcessor: 数据处理器主类
   - def process_excel(): 处理Excel文件并生成任务数据
@@ -24,7 +24,7 @@ from .title_generator import TitleGenerator
 class DataProcessor:
     """数据处理器.
 
-    整合 Excel 读取、价格计算、标题生成等功能。
+    整合 Excel 读取,价格计算,标题生成等功能.
 
     Attributes:
         price_calculator: 价格计算器

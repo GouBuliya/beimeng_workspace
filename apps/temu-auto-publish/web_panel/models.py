@@ -39,7 +39,7 @@ class WorkflowOptions(BaseModel):
     outer_package_image: Path | None = Field(default=None, description="外包装图片文件路径")
     manual_file: Path | None = Field(default=None, description="产品说明书PDF路径")
     single_run: bool = Field(default=True, description="是否仅运行一次流程")
-    start_round: int = Field(default=1, ge=1, description="起始轮次（模拟已运行次数，默认1）")
+    start_round: int = Field(default=1, ge=1, description="起始轮次(模拟已运行次数,默认1)")
 
     def as_workflow_kwargs(self) -> dict[str, object]:
         """转换为 CompletePublishWorkflow 所需的关键参数."""

@@ -1,5 +1,5 @@
 """
-@PURPOSE: 数据转换脚本示例，展示最佳实践的数据处理脚本
+@PURPOSE: 数据转换脚本示例,展示最佳实践的数据处理脚本
 @OUTLINE:
   - class Operation: 转换操作类型枚举
   - class InputData: 输入数据模型
@@ -15,7 +15,6 @@ import json
 import sys
 from enum import Enum
 from pathlib import Path
-from typing import Optional
 
 import typer
 from loguru import logger
@@ -81,17 +80,17 @@ def transform_data(data: list[str], operation: Operation) -> list[str]:
 
 
 def main(
-    input_file: Optional[Path] = typer.Option(
+    input_file: Path | None = typer.Option(
         None,
         "--input",
         "-i",
-        help="输入文件路径（JSON），不提供则从 stdin 读取",
+        help="输入文件路径(JSON),不提供则从 stdin 读取",
     ),
-    output_file: Optional[Path] = typer.Option(
+    output_file: Path | None = typer.Option(
         None,
         "--output",
         "-o",
-        help="输出文件路径（JSON），不提供则输出到 stdout",
+        help="输出文件路径(JSON),不提供则输出到 stdout",
     ),
     operation: Operation = typer.Option(
         Operation.UPPERCASE,
@@ -109,8 +108,8 @@ def main(
     """数据转换脚本主函数
 
     Args:
-        input_file: 输入文件路径（可选）
-        output_file: 输出文件路径（可选）
+        input_file: 输入文件路径(可选)
+        output_file: 输出文件路径(可选)
         operation: 转换操作
         log_level: 日志级别
     """

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+import importlib
 import io
 import sys
 from pathlib import Path
-import importlib
 
 import pytest
 
@@ -11,9 +11,9 @@ APP_ROOT = Path(__file__).resolve().parents[1] / "apps" / "temu-auto-publish"
 if str(APP_ROOT) not in sys.path:
     sys.path.insert(0, str(APP_ROOT))
 
-cfg_settings = importlib.import_module("config.settings")  # noqa: E402
-common_config = importlib.import_module("packages.common.config")  # noqa: E402
-common_logger = importlib.import_module("packages.common.logger")  # noqa: E402
+cfg_settings = importlib.import_module("config.settings")
+common_config = importlib.import_module("packages.common.config")
+common_logger = importlib.import_module("packages.common.logger")
 
 
 def test_settings_validation_and_masking():

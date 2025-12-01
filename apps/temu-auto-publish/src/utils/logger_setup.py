@@ -1,5 +1,5 @@
 """
-@PURPOSE: 日志系统设置 - 配置结构化日志、日志轮转和多级别输出
+@PURPOSE: 日志系统设置 - 配置结构化日志,日志轮转和多级别输出
 @OUTLINE:
   - def setup_logger(): 配置全局日志系统
   - def get_logger_with_context(): 获取带上下文的logger
@@ -12,26 +12,23 @@
   - JSON 格式适合生产环境日志分析
 @TECH_DEBT:
   - TODO: 添加远程日志推送
-  - TODO: 添加日志采样（高频日志降采样）
+  - TODO: 添加日志采样(高频日志降采样)
 @DEPENDENCIES:
   - 外部: loguru
   - 内部: config.settings
 """
 
 import sys
-from pathlib import Path
-from typing import Any, Dict, Optional
-
-from loguru import logger
+from typing import Any
 
 from config.settings import settings
-
+from loguru import logger
 
 # ========== 日志格式化器 ==========
 
 
-def format_detailed(record: Dict[str, Any]) -> str:
-    """详细格式化器（开发环境）.
+def format_detailed(record: dict[str, Any]) -> str:
+    """详细格式化器(开发环境).
 
     Args:
         record: 日志记录
@@ -67,8 +64,8 @@ def format_detailed(record: Dict[str, Any]) -> str:
     )
 
 
-def format_json(record: Dict[str, Any]) -> str:
-    """JSON格式化器（生产环境）.
+def format_json(record: dict[str, Any]) -> str:
+    """JSON格式化器(生产环境).
 
     Args:
         record: 日志记录
@@ -106,7 +103,7 @@ def format_json(record: Dict[str, Any]) -> str:
     return json.dumps(log_entry, ensure_ascii=False) + "\n"
 
 
-def format_simple(record: Dict[str, Any]) -> str:
+def format_simple(record: dict[str, Any]) -> str:
     """简单格式化器.
 
     Args:
@@ -121,11 +118,11 @@ def format_simple(record: Dict[str, Any]) -> str:
 # ========== 日志设置 ==========
 
 
-def setup_logger(config: Optional[Any] = None, force: bool = False) -> None:
+def setup_logger(config: Any | None = None, force: bool = False) -> None:
     """配置全局日志系统.
 
     Args:
-        config: 日志配置，默认使用 settings.logging
+        config: 日志配置,默认使用 settings.logging
         force: 是否强制重新配置
 
     Examples:
@@ -153,7 +150,7 @@ def setup_logger(config: Optional[Any] = None, force: bool = False) -> None:
             sys.stderr,
             format=formatter,
             level=config.level,
-            colorize=True if config.format != "json" else False,
+            colorize=config.format != "json",
             backtrace=True,
             diagnose=True,
         )
@@ -204,7 +201,7 @@ def log_with_context(level: str, message: str, **context):
     """记录带上下文的日志.
 
     Args:
-        level: 日志级别（debug/info/warning/error）
+        level: 日志级别(debug/info/warning/error)
         message: 日志消息
         **context: 上下文键值对
 
@@ -298,12 +295,12 @@ def log_section(title: str, char: str = "=", width: int = 80):
     logger.info(char * width)
 
 
-def log_dict(data: Dict[str, Any], title: Optional[str] = None):
+def log_dict(data: dict[str, Any], title: str | None = None):
     """记录字典数据.
 
     Args:
         data: 字典数据
-        title: 标题（可选）
+        title: 标题(可选)
     """
     if title:
         logger.info(f"{title}:")
@@ -312,12 +309,12 @@ def log_dict(data: Dict[str, Any], title: Optional[str] = None):
         logger.info(f"  {key}: {value}")
 
 
-def log_list(items: list, title: Optional[str] = None):
+def log_list(items: list, title: str | None = None):
     """记录列表数据.
 
     Args:
         items: 列表数据
-        title: 标题（可选）
+        title: 标题(可选)
     """
     if title:
         logger.info(f"{title}:")
@@ -328,9 +325,9 @@ def log_list(items: list, title: Optional[str] = None):
 
 # ========== 初始化 ==========
 
-# 自动配置日志（在模块导入时）
+# 自动配置日志(在模块导入时)
 try:
     setup_logger()
 except Exception as e:
-    # 如果配置失败，使用默认配置
-    logger.warning(f"日志配置失败，使用默认配置: {e}")
+    # 如果配置失败,使用默认配置
+    logger.warning(f"日志配置失败,使用默认配置: {e}")

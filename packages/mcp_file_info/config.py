@@ -10,9 +10,8 @@
 
 from dataclasses import dataclass
 
-
 # 不同文件类型的注释模式
-# 每种模式定义：(开始标记, 结束标记, 行内前缀)
+# 每种模式定义:(开始标记, 结束标记, 行内前缀)
 COMMENT_PATTERNS = {
     # Python
     ".py": [
@@ -113,7 +112,7 @@ class ParserConfig:
     """解析器配置类.
 
     Attributes:
-        max_lines_to_read: 最大读取行数（只读文件头部）
+        max_lines_to_read: 最大读取行数(只读文件头部)
         strip_comment_markers: 是否移除注释标记
         normalize_whitespace: 是否规范化空白字符
     """

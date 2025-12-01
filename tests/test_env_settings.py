@@ -3,7 +3,6 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-import pytest
 from dotenv import dotenv_values
 
 APP_ROOT = Path(__file__).resolve().parents[1] / "apps" / "temu-auto-publish"

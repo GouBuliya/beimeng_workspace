@@ -33,7 +33,7 @@ def check_environment():
     env_file = app_root / ".env"
     if not env_file.exists():
         errors.append("❌ .env 文件不存在")
-        print("\n请创建 .env 文件并配置以下变量：")
+        print("\n请创建 .env 文件并配置以下变量:")
         print("  MIAOSHOU_USERNAME=your_username")
         print("  MIAOSHOU_PASSWORD=your_password")
         print("  BROWSER_HEADLESS=false")
@@ -62,13 +62,13 @@ def check_environment():
         print("✓ Playwright Chromium 已安装")
     except Exception as e:
         errors.append(f"❌ Playwright 浏览器未安装: {e}")
-        print("\n请运行以下命令安装 Playwright 浏览器：")
+        print("\n请运行以下命令安装 Playwright 浏览器:")
         print("  uv run playwright install chromium")
 
     print("\n" + "=" * 80)
 
     if errors:
-        print("环境配置检查失败：")
+        print("环境配置检查失败:")
         for error in errors:
             print(f"  {error}")
         print("\n" + "=" * 80)
@@ -85,19 +85,19 @@ def run_integration_tests():
 
     # 检查环境
     if not check_environment():
-        print("\n请先修复上述问题，然后重新运行。")
+        print("\n请先修复上述问题,然后重新运行.")
         return False
 
     print("\n" + "=" * 80)
     print("运行集成测试")
     print("=" * 80)
-    print("\n提示：集成测试需要浏览器交互，可能需要较长时间。")
-    print("      请确保测试期间不要操作浏览器窗口。\n")
+    print("\n提示:集成测试需要浏览器交互,可能需要较长时间.")
+    print("      请确保测试期间不要操作浏览器窗口.\n")
 
     # 询问是否继续
-    response = input("是否继续？(y/N): ").strip().lower()
+    response = input("是否继续?(y/N): ").strip().lower()
     if response != "y":
-        print("已取消。")
+        print("已取消.")
         return False
 
     # 运行pytest集成测试

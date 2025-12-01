@@ -1,5 +1,5 @@
 """
-@PURPOSE: 提供统一的日志配置和管理功能，基于loguru实现
+@PURPOSE: 提供统一的日志配置和管理功能,基于loguru实现
 @OUTLINE:
   - def setup_logger(name, level, format_string): 配置并返回logger实例
   - def remove_default_handlers(): 移除默认处理器
@@ -22,8 +22,8 @@ def setup_logger(
 
     Args:
         name: logger 名称
-        level: 日志级别（DEBUG, INFO, WARNING, ERROR, CRITICAL）
-        format_string: 自定义格式字符串（可选）
+        level: 日志级别(DEBUG, INFO, WARNING, ERROR, CRITICAL)
+        format_string: 自定义格式字符串(可选)
 
     Returns:
         配置好的 loguru logger

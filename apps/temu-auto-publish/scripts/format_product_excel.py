@@ -7,7 +7,6 @@
 """
 
 import re
-import sys
 from pathlib import Path
 
 import pandas as pd
@@ -26,16 +25,16 @@ def find_product_image(
     spec_index: int,
     image_dir: Path,
 ) -> str:
-    """自动查找产品图片。
+    """自动查找产品图片.
 
     Args:
-        product_name: 产品名称。
-        suffix: 标题后缀。
-        spec_index: 规格序号(从1开始)。
-        image_dir: 图片目录。
+        product_name: 产品名称.
+        suffix: 标题后缀.
+        spec_index: 规格序号(从1开始).
+        image_dir: 图片目录.
 
     Returns:
-        相对于 data/image/ 的图片路径,如果未找到返回空字符串。
+        相对于 data/image/ 的图片路径,如果未找到返回空字符串.
     """
     # 尝试的文件名模式(按优先级)
     patterns = [
@@ -79,7 +78,7 @@ def format_excel(
         help="是否自动匹配产品图片",
     ),
 ) -> None:
-    """格式化产品 Excel 文件,便于脚本调用。
+    """格式化产品 Excel 文件,便于脚本调用.
 
     功能:
     - 规范化列名和数据结构
@@ -231,8 +230,8 @@ def format_excel(
             f"\n💡 提示: 请将图片放入 {image_dir} 目录,文件名格式:",
             style="blue",
         )
-        console.print(f"  - {{标题后缀}}_{{规格序号}}.jpg  (例如: A026_1.jpg)")
-        console.print(f"  - 然后重新运行此脚本")
+        console.print("  - {标题后缀}_{规格序号}.jpg  (例如: A026_1.jpg)")
+        console.print("  - 然后重新运行此脚本")
 
     # 显示产品列表
     console.print("\n📦 产品列表:", style="green bold")

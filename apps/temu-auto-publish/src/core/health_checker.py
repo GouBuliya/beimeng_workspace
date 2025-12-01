@@ -11,7 +11,7 @@
   - async def check_memory(): 检查内存使用
   - async def check_all(): 执行全面健康检查
 @GOTCHAS:
-  - 健康检查应该快速返回，避免长时间阻塞
+  - 健康检查应该快速返回,避免长时间阻塞
   - 某些检查可能需要管理员权限
 @DEPENDENCIES:
   - 外部: psutil, aiohttp
@@ -26,7 +26,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import psutil
 from loguru import logger
@@ -70,18 +70,18 @@ class HealthCheckResult:
     component: str
     status: HealthStatus
     message: str
-    details: Dict[str, Any] = field(default_factory=dict)
+    details: dict[str, Any] = field(default_factory=dict)
     timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
 
     def is_healthy(self) -> bool:
         """判断是否健康.
 
         Returns:
-            是否健康（OK或WARNING视为健康）
+            是否健康(OK或WARNING视为健康)
         """
         return self.status in [HealthStatus.OK, HealthStatus.WARNING]
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """转换为字典.
 
         Returns:
@@ -99,7 +99,7 @@ class HealthCheckResult:
 class HealthChecker:
     """健康检查器.
 
-    执行系统各组件的健康检查，包括浏览器、登录、网络、磁盘、内存等。
+    执行系统各组件的健康检查,包括浏览器,登录,网络,磁盘,内存等.
 
     Examples:
         >>> checker = HealthChecker()
@@ -142,7 +142,6 @@ class HealthChecker:
         try:
             if browser_manager is None:
                 # 尝试导入并检查浏览器是否可用
-                from src.browser.browser_manager import BrowserManager
 
                 # 检查playwright是否安装
                 try:
@@ -175,7 +174,7 @@ class HealthChecker:
             return HealthCheckResult(
                 component="browser",
                 status=HealthStatus.ERROR,
-                message=f"检查失败: {str(e)}",
+                message=f"检查失败: {e!s}",
                 details={"error": str(e)},
             )
 
@@ -206,7 +205,7 @@ class HealthChecker:
             details = {"credentials_configured": True, "username": username}
 
             if login_controller is not None:
-                # 如果提供了登录控制器，检查实际登录状态
+                # 如果提供了登录控制器,检查实际登录状态
                 try:
                     # 这里可以添加实际的登录状态检查
                     # 例如检查cookies是否有效
@@ -215,7 +214,7 @@ class HealthChecker:
                     status = HealthStatus.OK
                 except Exception as e:
                     details["session_active"] = False
-                    message = f"会话检查失败: {str(e)}"
+                    message = f"会话检查失败: {e!s}"
                     status = HealthStatus.WARNING
             else:
                 message = "登录凭证已配置"
@@ -230,11 +229,11 @@ class HealthChecker:
             return HealthCheckResult(
                 component="login",
                 status=HealthStatus.ERROR,
-                message=f"检查失败: {str(e)}",
+                message=f"检查失败: {e!s}",
                 details={"error": str(e)},
             )
 
-    async def check_network(self, test_urls: Optional[List[str]] = None) -> HealthCheckResult:
+    async def check_network(self, test_urls: list[str] | None = None) -> HealthCheckResult:
         """检查网络连接.
 
         Args:
@@ -247,7 +246,7 @@ class HealthChecker:
             return HealthCheckResult(
                 component="network",
                 status=HealthStatus.WARNING,
-                message="aiohttp未安装，跳过网络检查",
+                message="aiohttp未安装,跳过网络检查",
                 details={"skipped": True},
             )
 
@@ -296,11 +295,11 @@ class HealthChecker:
             return HealthCheckResult(
                 component="network",
                 status=HealthStatus.ERROR,
-                message=f"检查失败: {str(e)}",
+                message=f"检查失败: {e!s}",
                 details={"error": str(e)},
             )
 
-    async def check_disk(self, path: Optional[str] = None) -> HealthCheckResult:
+    async def check_disk(self, path: str | None = None) -> HealthCheckResult:
         """检查磁盘空间.
 
         Args:
@@ -346,7 +345,7 @@ class HealthChecker:
             return HealthCheckResult(
                 component="disk",
                 status=HealthStatus.ERROR,
-                message=f"检查失败: {str(e)}",
+                message=f"检查失败: {e!s}",
                 details={"error": str(e)},
             )
 
@@ -389,7 +388,7 @@ class HealthChecker:
             return HealthCheckResult(
                 component="memory",
                 status=HealthStatus.ERROR,
-                message=f"检查失败: {str(e)}",
+                message=f"检查失败: {e!s}",
                 details={"error": str(e)},
             )
 
@@ -410,7 +409,7 @@ class HealthChecker:
             }
 
             # 检查每个依赖
-            for dep in dependencies.keys():
+            for dep in dependencies:
                 try:
                     __import__(dep)
                     dependencies[dep] = True
@@ -441,7 +440,7 @@ class HealthChecker:
             return HealthCheckResult(
                 component="dependencies",
                 status=HealthStatus.ERROR,
-                message=f"检查失败: {str(e)}",
+                message=f"检查失败: {e!s}",
                 details={"error": str(e)},
             )
 
@@ -490,13 +489,13 @@ class HealthChecker:
             return HealthCheckResult(
                 component="config_files",
                 status=HealthStatus.ERROR,
-                message=f"检查失败: {str(e)}",
+                message=f"检查失败: {e!s}",
                 details={"error": str(e)},
             )
 
     async def check_all(
         self, browser_manager=None, login_controller=None, include_network: bool = True
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """执行全面健康检查.
 
         Args:
@@ -603,7 +602,7 @@ class HealthChecker:
 
 
 # 全局健康检查器实例
-_health_checker: Optional[HealthChecker] = None
+_health_checker: HealthChecker | None = None
 
 
 def get_health_checker() -> HealthChecker:

@@ -1,5 +1,5 @@
 """
-@PURPOSE: 通知服务 - 支持钉钉、企业微信、邮件等多渠道告警通知
+@PURPOSE: 通知服务 - 支持钉钉,企业微信,邮件等多渠道告警通知
 @OUTLINE:
   - class NotificationChannel: 通知渠道基类
   - class DingTalkChannel: 钉钉机器人通知
@@ -19,11 +19,10 @@
 """
 
 import asyncio
-import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import aiohttp
 from loguru import logger
@@ -44,15 +43,15 @@ class NotificationMessage:
     title: str
     content: str
     level: str = "info"
-    workflow_id: Optional[str] = None
-    metadata: Optional[Dict[str, Any]] = None
+    workflow_id: str | None = None
+    metadata: dict[str, Any] | None = None
 
 
 @dataclass
 class WorkflowResult:
     """工作流执行结果.
 
-    用于生成结构化的通知消息。
+    用于生成结构化的通知消息.
 
     Attributes:
         workflow_id: 工作流ID
@@ -68,9 +67,9 @@ class WorkflowResult:
     success: bool
     start_time: str
     end_time: str
-    stages: List[Dict[str, Any]]
-    errors: List[str] = None
-    metrics: Optional[Dict[str, Any]] = None
+    stages: list[dict[str, Any]]
+    errors: list[str] = None
+    metrics: dict[str, Any] | None = None
 
 
 class NotificationChannel(ABC):
@@ -111,7 +110,7 @@ class NotificationChannel(ABC):
 class DingTalkChannel(NotificationChannel):
     """钉钉机器人通知渠道.
 
-    使用钉钉自定义机器人Webhook发送Markdown消息。
+    使用钉钉自定义机器人Webhook发送Markdown消息.
 
     Examples:
         >>> channel = DingTalkChannel(webhook_url="https://...")
@@ -156,21 +155,20 @@ class DingTalkChannel(NotificationChannel):
             }
 
             # 发送请求
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    self.webhook_url, json=payload, timeout=aiohttp.ClientTimeout(total=10)
-                ) as response:
-                    if response.status == 200:
-                        result = await response.json()
-                        if result.get("errcode") == 0:
-                            logger.info(f"✓ 钉钉通知发送成功: {message.title}")
-                            return True
-                        else:
-                            logger.warning(f"钉钉通知发送失败: {result.get('errmsg')}")
-                            return False
+            async with aiohttp.ClientSession() as session, session.post(
+                self.webhook_url, json=payload, timeout=aiohttp.ClientTimeout(total=10)
+            ) as response:
+                if response.status == 200:
+                    result = await response.json()
+                    if result.get("errcode") == 0:
+                        logger.info(f"✓ 钉钉通知发送成功: {message.title}")
+                        return True
                     else:
-                        logger.warning(f"钉钉通知HTTP请求失败: {response.status}")
+                        logger.warning(f"钉钉通知发送失败: {result.get('errmsg')}")
                         return False
+                else:
+                    logger.warning(f"钉钉通知HTTP请求失败: {response.status}")
+                    return False
 
         except Exception as e:
             logger.error(f"发送钉钉通知异常: {e}")
@@ -207,7 +205,7 @@ class DingTalkChannel(NotificationChannel):
 class WeComChannel(NotificationChannel):
     """企业微信机器人通知渠道.
 
-    使用企业微信群机器人Webhook发送Markdown消息。
+    使用企业微信群机器人Webhook发送Markdown消息.
 
     Examples:
         >>> channel = WeComChannel(webhook_url="https://...")
@@ -248,21 +246,20 @@ class WeComChannel(NotificationChannel):
             payload = {"msgtype": "markdown", "markdown": {"content": markdown_text}}
 
             # 发送请求
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    self.webhook_url, json=payload, timeout=aiohttp.ClientTimeout(total=10)
-                ) as response:
-                    if response.status == 200:
-                        result = await response.json()
-                        if result.get("errcode") == 0:
-                            logger.info(f"✓ 企业微信通知发送成功: {message.title}")
-                            return True
-                        else:
-                            logger.warning(f"企业微信通知发送失败: {result.get('errmsg')}")
-                            return False
+            async with aiohttp.ClientSession() as session, session.post(
+                self.webhook_url, json=payload, timeout=aiohttp.ClientTimeout(total=10)
+            ) as response:
+                if response.status == 200:
+                    result = await response.json()
+                    if result.get("errcode") == 0:
+                        logger.info(f"✓ 企业微信通知发送成功: {message.title}")
+                        return True
                     else:
-                        logger.warning(f"企业微信通知HTTP请求失败: {response.status}")
+                        logger.warning(f"企业微信通知发送失败: {result.get('errmsg')}")
                         return False
+                else:
+                    logger.warning(f"企业微信通知HTTP请求失败: {response.status}")
+                    return False
 
         except Exception as e:
             logger.error(f"发送企业微信通知异常: {e}")
@@ -298,7 +295,7 @@ class WeComChannel(NotificationChannel):
 class EmailChannel(NotificationChannel):
     """邮件通知渠道.
 
-    使用SMTP发送HTML格式的邮件通知。
+    使用SMTP发送HTML格式的邮件通知.
 
     Examples:
         >>> channel = EmailChannel(
@@ -319,7 +316,7 @@ class EmailChannel(NotificationChannel):
         username: str,
         password: str,
         from_addr: str,
-        to_addrs: List[str],
+        to_addrs: list[str],
         use_tls: bool = True,
         enabled: bool = True,
     ):
@@ -358,8 +355,7 @@ class EmailChannel(NotificationChannel):
             return False
 
         try:
-            # 由于aiosmtplib可能未安装，使用同步smtplib
-            import smtplib
+            # 由于aiosmtplib可能未安装,使用同步smtplib
             from email.mime.multipart import MIMEMultipart
             from email.mime.text import MIMEText
 
@@ -373,7 +369,7 @@ class EmailChannel(NotificationChannel):
             html_content = self._format_html(message)
             msg.attach(MIMEText(html_content, "html", "utf-8"))
 
-            # 发送邮件（在线程池中执行以避免阻塞）
+            # 发送邮件(在线程池中执行以避免阻塞)
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(None, self._send_email_sync, msg)
 
@@ -385,7 +381,7 @@ class EmailChannel(NotificationChannel):
             return False
 
     def _send_email_sync(self, msg):
-        """同步发送邮件（在线程池中执行）.
+        """同步发送邮件(在线程池中执行).
 
         Args:
             msg: 邮件消息对象
@@ -441,7 +437,7 @@ class EmailChannel(NotificationChannel):
         html += """
             </div>
             <div class="footer">
-                <p>此邮件由Temu自动发布系统自动发送，请勿回复。</p>
+                <p>此邮件由Temu自动发布系统自动发送,请勿回复.</p>
             </div>
         </body>
         </html>
@@ -453,7 +449,7 @@ class EmailChannel(NotificationChannel):
 class NotificationService:
     """通知服务主类.
 
-    管理多个通知渠道，支持同时发送到多个渠道。
+    管理多个通知渠道,支持同时发送到多个渠道.
 
     Attributes:
         channels: 通知渠道列表
@@ -466,7 +462,7 @@ class NotificationService:
 
     def __init__(self):
         """初始化通知服务."""
-        self.channels: List[NotificationChannel] = []
+        self.channels: list[NotificationChannel] = []
         logger.info("通知服务已初始化")
 
     def add_channel(self, channel: NotificationChannel):
@@ -478,7 +474,7 @@ class NotificationService:
         self.channels.append(channel)
         logger.debug(f"已添加通知渠道: {channel.__class__.__name__}")
 
-    async def send(self, message: NotificationMessage) -> Dict[str, bool]:
+    async def send(self, message: NotificationMessage) -> dict[str, bool]:
         """发送通知到所有渠道.
 
         Args:
@@ -528,7 +524,7 @@ class NotificationService:
             logger.error(f"渠道 {channel.__class__.__name__} 发送失败: {e}")
             return False
 
-    async def send_workflow_result(self, result: WorkflowResult) -> Dict[str, bool]:
+    async def send_workflow_result(self, result: WorkflowResult) -> dict[str, bool]:
         """发送工作流执行结果通知.
 
         Args:
@@ -603,8 +599,8 @@ class NotificationService:
         )
 
     async def send_alert(
-        self, title: str, content: str, level: str = "warning", workflow_id: Optional[str] = None
-    ) -> Dict[str, bool]:
+        self, title: str, content: str, level: str = "warning", workflow_id: str | None = None
+    ) -> dict[str, bool]:
         """发送告警通知.
 
         Args:
@@ -623,7 +619,7 @@ class NotificationService:
 
 
 # 全局通知服务实例
-_notification_service: Optional[NotificationService] = None
+_notification_service: NotificationService | None = None
 
 
 def get_notification_service() -> NotificationService:
@@ -638,11 +634,11 @@ def get_notification_service() -> NotificationService:
     return _notification_service
 
 
-def configure_notifications(config: Dict[str, Any]):
+def configure_notifications(config: dict[str, Any]):
     """根据配置初始化通知服务.
 
     Args:
-        config: 配置字典，包含各渠道配置
+        config: 配置字典,包含各渠道配置
 
     Examples:
         >>> configure_notifications({
@@ -699,4 +695,4 @@ def configure_notifications(config: Dict[str, Any]):
             )
             logger.info("✓ 邮件通知渠道已启用")
         else:
-            logger.warning("邮件通知配置不完整，已跳过")
+            logger.warning("邮件通知配置不完整,已跳过")

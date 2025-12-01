@@ -9,11 +9,10 @@
   - 内部: src.browser.first_edit.dialog, tests.mocks
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-
-from tests.mocks import MockPage, MockLocator
+from tests.mocks import MockLocator, MockPage
 
 
 class TestFirstEditDialogBase:

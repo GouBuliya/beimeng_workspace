@@ -10,15 +10,14 @@
   - 内部: src.core.notification_service
 """
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-from datetime import datetime
+from unittest.mock import AsyncMock
 
+import pytest
 from src.core.notification_service import (
-    NotificationMessage,
-    WorkflowResult,
     NotificationChannel,
+    NotificationMessage,
     NotificationService,
+    WorkflowResult,
 )
 
 
@@ -315,7 +314,7 @@ channels:
 
         message = NotificationMessage(title="Test", content="Test")
 
-        results = await service.send(message)
+        await service.send(message)
 
         # 禁用的渠道不应该被调用
         mock_channel.send.assert_not_called()
@@ -328,7 +327,7 @@ class TestNotificationServiceConfiguration:
         """测试配置文件不存在"""
         nonexistent = tmp_path / "nonexistent.yaml"
 
-        # 应该不抛异常，使用默认配置
+        # 应该不抛异常,使用默认配置
         service = NotificationService(config_path=str(nonexistent))
 
         assert service is not None

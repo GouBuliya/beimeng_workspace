@@ -8,11 +8,11 @@
   - 内部: src.utils.state_detector
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, PropertyMock
 
+import pytest
 from src.utils.state_detector import PageState, StateDetector
-from tests.mocks import MockPage, MockLocator
+from tests.mocks import MockLocator, MockPage
 
 
 class TestPageState:
@@ -67,7 +67,7 @@ class TestStateDetector:
         mock_page.locator = MagicMock(return_value=mock_locator)
         mock_locator.is_visible = AsyncMock(return_value=True)
 
-        result = await detector.is_login_page(mock_page)
+        await detector.is_login_page(mock_page)
 
         # 基于URL判断
         assert "login" in mock_page.url.lower()
@@ -75,7 +75,7 @@ class TestStateDetector:
     @pytest.mark.asyncio
     async def test_is_login_page_false(self):
         """测试检测登录页 - 否"""
-        detector = StateDetector()
+        StateDetector()
 
         mock_page = MockPage(url="https://erp.91miaoshou.com/welcome")
 
@@ -85,7 +85,7 @@ class TestStateDetector:
     @pytest.mark.asyncio
     async def test_is_collection_box_by_url(self):
         """测试通过URL检测采集箱"""
-        detector = StateDetector()
+        StateDetector()
 
         mock_page = MockPage(url="https://erp.91miaoshou.com/miaoshou/collection")
 

@@ -9,8 +9,6 @@
   - 内部: browser_mock
 """
 
-from typing import List, Dict, Optional, Any
-from unittest.mock import MagicMock
 
 from .browser_mock import MockPage
 
@@ -19,9 +17,9 @@ class MockBrowserContext:
     """模拟 Playwright BrowserContext"""
 
     def __init__(self):
-        self._pages: List[MockPage] = []
-        self._cookies: List[Dict] = []
-        self._storage_state: Dict = {}
+        self._pages: list[MockPage] = []
+        self._cookies: list[dict] = []
+        self._storage_state: dict = {}
 
     async def new_page(self) -> MockPage:
         """创建新页面"""
@@ -34,15 +32,15 @@ class MockBrowserContext:
         self._pages.clear()
 
     @property
-    def pages(self) -> List[MockPage]:
+    def pages(self) -> list[MockPage]:
         """获取所有页面"""
         return self._pages
 
-    async def cookies(self, urls: Optional[List[str]] = None) -> List[Dict]:
+    async def cookies(self, urls: list[str] | None = None) -> list[dict]:
         """获取Cookies"""
         return self._cookies
 
-    async def add_cookies(self, cookies: List[Dict]) -> None:
+    async def add_cookies(self, cookies: list[dict]) -> None:
         """添加Cookies"""
         self._cookies.extend(cookies)
 
@@ -50,19 +48,19 @@ class MockBrowserContext:
         """清除Cookies"""
         self._cookies.clear()
 
-    async def storage_state(self, path: Optional[str] = None) -> Dict:
+    async def storage_state(self, path: str | None = None) -> dict:
         """获取存储状态"""
         return self._storage_state
 
-    async def grant_permissions(self, permissions: List[str], **kwargs) -> None:
+    async def grant_permissions(self, permissions: list[str], **kwargs) -> None:
         """授予权限"""
         pass
 
-    async def set_geolocation(self, geolocation: Dict) -> None:
+    async def set_geolocation(self, geolocation: dict) -> None:
         """设置地理位置"""
         pass
 
-    async def set_extra_http_headers(self, headers: Dict[str, str]) -> None:
+    async def set_extra_http_headers(self, headers: dict[str, str]) -> None:
         """设置额外HTTP头"""
         pass
 
@@ -79,7 +77,7 @@ class MockBrowser:
     """模拟 Playwright Browser"""
 
     def __init__(self):
-        self._contexts: List[MockBrowserContext] = []
+        self._contexts: list[MockBrowserContext] = []
         self._is_connected = True
         self.version = "mock-browser-1.0"
 
@@ -90,7 +88,7 @@ class MockBrowser:
         return context
 
     async def new_page(self, **kwargs) -> MockPage:
-        """创建新页面（便捷方法）"""
+        """创建新页面(便捷方法)"""
         context = await self.new_context()
         return await context.new_page()
 
@@ -100,7 +98,7 @@ class MockBrowser:
         self._contexts.clear()
 
     @property
-    def contexts(self) -> List[MockBrowserContext]:
+    def contexts(self) -> list[MockBrowserContext]:
         """获取所有上下文"""
         return self._contexts
 

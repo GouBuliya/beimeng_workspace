@@ -1,5 +1,5 @@
 """
-@PURPOSE: 基于最新 SOP 的 Temu 发布工作流, 实现首次编辑、认领、批量编辑与发布全流程
+@PURPOSE: 基于最新 SOP 的 Temu 发布工作流, 实现首次编辑,认领,批量编辑与发布全流程
 @OUTLINE:
   - dataclass StageOutcome: 阶段执行结果
   - dataclass EditedProduct: 首次编辑阶段产物
@@ -11,7 +11,7 @@
       - _stage_claim_products(): 阶段 2 认领
       - _stage_batch_edit(): 阶段 3 批量编辑 18 步
       - _stage_publish(): 阶段 4 选择店铺/供货价/发布
-      - 若干辅助方法: 数据准备、标题生成、凭证/店铺解析
+      - 若干辅助方法: 数据准备,标题生成,凭证/店铺解析
   - async def execute_complete_workflow(): 遗留兼容入口, 代理到 v1 工作流
 @DEPENDENCIES:
   - 内部: browser.*, data_processor.*
@@ -198,14 +198,14 @@ class CompletePublishWorkflow:
 
         Args:
             headless: 浏览器是否使用无头模式; None 时读取配置文件.
-            selection_table: 选品表路径，必须由外部提供（Web 上传或 CLI 参数）。
+            selection_table: 选品表路径,必须由外部提供(Web 上传或 CLI 参数).
             use_ai_titles: 是否启用 AI 生成标题 (失败时自动回退).
             use_codegen_batch_edit: 是否使用 codegen 录制的批量编辑模块 (默认 False, 推荐使用优化后的 BatchEditController).
             skip_first_edit: 是否直接跳过首次编辑阶段.
             resume_from_checkpoint: 是否从检查点恢复.
-            checkpoint_id: 指定要恢复的检查点ID，为空则使用最新检查点.
-            execution_round: 连续执行的轮位（从 1 开始），用于计算首次编辑起始索引.
-            login_ctrl: 可选复用的登录控制器，传入后会复用同一浏览器实例.
+            checkpoint_id: 指定要恢复的检查点ID,为空则使用最新检查点.
+            execution_round: 连续执行的轮位(从 1 开始),用于计算首次编辑起始索引.
+            login_ctrl: 可选复用的登录控制器,传入后会复用同一浏览器实例.
         """
 
         if load_dotenv:  # pragma: no cover - 环境可选
@@ -240,7 +240,7 @@ class CompletePublishWorkflow:
         else:
             self.timeout_config = get_timeout_config(timeout_config)
 
-        # 归一化相对路径(以应用根目录为基准，适配 Windows)
+        # 归一化相对路径(以应用根目录为基准,适配 Windows)
         self._app_root = Path(__file__).resolve().parents[2]
         # 图片基础目录(从环境变量或配置读取, 默认为 data/input/10月新品可推)
         self.image_base_dir = self._resolve_image_base_dir()
@@ -271,7 +271,7 @@ class CompletePublishWorkflow:
         return asyncio.run(self.execute_async())
 
     async def execute_async(self) -> WorkflowExecutionResult:
-        """异步执行工作流入口，带总超时保护."""
+        """异步执行工作流入口,带总超时保护."""
 
         logger.info("启动 Temu 发布工作流 (SOTA 异步模式)")
 
@@ -284,14 +284,14 @@ class CompletePublishWorkflow:
             async with with_stage_timeout(
                 "workflow_total",
                 workflow_timeout,
-                on_timeout=lambda: logger.warning("[TIMEOUT] 工作流超时，将触发紧急清理"),
+                on_timeout=lambda: logger.warning("[TIMEOUT] 工作流超时,将触发紧急清理"),
             ):
                 return await self._run()
 
         except WorkflowTimeoutError as exc:
             logger.error(f"[TIMEOUT] 工作流超时异常: {exc}")
             await self._emergency_cleanup("timeout")
-            # 返回失败结果而非抛出异常，确保上游能正常处理
+            # 返回失败结果而非抛出异常,确保上游能正常处理
             return WorkflowExecutionResult(
                 workflow_id=f"timeout_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
                 total_success=False,
@@ -354,7 +354,7 @@ class CompletePublishWorkflow:
                 # 恢复已完成阶段的数据
                 stage1_data = checkpoint_mgr.get_stage_data("stage1_first_edit")
                 if stage1_data and "products" in stage1_data:
-                    # 重建 EditedProduct 对象（简化处理）
+                    # 重建 EditedProduct 对象(简化处理)
                     logger.info(f"恢复了 {len(stage1_data['products'])} 个商品数据")
 
         login_ctrl = self.login_ctrl or LoginController()
@@ -370,7 +370,7 @@ class CompletePublishWorkflow:
             publish_ctrl: PublishController | None = None
             edited_products: list[EditedProduct] = []
 
-            # ===== 阶段 0: 预处理（登录+初始化） =====
+            # ===== 阶段 0: 预处理(登录+初始化) =====
             logger.info("阶段0: 预处理开始")
 
             # 解析凭证
@@ -387,7 +387,7 @@ class CompletePublishWorkflow:
                     and await login_ctrl._check_login_status()
                 ):
                     already_logged_in = True
-                    logger.info("检测到已登录状态，跳过登录流程")
+                    logger.info("检测到已登录状态,跳过登录流程")
             except Exception as exc:
                 logger.debug("检查登录状态失败: {}", exc)
 
@@ -440,7 +440,7 @@ class CompletePublishWorkflow:
                     perf_tracker=self._perf_tracker,
                 )
             except TypeError:
-                logger.warning("旧版 BatchEditController 不支持扩展参数，使用兼容参数重新初始化")
+                logger.warning("旧版 BatchEditController 不支持扩展参数,使用兼容参数重新初始化")
                 batch_edit_ctrl = BatchEditController(perf_tracker=self._perf_tracker)
             publish_ctrl = PublishController()
 
@@ -451,7 +451,7 @@ class CompletePublishWorkflow:
                 or batch_edit_ctrl is None
                 or publish_ctrl is None
             ):
-                raise RuntimeError("工作流初始化失败，关键控制器未创建")
+                raise RuntimeError("工作流初始化失败,关键控制器未创建")
 
             # ===== 阶段 1: 首次编辑 =====
             async with self._perf_tracker.stage("stage1_first_edit", "首次编辑", order=1):
@@ -645,14 +645,14 @@ class CompletePublishWorkflow:
             return WorkflowExecutionResult(workflow_id, total_success, stages, errors)
 
         finally:
-            # 工作流结束后保持浏览器运行，以便 web 前端继续连接
+            # 工作流结束后保持浏览器运行,以便 web 前端继续连接
             if login_ctrl.browser_manager and login_ctrl.browser_manager.browser:
                 workflow_failed = errors or any(not stage.success for stage in stages)
                 if workflow_failed:
-                    logger.warning("检测到阶段失败，保留浏览器以便继续排查。")
+                    logger.warning("检测到阶段失败,保留浏览器以便继续排查.")
                     logger.info(f"可使用 --resume --checkpoint-id={workflow_id} 从断点恢复")
                 else:
-                    logger.success("工作流已完成，浏览器保持运行以供 web 前端连接。")
+                    logger.success("工作流已完成,浏览器保持运行以供 web 前端连接.")
 
     async def _stage_first_edit(
         self,
@@ -676,11 +676,11 @@ class CompletePublishWorkflow:
 
         page_size = 20
         use_override_rows = self._selection_rows_override is not None
-        # 数据已在 _finalize_selection_rows 中根据 execution_round 截取，这里直接使用
+        # 数据已在 _finalize_selection_rows 中根据 execution_round 截取,这里直接使用
         working_selections = list(selections)
-        # start_offset 用于计算采集箱中的商品位置（基于原始数据的绝对索引）
-        # 修复：不管是否有 override，都应该根据 execution_round 计算偏移
-        # 因为页面上的商品列表是完整的，需要根据轮次定位到正确的商品
+        # start_offset 用于计算采集箱中的商品位置(基于原始数据的绝对索引)
+        # 修复:不管是否有 override,都应该根据 execution_round 计算偏移
+        # 因为页面上的商品列表是完整的,需要根据轮次定位到正确的商品
         start_offset = max(0, (self.execution_round - 1) * self.collect_count)
 
         logger.info(
@@ -692,7 +692,7 @@ class CompletePublishWorkflow:
         )
 
         if not working_selections:
-            message = f"执行轮位 {self.execution_round} 超出可编辑范围，跳过首次编辑"
+            message = f"执行轮位 {self.execution_round} 超出可编辑范围,跳过首次编辑"
             logger.warning(message)
             return (
                 StageOutcome(
@@ -806,15 +806,15 @@ class CompletePublishWorkflow:
         try:
 
             async def open_edit_dialog(absolute_idx: int) -> bool:
-                """打开编辑弹窗。
+                """打开编辑弹窗.
 
-                使用基于行的定位策略：
+                使用基于行的定位策略:
                 1. click_edit_product_by_index 会定位第 N 个商品行
-                2. 如果行不可见，会自动滚动到目标位置
+                2. 如果行不可见,会自动滚动到目标位置
                 3. 在目标行内点击编辑按钮
 
                 Args:
-                    absolute_idx: 商品的绝对索引（从0开始）
+                    absolute_idx: 商品的绝对索引(从0开始)
                 """
                 opened = await miaoshou_ctrl.click_edit_product_by_index(
                     page, absolute_idx, enable_scroll=True
@@ -822,7 +822,7 @@ class CompletePublishWorkflow:
                 if opened:
                     return True
                 logger.debug(
-                    "默认点击失败，尝试 Codegen 录制逻辑打开第 {} 个商品", absolute_idx + 1
+                    "默认点击失败,尝试 Codegen 录制逻辑打开第 {} 个商品", absolute_idx + 1
                 )
                 return await open_edit_dialog_codegen(page, absolute_idx)
 
@@ -831,10 +831,10 @@ class CompletePublishWorkflow:
             processed_products: list[EditedProduct] = []
             per_item_max_retry = 3
 
-            # 计算起始页码并翻页（每页20条）
+            # 计算起始页码并翻页(每页20条)
             initial_page = start_offset // page_size + 1
             if initial_page > 1:
-                logger.info(f"起始偏移 {start_offset} 超过单页容量，跳转到第 {initial_page} 页")
+                logger.info(f"起始偏移 {start_offset} 超过单页容量,跳转到第 {initial_page} 页")
                 await _jump_to_page(initial_page)
 
             for index, selection in enumerate(working_selections):
@@ -843,11 +843,11 @@ class CompletePublishWorkflow:
                 target_page = absolute_index // page_size + 1
                 page_relative_index = absolute_index % page_size
 
-                # 如果需要翻页（商品跨页）
+                # 如果需要翻页(商品跨页)
                 if target_page != current_page:
                     logger.info(
-                        f"商品 {absolute_index + 1} 在第 {target_page} 页，"
-                        f"当前在第 {current_page} 页，执行翻页"
+                        f"商品 {absolute_index + 1} 在第 {target_page} 页,"
+                        f"当前在第 {current_page} 页,执行翻页"
                     )
                     await _jump_to_page(target_page)
 
@@ -856,7 +856,7 @@ class CompletePublishWorkflow:
                 async with self._perf_tracker.operation(op_name, product_index=absolute_index + 1):
                     logger.info(
                         f"编辑商品 {absolute_index + 1} "
-                        f"(批次内第 {index + 1}/{len(working_selections)} 个，"
+                        f"(批次内第 {index + 1}/{len(working_selections)} 个,"
                         f"页内索引 {page_relative_index})"
                     )
                     attempt_success = False
@@ -889,7 +889,7 @@ class CompletePublishWorkflow:
                                 product_video_url=product_video_url,
                             )
 
-                            logger.info("使用 Codegen 方式填写首次编辑弹窗（已禁用JS注入）")
+                            logger.info("使用 Codegen 方式填写首次编辑弹窗(已禁用JS注入)")
                             success = await fill_first_edit_dialog_codegen(page, payload_dict)
 
                             if not success:
@@ -914,7 +914,7 @@ class CompletePublishWorkflow:
                                         )
                                         if not saved_after_hook:
                                             logger.warning(
-                                                "SKU/媒体操作后保存失败，可能触发离开提示"
+                                                "SKU/媒体操作后保存失败,可能触发离开提示"
                                             )
 
                             processed_products.append(
@@ -930,7 +930,7 @@ class CompletePublishWorkflow:
                                 f"(第{attempt}/{per_item_max_retry}次): {exc}"
                             )
                             logger.warning(
-                                "商品 {} 第 {} 次尝试失败，准备重试", absolute_index + 1, attempt
+                                "商品 {} 第 {} 次尝试失败,准备重试", absolute_index + 1, attempt
                             )
                             await page.wait_for_timeout(500)
                         finally:
@@ -1002,8 +1002,8 @@ class CompletePublishWorkflow:
 
                 hooks.append(_sync_sku_images)
 
-        # 尺寸图/视频已在 fill_first_edit_dialog_codegen 内完成，这里不再重复执行
-        # 仅保留 SKU 图同步 hook，避免重复等待
+        # 尺寸图/视频已在 fill_first_edit_dialog_codegen 内完成,这里不再重复执行
+        # 仅保留 SKU 图同步 hook,避免重复等待
 
         if not hooks:
             return None
@@ -1162,10 +1162,10 @@ class CompletePublishWorkflow:
         miaoshou_ctrl: MiaoshouController,
         edited_products: Sequence[EditedProduct],
     ) -> StageOutcome:
-        """阶段 2: 逐行点击认领按钮，每个商品点击 5 次.
+        """阶段 2: 逐行点击认领按钮,每个商品点击 5 次.
 
-        使用 JS 定位逻辑（复用首次编辑的动态行高检测），直接点击每行内的
-        "认领到"下拉按钮并选择第一个选项，无需先勾选复选框。
+        使用 JS 定位逻辑(复用首次编辑的动态行高检测),直接点击每行内的
+        "认领到"下拉按钮并选择第一个选项,无需先勾选复选框.
         """
 
         if self.skip_first_edit:
@@ -1199,7 +1199,7 @@ class CompletePublishWorkflow:
 
         await miaoshou_ctrl.refresh_collection_box(page, filter_owner=filter_owner)
 
-        # 按 execution_round 计算偏移，若不足则强制使用顺序索引占位
+        # 按 execution_round 计算偏移,若不足则强制使用顺序索引占位
         start_offset = max(0, (self.execution_round - 1) * self.collect_count)
         end_offset = start_offset + self.collect_count
         working_products = edited_products[start_offset:end_offset]
@@ -1220,13 +1220,13 @@ class CompletePublishWorkflow:
             target_indexes = list(range(start_offset, start_offset + selection_count))
 
         logger.info(
-            "认领阶段: 目标索引 %s (筛选后的商品列表，共 %s 条), 每商品点击 %s 次",
+            "认领阶段: 目标索引 %s (筛选后的商品列表,共 %s 条), 每商品点击 %s 次",
             target_indexes,
             selection_count,
             self.claim_times,
         )
 
-        # 分批按索引认领（仿首次编辑的批次逻辑，每批最多5个）
+        # 分批按索引认领(仿首次编辑的批次逻辑,每批最多5个)
         batch_size = min(5, max(1, self.collect_count))
         total_expected = 0
         batch_failures: list[str] = []
@@ -1277,7 +1277,7 @@ class CompletePublishWorkflow:
 
         claim_success = batch_success > 0 and not batch_failures
 
-        # 去重后的阈值：批次总期望 = 每批勾选数 × claim_times
+        # 去重后的阈值:批次总期望 = 每批勾选数 × claim_times
         expected_total = total_expected or (selection_count * self.claim_times)
         unique_threshold = expected_total
         verify_success = await miaoshou_ctrl.verify_claim_success(
@@ -1294,7 +1294,7 @@ class CompletePublishWorkflow:
 
         overall_success = claim_success and verify_success
         message = (
-            f"认领成功 {selection_count} 个商品，每商品 {self.claim_times} 次 (共 {expected_total} 次)"
+            f"认领成功 {selection_count} 个商品,每商品 {self.claim_times} 次 (共 {expected_total} 次)"
             if overall_success
             else "认领结果存在异常, 详见 details"
         )
@@ -1362,7 +1362,7 @@ class CompletePublishWorkflow:
         batch_edit_ctrl: BatchEditController,
         edited_products: Sequence[EditedProduct],
     ) -> StageOutcome:
-        """阶段 3: Temu 全托管批量编辑 18 步，增加重试保障."""
+        """阶段 3: Temu 全托管批量编辑 18 步,增加重试保障."""
 
         if not edited_products:
             message = "无待批量编辑商品,批量编辑阶段跳过"
@@ -1377,7 +1377,7 @@ class CompletePublishWorkflow:
         reference = edited_products[0]
         max_attempts = 3
 
-        # 获取 owner 信息用于筛选（与首次编辑和认领阶段保持一致）
+        # 获取 owner 信息用于筛选(与首次编辑和认领阶段保持一致)
         filter_owner: str | None = None
         if edited_products:
             owner_candidate = getattr(edited_products[0].selection, "owner", "") or ""
@@ -1398,7 +1398,7 @@ class CompletePublishWorkflow:
                     logger.warning("说明书文件不存在, 将跳过上传: {}", manual_source)
 
             return {
-                "category_path": ["收纳用品", "收纳篮、箱子、盒子", "盖式储物箱"],
+                "category_path": ["收纳用品", "收纳篮,箱子,盒子", "盖式储物箱"],
                 "category_attrs": {
                     "product_use": "多用途",
                     "shape": "其他形状",
@@ -1444,10 +1444,10 @@ class CompletePublishWorkflow:
                 if outcome.success:
                     return outcome
                 last_outcome = outcome
-                logger.warning("Codegen 批量编辑第 {}/{} 次失败，准备重试", attempt, max_attempts)
+                logger.warning("Codegen 批量编辑第 {}/{} 次失败,准备重试", attempt, max_attempts)
                 await page.wait_for_timeout(800)
             if last_outcome:
-                last_outcome.message = f"{last_outcome.message}（已重试 {max_attempts} 次）"
+                last_outcome.message = f"{last_outcome.message}(已重试 {max_attempts} 次)"
                 return last_outcome
             return await _run_codegen_stage("Codegen")
 
@@ -1503,14 +1503,14 @@ class CompletePublishWorkflow:
                 if overall_success:
                     return stage
 
-                logger.warning("批量编辑第 {}/{} 次未达标，准备重试", attempt, max_attempts)
+                logger.warning("批量编辑第 {}/{} 次未达标,准备重试", attempt, max_attempts)
                 await page.wait_for_timeout(800)
 
             if last_stage:
-                last_stage.message = f"{last_stage.message}（已重试 {max_attempts} 次）"
+                last_stage.message = f"{last_stage.message}(已重试 {max_attempts} 次)"
                 return last_stage
 
-        logger.info("检测到 Legacy BatchEditController，回退到 Codegen 流程")
+        logger.info("检测到 Legacy BatchEditController,回退到 Codegen 流程")
         return await _run_codegen_stage("Legacy")
 
     async def _stage_publish(
@@ -1519,7 +1519,7 @@ class CompletePublishWorkflow:
         publish_ctrl: PublishController,
         edited_products: Sequence[EditedProduct],
     ) -> StageOutcome:
-        """阶段 4: 选择店铺、设置供货价、批量发布."""
+        """阶段 4: 选择店铺,设置供货价,批量发布."""
 
         if not edited_products:
             message = "无待发布商品,发布阶段跳过"
@@ -1543,7 +1543,7 @@ class CompletePublishWorkflow:
                 details={},
             )
 
-        # 供货价逻辑已停用，直接视为成功
+        # 供货价逻辑已停用,直接视为成功
         set_price_ok = True
         # 批量发布
         publish_ok = await publish_ctrl.batch_publish(page)
@@ -1602,18 +1602,18 @@ class CompletePublishWorkflow:
     ) -> list[ProductSelectionRow]:
         """根据 collect_count 和 execution_round 截取正确的数据段并输出日志."""
 
-        # 当外部注入数据时不再截断，便于按 execution_round 逐批处理不同商品
+        # 当外部注入数据时不再截断,便于按 execution_round 逐批处理不同商品
         if self._selection_rows_override is not None:
             limited_rows = list(rows)
         else:
-            # 根据 execution_round 计算起始偏移，截取对应批次的数据
+            # 根据 execution_round 计算起始偏移,截取对应批次的数据
             start_offset = max(0, (self.execution_round - 1) * self.collect_count)
             end_offset = start_offset + self.collect_count
             limited_rows = list(rows[start_offset:end_offset])
 
             if start_offset > 0:
                 logger.info(
-                    "起始轮次=%s: 跳过前 %s 条，处理第 %s-%s 条数据",
+                    "起始轮次=%s: 跳过前 %s 条,处理第 %s-%s 条数据",
                     self.execution_round,
                     start_offset,
                     start_offset + 1,
@@ -1671,7 +1671,7 @@ class CompletePublishWorkflow:
             logger.info("使用自定义{}: {}", description, candidate)
             return candidate
 
-        logger.warning("{} 不存在: {}，将忽略该配置", description, candidate)
+        logger.warning("{} 不存在: {},将忽略该配置", description, candidate)
         return None
 
     def _resolve_cost_price(self, selection: ProductSelectionRow) -> float:
@@ -1851,14 +1851,14 @@ async def execute_complete_workflow(
     """兼容旧接口的便捷函数, 代理到遗留工作流实现.
 
     Args:
-        page: Playwright Page 对象(已登录并定位到采集箱)。
-        products_data: 产品数据列表(至少 5 个产品字典)。
-        shop_name: 发布店铺名称, 可选。
-        enable_batch_edit: 是否执行批量编辑阶段。
-        enable_publish: 是否执行发布阶段。
+        page: Playwright Page 对象(已登录并定位到采集箱).
+        products_data: 产品数据列表(至少 5 个产品字典).
+        shop_name: 发布店铺名称, 可选.
+        enable_batch_edit: 是否执行批量编辑阶段.
+        enable_publish: 是否执行发布阶段.
 
     Returns:
-        遗留工作流返回的执行结果字典。
+        遗留工作流返回的执行结果字典.
     """
 
     return await legacy_execute_complete_workflow(

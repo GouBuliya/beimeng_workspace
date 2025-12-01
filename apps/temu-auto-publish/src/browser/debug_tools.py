@@ -1,5 +1,5 @@
 """
-@PURPOSE: 提供浏览器自动化调试辅助工具, 包含日志、快照与同步调试入口
+@PURPOSE: 提供浏览器自动化调试辅助工具, 包含日志,快照与同步调试入口
 @OUTLINE:
   - async def capture_debug_artifacts(): 保存截图与HTML
   - def log_payload_preview(): 使用 Rich 输出结构化数据

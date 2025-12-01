@@ -1,5 +1,5 @@
 """
-@PURPOSE: 批量编辑控制器，负责商品的批量编辑操作（基于SOP步骤7的18步流程）
+@PURPOSE: 批量编辑控制器,负责商品的批量编辑操作(基于SOP步骤7的18步流程)
 @OUTLINE:
   - class BatchEditController: 批量编辑控制器主类
   - async def select_all_products(): 全选商品
@@ -8,17 +8,17 @@
   - async def step_01_modify_title(): 步骤1-修改标题
   - async def step_02_english_title(): 步骤2-填写英文标题
   - async def step_03_category_attrs(): 步骤3-类目属性
-  - async def step_04_main_sku(): 步骤4-主货号（不改动但需预览+保存）
+  - async def step_04_main_sku(): 步骤4-主货号(不改动但需预览+保存)
   - async def step_05_packaging(): 步骤5-包装信息
   - async def step_06_origin(): 步骤6-产地信息
-  - async def step_07_customization(): 步骤7-定制品（不改动但需预览+保存）
-  - async def step_08_sensitive_attrs(): 步骤8-敏感属性（不改动但需预览+保存）
+  - async def step_07_customization(): 步骤7-定制品(不改动但需预览+保存)
+  - async def step_08_sensitive_attrs(): 步骤8-敏感属性(不改动但需预览+保存)
   - async def step_09_weight(): 步骤9-重量
   - async def step_10_dimensions(): 步骤10-尺寸
   - async def step_11_sku(): 步骤11-SKU
   - async def step_12_sku_category(): 步骤12-SKU类目
   - async def step_14_suggested_price(): 步骤14-建议售价
-  - async def step_15_package_list(): 步骤15-包装清单（不改动但需预览+保存）
+  - async def step_15_package_list(): 步骤15-包装清单(不改动但需预览+保存)
   - async def step_18_manual_upload(): 步骤18-手动上传
   - async def save_batch_edit(): 保存批量编辑
 @GOTCHAS:
@@ -26,50 +26,43 @@
   - 重量和尺寸需要随机生成
   - 每步操作后需要等待UI更新
   - 保存前需要预览
-  - 步骤4/7/8/15虽然不修改内容，但SOP要求必须执行预览+保存操作
+  - 步骤4/7/8/15虽然不修改内容,但SOP要求必须执行预览+保存操作
 @DEPENDENCIES:
   - 内部: browser_manager, data_processor
   - 外部: playwright, loguru
 @RELATED: first_edit_controller.py, miaoshou_controller.py
 @CHANGELOG:
-  - 2025-10-31: 补充步骤4/7/8/15（主货号/定制品/敏感属性/包装清单），完整实现SOP 18步流程
+  - 2025-10-31: 补充步骤4/7/8/15(主货号/定制品/敏感属性/包装清单),完整实现SOP 18步流程
 """
 
 import asyncio
 import json
 from pathlib import Path
-from typing import Any, List
+from typing import Any
 
 from loguru import logger
 from playwright.async_api import Page
 
 from ...data_processor.price_calculator import PriceCalculator
 from ...data_processor.random_generator import RandomDataGenerator
-from ...utils.smart_locator import SmartLocator
 from ...utils.page_waiter import WaitStrategy
-from ...utils.batch_edit_helpers import (
-    retry_on_failure,
-    performance_monitor,
-    enhanced_error_handler,
-    StepValidator,
-    GenericSelectors,
-)
+from ...utils.smart_locator import SmartLocator
 
 
 class BatchEditController:
-    """批量编辑控制器（基于SOP步骤8的18步流程）.
+    """批量编辑控制器(基于SOP步骤8的18步流程).
 
-    负责对20条商品进行批量编辑操作：
+    负责对20条商品进行批量编辑操作:
     - 全选商品
     - 执行18步编辑流程
     - 保存批量编辑
 
-    SOP步骤8包含18个具体步骤，本控制器完整实现。
+    SOP步骤8包含18个具体步骤,本控制器完整实现.
 
     Attributes:
-        batch_size: 批量编辑数量（固定20，SOP规定）
-        weight_range: 重量范围（克，用于随机生成）
-        dimension_range: 尺寸范围（厘米，用于随机生成）
+        batch_size: 批量编辑数量(固定20,SOP规定)
+        weight_range: 重量范围(克,用于随机生成)
+        dimension_range: 尺寸范围(厘米,用于随机生成)
 
     Examples:
         >>> ctrl = BatchEditController()
@@ -97,7 +90,7 @@ class BatchEditController:
         self.price_calculator = PriceCalculator()
         self.random_generator = RandomDataGenerator()
 
-        logger.info("批量编辑控制器初始化（SOP v2.0，18步流程）")
+        logger.info("批量编辑控制器初始化(SOP v2.0,18步流程)")
 
     def _load_selectors(self) -> dict:
         """加载选择器配置.
@@ -113,20 +106,20 @@ class BatchEditController:
             else:
                 selector_file = self.selector_path
 
-            with open(selector_file, "r", encoding="utf-8") as f:
+            with open(selector_file, encoding="utf-8") as f:
                 config = json.load(f)
                 logger.debug(f"选择器配置已加载: {selector_file}")
                 return config
         except Exception as e:
-            logger.warning(f"加载选择器配置失败: {e}，使用默认值")
+            logger.warning(f"加载选择器配置失败: {e},使用默认值")
             return {}
 
-    async def batch_edit(self, page: Page, products_data: List[dict]) -> bool:
-        """执行批量编辑（完整流程）.
+    async def batch_edit(self, page: Page, products_data: list[dict]) -> bool:
+        """执行批量编辑(完整流程).
 
         Args:
             page: 页面对象
-            products_data: 商品数据列表（20条）
+            products_data: 商品数据列表(20条)
 
         Returns:
             是否批量编辑成功
@@ -136,11 +129,11 @@ class BatchEditController:
             >>> await ctrl.batch_edit(page, data_list)
             True
         """
-        logger.info("SOP步骤8：批量编辑（18步流程）")
+        logger.info("SOP步骤8:批量编辑(18步流程)")
 
         # 验证数量
         if len(products_data) != self.BATCH_SIZE:
-            logger.warning(f"商品数量不符合预期（预期{self.BATCH_SIZE}，实际{len(products_data)}）")
+            logger.warning(f"商品数量不符合预期(预期{self.BATCH_SIZE},实际{len(products_data)})")
 
         try:
             # 8.0 全选商品
@@ -199,7 +192,7 @@ class BatchEditController:
         Returns:
             是否全选成功
         """
-        logger.info("步骤8.0：全选商品（20条）")
+        logger.info("步骤8.0:全选商品(20条)")
 
         try:
             # TODO: 使用codegen获取选择器
@@ -225,7 +218,7 @@ class BatchEditController:
         Returns:
             是否成功进入
         """
-        logger.info("步骤8.0：进入批量编辑模式")
+        logger.info("步骤8.0:进入批量编辑模式")
 
         try:
             # TODO: 使用codegen获取选择器
@@ -247,7 +240,7 @@ class BatchEditController:
             logger.error(f"进入批量编辑失败: {e}")
             return False
 
-    async def execute_batch_edit_steps(self, page: Page, products_data: List[dict]) -> bool:
+    async def execute_batch_edit_steps(self, page: Page, products_data: list[dict]) -> bool:
         """执行18步批量编辑流程.
 
         Args:
@@ -260,53 +253,53 @@ class BatchEditController:
         logger.info("开始执行18步批量编辑流程...")
 
         try:
-            # 步骤1：修改标题（仅标注不修改）
+            # 步骤1:修改标题(仅标注不修改)
             await self.step_01_modify_title(page)
 
-            # 步骤2：填写英文标题
+            # 步骤2:填写英文标题
             await self.step_02_english_title(page, products_data)
 
-            # 步骤3：类目属性
+            # 步骤3:类目属性
             await self.step_03_category_attrs(page)
 
-            # 步骤4：主货号（不改动但需预览+保存）
+            # 步骤4:主货号(不改动但需预览+保存)
             await self.step_04_main_sku(page)
 
-            # 步骤5：包装信息
+            # 步骤5:包装信息
             await self.step_05_packaging(page)
 
-            # 步骤6：产地信息
+            # 步骤6:产地信息
             await self.step_06_origin(page)
 
-            # 步骤7：定制品（不改动但需预览+保存）
+            # 步骤7:定制品(不改动但需预览+保存)
             await self.step_07_customization(page)
 
-            # 步骤8：敏感属性（不改动但需预览+保存）
+            # 步骤8:敏感属性(不改动但需预览+保存)
             await self.step_08_sensitive_attrs(page)
 
-            # 步骤9：重量
+            # 步骤9:重量
             await self.step_09_weight(page)
 
-            # 步骤10：尺寸
+            # 步骤10:尺寸
             await self.step_10_dimensions(page)
 
-            # 步骤11：SKU
+            # 步骤11:SKU
             await self.step_11_sku(page)
 
-            # 步骤12：SKU类目
+            # 步骤12:SKU类目
             await self.step_12_sku_category(page)
 
-            # 步骤13：跳过（SOP中标记为跳过）
+            # 步骤13:跳过(SOP中标记为跳过)
 
-            # 步骤14：建议售价
+            # 步骤14:建议售价
             await self.step_14_suggested_price(page, products_data)
 
-            # 步骤15：包装清单（不改动但需预览+保存）
+            # 步骤15:包装清单(不改动但需预览+保存)
             await self.step_15_package_list(page)
 
-            # 步骤16-17：跳过（SOP中标记为跳过）
+            # 步骤16-17:跳过(SOP中标记为跳过)
 
-            # 步骤18：手动上传
+            # 步骤18:手动上传
             await self.step_18_manual_upload(page)
 
             logger.success("✓ 18步批量编辑流程执行完成")
@@ -317,21 +310,21 @@ class BatchEditController:
             return False
 
     async def step_01_modify_title(self, page: Page) -> bool:
-        """步骤1：修改标题（仅标注不修改）.
+        """步骤1:修改标题(仅标注不修改).
 
-        SOP说明：首次编辑已设置标题，此处仅标注不修改。
+        SOP说明:首次编辑已设置标题,此处仅标注不修改.
 
         Returns:
             是否执行成功
         """
-        logger.info("步骤8.1：修改标题（跳过，已在首次编辑中完成）")
+        logger.info("步骤8.1:修改标题(跳过,已在首次编辑中完成)")
         await asyncio.sleep(0.5)
         return True
 
-    async def step_02_english_title(self, page: Page, products_data: List[dict]) -> bool:
-        """步骤2：填写英文标题（按空格键，SOP特殊要求）.
+    async def step_02_english_title(self, page: Page, products_data: list[dict]) -> bool:
+        """步骤2:填写英文标题(按空格键,SOP特殊要求).
 
-        SOP说明：在输入框中按一下空格键即可
+        SOP说明:在输入框中按一下空格键即可
 
         Args:
             page: 页面对象
@@ -340,13 +333,13 @@ class BatchEditController:
         Returns:
             是否填写成功
         """
-        logger.info("步骤7.2：填写英文标题（按空格键）")
+        logger.info("步骤7.2:填写英文标题(按空格键)")
 
         try:
             step_config = self.selectors.get("batch_edit", {}).get("step_02_english_title", {})
 
             if not step_config.get("enabled", True):
-                logger.info("  跳过步骤2（未启用）")
+                logger.info("  跳过步骤2(未启用)")
                 return True
 
             # 查找英文标题输入框
@@ -360,13 +353,13 @@ class BatchEditController:
                 logger.warning("英文标题输入框不可见")
                 return False
 
-            # 按空格键（SOP要求）
+            # 按空格键(SOP要求)
             await input_element.click()
             await page.wait_for_timeout(300)
             await input_element.press("Space")
             await page.wait_for_timeout(500)
 
-            logger.success("✓ 英文标题已填写（空格键）")
+            logger.success("✓ 英文标题已填写(空格键)")
 
             # 预览和保存
             await self._preview_and_save(page)
@@ -377,14 +370,14 @@ class BatchEditController:
             return False
 
     async def step_03_category_attrs(self, page: Page) -> bool:
-        """步骤3：类目属性.
+        """步骤3:类目属性.
 
-        SOP说明：选择并填写类目属性。
+        SOP说明:选择并填写类目属性.
 
         Returns:
             是否执行成功
         """
-        logger.info("步骤7.3：类目属性")
+        logger.info("步骤7.3:类目属性")
 
         try:
             # TODO: 使用codegen获取选择器
@@ -400,9 +393,9 @@ class BatchEditController:
             return False
 
     async def step_04_main_sku(self, page: Page) -> bool:
-        """步骤4：主货号（SOP步骤7.4）.
+        """步骤4:主货号(SOP步骤7.4).
 
-        SOP说明：不改动，但需要执行预览+保存操作。
+        SOP说明:不改动,但需要执行预览+保存操作.
 
         Returns:
             是否执行成功
@@ -411,7 +404,7 @@ class BatchEditController:
             >>> await ctrl.step_04_main_sku(page)
             True
         """
-        logger.info("步骤7.4：主货号（不改动但需预览+保存）")
+        logger.info("步骤7.4:主货号(不改动但需预览+保存)")
 
         try:
             # 1. 点击预览按钮
@@ -440,13 +433,13 @@ class BatchEditController:
             for indicator in success_indicators:
                 try:
                     if await page.locator(indicator).count() > 0:
-                        logger.success("✓ 主货号步骤完成（预览+保存）")
+                        logger.success("✓ 主货号步骤完成(预览+保存)")
                         return True
                 except:
                     continue
 
-            logger.success("✓ 主货号步骤完成（预览+保存）")
-            logger.info("提示：虽然不修改内容，但SOP要求执行预览+保存操作")
+            logger.success("✓ 主货号步骤完成(预览+保存)")
+            logger.info("提示:虽然不修改内容,但SOP要求执行预览+保存操作")
             return True
 
         except Exception as e:
@@ -454,20 +447,20 @@ class BatchEditController:
             return False
 
     async def step_05_packaging(self, page: Page) -> bool:
-        """步骤5：包装信息.
+        """步骤5:包装信息.
 
-        SOP说明：
-        - 包装形状：盒装
-        - 包装类型：可选
+        SOP说明:
+        - 包装形状:盒装
+        - 包装类型:可选
 
         Returns:
             是否执行成功
         """
-        logger.info("步骤8.5：包装信息（盒装）")
+        logger.info("步骤8.5:包装信息(盒装)")
 
         try:
             # TODO: 使用codegen获取选择器
-            # 选择包装形状：盒装
+            # 选择包装形状:盒装
             # await page.select_option(
             #     self.selectors["step_05_packaging_shape"], "盒装"
             # )
@@ -482,14 +475,14 @@ class BatchEditController:
             return False
 
     async def step_06_origin(self, page: Page) -> bool:
-        """步骤6：产地信息.
+        """步骤6:产地信息.
 
-        SOP说明：选择产地（如：中国）
+        SOP说明:选择产地(如:中国)
 
         Returns:
             是否执行成功
         """
-        logger.info("步骤7.6：产地信息（浙江）")
+        logger.info("步骤7.6:产地信息(浙江)")
 
         try:
             # TODO: 使用codegen获取选择器
@@ -507,9 +500,9 @@ class BatchEditController:
             return False
 
     async def step_07_customization(self, page: Page) -> bool:
-        """步骤7：定制品（SOP步骤7.7）.
+        """步骤7:定制品(SOP步骤7.7).
 
-        SOP说明：不改动，但需要执行预览+保存操作。
+        SOP说明:不改动,但需要执行预览+保存操作.
 
         Returns:
             是否执行成功
@@ -518,7 +511,7 @@ class BatchEditController:
             >>> await ctrl.step_07_customization(page)
             True
         """
-        logger.info("步骤7.7：定制品（不改动但需预览+保存）")
+        logger.info("步骤7.7:定制品(不改动但需预览+保存)")
 
         try:
             # 1. 点击预览按钮
@@ -547,13 +540,13 @@ class BatchEditController:
             for indicator in success_indicators:
                 try:
                     if await page.locator(indicator).count() > 0:
-                        logger.success("✓ 定制品步骤完成（预览+保存）")
+                        logger.success("✓ 定制品步骤完成(预览+保存)")
                         return True
                 except:
                     continue
 
-            logger.success("✓ 定制品步骤完成（预览+保存）")
-            logger.info("提示：虽然不修改内容，但SOP要求执行预览+保存操作")
+            logger.success("✓ 定制品步骤完成(预览+保存)")
+            logger.info("提示:虽然不修改内容,但SOP要求执行预览+保存操作")
             return True
 
         except Exception as e:
@@ -561,9 +554,9 @@ class BatchEditController:
             return False
 
     async def step_08_sensitive_attrs(self, page: Page) -> bool:
-        """步骤8：敏感属性（SOP步骤7.8）.
+        """步骤8:敏感属性(SOP步骤7.8).
 
-        SOP说明：不改动，但需要执行预览+保存操作。
+        SOP说明:不改动,但需要执行预览+保存操作.
 
         Returns:
             是否执行成功
@@ -572,7 +565,7 @@ class BatchEditController:
             >>> await ctrl.step_08_sensitive_attrs(page)
             True
         """
-        logger.info("步骤7.8：敏感属性（不改动但需预览+保存）")
+        logger.info("步骤7.8:敏感属性(不改动但需预览+保存)")
 
         try:
             # 1. 点击预览按钮
@@ -601,13 +594,13 @@ class BatchEditController:
             for indicator in success_indicators:
                 try:
                     if await page.locator(indicator).count() > 0:
-                        logger.success("✓ 敏感属性步骤完成（预览+保存）")
+                        logger.success("✓ 敏感属性步骤完成(预览+保存)")
                         return True
                 except:
                     continue
 
-            logger.success("✓ 敏感属性步骤完成（预览+保存）")
-            logger.info("提示：虽然不修改内容，但SOP要求执行预览+保存操作")
+            logger.success("✓ 敏感属性步骤完成(预览+保存)")
+            logger.info("提示:虽然不修改内容,但SOP要求执行预览+保存操作")
             return True
 
         except Exception as e:
@@ -615,20 +608,20 @@ class BatchEditController:
             return False
 
     async def step_09_weight(self, page: Page) -> bool:
-        """步骤9：重量（随机生成5000-9999G，SOP步骤7.9）.
+        """步骤9:重量(随机生成5000-9999G,SOP步骤7.9).
 
-        SOP说明：随机生成重量（5000-9999克）
+        SOP说明:随机生成重量(5000-9999克)
 
         Returns:
             是否执行成功
         """
-        logger.info("步骤7.9：重量（随机生成5000-9999G）")
+        logger.info("步骤7.9:重量(随机生成5000-9999G)")
 
         try:
             step_config = self.selectors.get("batch_edit", {}).get("step_09_weight", {})
 
             if not step_config.get("enabled", True):
-                logger.info("  跳过步骤9（未启用）")
+                logger.info("  跳过步骤9(未启用)")
                 return True
 
             # 生成随机重量
@@ -660,20 +653,20 @@ class BatchEditController:
             return False
 
     async def step_10_dimensions(self, page: Page) -> bool:
-        """步骤10：尺寸（长宽高，随机生成50-99cm，长>宽>高）.
+        """步骤10:尺寸(长宽高,随机生成50-99cm,长>宽>高).
 
-        SOP说明：随机生成尺寸，且长>宽>高
+        SOP说明:随机生成尺寸,且长>宽>高
 
         Returns:
             是否执行成功
         """
-        logger.info("步骤7.10：尺寸（随机生成，长>宽>高）")
+        logger.info("步骤7.10:尺寸(随机生成,长>宽>高)")
 
         try:
             step_config = self.selectors.get("batch_edit", {}).get("step_10_dimensions", {})
 
             if not step_config.get("enabled", True):
-                logger.info("  跳过步骤10（未启用）")
+                logger.info("  跳过步骤10(未启用)")
                 return True
 
             # 生成随机尺寸
@@ -710,14 +703,14 @@ class BatchEditController:
             return False
 
     async def step_11_sku(self, page: Page) -> bool:
-        """步骤11：SKU.
+        """步骤11:SKU.
 
-        SOP说明：设置SKU信息
+        SOP说明:设置SKU信息
 
         Returns:
             是否执行成功
         """
-        logger.info("步骤8.11：SKU")
+        logger.info("步骤8.11:SKU")
 
         try:
             # TODO: 使用codegen获取选择器
@@ -733,14 +726,14 @@ class BatchEditController:
             return False
 
     async def step_12_sku_category(self, page: Page) -> bool:
-        """步骤12：SKU类目.
+        """步骤12:SKU类目.
 
-        SOP说明：选择SKU类目
+        SOP说明:选择SKU类目
 
         Returns:
             是否执行成功
         """
-        logger.info("步骤8.12：SKU类目")
+        logger.info("步骤8.12:SKU类目")
 
         try:
             # TODO: 使用codegen获取选择器
@@ -755,10 +748,10 @@ class BatchEditController:
             logger.error(f"选择SKU类目失败: {e}")
             return False
 
-    async def step_14_suggested_price(self, page: Page, products_data: List[dict]) -> bool:
-        """步骤14：建议售价（成本×10，SOP步骤7.14）.
+    async def step_14_suggested_price(self, page: Page, products_data: list[dict]) -> bool:
+        """步骤14:建议售价(成本×10,SOP步骤7.14).
 
-        SOP规则：建议售价 = 成本 × 10
+        SOP规则:建议售价 = 成本 × 10
 
         Args:
             page: 页面对象
@@ -767,16 +760,16 @@ class BatchEditController:
         Returns:
             是否设置成功
         """
-        logger.info("步骤7.14：建议售价（成本×10）")
+        logger.info("步骤7.14:建议售价(成本×10)")
 
         try:
             step_config = self.selectors.get("batch_edit", {}).get("step_14_suggested_price", {})
 
             if not step_config.get("enabled", True):
-                logger.info("  跳过步骤14（未启用）")
+                logger.info("  跳过步骤14(未启用)")
                 return True
 
-            # 计算第一个商品的价格（批量编辑使用统一价格）
+            # 计算第一个商品的价格(批量编辑使用统一价格)
             cost = products_data[0].get("cost", 0) if products_data else 150.0
             price_result = self.price_calculator.calculate(cost)
             suggested_price = price_result.suggested_price
@@ -811,9 +804,9 @@ class BatchEditController:
             return False
 
     async def step_15_package_list(self, page: Page) -> bool:
-        """步骤15：包装清单（SOP步骤7.15）.
+        """步骤15:包装清单(SOP步骤7.15).
 
-        SOP说明：不改动，但需要执行预览+保存操作。
+        SOP说明:不改动,但需要执行预览+保存操作.
 
         Returns:
             是否执行成功
@@ -822,7 +815,7 @@ class BatchEditController:
             >>> await ctrl.step_15_package_list(page)
             True
         """
-        logger.info("步骤7.15：包装清单（不改动但需预览+保存）")
+        logger.info("步骤7.15:包装清单(不改动但需预览+保存)")
 
         try:
             # 1. 点击预览按钮
@@ -851,13 +844,13 @@ class BatchEditController:
             for indicator in success_indicators:
                 try:
                     if await page.locator(indicator).count() > 0:
-                        logger.success("✓ 包装清单步骤完成（预览+保存）")
+                        logger.success("✓ 包装清单步骤完成(预览+保存)")
                         return True
                 except:
                     continue
 
-            logger.success("✓ 包装清单步骤完成（预览+保存）")
-            logger.info("提示：虽然不修改内容，但SOP要求执行预览+保存操作")
+            logger.success("✓ 包装清单步骤完成(预览+保存)")
+            logger.info("提示:虽然不修改内容,但SOP要求执行预览+保存操作")
             return True
 
         except Exception as e:
@@ -865,14 +858,14 @@ class BatchEditController:
             return False
 
     async def step_18_manual_upload(self, page: Page) -> bool:
-        """步骤18：手动上传.
+        """步骤18:手动上传.
 
-        SOP说明：最后一步，确认手动上传
+        SOP说明:最后一步,确认手动上传
 
         Returns:
             是否执行成功
         """
-        logger.info("步骤8.18：手动上传（确认）")
+        logger.info("步骤8.18:手动上传(确认)")
 
         try:
             # TODO: 使用codegen获取选择器
@@ -890,14 +883,14 @@ class BatchEditController:
     async def save_batch_edit(self, page: Page) -> bool:
         """保存批量编辑.
 
-        SOP说明：
+        SOP说明:
         - 先预览
         - 再保存
 
         Returns:
             是否保存成功
         """
-        logger.info("步骤8.19：保存批量编辑")
+        logger.info("步骤8.19:保存批量编辑")
 
         try:
             await self._preview_and_save(page)
@@ -914,7 +907,7 @@ class BatchEditController:
             return False
 
     async def _preview_and_save(self, page: Page) -> bool:
-        """预览并保存（内部辅助方法）.
+        """预览并保存(内部辅助方法).
 
         每个步骤完成后都需要预览和保存
 
@@ -931,7 +924,7 @@ class BatchEditController:
                 await page.wait_for_timeout(1000)
                 logger.debug("  已预览")
             except Exception:
-                logger.debug("  未找到预览按钮，跳过")
+                logger.debug("  未找到预览按钮,跳过")
 
             # 2. 保存
             save_btn = nav_config.get("save_button", "button:has-text('保存')")
@@ -953,35 +946,35 @@ class BatchEditController:
 # 示例使用
 if __name__ == "__main__":
     print("=" * 60)
-    print("批量编辑控制器模块（SOP v2.0）")
+    print("批量编辑控制器模块(SOP v2.0)")
     print("=" * 60)
     print()
-    print("此模块负责商品的批量编辑操作（SOP步骤8的18步流程）")
+    print("此模块负责商品的批量编辑操作(SOP步骤8的18步流程)")
     print()
-    print("18步流程：")
-    print("  1. 修改标题（跳过）")
+    print("18步流程:")
+    print("  1. 修改标题(跳过)")
     print("  2. 填写英文标题")
     print("  3. 类目属性")
     print("  4. 跳过")
-    print("  5. 包装信息（盒装）")
-    print("  6. 产地信息（中国）")
+    print("  5. 包装信息(盒装)")
+    print("  6. 产地信息(中国)")
     print("  7-8. 跳过")
-    print("  9. 重量（随机）")
-    print(" 10. 尺寸（随机）")
+    print("  9. 重量(随机)")
+    print(" 10. 尺寸(随机)")
     print(" 11. SKU")
     print(" 12. SKU类目")
     print(" 13. 跳过")
-    print(" 14. 建议售价（成本×10）")
+    print(" 14. 建议售价(成本×10)")
     print(" 15-17. 跳过")
     print(" 18. 手动上传")
     print()
-    print("使用步骤：")
+    print("使用步骤:")
     print("1. 使用 playwright codegen 获取所有选择器")
     print("2. 更新类中的选择器配置")
     print("3. 准备20条商品数据")
     print("4. 在实际浏览器环境中测试")
     print()
-    print("示例代码：")
+    print("示例代码:")
     print("""
     from playwright.async_api import async_playwright
     from src.browser.batch_edit_controller import BatchEditController
@@ -996,7 +989,7 @@ if __name__ == "__main__":
 
             # 准备20条商品数据
             products_data = [
-                {"cost": 150.0, "title_en": "Smart Watch A0001"} 
+                {"cost": 150.0, "title_en": "Smart Watch A0001"}
                 for _ in range(20)
             ]
 

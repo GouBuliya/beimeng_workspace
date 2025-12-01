@@ -12,8 +12,8 @@ from cli.commands.monitor import monitor_app
 from cli.commands.workflow import workflow_app
 
 __all__ = [
-    "workflow_app",
-    "monitor_app",
-    "debug_app",
     "config_app",
+    "debug_app",
+    "monitor_app",
+    "workflow_app",
 ]

@@ -1,5 +1,5 @@
 """
-@PURPOSE: 通用组件和工具库，提供项目中多个组件共享的通用功能
+@PURPOSE: 通用组件和工具库,提供项目中多个组件共享的通用功能
 @OUTLINE:
   - BaseAppConfig: 应用配置基类
   - setup_logger: 日志配置函数

@@ -8,11 +8,11 @@
   - 内部: src.utils.page_waiter
 """
 
-import pytest
 import asyncio
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
-from src.utils.page_waiter import WaitStrategy, PageWaiter
+import pytest
+from src.utils.page_waiter import PageWaiter, WaitStrategy
 
 
 class TestWaitStrategy:
@@ -188,7 +188,7 @@ class TestPageWaiter:
         elapsed = asyncio.get_event_loop().time() - start
 
         # 第0次重试应该等待约10ms
-        assert elapsed >= 0.005  # 至少5ms（考虑精度）
+        assert elapsed >= 0.005  # 至少5ms(考虑精度)
 
 
 class TestPageWaiterEdgeCases:
@@ -246,7 +246,7 @@ class TestPageWaiterEdgeCases:
             ),
         )
 
-        # 由于DOM不稳定，应该最终超时
+        # 由于DOM不稳定,应该最终超时
         await waiter.wait_for_dom_stable()  # 不应无限循环
 
 
@@ -261,7 +261,7 @@ class TestWaitStrategyCalculations:
 
         delays = [strategy.next_retry_delay(i) for i in range(5)]
 
-        # 验证序列递增（直到达到上限）
+        # 验证序列递增(直到达到上限)
         for i in range(len(delays) - 1):
             if delays[i] < 1.0:  # 未达到上限
                 assert delays[i] <= delays[i + 1]
@@ -276,7 +276,7 @@ class TestWaitStrategyCalculations:
             retry_initial_delay_ms=100, retry_backoff_factor=2.5, retry_max_delay_ms=10000
         )
 
-        # 相同尝试次数，高因子应该有更长延迟
+        # 相同尝试次数,高因子应该有更长延迟
         slow_delay = strategy_slow.next_retry_delay(3)
         fast_delay = strategy_fast.next_retry_delay(3)
 

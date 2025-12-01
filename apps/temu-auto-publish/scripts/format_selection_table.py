@@ -1,11 +1,11 @@
 """
-@PURPOSE: 格式化原始选品表Excel文件，转换为标准格式
+@PURPOSE: 格式化原始选品表Excel文件,转换为标准格式
 @OUTLINE:
   - def parse_complex_excel(): 解析复杂的多行格式Excel
   - def convert_to_standard_format(): 转换为标准选品表格式
   - def main(): 主函数
 @GOTCHAS:
-  - 原始Excel中一个产品可能占多行（主行+规格行）
+  - 原始Excel中一个产品可能占多行(主行+规格行)
   - 需要向下填充产品名称和标题后缀
   - 规格信息需要合并
 @DEPENDENCIES:
@@ -15,7 +15,6 @@
 import argparse
 import sys
 from pathlib import Path
-from typing import List, Dict
 
 import pandas as pd
 from loguru import logger
@@ -24,8 +23,8 @@ from loguru import logger
 def parse_complex_excel(input_file: str) -> pd.DataFrame:
     """解析复杂格式的Excel文件.
 
-    处理以下格式：
-    - 产品名称在第一行，后续行为空
+    处理以下格式:
+    - 产品名称在第一行,后续行为空
     - 标题后缀可能在第一行或后续行
     - 规格分布在多行
 
@@ -40,7 +39,7 @@ def parse_complex_excel(input_file: str) -> pd.DataFrame:
     # 读取所有数据
     df = pd.read_excel(input_file)
 
-    logger.info(f"✓ 读取成功，共 {len(df)} 行，{len(df.columns)} 列")
+    logger.info(f"✓ 读取成功,共 {len(df)} 行,{len(df.columns)} 列")
     logger.debug(f"列名: {df.columns.tolist()}")
 
     return df
@@ -49,7 +48,7 @@ def parse_complex_excel(input_file: str) -> pd.DataFrame:
 def convert_to_standard_format(df: pd.DataFrame) -> pd.DataFrame:
     """转换为标准选品表格式.
 
-    标准格式要求：
+    标准格式要求:
     - 主品负责人
     - 产品名称
     - 标题后缀
@@ -65,7 +64,7 @@ def convert_to_standard_format(df: pd.DataFrame) -> pd.DataFrame:
     """
     logger.info("开始转换为标准格式...")
 
-    # 提取关键列（只保留基本信息和进货价）
+    # 提取关键列(只保留基本信息和进货价)
     key_columns = {
         "产品名称": "产品名称",
         "标题后缀": "标题后缀",
@@ -74,7 +73,7 @@ def convert_to_standard_format(df: pd.DataFrame) -> pd.DataFrame:
     }
 
     # 检查列是否存在
-    missing_cols = [col for col in key_columns.keys() if col not in df.columns]
+    missing_cols = [col for col in key_columns if col not in df.columns]
     if missing_cols:
         logger.warning(f"缺失列: {missing_cols}")
         # 移除缺失的列
@@ -85,27 +84,27 @@ def convert_to_standard_format(df: pd.DataFrame) -> pd.DataFrame:
     work_df = df[list(key_columns.keys())].copy()
     work_df.columns = list(key_columns.values())
 
-    # 向下填充产品名称、标题后缀和进货价
-    logger.info("向下填充产品名称、标题后缀和进货价...")
+    # 向下填充产品名称,标题后缀和进货价
+    logger.info("向下填充产品名称,标题后缀和进货价...")
     work_df["产品名称"] = work_df["产品名称"].ffill()
     work_df["标题后缀"] = work_df["标题后缀"].ffill()
     if "进货价" in work_df.columns:
         work_df["进货价"] = work_df["进货价"].ffill()
 
-    # 过滤掉无效行（没有规格信息的）
+    # 过滤掉无效行(没有规格信息的)
     logger.info("过滤无效行...")
     work_df = work_df[work_df["产品颜色/规格"].notna()].copy()
 
-    # 添加采集数量（默认5个）
+    # 添加采集数量(默认5个)
     work_df["采集数量"] = 5
 
-    # 添加负责人（默认为空，需要手动填写）
+    # 添加负责人(默认为空,需要手动填写)
     work_df["主品负责人"] = ""
 
     # 重新排列列顺序
     columns_order = ["主品负责人", "产品名称", "标题后缀", "产品颜色/规格", "采集数量"]
 
-    # 添加可选列（如果存在）
+    # 添加可选列(如果存在)
     if "进货价" in work_df.columns:
         columns_order.append("进货价")
 
@@ -115,7 +114,7 @@ def convert_to_standard_format(df: pd.DataFrame) -> pd.DataFrame:
     logger.info("清理数据...")
     standard_df = standard_df.dropna(subset=["产品名称", "标题后缀"])
 
-    logger.success(f"✓ 转换完成，共 {len(standard_df)} 条有效数据")
+    logger.success(f"✓ 转换完成,共 {len(standard_df)} 条有效数据")
 
     return standard_df
 
@@ -139,7 +138,7 @@ def validate_output(df: pd.DataFrame) -> bool:
         if col not in df.columns:
             issues.append(f"缺少必填列: {col}")
 
-    # 检查空值（必填列）
+    # 检查空值(必填列)
     for col in ["产品名称", "标题后缀", "产品颜色/规格"]:
         if col in df.columns:
             null_count = df[col].isna().sum()
@@ -175,17 +174,17 @@ def show_preview(df: pd.DataFrame, n: int = 10):
         n: 显示行数
     """
     logger.info(f"\n{'=' * 80}")
-    logger.info(f"📋 数据预览（前{n}行）")
+    logger.info(f"📋 数据预览(前{n}行)")
     logger.info(f"{'=' * 80}")
     print(df.head(n).to_string(index=False))
 
     logger.info(f"\n{'=' * 80}")
-    logger.info(f"📊 数据统计")
+    logger.info("📊 数据统计")
     logger.info(f"{'=' * 80}")
     logger.info(f"总行数: {len(df)}")
     logger.info(f"产品数: {df['产品名称'].nunique()}")
     logger.info(f"规格数: {len(df)}")
-    logger.info(f"\n产品列表（前10个）:")
+    logger.info("\n产品列表(前10个):")
     for i, prod in enumerate(df["产品名称"].unique()[:10], 1):
         count = len(df[df["产品名称"] == prod])
         logger.info(f"  {i}. {prod} ({count}个规格)")
@@ -200,10 +199,10 @@ def main():
 示例:
   # 基本用法
   python format_selection_table.py ../../10月品.xlsx
-  
+
   # 指定输出文件
   python format_selection_table.py ../../10月品.xlsx -o selection_formatted.xlsx
-  
+
   # 只预览不保存
   python format_selection_table.py ../../10月品.xlsx --preview-only
         """,
@@ -215,12 +214,12 @@ def main():
         "-o",
         "--output",
         default="selection_formatted.xlsx",
-        help="输出文件名（默认: selection_formatted.xlsx）",
+        help="输出文件名(默认: selection_formatted.xlsx)",
     )
 
-    parser.add_argument("--preview-only", action="store_true", help="只预览数据，不保存文件")
+    parser.add_argument("--preview-only", action="store_true", help="只预览数据,不保存文件")
 
-    parser.add_argument("--preview-lines", type=int, default=10, help="预览行数（默认: 10）")
+    parser.add_argument("--preview-lines", type=int, default=10, help="预览行数(默认: 10)")
 
     args = parser.parse_args()
 
@@ -250,10 +249,10 @@ def main():
             logger.success(f"\n✅ 文件已保存: {output_path}")
             logger.info(f"   总行数: {len(standard_df)}")
             logger.info(f"   产品数: {standard_df['产品名称'].nunique()}")
-            logger.info(f"\n💡 使用方法:")
+            logger.info("\n💡 使用方法:")
             logger.info(f"   python run_collection_to_edit_test.py --selection {output_path}")
         else:
-            logger.info("\n⏭️  预览模式：未保存文件")
+            logger.info("\n⏭️  预览模式:未保存文件")
 
     except FileNotFoundError:
         logger.error(f"❌ 文件不存在: {args.input_file}")

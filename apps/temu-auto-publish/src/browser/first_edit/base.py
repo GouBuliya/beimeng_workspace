@@ -1,9 +1,9 @@
 """
 @PURPOSE: 提供首次编辑控制器通用的选择器加载与配置工具.
 @OUTLINE:
-  - class FirstEditBase: 基础初始化、选择器读取与通用元素定位
+  - class FirstEditBase: 基础初始化,选择器读取与通用元素定位
   - def find_visible_element(): 顺序定位可见元素的通用工具
-  - TIMEOUTS: 统一超时配置常量（从 selector_race 导出）
+  - TIMEOUTS: 统一超时配置常量(从 selector_race 导出)
 """
 
 from __future__ import annotations
@@ -19,11 +19,11 @@ from ...utils.selector_race import TIMEOUTS
 from ..selector_resolver import SelectorResolver
 
 # 导出 TIMEOUTS 便于 mixin 模块直接使用
-__all__ = ["FirstEditBase", "TIMEOUTS"]
+__all__ = ["TIMEOUTS", "FirstEditBase"]
 
 
 class FirstEditBase:
-    """首次编辑控制器的基础能力混入，负责读取选择器配置并提供通用定位工具。"""
+    """首次编辑控制器的基础能力混入,负责读取选择器配置并提供通用定位工具."""
 
     def __init__(self, selector_path: str = "config/miaoshou_selectors_v2.json") -> None:
         """初始化基础配置.
@@ -86,17 +86,17 @@ class FirstEditBase:
         context_name: str = "",
         nth: int = 0,
     ) -> Locator | None:
-        """顺序尝试定位可见元素，命中即返回.
+        """顺序尝试定位可见元素,命中即返回.
 
         Args:
             page: Playwright 页面对象.
-            selectors: 选择器列表（按优先级排序）.
-            timeout_ms: 单个选择器的超时时间（毫秒）.
-            context_name: 日志上下文，便于排查.
-            nth: 针对存在多个匹配元素时，取第几个（0-based）.
+            selectors: 选择器列表(按优先级排序).
+            timeout_ms: 单个选择器的超时时间(毫秒).
+            context_name: 日志上下文,便于排查.
+            nth: 针对存在多个匹配元素时,取第几个(0-based).
 
         Returns:
-            首个匹配的 Locator，未找到则返回 None.
+            首个匹配的 Locator,未找到则返回 None.
         """
         for index, selector in enumerate(selectors):
             try:
@@ -115,7 +115,7 @@ class FirstEditBase:
                     return candidate
             except Exception as exc:  # pragma: no cover - Playwright 环境相关
                 logger.trace(
-                    "定位元素失败，继续尝试后续选择器: {} (selector={}, nth={})",
+                    "定位元素失败,继续尝试后续选择器: {} (selector={}, nth={})",
                     exc,
                     selector,
                     nth,

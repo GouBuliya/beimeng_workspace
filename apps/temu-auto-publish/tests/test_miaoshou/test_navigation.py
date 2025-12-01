@@ -12,8 +12,7 @@
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-
-from tests.mocks import MockPage, MockLocator
+from tests.mocks import MockLocator, MockPage
 
 
 class TestMiaoshouNavigation:

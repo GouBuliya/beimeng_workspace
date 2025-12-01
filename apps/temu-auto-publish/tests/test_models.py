@@ -1,5 +1,5 @@
 """
-@PURPOSE: 测试 models 模块的数据模型（result.py 和 task.py）
+@PURPOSE: 测试 models 模块的数据模型(result.py 和 task.py)
 @OUTLINE:
   - class TestBrowserResult: 浏览器操作结果基类测试
   - class TestSearchResult: 搜索结果测试
@@ -17,7 +17,6 @@ from datetime import datetime
 
 import pytest
 from pydantic import ValidationError
-
 from src.models.result import (
     BrowserResult,
     EditResult,
@@ -300,7 +299,7 @@ class TestTaskProduct:
             id="P001",
             keyword="智能手表",
             original_name="智能手表运动防水",
-            ai_title="【热销】智能手表运动防水蓝牙通话",
+            ai_title="[热销]智能手表运动防水蓝牙通话",
             cost_price=150.00,
             suggested_price=1125.00,  # 150 * 7.5
             supply_price=1500.00,  # 150 * 10

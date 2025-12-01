@@ -12,24 +12,23 @@
   - 外部: pytest, pytest-asyncio
 """
 
-import asyncio
-from unittest.mock import AsyncMock, patch
+
+import contextlib
 
 import pytest
-
 from src.core.enhanced_retry import (
     EnhancedRetryHandler,
     RetryOutcome,
     RetryPolicy,
     RetryResult,
-    smart_retry,
-    create_step_retry_policy,
     create_stage_retry_policy,
+    create_step_retry_policy,
+    smart_retry,
 )
 from src.core.retry_handler import (
-    RetryableError,
-    NonRetryableError,
     NetworkError,
+    NonRetryableError,
+    RetryableError,
     ValidationError,
 )
 
@@ -48,7 +47,7 @@ class TestRetryPolicy:
         assert policy.jitter is True
 
     def test_get_delay_calculation(self):
-        """测试延迟计算（无抖动）"""
+        """测试延迟计算(无抖动)"""
         policy = RetryPolicy(
             initial_delay_ms=1000,
             backoff_factor=2.0,
@@ -88,7 +87,7 @@ class TestRetryPolicy:
         for delay in delays:
             assert 0.85 <= delay <= 1.15
 
-        # 应该有一定的变化（不全相同）
+        # 应该有一定的变化(不全相同)
         assert len(set(delays)) > 1
 
     def test_is_retryable_for_retryable_error(self):
@@ -237,7 +236,7 @@ class TestEnhancedRetryHandler:
         with pytest.raises(ValidationError):
             await handler.execute(raise_non_retryable)
 
-        # 应该只调用一次，不重试
+        # 应该只调用一次,不重试
         assert call_count == 1
 
     async def test_pre_retry_action_called(self):
@@ -266,7 +265,7 @@ class TestEnhancedRetryHandler:
         result = await handler.execute(eventually_succeed)
 
         assert result.success is True
-        # 恢复动作在第一次失败后、第二次尝试前被调用
+        # 恢复动作在第一次失败后,第二次尝试前被调用
         assert len(recovery_calls) == 1
 
     async def test_metrics_tracking(self):
@@ -356,3 +355,234 @@ class TestFactoryFunctions:
         policy = create_step_retry_policy(pre_retry_action=custom_recovery)
 
         assert policy.pre_retry_action is custom_recovery
+
+
+@pytest.mark.asyncio
+class TestRecoveryValidation:
+    """测试恢复验证功能."""
+
+    async def test_recovery_validator_passes(self):
+        """测试恢复验证通过后继续重试."""
+        recovery_called = False
+        validation_called = False
+
+        async def recovery_action():
+            nonlocal recovery_called
+            recovery_called = True
+
+        async def recovery_validator():
+            nonlocal validation_called
+            validation_called = True
+            return True  # 验证通过
+
+        call_count = 0
+
+        async def eventually_succeed():
+            nonlocal call_count
+            call_count += 1
+            if call_count < 2:
+                raise RetryableError("失败")
+            return "success"
+
+        policy = RetryPolicy(
+            max_attempts=3,
+            initial_delay_ms=10,
+            pre_retry_action=recovery_action,
+            recovery_validator=recovery_validator,
+            jitter=False,
+        )
+        handler = EnhancedRetryHandler(policy)
+        result = await handler.execute(eventually_succeed)
+
+        assert result.success is True
+        assert recovery_called is True
+        assert validation_called is True
+        assert call_count == 2
+
+    async def test_recovery_validator_fails_skips_retry(self):
+        """测试恢复验证失败时跳过重试."""
+        validation_results = [False, True]  # 第一次失败,第二次通过
+        validation_index = 0
+
+        async def recovery_action():
+            pass
+
+        async def recovery_validator():
+            nonlocal validation_index
+            result = validation_results[validation_index]
+            validation_index += 1
+            return result
+
+        call_count = 0
+
+        async def eventually_succeed():
+            nonlocal call_count
+            call_count += 1
+            if call_count < 3:
+                raise RetryableError("失败")
+            return "success"
+
+        policy = RetryPolicy(
+            max_attempts=5,
+            initial_delay_ms=10,
+            pre_retry_action=recovery_action,
+            recovery_validator=recovery_validator,
+            skip_retry_on_validation_failure=True,
+            jitter=False,
+        )
+        handler = EnhancedRetryHandler(policy)
+        result = await handler.execute(eventually_succeed)
+
+        assert result.success is True
+        # 调用3次:第1次失败 -> 恢复验证失败(跳过) -> 第2次失败 -> 恢复验证通过 -> 第3次成功
+        assert call_count == 3
+
+
+@pytest.mark.asyncio
+class TestStateChecker:
+    """测试状态检查器功能."""
+
+    async def test_state_checker_passes(self):
+        """测试状态检查通过后继续重试."""
+        check_called = False
+
+        async def state_checker():
+            nonlocal check_called
+            check_called = True
+            return True  # 状态正常
+
+        call_count = 0
+
+        async def eventually_succeed():
+            nonlocal call_count
+            call_count += 1
+            if call_count < 2:
+                raise RetryableError("失败")
+            return "success"
+
+        policy = RetryPolicy(
+            max_attempts=3,
+            initial_delay_ms=10,
+            state_checker=state_checker,
+            jitter=False,
+        )
+        handler = EnhancedRetryHandler(policy)
+        result = await handler.execute(eventually_succeed)
+
+        assert result.success is True
+        assert check_called is True
+        assert call_count == 2
+
+    async def test_state_checker_fails_stops_retry(self):
+        """测试状态检查失败时停止重试."""
+
+        async def state_checker():
+            return False  # 状态异常,不应重试
+
+        call_count = 0
+
+        async def always_fail():
+            nonlocal call_count
+            call_count += 1
+            raise RetryableError("失败")
+
+        policy = RetryPolicy(
+            max_attempts=5,
+            initial_delay_ms=10,
+            state_checker=state_checker,
+            jitter=False,
+        )
+        handler = EnhancedRetryHandler(policy)
+
+        with pytest.raises(RetryableError):
+            await handler.execute(always_fail)
+
+        # 只调用一次,状态检查失败后停止重试
+        assert call_count == 1
+
+    async def test_state_checker_outcome(self):
+        """测试状态检查失败时的 outcome."""
+
+        async def state_checker():
+            return False
+
+        async def always_fail():
+            raise RetryableError("失败")
+
+        policy = RetryPolicy(
+            max_attempts=3,
+            initial_delay_ms=10,
+            state_checker=state_checker,
+            jitter=False,
+        )
+        handler = EnhancedRetryHandler(policy)
+
+        with contextlib.suppress(RetryableError):
+            await handler.execute(always_fail)
+
+        # 检查 metrics
+        metrics = handler.get_metrics()
+        assert metrics["total_failures"] == 1
+
+
+@pytest.mark.asyncio
+class TestSmartRetryWithValidation:
+    """测试 smart_retry 装饰器支持验证参数."""
+
+    async def test_decorator_with_recovery_validator(self):
+        """测试装饰器支持 recovery_validator 参数."""
+        validator_called = False
+
+        async def my_validator():
+            nonlocal validator_called
+            validator_called = True
+            return True
+
+        async def my_recovery():
+            pass
+
+        call_count = 0
+
+        @smart_retry(
+            max_attempts=3,
+            initial_delay_ms=10,
+            pre_retry_action=my_recovery,
+            recovery_validator=my_validator,
+        )
+        async def my_func():
+            nonlocal call_count
+            call_count += 1
+            if call_count < 2:
+                raise RetryableError("失败")
+            return "ok"
+
+        result = await my_func()
+        assert result == "ok"
+        assert validator_called is True
+
+    async def test_decorator_with_state_checker(self):
+        """测试装饰器支持 state_checker 参数."""
+        checker_called = False
+
+        async def my_checker():
+            nonlocal checker_called
+            checker_called = True
+            return True
+
+        call_count = 0
+
+        @smart_retry(
+            max_attempts=3,
+            initial_delay_ms=10,
+            state_checker=my_checker,
+        )
+        async def my_func():
+            nonlocal call_count
+            call_count += 1
+            if call_count < 2:
+                raise RetryableError("失败")
+            return "ok"
+
+        result = await my_func()
+        assert result == "ok"
+        assert checker_called is True

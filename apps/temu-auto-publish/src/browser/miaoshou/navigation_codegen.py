@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from contextlib import suppress
 import re
+from contextlib import suppress
 
 from loguru import logger
 from playwright.async_api import Locator, Page
@@ -293,7 +293,7 @@ async def fallback_switch_tab(page: Page, tab_name: str) -> bool:
     labels = _label_variants(tab_name)
     logger.warning(f"🔍 Fallback tab switch DEBUG: looking for labels {labels}")
 
-    # 调试：输出页面内所有可能的 tab 相关元素
+    # 调试:输出页面内所有可能的 tab 相关元素
     try:
         all_buttons = await page.locator("button").all()
         logger.warning(f"🔍 Found {len(all_buttons)} buttons on page")

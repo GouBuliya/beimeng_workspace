@@ -12,8 +12,7 @@
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-
-from tests.mocks import MockPage, MockLocator
+from tests.mocks import MockLocator, MockPage
 
 
 class TestLogisticsWeight:
@@ -36,14 +35,14 @@ class TestLogisticsWeight:
 
     @pytest.mark.asyncio
     async def test_weight_unit_grams(self, mock_page):
-        """测试重量单位（克）"""
+        """测试重量单位(克)"""
         weight_g = 6500
 
         # 验证重量在合理范围
         assert 1000 <= weight_g <= 50000
 
     def test_weight_conversion_kg_to_g(self):
-        """测试重量转换（千克到克）"""
+        """测试重量转换(千克到克)"""
         weight_kg = 6.5
         weight_g = int(weight_kg * 1000)
 
@@ -92,7 +91,7 @@ class TestLogisticsDimensions:
         assert mock_page.fill.call_count == 3
 
     def test_dimensions_order_validation(self):
-        """测试尺寸顺序验证（长>宽>高）"""
+        """测试尺寸顺序验证(长>宽>高)"""
         length, width, height = 80, 60, 50
 
         is_valid_order = length >= width >= height
@@ -169,9 +168,7 @@ class TestLogisticsValidation:
         def validate_logistics(info):
             if not info.get("weight_g") or info["weight_g"] <= 0:
                 return False
-            if not all([info.get("length_cm"), info.get("width_cm"), info.get("height_cm")]):
-                return False
-            return True
+            return all([info.get("length_cm"), info.get("width_cm"), info.get("height_cm")])
 
         assert validate_logistics(logistics) is True
 

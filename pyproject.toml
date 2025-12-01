@@ -108,10 +108,17 @@ select = [
 
 ignore = [
     "E501",   # line too long (handled by formatter)
+    "B008",   # 允许在参数默认值中调用函数 (Typer 需要)
+    "N999",   # 允许非标准模块名 (airtest 等)
 ]
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]  # 允许未使用的导入
+"tests/*.py" = ["RUF059", "E402"]  # 测试中允许未使用的变量和非顶部导入
+"**/cli/commands/*.py" = ["E402"]  # CLI命令允许非顶部导入(需要先加载环境变量)
+"**/service.py" = ["RUF059"]  # service 文件允许未使用的变量
+"**/test_*.py" = ["B007"]  # 测试文件允许循环变量未使用
+"**/examples/*.py" = ["E402"]  # 示例文件允许非顶部导入
 
 [tool.ruff.format]
 quote-style = "double"

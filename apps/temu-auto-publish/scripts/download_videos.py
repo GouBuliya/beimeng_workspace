@@ -1,5 +1,5 @@
 """
-@PURPOSE: 批量下载副本10月.csv 中的视频资源到指定目录。
+@PURPOSE: 批量下载副本10月.csv 中的视频资源到指定目录.
 @OUTLINE:
   - def sanitize_name(): 清洗文件名
   - def resolve_filename(): 处理重名逻辑
@@ -14,8 +14,8 @@ from __future__ import annotations
 import argparse
 import csv
 import re
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
 
 import requests
 
@@ -31,7 +31,7 @@ DEFAULT_HEADERS = {
 
 
 def sanitize_name(value: str | None) -> str:
-    """清洗文件名，只保留字母、数字、下划线和短横线."""
+    """清洗文件名,只保留字母,数字,下划线和短横线."""
 
     if not value:
         return ""
@@ -40,7 +40,7 @@ def sanitize_name(value: str | None) -> str:
 
 
 def resolve_filename(base: str, directory: Path) -> Path:
-    """避免重名，必要时追加序号."""
+    """避免重名,必要时追加序号."""
 
     candidate = directory / f"{base}.mp4"
     index = 1
@@ -102,12 +102,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--input",
         required=True,
-        help="CSV 文件路径，例如 apps/temu-auto-publish/data/input/副本10月.csv",
+        help="CSV 文件路径,例如 apps/temu-auto-publish/data/input/副本10月.csv",
     )
     parser.add_argument(
         "--output",
         required=True,
-        help="视频输出目录，例如 apps/temu-auto-publish/data/video",
+        help="视频输出目录,例如 apps/temu-auto-publish/data/video",
     )
     parser.add_argument(
         "--overwrite",

@@ -1,5 +1,5 @@
 """
-@PURPOSE: 从采集到首次编辑的完整集成工作流（SOP步骤1-4）
+@PURPOSE: 从采集到首次编辑的完整集成工作流(SOP步骤1-4)
 @OUTLINE:
   - class CollectionToEditWorkflow: 采集到编辑集成工作流
   - async def execute(): 执行完整流程
@@ -10,27 +10,24 @@
   - async def _stage_first_edit(): 阶段5-首次编辑
 @GOTCHAS:
   - 需要在Temu和妙手之间切换页面context
-  - 妙手插件可能无法识别，需要fallback方案
+  - 妙手插件可能无法识别,需要fallback方案
   - 每个阶段都要有完整的错误处理和重试机制
 @DEPENDENCIES:
   - 内部: CollectionController, MiaoshouController, FiveToTwentyWorkflow, DataConverter
   - 外部: playwright, loguru
 @RELATED: collection_workflow.py, five_to_twenty_workflow.py
 @CHANGELOG:
-  - 2025-11-01: 初始创建，实现采集到编辑的完整自动化流程
+  - 2025-11-01: 初始创建,实现采集到编辑的完整自动化流程
 """
 
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
 
 from loguru import logger
 from playwright.async_api import Page
-
 from src.browser.collection_controller import CollectionController
 from src.browser.miaoshou_controller import MiaoshouController
-from src.data_processor.data_converter import DataConverter
 from src.data_processor.selection_table_reader import (
     ProductSelectionRow,
     SelectionTableReader,
@@ -39,17 +36,17 @@ from src.workflows.five_to_twenty_workflow import FiveToTwentyWorkflow
 
 
 class CollectionToEditWorkflow:
-    """从采集到首次编辑的完整集成工作流（SOP步骤1-4）.
+    """从采集到首次编辑的完整集成工作流(SOP步骤1-4).
 
-    实现从Excel选品表到妙手首次编辑完成的全自动化流程：
+    实现从Excel选品表到妙手首次编辑完成的全自动化流程:
 
     阶段0: 读取选品表
-    阶段1: Temu采集（SOP步骤1-3）
+    阶段1: Temu采集(SOP步骤1-3)
       1.1 访问Temu店铺
       1.2 搜索商品
       1.3 采集5个链接
 
-    阶段2: 添加到妙手（关键衔接点）
+    阶段2: 添加到妙手(关键衔接点)
       2.1 逐个访问商品详情页
       2.2 点击妙手插件"采集"
       2.3 验证采集成功
@@ -59,11 +56,11 @@ class CollectionToEditWorkflow:
       3.2 导航到公用采集箱
       3.3 筛选和切换tab
 
-    阶段4: 验证采集结果（可选）
+    阶段4: 验证采集结果(可选)
       4.1 检查商品数量
       4.2 验证商品信息
 
-    阶段5: 首次编辑（SOP步骤4）
+    阶段5: 首次编辑(SOP步骤4)
       5.1 逐个编辑5个产品
       5.2 AI生成标题
       5.3 设置价格和库存
@@ -87,14 +84,14 @@ class CollectionToEditWorkflow:
     """
 
     def __init__(
-        self, use_ai_titles: bool = True, output_dir: Optional[str] = None, debug_mode: bool = False
+        self, use_ai_titles: bool = True, output_dir: str | None = None, debug_mode: bool = False
     ):
         """初始化集成工作流.
 
         Args:
             use_ai_titles: 是否使用AI生成标题
-            output_dir: 输出目录（保存中间结果和报告）
-            debug_mode: 是否启用调试模式（逐步执行）
+            output_dir: 输出目录(保存中间结果和报告)
+            debug_mode: 是否启用调试模式(逐步执行)
         """
         self.collection_ctrl = CollectionController()
         self.miaoshou_ctrl = MiaoshouController()
@@ -115,7 +112,7 @@ class CollectionToEditWorkflow:
 
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-        logger.info("【采集到编辑集成工作流】初始化完成")
+        logger.info("[采集到编辑集成工作流]初始化完成")
         logger.info(f"  AI标题生成: {'启用' if use_ai_titles else '禁用'}")
         logger.info(f"  输出目录: {self.output_dir}")
 
@@ -123,25 +120,25 @@ class CollectionToEditWorkflow:
         self,
         page: Page,
         selection_table_path: str,
-        filter_by_user: Optional[str] = None,
+        filter_by_user: str | None = None,
         enable_validation: bool = True,
         enable_plugin_collection: bool = True,
         save_intermediate_results: bool = True,
         skip_temu_collection: bool = True,
-    ) -> Dict:
-        """执行从采集到首次编辑的完整流程（工业化版本）.
+    ) -> dict:
+        """执行从采集到首次编辑的完整流程(工业化版本).
 
         Args:
             page: Playwright页面对象
             selection_table_path: Excel选品表文件路径
-            filter_by_user: 妙手采集箱用户筛选（如"张三(zhangsan123)"）
+            filter_by_user: 妙手采集箱用户筛选(如"张三(zhangsan123)")
             enable_validation: 是否启用采集结果验证
             enable_plugin_collection: 是否使用妙手插件采集
             save_intermediate_results: 是否保存中间结果
-            skip_temu_collection: 是否跳过Temu采集（简化模式，默认True）
+            skip_temu_collection: 是否跳过Temu采集(简化模式,默认True)
 
         Returns:
-            执行结果字典，包含：
+            执行结果字典,包含:
             - success: 是否成功
             - stages: 各阶段结果
             - summary: 汇总统计
@@ -153,14 +150,14 @@ class CollectionToEditWorkflow:
             RuntimeError: 关键阶段失败
         """
         logger.info("\n" + "=" * 100)
-        logger.info(" " * 25 + "【采集到编辑完整集成工作流】")
+        logger.info(" " * 25 + "[采集到编辑完整集成工作流]")
         logger.info("=" * 100)
         logger.info(f"选品表: {selection_table_path}")
         logger.info(f"AI标题生成: {'启用' if self.use_ai_titles else '禁用'}")
         logger.info(f"采集验证: {'启用' if enable_validation else '禁用'}")
         logger.info(f"妙手插件: {'启用' if enable_plugin_collection else '禁用'}")
         logger.info(
-            f"运行模式: {'简化模式（跳过Temu采集）' if skip_temu_collection else '完整模式'}"
+            f"运行模式: {'简化模式(跳过Temu采集)' if skip_temu_collection else '完整模式'}"
         )
         logger.info("=" * 100 + "\n")
 
@@ -183,7 +180,7 @@ class CollectionToEditWorkflow:
         try:
             # ========== 阶段0: 读取选品表 ==========
             logger.info("▶" * 50)
-            logger.info("【阶段0/5】读取Excel选品表")
+            logger.info("[阶段0/5]读取Excel选品表")
             logger.info("▶" * 50 + "\n")
 
             products = self.table_reader.read_excel(selection_table_path)
@@ -192,13 +189,13 @@ class CollectionToEditWorkflow:
             if len(products) == 0:
                 raise ValueError("选品表中没有有效产品")
 
-            logger.success(f"✓ 阶段0完成：读取 {len(products)} 个产品\n")
+            logger.success(f"✓ 阶段0完成:读取 {len(products)} 个产品\n")
             result["stages"]["stage0"] = {"products_count": len(products)}
 
-            # ========== 简化模式：跳过Temu采集 ==========
+            # ========== 简化模式:跳过Temu采集 ==========
             if skip_temu_collection:
                 logger.info("=" * 100)
-                logger.info("⏭️  【简化模式】跳过阶段1-2: Temu采集")
+                logger.info("⏭️  [简化模式]跳过阶段1-2: Temu采集")
                 logger.info("=" * 100)
                 logger.info("ℹ️  假设商品已通过妙手插件手动采集到采集箱")
                 logger.info("ℹ️  将直接从妙手采集箱读取并编辑商品")
@@ -209,12 +206,12 @@ class CollectionToEditWorkflow:
 
                 # 直接跳到阶段3
             else:
-                # ========== 阶段1: Temu采集（SOP步骤1-3） ==========
+                # ========== 阶段1: Temu采集(SOP步骤1-3) ==========
                 stage1_result = await self._stage_collect_from_temu(page, products)
                 result["stages"]["stage1"] = stage1_result
 
                 if not stage1_result["success"]:
-                    raise RuntimeError("阶段1失败：Temu采集失败")
+                    raise RuntimeError("阶段1失败:Temu采集失败")
 
                 result["summary"]["collected_products"] = stage1_result["success_count"]
 
@@ -222,7 +219,7 @@ class CollectionToEditWorkflow:
                 if save_intermediate_results:
                     self._save_intermediate_result("stage1_collection", stage1_result)
 
-                # ========== 阶段2: 添加到妙手（关键衔接点） ==========
+                # ========== 阶段2: 添加到妙手(关键衔接点) ==========
                 if enable_plugin_collection:
                     stage2_result = await self._stage_add_to_miaoshou(
                         page, stage1_result["collected_links"]
@@ -230,28 +227,28 @@ class CollectionToEditWorkflow:
                     result["stages"]["stage2"] = stage2_result
 
                     if not stage2_result["success"]:
-                        logger.warning("⚠️  阶段2警告：部分商品未能添加到妙手")
+                        logger.warning("⚠️  阶段2警告:部分商品未能添加到妙手")
                         logger.warning(
                             f"   成功: {stage2_result['success_count']}/{stage2_result['total']}"
                         )
 
-                        # 如果完全失败，提示用户手动操作
+                        # 如果完全失败,提示用户手动操作
                         if stage2_result["success_count"] == 0:
-                            logger.error("✗ 阶段2失败：无法自动添加到妙手采集箱")
-                            logger.info("💡 请手动完成以下操作：")
+                            logger.error("✗ 阶段2失败:无法自动添加到妙手采集箱")
+                            logger.info("💡 请手动完成以下操作:")
                             logger.info("   1. 打开Temu商品详情页")
                             logger.info("   2. 点击妙手插件的「采集商品」按钮")
                             logger.info("   3. 确认商品已添加到妙手采集箱")
                             logger.info("   4. 完成后按Enter继续...")
                             # input()  # 等待用户手动操作
-                            # 注意：在自动化测试中应该跳过此步骤
+                            # 注意:在自动化测试中应该跳过此步骤
 
                     result["summary"]["added_to_miaoshou"] = stage2_result["success_count"]
 
                     if save_intermediate_results:
                         self._save_intermediate_result("stage2_add_to_miaoshou", stage2_result)
                 else:
-                    logger.info("⏭️  跳过阶段2：妙手插件采集已禁用")
+                    logger.info("⏭️  跳过阶段2:妙手插件采集已禁用")
                     result["stages"]["stage2"] = {"skipped": True}
 
             # ========== 阶段3: 导航到妙手采集箱 ==========
@@ -261,9 +258,9 @@ class CollectionToEditWorkflow:
             result["stages"]["stage3"] = stage3_result
 
             if not stage3_result["success"]:
-                raise RuntimeError("阶段3失败：无法导航到妙手采集箱")
+                raise RuntimeError("阶段3失败:无法导航到妙手采集箱")
 
-            # ========== 阶段4: 验证采集结果（可选） ==========
+            # ========== 阶段4: 验证采集结果(可选) ==========
             if enable_validation:
                 stage4_result = await self._stage_verify_collection(
                     page,
@@ -273,19 +270,19 @@ class CollectionToEditWorkflow:
                 result["stages"]["stage4"] = stage4_result
 
                 if not stage4_result["success"]:
-                    logger.warning("⚠️  阶段4警告：采集结果验证未通过")
+                    logger.warning("⚠️  阶段4警告:采集结果验证未通过")
             else:
-                logger.info("⏭️  跳过阶段4：采集验证已禁用\n")
+                logger.info("⏭️  跳过阶段4:采集验证已禁用\n")
                 result["stages"]["stage4"] = {"skipped": True}
 
-            # ========== 阶段5: 首次编辑（SOP步骤4） ==========
+            # ========== 阶段5: 首次编辑(SOP步骤4) ==========
             stage5_result = await self._stage_first_edit(
                 page, products, skip_temu_collection=skip_temu_collection
             )
             result["stages"]["stage5"] = stage5_result
 
             if not stage5_result["success"]:
-                raise RuntimeError("阶段5失败：首次编辑失败")
+                raise RuntimeError("阶段5失败:首次编辑失败")
 
             result["summary"]["edited_products"] = stage5_result["edited_count"]
 
@@ -315,15 +312,15 @@ class CollectionToEditWorkflow:
             return result
 
     async def _stage_collect_from_temu(
-        self, page: Page, products: List[ProductSelectionRow]
-    ) -> Dict:
-        """阶段1: Temu采集（SOP步骤1-3）.
+        self, page: Page, products: list[ProductSelectionRow]
+    ) -> dict:
+        """阶段1: Temu采集(SOP步骤1-3).
 
-        执行完整的Temu商品采集流程。
-        注意：此方法需要在新tab中打开Temu前端。
+        执行完整的Temu商品采集流程.
+        注意:此方法需要在新tab中打开Temu前端.
         """
         logger.info("\n" + "▶" * 50)
-        logger.info("【阶段1/5】Temu商品采集（SOP步骤1-3）")
+        logger.info("[阶段1/5]Temu商品采集(SOP步骤1-3)")
         logger.info("▶" * 50 + "\n")
 
         result = {
@@ -372,10 +369,10 @@ class CollectionToEditWorkflow:
                         if len(links) > 0:
                             result["success_count"] += 1
                             result["collected_links"].extend([link["url"] for link in links])
-                            logger.success(f"✓ 产品 {i + 1} 采集成功：{len(links)} 个链接\n")
+                            logger.success(f"✓ 产品 {i + 1} 采集成功:{len(links)} 个链接\n")
                         else:
                             result["failed_count"] += 1
-                            logger.error(f"✗ 产品 {i + 1} 采集失败：未获取到链接\n")
+                            logger.error(f"✗ 产品 {i + 1} 采集失败:未获取到链接\n")
 
                     except Exception as e:
                         logger.error(f"✗ 产品 {i + 1} 采集异常: {e}\n")
@@ -391,7 +388,7 @@ class CollectionToEditWorkflow:
 
             logger.info("=" * 80)
             logger.success(
-                f"✓ 阶段1完成：成功采集 {result['success_count']}/{len(products)} 个产品"
+                f"✓ 阶段1完成:成功采集 {result['success_count']}/{len(products)} 个产品"
             )
             logger.info(f"  总链接数: {len(result['collected_links'])}")
             logger.info("=" * 80 + "\n")
@@ -404,13 +401,13 @@ class CollectionToEditWorkflow:
             result["errors"].append(str(e))
             return result
 
-    async def _stage_add_to_miaoshou(self, page: Page, product_urls: List[str]) -> Dict:
-        """阶段2: 添加到妙手采集箱（关键衔接点）.
+    async def _stage_add_to_miaoshou(self, page: Page, product_urls: list[str]) -> dict:
+        """阶段2: 添加到妙手采集箱(关键衔接点).
 
-        使用妙手插件将Temu商品添加到妙手ERP采集箱。
+        使用妙手插件将Temu商品添加到妙手ERP采集箱.
         """
         logger.info("\n" + "▶" * 50)
-        logger.info("【阶段2/5】添加到妙手采集箱（关键衔接）")
+        logger.info("[阶段2/5]添加到妙手采集箱(关键衔接)")
         logger.info("▶" * 50 + "\n")
 
         try:
@@ -423,10 +420,10 @@ class CollectionToEditWorkflow:
             logger.info("=" * 80)
             if result["success"]:
                 logger.success(
-                    f"✓ 阶段2完成：成功添加 {result['success_count']}/{result['total']} 个商品到妙手"
+                    f"✓ 阶段2完成:成功添加 {result['success_count']}/{result['total']} 个商品到妙手"
                 )
             else:
-                logger.warning(f"⚠️  阶段2警告：添加到妙手失败")
+                logger.warning("⚠️  阶段2警告:添加到妙手失败")
             logger.info("=" * 80 + "\n")
 
             return result
@@ -441,14 +438,14 @@ class CollectionToEditWorkflow:
             }
 
     async def _stage_navigate_to_collection_box(
-        self, page: Page, filter_by_user: Optional[str] = None
-    ) -> Dict:
+        self, page: Page, filter_by_user: str | None = None
+    ) -> dict:
         """阶段3: 导航到妙手采集箱.
 
-        切换到妙手ERP并导航到公用采集箱。
+        切换到妙手ERP并导航到公用采集箱.
         """
         logger.info("\n" + "▶" * 50)
-        logger.info("【阶段3/5】导航到妙手采集箱")
+        logger.info("[阶段3/5]导航到妙手采集箱")
         logger.info("▶" * 50 + "\n")
 
         try:
@@ -459,9 +456,9 @@ class CollectionToEditWorkflow:
             result = {"success": success, "filter_by_user": filter_by_user}
 
             if success:
-                logger.success("✓ 阶段3完成：成功导航到妙手采集箱\n")
+                logger.success("✓ 阶段3完成:成功导航到妙手采集箱\n")
             else:
-                logger.error("✗ 阶段3失败：导航失败\n")
+                logger.error("✗ 阶段3失败:导航失败\n")
 
             return result
 
@@ -470,14 +467,14 @@ class CollectionToEditWorkflow:
             return {"success": False, "error": str(e)}
 
     async def _stage_verify_collection(
-        self, page: Page, expected_count: int, product_keywords: List[str]
-    ) -> Dict:
-        """阶段4: 验证采集结果（可选）.
+        self, page: Page, expected_count: int, product_keywords: list[str]
+    ) -> dict:
+        """阶段4: 验证采集结果(可选).
 
-        验证妙手采集箱中的商品是否正确。
+        验证妙手采集箱中的商品是否正确.
         """
         logger.info("\n" + "▶" * 50)
-        logger.info("【阶段4/5】验证采集结果")
+        logger.info("[阶段4/5]验证采集结果")
         logger.info("▶" * 50 + "\n")
 
         try:
@@ -489,9 +486,9 @@ class CollectionToEditWorkflow:
             )
 
             if result["success"]:
-                logger.success("✓ 阶段4完成：采集结果验证通过\n")
+                logger.success("✓ 阶段4完成:采集结果验证通过\n")
             else:
-                logger.warning("⚠️  阶段4警告：采集结果验证未通过\n")
+                logger.warning("⚠️  阶段4警告:采集结果验证未通过\n")
 
             return result
 
@@ -500,23 +497,23 @@ class CollectionToEditWorkflow:
             return {"success": False, "error": str(e)}
 
     async def _stage_first_edit(
-        self, page: Page, products: List[ProductSelectionRow], skip_temu_collection: bool = True
-    ) -> Dict:
-        """阶段5: 首次编辑（SOP步骤4）.
+        self, page: Page, products: list[ProductSelectionRow], skip_temu_collection: bool = True
+    ) -> dict:
+        """阶段5: 首次编辑(SOP步骤4).
 
-        执行妙手采集箱中5个产品的首次编辑。
+        执行妙手采集箱中5个产品的首次编辑.
 
         Args:
             page: 页面对象
-            products: 选品表产品列表（使用真实Excel数据）
+            products: 选品表产品列表(使用真实Excel数据)
             skip_temu_collection: 是否为简化模式
         """
         logger.info("\n" + "▶" * 50)
-        logger.info("【阶段5/5】首次编辑（SOP步骤4）")
+        logger.info("[阶段5/5]首次编辑(SOP步骤4)")
         logger.info("▶" * 50 + "\n")
 
         try:
-            # 构建产品数据（使用Excel真实数据）
+            # 构建产品数据(使用Excel真实数据)
             products_data = []
             for i, product in enumerate(products[:5]):  # 取前5个
                 product_data = {
@@ -537,19 +534,19 @@ class CollectionToEditWorkflow:
                     )
                 logger.info("")
 
-            # 执行首次编辑（不包括认领）
+            # 执行首次编辑(不包括认领)
             result = await self.five_to_twenty.execute(
                 page,
                 products_data if products_data else None,
-                claim_times=0,  # 暂时不执行认领，只做首次编辑
+                claim_times=0,  # 暂时不执行认领,只做首次编辑
             )
 
             if result.get("edited_count", 0) > 0:
                 logger.success(
-                    f"✓ 阶段5完成：成功编辑 {result['edited_count']}/{len(products_data) if products_data else 5} 个产品\n"
+                    f"✓ 阶段5完成:成功编辑 {result['edited_count']}/{len(products_data) if products_data else 5} 个产品\n"
                 )
             else:
-                logger.error("✗ 阶段5失败：首次编辑失败\n")
+                logger.error("✗ 阶段5失败:首次编辑失败\n")
 
             return result
 
@@ -557,7 +554,7 @@ class CollectionToEditWorkflow:
             logger.error(f"阶段5失败: {e}")
             return {"success": False, "edited_count": 0, "error": str(e)}
 
-    def _save_intermediate_result(self, stage_name: str, result: Dict) -> str:
+    def _save_intermediate_result(self, stage_name: str, result: dict) -> str:
         """保存中间结果到文件.
 
         Args:
@@ -577,7 +574,7 @@ class CollectionToEditWorkflow:
         logger.debug(f"中间结果已保存: {filepath}")
         return str(filepath)
 
-    def _save_final_report(self, result: Dict) -> str:
+    def _save_final_report(self, result: dict) -> str:
         """保存最终报告.
 
         Args:
@@ -596,14 +593,14 @@ class CollectionToEditWorkflow:
         logger.info(f"\n📄 完整报告已保存: {filepath}")
         return str(filepath)
 
-    def _display_final_summary(self, result: Dict) -> None:
+    def _display_final_summary(self, result: dict) -> None:
         """显示最终总结.
 
         Args:
             result: 完整结果数据
         """
         logger.info("\n" + "=" * 100)
-        logger.info(" " * 35 + "【执行总结】")
+        logger.info(" " * 35 + "[执行总结]")
         logger.info("=" * 100)
 
         summary = result["summary"]
@@ -620,7 +617,7 @@ class CollectionToEditWorkflow:
         logger.info(f"执行时间: {duration:.1f}秒")
 
         if result["success"]:
-            logger.success("\n✅ 工作流执行成功！")
+            logger.success("\n✅ 工作流执行成功!")
         else:
             logger.error("\n❌ 工作流执行失败")
             if result["errors"]:

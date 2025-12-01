@@ -16,14 +16,14 @@ from .base import TIMEOUTS, FirstEditBase
 
 
 class FirstEditDialogMixin(FirstEditBase):
-    """封装首次编辑弹窗的等待、保存与关闭逻辑。"""
+    """封装首次编辑弹窗的等待,保存与关闭逻辑."""
 
     async def wait_for_dialog(self, page: Page, timeout: int = 3000) -> bool:
         """等待首次编辑弹窗打开.
 
         Args:
             page: Playwright 页面对象.
-            timeout: 等待弹窗的超时时间（毫秒），默认为 3000ms.
+            timeout: 等待弹窗的超时时间(毫秒),默认为 3000ms.
 
         Returns:
             弹窗是否在超时时间内成功打开.
@@ -94,11 +94,11 @@ class FirstEditDialogMixin(FirstEditBase):
                                 logger.warning("修改已保存但弹窗仍打开({} 个)", dialog_count)
                         except Exception as inner_exc:
                             logger.warning("第二次检查弹窗状态时出错: {}", inner_exc)
-                            logger.success("修改已保存，弹窗状态未知")
+                            logger.success("修改已保存,弹窗状态未知")
 
                 except Exception as exc:
                     logger.warning("检查弹窗状态时出错: {}", exc)
-                    logger.success("修改已保存，弹窗状态检查失败")
+                    logger.success("修改已保存,弹窗状态检查失败")
             else:
                 logger.success("修改已保存")
 
@@ -243,7 +243,7 @@ class FirstEditDialogMixin(FirstEditBase):
     async def _close_message_boxes(self, page: Page) -> None:
         """关闭所有遮挡的消息框.
 
-        这些消息框可能出现在编辑弹窗上方并阻止点击操作。
+        这些消息框可能出现在编辑弹窗上方并阻止点击操作.
         常见类型:
         - .jx-overlay-message-box (确认/提示消息)
         - 保存成功提示
@@ -264,7 +264,7 @@ class FirstEditDialogMixin(FirstEditBase):
             if count == 0:
                 return
 
-            logger.debug("检测到 {} 个遮挡消息框，尝试关闭", count)
+            logger.debug("检测到 {} 个遮挡消息框,尝试关闭", count)
 
             close_selectors = [
                 ".jx-overlay-message-box button.jx-message-box__headerbtn",
@@ -290,7 +290,7 @@ class FirstEditDialogMixin(FirstEditBase):
                     )
                 return
 
-            logger.debug("未找到消息框按钮，尝试发送 Escape")
+            logger.debug("未找到消息框按钮,尝试发送 Escape")
             with suppress(Exception):
                 await page.keyboard.press("Escape")
                 with suppress(Exception):
@@ -299,4 +299,4 @@ class FirstEditDialogMixin(FirstEditBase):
                     )
 
         except Exception as exc:
-            logger.debug(f"关闭消息框异常（可忽略）: {exc}")
+            logger.debug(f"关闭消息框异常(可忽略): {exc}")

@@ -12,11 +12,9 @@
   - 内部: src.core.retry_handler
 """
 
-import asyncio
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
-
 from src.core.retry_handler import (
     ConfigurationError,
     ElementNotFoundError,
@@ -122,7 +120,7 @@ class TestRetryConfig:
         """测试延迟不超过最大值"""
         config = RetryConfig(initial_delay=10.0, backoff_factor=3.0, max_delay=30.0)
 
-        # 第3次尝试: 10 * 3^2 = 90，但最大30
+        # 第3次尝试: 10 * 3^2 = 90,但最大30
         assert config.get_delay(3) == 30.0
 
     def test_retryable_exceptions_default(self):
@@ -214,7 +212,7 @@ class TestRetryHandler:
         result = await handler.execute(mock_func, cleanup_func=cleanup)
 
         assert result == "success"
-        # 清理函数应该在每次重试前调用（共2次）
+        # 清理函数应该在每次重试前调用(共2次)
         assert len(cleanup_called) == 2
 
     @pytest.mark.asyncio

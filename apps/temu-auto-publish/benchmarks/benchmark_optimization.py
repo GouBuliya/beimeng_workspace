@@ -26,35 +26,34 @@ import statistics
 import sys
 import tempfile
 import time
+from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Awaitable, Callable
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 # 添加项目路径
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.core.enhanced_retry import (
-    EnhancedRetryHandler,
-    RetryPolicy,
-    RetryOutcome,
-    smart_retry,
-)
-from src.core.checkpoint_manager import (
-    CheckpointManager,
-    WorkflowCheckpoint,
-    StageCheckpoint,
-)
-from src.browser.smart_wait_mixin import (
-    SmartWaitMixin,
-    AdaptiveWaitConfig,
-    WaitMetrics,
-)
 from src.browser.resilient_selector import (
     ResilientLocator,
     SelectorChain,
     SelectorHitMetrics,
+)
+from src.browser.smart_wait_mixin import (
+    SmartWaitMixin,
+    WaitMetrics,
+)
+from src.core.checkpoint_manager import (
+    CheckpointManager,
+    StageCheckpoint,
+    WorkflowCheckpoint,
+)
+from src.core.enhanced_retry import (
+    EnhancedRetryHandler,
+    RetryPolicy,
+    smart_retry,
 )
 from src.core.retry_handler import RetryableError
 
@@ -218,7 +217,7 @@ class BenchmarkRunner:
         # 正式测试
         times_ms: list[float] = []
 
-        for i in range(self.iterations):
+        for _i in range(self.iterations):
             if setup:
                 setup()
 
@@ -285,7 +284,7 @@ class BenchmarkRunner:
 async def benchmark_enhanced_retry(runner: BenchmarkRunner) -> None:
     """增强重试机制基准测试"""
 
-    # 测试1: 成功执行（无重试）
+    # 测试1: 成功执行(无重试)
     async def success_func():
         return "success"
 
@@ -423,7 +422,7 @@ async def benchmark_smart_wait(runner: BenchmarkRunner) -> None:
     mock_page = create_mock_page()
     mixin = SmartWaitMixin()
 
-    # 测试1: 自适应等待（无网络/DOM检测）
+    # 测试1: 自适应等待(无网络/DOM检测)
     await runner.run_async_benchmark(
         name="SmartWait - 自适应等待(最小等待)",
         func=lambda: mixin.adaptive_wait(
@@ -499,13 +498,13 @@ async def benchmark_resilient_selector(runner: BenchmarkRunner) -> None:
     mock_page = create_mock_page()
     locator = ResilientLocator()
 
-    # 测试1: 元素定位（主选择器成功）
+    # 测试1: 元素定位(主选择器成功)
     await runner.run_async_benchmark(
         name="ResilientLocator - 定位元素(主选择器)",
         func=lambda: locator.locate(mock_page, "claim_button", timeout=1000),
     )
 
-    # 测试2: 元素定位（降级场景）
+    # 测试2: 元素定位(降级场景)
     from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
     call_count = 0
@@ -543,7 +542,7 @@ async def benchmark_resilient_selector(runner: BenchmarkRunner) -> None:
 
     # 测试5: 注册选择器链
     custom_chain = SelectorChain(
-        key=f"bench_chain",
+        key="bench_chain",
         primary="#primary",
         fallbacks=["#fallback1", "#fallback2"],
     )
@@ -583,7 +582,7 @@ async def benchmark_resilient_selector(runner: BenchmarkRunner) -> None:
 
 
 async def benchmark_comparison(runner: BenchmarkRunner) -> None:
-    """对比测试：优化组件 vs 传统方法"""
+    """对比测试:优化组件 vs 传统方法"""
 
     # 对比1: 智能等待 vs 固定等待
     print("\n[COMPARE] 对比测试: 智能等待 vs 固定等待")
@@ -597,7 +596,7 @@ async def benchmark_comparison(runner: BenchmarkRunner) -> None:
         func=fixed_wait,
     )
 
-    # 智能等待（最小等待）
+    # 智能等待(最小等待)
     mock_page = MagicMock()
     mock_page.wait_for_load_state = AsyncMock()
     mock_page.evaluate = AsyncMock(return_value=(100, 10))
@@ -682,7 +681,7 @@ def print_summary(suite: BenchmarkSuite) -> None:
         groups[group].append(r)
 
     for group_name, results in groups.items():
-        print(f"\n【{group_name}】")
+        print(f"\n[{group_name}]")
         for r in results:
             print(f"  {r.name}")
             print(
@@ -707,7 +706,7 @@ def print_summary(suite: BenchmarkSuite) -> None:
 async def main():
     """主函数"""
 
-    # 设置控制台编码（Windows）
+    # 设置控制台编码(Windows)
     import io
 
     if sys.platform == "win32":

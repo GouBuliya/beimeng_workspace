@@ -25,7 +25,6 @@ import os
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
 
 import typer
 import yaml
@@ -42,7 +41,6 @@ from config.settings import settings
 from src.browser.login_controller import LoginController
 from src.core.health_checker import get_health_checker
 from src.core.notification_service import (
-    NotificationMessage,
     WorkflowResult,
     configure_notifications,
     get_notification_service,
@@ -82,8 +80,8 @@ class ProductionRunner:
         self,
         input_path: Path,
         input_type: str,
-        config_path: Optional[Path] = None,
-        staff_name: Optional[str] = None,
+        config_path: Path | None = None,
+        staff_name: str | None = None,
         enable_batch_edit: bool = True,
         enable_publish: bool = True,
         use_ai_titles: bool = True,
@@ -121,13 +119,13 @@ class ProductionRunner:
             configure_notifications(self.config["notification"])
 
         # 运行器状态
-        self.login_controller: Optional[LoginController] = None
+        self.login_controller: LoginController | None = None
         self.workflow_id: str = f"workflow_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-        self.start_time: Optional[datetime] = None
+        self.start_time: datetime | None = None
 
         logger.info(f"生产环境运行器已初始化 (工作流ID: {self.workflow_id})")
 
-    def _load_config(self) -> Dict:
+    def _load_config(self) -> dict:
         """加载配置文件.
 
         Returns:
@@ -138,7 +136,7 @@ class ProductionRunner:
             return {}
 
         try:
-            with open(self.config_path, "r", encoding="utf-8") as f:
+            with open(self.config_path, encoding="utf-8") as f:
                 config = yaml.safe_load(f)
             logger.info(f"✓ 已加载配置文件: {self.config_path}")
             return config or {}
@@ -146,7 +144,7 @@ class ProductionRunner:
             logger.error(f"加载配置文件失败: {e}")
             return {}
 
-    async def load_input_data(self) -> List[Dict]:
+    async def load_input_data(self) -> list[dict]:
         """加载输入数据.
 
         Returns:
@@ -156,7 +154,7 @@ class ProductionRunner:
             FileNotFoundError: 输入文件不存在
             ValueError: 输入数据格式错误
         """
-        console.print(f"\n[bold cyan]📂 加载输入数据...[/bold cyan]")
+        console.print("\n[bold cyan]📂 加载输入数据...[/bold cyan]")
 
         if not self.input_path.exists():
             raise FileNotFoundError(f"输入文件不存在: {self.input_path}")
@@ -183,9 +181,9 @@ class ProductionRunner:
 
             console.print(f"[green]✓[/green] 已从Excel加载 {len(products_data)} 个产品")
 
-            # SOP工作流每次处理5个产品，如果超过5个，只取前5个
+            # SOP工作流每次处理5个产品,如果超过5个,只取前5个
             if len(products_data) > 5:
-                console.print(f"[yellow]⚠[/yellow] 产品数量超过5个，本次只处理前5个产品")
+                console.print("[yellow]⚠[/yellow] 产品数量超过5个,本次只处理前5个产品")
                 console.print(f"   剩余 {len(products_data) - 5} 个产品将在后续批次处理")
                 products_data = products_data[:5]
 
@@ -193,7 +191,7 @@ class ProductionRunner:
 
         elif self.input_type == "json":
             # 读取JSON文件
-            with open(self.input_path, "r", encoding="utf-8") as f:
+            with open(self.input_path, encoding="utf-8") as f:
                 data = json.load(f)
 
             # 支持两种JSON格式
@@ -236,7 +234,7 @@ class ProductionRunner:
         with Progress(
             SpinnerColumn(), TextColumn("[progress.description]{task.description}"), console=console
         ) as progress:
-            task = progress.add_task("检查中...", total=None)
+            progress.add_task("检查中...", total=None)
 
             health_result = await health_checker.check_all(include_network=True)
 
@@ -282,7 +280,7 @@ class ProductionRunner:
                 console.print("[red]→[/red] 中止执行")
                 return False
 
-    async def execute_workflow(self, products_data: List[Dict]) -> Dict:
+    async def execute_workflow(self, products_data: list[dict]) -> dict:
         """执行完整工作流.
 
         Args:
@@ -336,20 +334,18 @@ class ProductionRunner:
             logger.exception("详细错误:")
             return {"success": False, "error": str(e)}
 
-    async def post_execution_actions(self, result: Dict):
+    async def post_execution_actions(self, result: dict):
         """执行后操作.
 
         Args:
             result: 工作流执行结果
         """
         # 1. 发送通知
-        if self.config.get("notification", {}).get("triggers", {}).get("on_success") and result.get(
+        if (self.config.get("notification", {}).get("triggers", {}).get("on_success") and result.get(
             "success"
-        ):
-            await self._send_notification(result)
-        elif self.config.get("notification", {}).get("triggers", {}).get(
+        )) or (self.config.get("notification", {}).get("triggers", {}).get(
             "on_failure"
-        ) and not result.get("success"):
+        ) and not result.get("success")):
             await self._send_notification(result)
 
         # 2. 保存结果
@@ -358,7 +354,7 @@ class ProductionRunner:
         # 3. 清理临时文件(可选)
         # TODO: 实现临时文件清理
 
-    async def _send_notification(self, result: Dict):
+    async def _send_notification(self, result: dict):
         """发送通知.
 
         Args:
@@ -406,7 +402,7 @@ class ProductionRunner:
             logger.error(f"发送通知失败: {e}")
             console.print(f"[yellow]⚠[/yellow] 通知发送失败: {e}")
 
-    async def _save_result(self, result: Dict):
+    async def _save_result(self, result: dict):
         """保存执行结果.
 
         Args:
@@ -460,7 +456,7 @@ class ProductionRunner:
         self.start_time = datetime.now()
 
         console.print(f"\n[bold blue]{'=' * 60}[/bold blue]")
-        console.print(f"[bold blue]Temu自动发布系统 - 生产环境[/bold blue]")
+        console.print("[bold blue]Temu自动发布系统 - 生产环境[/bold blue]")
         console.print(f"[bold blue]{'=' * 60}[/bold blue]")
         console.print(f"\n工作流ID: {self.workflow_id}")
         console.print(f"开始时间: {self.start_time.strftime('%Y-%m-%d %H:%M:%S')}")
@@ -472,7 +468,7 @@ class ProductionRunner:
         console.print(f"发布: {'✓ 启用' if self.enable_publish else '✗ 禁用'}")
         console.print(f"AI标题: {'✓ 启用' if self.use_ai_titles else '✗ 禁用'}")
         if self.dry_run:
-            console.print(f"[yellow]模式: DRY-RUN (不会实际执行)[/yellow]")
+            console.print("[yellow]模式: DRY-RUN (不会实际执行)[/yellow]")
 
         try:
             # 1. 健康检查
@@ -494,16 +490,16 @@ class ProductionRunner:
             duration = (end_time - self.start_time).total_seconds()
 
             console.print(f"\n[bold blue]{'=' * 60}[/bold blue]")
-            console.print(f"[bold blue]执行完成[/bold blue]")
+            console.print("[bold blue]执行完成[/bold blue]")
             console.print(f"[bold blue]{'=' * 60}[/bold blue]")
             console.print(f"\n结束时间: {end_time.strftime('%Y-%m-%d %H:%M:%S')}")
             console.print(f"总耗时: {int(duration // 60)}分{int(duration % 60)}秒")
 
             if result.get("success"):
-                console.print(f"[green]✓ 执行成功![/green]")
+                console.print("[green]✓ 执行成功![/green]")
                 return 0
             else:
-                console.print(f"[red]✗ 执行失败[/red]")
+                console.print("[red]✗ 执行失败[/red]")
                 if "error" in result:
                     console.print(f"错误: {result['error']}")
                 return 1
@@ -530,13 +526,13 @@ app = typer.Typer(help="Temu自动发布系统 - 生产环境主脚本")
 @app.command()
 def run(
     input_file: Path = typer.Argument(..., help="输入文件路径(Excel或JSON)"),
-    input_type: Optional[str] = typer.Option(
+    input_type: str | None = typer.Option(
         None, "--type", "-t", help="输入类型(excel/json),不指定则根据文件扩展名自动判断"
     ),
-    config: Optional[Path] = typer.Option(
+    config: Path | None = typer.Option(
         None, "--config", "-c", help="配置文件路径(默认: config/production.yaml)"
     ),
-    staff_name: Optional[str] = typer.Option(
+    staff_name: str | None = typer.Option(
         None, "--staff-name", "-s", help="人员名称(用于筛选采集箱中的产品)"
     ),
     batch_edit: bool = typer.Option(True, "--batch-edit/--no-batch-edit", help="是否启用批量编辑"),
@@ -573,7 +569,7 @@ def run(
         elif suffix == ".json":
             input_type = "json"
         else:
-            console.print(f"[red]✗ 无法判断输入类型,请使用--type指定[/red]")
+            console.print("[red]✗ 无法判断输入类型,请使用--type指定[/red]")
             raise typer.Exit(1)
 
     # 创建运行器

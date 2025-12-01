@@ -11,8 +11,8 @@
   - 内部: browser_mock
 """
 
-from typing import Any, Dict, List, Optional
-from unittest.mock import AsyncMock, MagicMock
+from typing import Any
+from unittest.mock import MagicMock
 
 from .browser_mock import MockBrowserManager, MockPage
 
@@ -50,7 +50,7 @@ class MockLoginController:
         """检查登录状态"""
         return self._is_logged_in
 
-    def _load_selectors(self) -> Dict:
+    def _load_selectors(self) -> dict:
         """加载选择器"""
         return {}
 
@@ -61,7 +61,7 @@ class MockMiaoshouController:
     def __init__(self, success: bool = True):
         self._success = success
         self.selectors = {}
-        self.call_history: List[Dict] = []
+        self.call_history: list[dict] = []
 
     async def navigate_to_collection_box(self, page: MockPage) -> bool:
         """模拟导航到采集箱"""
@@ -78,7 +78,7 @@ class MockMiaoshouController:
         self.call_history.append({"method": "claim_product", "product_index": product_index})
         return self._success
 
-    async def select_products(self, page: MockPage, count: int = 5) -> List[Dict]:
+    async def select_products(self, page: MockPage, count: int = 5) -> list[dict]:
         """模拟选择产品"""
         self.call_history.append({"method": "select_products", "count": count})
         return [{"id": i, "name": f"Product {i}"} for i in range(count)]
@@ -90,11 +90,11 @@ class MockBatchEditController:
     def __init__(self, success: bool = True):
         self._success = success
         self.selectors = {}
-        self.executed_steps: List[str] = []
+        self.executed_steps: list[str] = []
 
     async def execute_batch_edit_steps(
-        self, page: MockPage, products_data: List[Dict]
-    ) -> Dict[str, Any]:
+        self, page: MockPage, products_data: list[dict]
+    ) -> dict[str, Any]:
         """模拟执行批量编辑步骤"""
         self.executed_steps = [f"step_{i:02d}" for i in range(1, 19)]
         return {
@@ -133,7 +133,7 @@ class MockPublishController:
 
     def __init__(self, success: bool = True):
         self._success = success
-        self.published_products: List[Dict] = []
+        self.published_products: list[dict] = []
 
     async def select_shop(self, page: MockPage, shop_name: str) -> bool:
         """模拟选择店铺"""
@@ -143,7 +143,7 @@ class MockPublishController:
         """模拟设置供货价"""
         return self._success
 
-    async def publish_products(self, page: MockPage, products: List[Dict]) -> Dict[str, Any]:
+    async def publish_products(self, page: MockPage, products: list[dict]) -> dict[str, Any]:
         """模拟发布产品"""
         self.published_products.extend(products)
         return {
@@ -159,9 +159,9 @@ class MockCollectionController:
 
     def __init__(self, success: bool = True):
         self._success = success
-        self.collected_products: List[Dict] = []
+        self.collected_products: list[dict] = []
 
-    async def search_products(self, page: MockPage, keyword: str, count: int = 5) -> List[Dict]:
+    async def search_products(self, page: MockPage, keyword: str, count: int = 5) -> list[dict]:
         """模拟搜索产品"""
         products = [
             {"id": i, "name": f"{keyword} Product {i}", "price": 100 + i * 10} for i in range(count)
@@ -169,7 +169,7 @@ class MockCollectionController:
         self.collected_products.extend(products)
         return products
 
-    async def collect_product(self, page: MockPage, product_data: Dict) -> bool:
+    async def collect_product(self, page: MockPage, product_data: dict) -> bool:
         """模拟采集产品"""
         if self._success:
             self.collected_products.append(product_data)
@@ -181,7 +181,7 @@ class MockFirstEditController:
 
     def __init__(self, success: bool = True):
         self._success = success
-        self.edited_products: List[Dict] = []
+        self.edited_products: list[dict] = []
 
     async def open_edit_dialog(self, page: MockPage, product_index: int) -> bool:
         """模拟打开编辑弹窗"""
@@ -199,7 +199,7 @@ class MockFirstEditController:
         """模拟填写物流信息"""
         return self._success
 
-    async def complete_first_edit(self, page: MockPage, product_data: Dict) -> Dict[str, Any]:
+    async def complete_first_edit(self, page: MockPage, product_data: dict) -> dict[str, Any]:
         """模拟完成首次编辑"""
         self.edited_products.append(product_data)
         return {"success": self._success, "product": product_data}
@@ -210,17 +210,17 @@ class MockCookieManager:
 
     def __init__(self, valid: bool = True):
         self._valid = valid
-        self._cookies: List[Dict] = []
+        self._cookies: list[dict] = []
 
     def is_valid(self) -> bool:
         """检查Cookie是否有效"""
         return self._valid
 
-    def update(self, cookies: List[Dict]) -> None:
+    def update(self, cookies: list[dict]) -> None:
         """更新Cookies"""
         self._cookies = cookies
 
-    def get(self) -> List[Dict]:
+    def get(self) -> list[dict]:
         """获取Cookies"""
         return self._cookies
 

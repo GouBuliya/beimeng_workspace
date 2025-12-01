@@ -11,7 +11,6 @@
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-
 from src.browser.resilient_selector import (
     ResilientLocator,
     SelectorChain,
@@ -217,7 +216,7 @@ class TestResilientLocator:
         # 应该记录降级选择器命中
         metrics = locator._metrics.get("claim_button")
         assert metrics is not None
-        assert 1 in metrics.hits  # 第二个选择器（索引1）命中
+        assert 1 in metrics.hits  # 第二个选择器(索引1)命中
 
     async def test_locate_all_failed(self, locator, mock_page):
         """测试所有选择器都失败"""
@@ -270,7 +269,7 @@ class TestResilientLocator:
         mock_loc.click.assert_called_once()
 
     async def test_click_locate_failed(self, locator, mock_page):
-        """测试点击失败（定位失败）"""
+        """测试点击失败(定位失败)"""
         from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
         mock_loc = MagicMock()
@@ -375,7 +374,7 @@ class TestResilientLocator:
 
         suggestions = locator.suggest_optimizations()
 
-        # 样本太少，不应该有建议
+        # 样本太少,不应该有建议
         assert len(suggestions) == 0
 
 

@@ -12,10 +12,7 @@
   - 内部: src.workflows.complete_publish_workflow
 """
 
-from dataclasses import dataclass
-from datetime import datetime
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -663,7 +660,7 @@ class TestCompletePublishWorkflowStages:
             return_value={"length": 30, "width": 20, "height": 10}
         )
 
-        outcome, products = await mock_workflow_instance._stage_first_edit(
+        outcome, _products = await mock_workflow_instance._stage_first_edit(
             mock_page, miaoshou_ctrl, first_edit_ctrl, [mock_selection]
         )
 
@@ -908,12 +905,12 @@ class TestCaptureHtmlSnapshot:
         mock_page = MagicMock()
         mock_page.content = AsyncMock(return_value="<html><body>Test</body></html>")
 
-        with patch("src.workflows.complete_publish_workflow.Path") as mock_path_cls:
+        with patch("src.workflows.complete_publish_workflow.Path"):
             mock_target_root = tmp_path / "debug" / "html"
             mock_target_root.mkdir(parents=True, exist_ok=True)
 
             # 需要更复杂的 mock 设置来处理 Path 操作
-            # 简化测试，只验证函数不抛出异常
+            # 简化测试,只验证函数不抛出异常
             await _capture_html_snapshot(mock_page, "test.html")
 
     @pytest.mark.asyncio
@@ -924,7 +921,7 @@ class TestCaptureHtmlSnapshot:
         mock_page = MagicMock()
         mock_page.content = AsyncMock(side_effect=Exception("Network error"))
 
-        # 应该不抛出异常，只记录警告
+        # 应该不抛出异常,只记录警告
         await _capture_html_snapshot(mock_page, "test.html")
 
 

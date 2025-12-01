@@ -1,15 +1,15 @@
 """
-@PURPOSE: Temu发布控制器，串联选择店铺、设置供货价、批量发布等步骤并保证流程稳定。
+@PURPOSE: Temu发布控制器,串联选择店铺,设置供货价,批量发布等步骤并保证流程稳定.
 @OUTLINE:
-  - class PublishController: 负责发布工作流、选择器加载与上下文复位
-  - def select_all_20_products(): 全选当前页 20 条商品，准备发布上下文
+  - class PublishController: 负责发布工作流,选择器加载与上下文复位
+  - def select_all_20_products(): 全选当前页 20 条商品,准备发布上下文
   - def select_shop(): 选择目标店铺或全选店铺并确认
   - def set_supply_price(): 打开供货价弹窗并按 SOP 配置公式
   - def batch_publish(): 批量发布并处理双重确认弹窗
   - def execute_publish_workflow(): 串联完整发布流程并返回结构化结果
 @GOTCHAS:
-  - 选择器依赖配置文件，缺失或失效时会启用兜底选择器并记录警告
-  - Playwright 操作需要等待可见且启用，必要时滚动到视口并重试
+  - 选择器依赖配置文件,缺失或失效时会启用兜底选择器并记录警告
+  - Playwright 操作需要等待可见且启用,必要时滚动到视口并重试
 @DEPENDENCIES:
   - 内部: data_processor.price_calculator.PriceCalculator, utils.selector_race.TIMEOUTS
   - 外部: playwright.async_api, loguru
@@ -19,12 +19,14 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from loguru import logger
-from playwright.async_api import Locator, Page, TimeoutError as PlaywrightTimeoutError
+from playwright.async_api import Locator, Page
+from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 from ..data_processor.price_calculator import PriceCalculator
 from ..utils.page_load_decorator import wait_dom_loaded
@@ -65,11 +67,11 @@ class PublishWorkflowResult:
 class PublishController:
     """Temu 发布控制器.
 
-    串联 SOP 步骤 8-10（选择店铺、设置供货价、批量发布），并在失败时提供清晰的日志与回退。
+    串联 SOP 步骤 8-10(选择店铺,设置供货价,批量发布),并在失败时提供清晰的日志与回退.
 
     Attributes:
         selectors: 选择器配置字典.
-        price_calculator: 价格计算器，用于日志/校验.
+        price_calculator: 价格计算器,用于日志/校验.
     Examples:
         >>> controller = PublishController()
         >>> await controller.select_shop(page, "测试店铺")
@@ -83,9 +85,9 @@ class PublishController:
         self.selectors = self._load_selectors()
         self.price_calculator = PriceCalculator()
         self._publish_context_ready = False
-        # 供货价功能暂时停用，避免 success 恒为 False
+        # 供货价功能暂时停用,避免 success 恒为 False
         self.enable_set_supply_price = False
-        logger.info(f"发布控制器初始化完成，选择器配置路径: {self.selector_path}")
+        logger.info(f"发布控制器初始化完成,选择器配置路径: {self.selector_path}")
 
     def _resolve_selector_path(self, selector_path: str) -> Path:
         """将选择器配置路径转换为绝对路径."""
@@ -100,7 +102,7 @@ class PublishController:
     def _load_selectors(self) -> dict[str, Any]:
         """加载选择器配置并做基本校验."""
         if not self.selector_path.exists():
-            logger.warning(f"选择器配置文件不存在，将使用兜底选择器: {self.selector_path}")
+            logger.warning(f"选择器配置文件不存在,将使用兜底选择器: {self.selector_path}")
             return {}
 
         try:
@@ -114,7 +116,7 @@ class PublishController:
             )
             return data
         except Exception as exc:  # pragma: no cover - 运行时保护
-            logger.error(f"加载选择器配置失败，将使用兜底选择器: {exc}")
+            logger.error(f"加载选择器配置失败,将使用兜底选择器: {exc}")
             return {}
 
     def _invalidate_publish_context(self) -> None:
@@ -133,7 +135,7 @@ class PublishController:
         return deduped
 
     def _get_selector_candidates(self, *entries: SelectorEntries) -> list[str]:
-        """展开配置与兜底选择器，自动去重."""
+        """展开配置与兜底选择器,自动去重."""
         candidates: list[str] = []
         for entry in entries:
             if entry is None:
@@ -148,7 +150,7 @@ class PublishController:
         return self._dedup_selectors(candidates)
 
     def _build_waiter(self, page: Page) -> PageWaiter:
-        """构造页面等待器，减少重复配置."""
+        """构造页面等待器,减少重复配置."""
 
         return PageWaiter(page)
 
@@ -164,7 +166,7 @@ class PublishController:
     ) -> str | None:
         """尝试依次点击第一个可见且可用的选择器.
 
-        性能优化说明：
+        性能优化说明:
         - visible_timeout_ms: 4000 -> 2000
         - click_timeout_ms: 3000 -> 1500
         - attempts: 3 -> 2
@@ -241,7 +243,7 @@ class PublishController:
             require_load_state=force or not self._publish_context_ready,
         )
         if not selected:
-            raise RuntimeError("全选商品失败，无法继续发布流程")
+            raise RuntimeError("全选商品失败,无法继续发布流程")
         self._publish_context_ready = True
 
     @ensure_dom_ready
@@ -253,7 +255,7 @@ class PublishController:
     ) -> bool:
         """全选当前页 20 条产品."""
 
-        logger.info("全选当前页产品（目标 20 条）...")
+        logger.info("全选当前页产品(目标 20 条)...")
         if require_load_state:
             await wait_dom_loaded(page, context="[select all 20]")
 
@@ -287,7 +289,7 @@ class PublishController:
 
     @ensure_dom_ready
     async def _reset_to_all_tab(self, page: Page) -> None:
-        """复位到「全部」TAB，确保后续操作在正确的列表."""
+        """复位到「全部」TAB,确保后续操作在正确的列表."""
 
         temu_tabs = self.selectors.get("temu_collect_box", {}).get("tabs", {}).get("all", [])
         collection_tabs = self.selectors.get("collection_box", {}).get("tabs", {}).get("all", [])
@@ -315,11 +317,11 @@ class PublishController:
         if clicked_selector:
             logger.info(f"已复位到「全部」TAB selector={clicked_selector}")
         else:
-            logger.warning("复位到「全部」TAB 失败，未找到可用的 TAB 按钮")
+            logger.warning("复位到「全部」TAB 失败,未找到可用的 TAB 按钮")
 
     @ensure_dom_ready
     async def select_shop(self, page: Page, shop_name: str | None = None) -> bool:
-        """选择店铺（SOP 步骤 8）."""
+        """选择店铺(SOP 步骤 8)."""
         logger.info("=" * 60)
         logger.info("[SOP 步骤 8] 选择店铺")
 
@@ -358,14 +360,14 @@ class PublishController:
                 logger.info(f"选择店铺: {normalized_name}")
                 target = page.get_by_text(normalized_name, exact=False).first
                 try:
-                    # 性能优化：减少店铺选择等待时间
+                    # 性能优化:减少店铺选择等待时间
                     await target.wait_for(state="visible", timeout=1500)
                     await target.click(timeout=1000)
                 except Exception as exc:
-                    logger.warning(f"定位店铺失败，将尝试全选店铺 name={normalized_name} err={exc}")
+                    logger.warning(f"定位店铺失败,将尝试全选店铺 name={normalized_name} err={exc}")
                     await self._select_all_shops(page)
             else:
-                logger.info("未指定店铺，直接全选所有店铺")
+                logger.info("未指定店铺,直接全选所有店铺")
                 await self._select_all_shops(page)
 
             await self._confirm_shop_selection(page)
@@ -400,7 +402,7 @@ class PublishController:
             logger.success(f"已全选所有店铺 selector={clicked_selector}")
             return
 
-        raise RuntimeError("未找到可用的“全选”选项，无法继续选择店铺")
+        raise RuntimeError("未找到可用的“全选”选项,无法继续选择店铺")
 
     @ensure_dom_ready
     async def _confirm_shop_selection(self, page: Page) -> None:
@@ -430,7 +432,7 @@ class PublishController:
             await page.keyboard.press("Enter")
             logger.info("已通过键盘 Enter 确认店铺选择")
         except Exception as exc:  # pragma: no cover - 运行时保护
-            raise RuntimeError("未能找到“确定/确认”按钮，无法确认店铺选择") from exc
+            raise RuntimeError("未能找到“确定/确认”按钮,无法确认店铺选择") from exc
 
     def _validate_products_data(
         self,
@@ -438,7 +440,7 @@ class PublishController:
     ) -> list[float]:
         """校验产品数据并提取成本价列表."""
         if not products_data:
-            raise ValueError("产品数据为空，无法计算供货价")
+            raise ValueError("产品数据为空,无法计算供货价")
 
         costs: list[float] = []
         for idx, product in enumerate(products_data):
@@ -455,7 +457,7 @@ class PublishController:
 
     @ensure_dom_ready
     async def _close_dialog_safely(self, page: Page) -> None:
-        """尝试关闭当前弹窗，避免阻塞后续流程."""
+        """尝试关闭当前弹窗,避免阻塞后续流程."""
 
         close_selectors = self._get_selector_candidates(
             "button:has-text('关闭')",
@@ -479,7 +481,7 @@ class PublishController:
         page: Page,
         products_data: Sequence[Mapping[str, Any]],
     ) -> bool:
-        """设置供货价（SOP 步骤 9）."""
+        """设置供货价(SOP 步骤 9)."""
         logger.info("=" * 60)
         logger.info("[SOP 步骤 9] 设置供货价")
         logger.info("=" * 60)
@@ -565,9 +567,9 @@ class PublishController:
         #     )
         #     if multiplier:
         #         await multiplier.fill("3")
-        #         logger.info("倍数输入框已填充 3（供货价 = 成本 × 7.5）")
+        #         logger.info("倍数输入框已填充 3(供货价 = 成本 × 7.5)")
         #     else:
-        #         logger.warning("未找到倍数输入框，将跳过倍数填充")
+        #         logger.warning("未找到倍数输入框,将跳过倍数填充")
 
         #     apply_selectors = self._get_selector_candidates(
         #         pricing_dialog_cfg.get("apply"),
@@ -609,7 +611,7 @@ class PublishController:
         #         context="set_price.close",
         #     )
 
-        #     logger.success("供货价设置完成（公式倍数 3）")
+        #     logger.success("供货价设置完成(公式倍数 3)")
         #     self._publish_context_ready = True
         #     return True
         # except Exception as exc:  # pragma: no cover - 运行时保护
@@ -621,7 +623,7 @@ class PublishController:
 
     @ensure_dom_ready
     async def _handle_pre_publish_modal(self, page: Page) -> None:
-        """处理批量发布前置提示弹窗（可选出现）。"""
+        """处理批量发布前置提示弹窗(可选出现)."""
         confirm_first_selectors = self._get_selector_candidates(
             "button:has-text('我知道了')",
             "button:has-text('确认')",
@@ -629,7 +631,7 @@ class PublishController:
             "text='我知道了'",
         )
 
-        # 性能优化：减少前置弹窗超时时间
+        # 性能优化:减少前置弹窗超时时间
         confirm_first_clicked = await self._click_first_available(
             page,
             confirm_first_selectors,
@@ -644,7 +646,7 @@ class PublishController:
 
     @ensure_dom_ready
     async def batch_publish(self, page: Page) -> bool:
-        """批量发布（SOP 步骤 10）."""
+        """批量发布(SOP 步骤 10)."""
         logger.info("=" * 60)
         logger.info("[SOP 步骤 10] 批量发布")
         logger.info("=" * 60)
@@ -666,7 +668,7 @@ class PublishController:
             )
             waiter = self._build_waiter(page)
             for round_idx in range(repeat_per_batch):
-                logger.info(f">>> 批量发布 {round_idx + 1}/{repeat_per_batch} 次，共 20 条产品")
+                logger.info(f">>> 批量发布 {round_idx + 1}/{repeat_per_batch} 次,共 20 条产品")
                 await self._reset_to_all_tab(page)
                 await self._ensure_publish_context(page, force=True)
 
@@ -683,7 +685,7 @@ class PublishController:
                     self._invalidate_publish_context()
                     raise RuntimeError("未能点击「批量发布」按钮")
                 logger.info(f"批量发布按钮命中 selector={publish_clicked}")
-                # 性能优化：减少 DOM 稳定检测超时
+                # 性能优化:减少 DOM 稳定检测超时
                 await waiter.wait_for_dom_stable(timeout_ms=1000)
                 await self._handle_pre_publish_modal(page)
 
@@ -694,16 +696,16 @@ class PublishController:
                 confirm_ready = await self._first_visible_locator(
                     page,
                     confirm_publish_selectors,
-                    timeout_ms=1500,  # 性能优化：从 TIMEOUTS.SLOW(2500) 减少
+                    timeout_ms=1500,  # 性能优化:从 TIMEOUTS.SLOW(2500) 减少
                     context="batch_publish.confirm_ready",
                 )
                 if not confirm_ready:
                     self._invalidate_publish_context()
                     raise RuntimeError("确认发布弹窗未出现")
-                # 性能优化：减少 DOM 稳定检测超时
+                # 性能优化:减少 DOM 稳定检测超时
                 await waiter.wait_for_dom_stable(timeout_ms=800)
 
-                confirm_publish_clicked = await self._click_first_available(
+                await self._click_first_available(
                     page,
                     confirm_publish_selectors,
                     visible_timeout_ms=1_000,
@@ -712,7 +714,7 @@ class PublishController:
                     context="batch_publish.confirm",
                 )
 
-                # 性能优化：减少 close_retry 默认值从 5 到 3
+                # 性能优化:减少 close_retry 默认值从 5 到 3
                 close_retry_cfg = self.selectors.get("publish_confirm", {}).get("close_retry", 3)
                 try:
                     close_retry = int(close_retry_cfg)
@@ -731,8 +733,8 @@ class PublishController:
                     close_button = await self._click_first_available(
                         page,
                         close_button_selectors,
-                        visible_timeout_ms=600,  # 性能优化：从 800 减少
-                        click_timeout_ms=500,  # 性能优化：从 600 减少
+                        visible_timeout_ms=600,  # 性能优化:从 800 减少
+                        click_timeout_ms=500,  # 性能优化:从 600 减少
                         attempts=1,
                         context=f"batch_publish.close[{attempt + 1}/{close_retry}]",
                     )
@@ -742,7 +744,7 @@ class PublishController:
                             f"(尝试 {attempt + 1}/{close_retry})"
                         )
                         break
-                    # 性能优化：减少等待时间
+                    # 性能优化:减少等待时间
                     await waiter.wait_for_dom_stable(timeout_ms=300)
                     if attempt < close_retry - 1:
                         await waiter.apply_retry_backoff(attempt + 1)
@@ -762,13 +764,13 @@ class PublishController:
                     )
                     if dialog_still_open:
                         self._invalidate_publish_context()
-                        raise RuntimeError("未能点击「关闭」按钮，弹窗仍存在")
-                    logger.warning("未找到关闭按钮，但确认弹窗已消失，视为本轮发布完成")
+                        raise RuntimeError("未能点击「关闭」按钮,弹窗仍存在")
+                    logger.warning("未找到关闭按钮,但确认弹窗已消失,视为本轮发布完成")
 
                 self._invalidate_publish_context()
 
             logger.success(
-                f"批量发布完成 20 条产品 {repeat_per_batch} 次，共 {20 * repeat_per_batch} 条产品"
+                f"批量发布完成 20 条产品 {repeat_per_batch} 次,共 {20 * repeat_per_batch} 条产品"
             )
             return True
         except Exception as exc:  # pragma: no cover - 运行时保护
@@ -784,9 +786,9 @@ class PublishController:
         products_data: Sequence[Mapping[str, Any]],
         shop_name: str | None = None,
     ) -> dict[str, Any]:
-        """执行发布工作流（SOP 步骤 8-10）."""
+        """执行发布工作流(SOP 步骤 8-10)."""
         logger.info("=" * 80)
-        logger.info("开始执行发布工作流（SOP 步骤 8-10）")
+        logger.info("开始执行发布工作流(SOP 步骤 8-10)")
         logger.info("=" * 80)
 
         result = PublishWorkflowResult()
@@ -816,5 +818,5 @@ class PublishController:
 
 # 测试代码
 if __name__ == "__main__":
-    # 该控制器需要 Playwright Page 对象，单独运行仅用于占位
+    # 该控制器需要 Playwright Page 对象,单独运行仅用于占位
     pass

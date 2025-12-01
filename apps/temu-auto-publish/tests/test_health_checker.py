@@ -9,14 +9,14 @@
   - 内部: src.core.health_checker
 """
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from src.core.health_checker import (
-    HealthStatus,
-    HealthCheckResult,
     HealthChecker,
+    HealthCheckResult,
+    HealthStatus,
 )
 
 
@@ -112,7 +112,7 @@ class TestHealthCheckResult:
         result = HealthCheckResult(component="test", status=HealthStatus.OK, message="Test")
 
         assert result.timestamp is not None
-        # 验证时间戳格式（ISO 8601）
+        # 验证时间戳格式(ISO 8601)
         datetime.fromisoformat(result.timestamp)
 
 
@@ -308,7 +308,7 @@ class TestHealthCheckerIntegration:
 
     @pytest.mark.asyncio
     async def test_real_disk_check(self):
-        """测试真实磁盘检查（不mock）"""
+        """测试真实磁盘检查(不mock)"""
         checker = HealthChecker()
 
         result = await checker.check_disk()
@@ -321,7 +321,7 @@ class TestHealthCheckerIntegration:
 
     @pytest.mark.asyncio
     async def test_real_memory_check(self):
-        """测试真实内存检查（不mock）"""
+        """测试真实内存检查(不mock)"""
         checker = HealthChecker()
 
         result = await checker.check_memory()

@@ -17,7 +17,6 @@
 """
 
 from enum import Enum
-from typing import Optional
 
 from loguru import logger
 from playwright.async_api import Page
@@ -59,7 +58,7 @@ class StateDetector:
         """
         try:
             url = page.url
-            logger.debug(f"检测页面状态，当前URL: {url}")
+            logger.debug(f"检测页面状态,当前URL: {url}")
 
             # 1. 检查是否在登录页
             if await self.is_login_page(page):
@@ -149,7 +148,7 @@ class StateDetector:
             if "common_collect_box/items" not in url:
                 return False
 
-            # 确认页面加载完成（检查tab是否存在）
+            # 确认页面加载完成(检查tab是否存在)
             tab_count = await page.locator(".jx-radio-button:has-text('全部'), text='全部'").count()
             return tab_count > 0
         except:
@@ -169,7 +168,7 @@ class StateDetector:
             if dialog_count == 0:
                 return False
 
-            # 检查是否是编辑弹窗（而不是其他弹窗）
+            # 检查是否是编辑弹窗(而不是其他弹窗)
             edit_indicators = [
                 "text='基本信息'",
                 "text='销售属性'",
@@ -218,7 +217,7 @@ class StateDetector:
             return False
 
     async def close_any_dialog(self, page: Page) -> bool:
-        """关闭任何打开的弹窗（容错恢复）.
+        """关闭任何打开的弹窗(容错恢复).
 
         Args:
             page: Playwright页面对象
@@ -271,7 +270,7 @@ class StateDetector:
                 logger.success(f"✓ 已关闭{closed_count}个弹窗")
                 return True
             else:
-                logger.warning(f"⚠️ 关闭了{closed_count}个按钮，但仍有{dialog_count}个弹窗")
+                logger.warning(f"⚠️ 关闭了{closed_count}个按钮,但仍有{dialog_count}个弹窗")
                 return False
 
         except Exception as e:
@@ -279,7 +278,7 @@ class StateDetector:
             return False
 
     async def recover_to_collection_box(self, page: Page) -> bool:
-        """恢复到采集箱列表页（容错恢复）.
+        """恢复到采集箱列表页(容错恢复).
 
         Args:
             page: Playwright页面对象
@@ -321,12 +320,12 @@ class StateDetector:
     async def ensure_state(
         self, page: Page, expected_state: PageState, auto_recover: bool = True
     ) -> bool:
-        """确保当前处于期望的状态，如果不是则尝试恢复.
+        """确保当前处于期望的状态,如果不是则尝试恢复.
 
         Args:
             page: Playwright页面对象
             expected_state: 期望的状态
-            auto_recover: 是否自动恢复（默认True）
+            auto_recover: 是否自动恢复(默认True)
 
         Returns:
             是否处于期望状态
@@ -345,13 +344,13 @@ class StateDetector:
 
         if not auto_recover:
             logger.warning(
-                f"⚠️ 当前状态({current_state.value}) != 期望状态({expected_state.value})，且未启用自动恢复"
+                f"⚠️ 当前状态({current_state.value}) != 期望状态({expected_state.value}),且未启用自动恢复"
             )
             return False
 
         # 尝试恢复
         logger.warning(
-            f"⚠️ 当前状态({current_state.value}) != 期望状态({expected_state.value})，尝试恢复..."
+            f"⚠️ 当前状态({current_state.value}) != 期望状态({expected_state.value}),尝试恢复..."
         )
 
         if expected_state == PageState.COLLECTION_BOX:

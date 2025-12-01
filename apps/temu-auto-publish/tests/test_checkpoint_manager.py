@@ -16,7 +16,6 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
-
 from src.core.checkpoint_manager import (
     CheckpointManager,
     StageCheckpoint,
@@ -370,7 +369,7 @@ class TestCheckpointCleanup:
                 )
             )
 
-            # 清理（保留24小时）
+            # 清理(保留24小时)
             cleaned = await CheckpointManager.cleanup_old_checkpoints(
                 checkpoint_dir=checkpoint_dir,
                 retention_hours=24,

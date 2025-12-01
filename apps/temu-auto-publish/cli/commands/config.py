@@ -5,7 +5,7 @@
   - show(): 显示配置
   - validate(): 验证配置
   - init(): 初始化配置模板
-  - edit(): 编辑配置（TODO）
+  - edit(): 编辑配置(TODO)
 @DEPENDENCIES:
   - 内部: config.settings
   - 外部: typer, rich, pyyaml
@@ -13,14 +13,12 @@
 
 import json
 from pathlib import Path
-from typing import Optional
 
 import typer
 import yaml
+from config.settings import settings
 from rich.console import Console
 from rich.syntax import Syntax
-
-from config.settings import settings
 
 config_app = typer.Typer(
     name="config",
@@ -32,8 +30,8 @@ console = Console()
 
 @config_app.command("show")
 def show(
-    env: Optional[str] = typer.Option(None, "--env", help="环境名称"),
-    format: str = typer.Option("yaml", "--format", "-f", help="输出格式（yaml/json）"),
+    env: str | None = typer.Option(None, "--env", help="环境名称"),
+    format: str = typer.Option("yaml", "--format", "-f", help="输出格式(yaml/json)"),
 ):
     """显示当前配置.
 
@@ -75,17 +73,14 @@ def validate(
 
     if not config_file.exists():
         console.print(f"[red]✗[/red] 文件不存在: {config_file}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     console.print(f"验证文件: {config_file}")
 
     try:
         # 加载配置
         with config_file.open("r", encoding="utf-8") as f:
-            if config_file.suffix in [".yaml", ".yml"]:
-                config = yaml.safe_load(f)
-            else:
-                config = json.load(f)
+            config = yaml.safe_load(f) if config_file.suffix in [".yaml", ".yml"] else json.load(f)
 
         console.print("[green]✓[/green] 文件格式正确")
 
@@ -112,18 +107,18 @@ def validate(
 
     except yaml.YAMLError as e:
         console.print(f"[red]✗[/red] YAML 语法错误: {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
     except json.JSONDecodeError as e:
         console.print(f"[red]✗[/red] JSON 语法错误: {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
     except Exception as e:
         console.print(f"[red]✗[/red] 验证失败: {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 @config_app.command("init")
 def init(
-    template: str = typer.Option("dev", "--template", "-t", help="模板类型（dev/staging/prod）"),
+    template: str = typer.Option("dev", "--template", "-t", help="模板类型(dev/staging/prod)"),
     output: Path = typer.Option(Path("config.yaml"), "--output", "-o", help="输出文件路径"),
 ):
     """初始化配置文件模板.
@@ -137,7 +132,7 @@ def init(
     if template not in ["dev", "staging", "prod"]:
         console.print(f"[red]✗[/red] 无效的模板类型: {template}")
         console.print("  有效值: dev, staging, prod")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     # 源模板文件
     template_file = (
@@ -146,7 +141,7 @@ def init(
 
     if not template_file.exists():
         console.print(f"[red]✗[/red] 模板文件不存在: {template_file}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     # 复制模板
     try:
@@ -159,4 +154,4 @@ def init(
 
     except Exception as e:
         console.print(f"[red]✗[/red] 创建失败: {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None

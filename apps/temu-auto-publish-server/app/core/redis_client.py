@@ -1,16 +1,16 @@
 """
-@PURPOSE: Redis 客户端和会话管理，实现单设备登录限制
+@PURPOSE: Redis 客户端和会话管理,实现单设备登录限制
 @OUTLINE:
   - get_redis(): 获取 Redis 连接
-  - class SessionManager: 会话管理器，处理登录会话和设备锁定
-    - create_session(): 创建新会话，踢出旧会话
+  - class SessionManager: 会话管理器,处理登录会话和设备锁定
+    - create_session(): 创建新会话,踢出旧会话
     - validate_session(): 验证会话是否有效
     - invalidate_session(): 使会话失效
     - invalidate_all_sessions(): 使用户所有会话失效
     - get_active_session(): 获取用户当前活跃会话
 @GOTCHAS:
-  - 新登录会自动使该用户的所有旧会话失效（单设备限制）
-  - 会话信息存储在 Redis 中，支持过期自动清理
+  - 新登录会自动使该用户的所有旧会话失效(单设备限制)
+  - 会话信息存储在 Redis 中,支持过期自动清理
 @DEPENDENCIES:
   - 内部: app.core.config
   - 外部: redis
@@ -19,7 +19,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import redis.asyncio as redis
@@ -58,7 +58,7 @@ async def close_redis() -> None:
 
 
 class SessionManager:
-    """会话管理器，实现单设备登录限制."""
+    """会话管理器,实现单设备登录限制."""
 
     # Redis 键前缀
     SESSION_PREFIX = "session:"  # session:{jti} -> session_data
@@ -80,7 +80,7 @@ class SessionManager:
         token_type: str = "access",
         extra_data: dict[str, Any] | None = None,
     ) -> bool:
-        """创建新会话，同时使该用户的所有旧会话失效.
+        """创建新会话,同时使该用户的所有旧会话失效.
 
         Args:
             user_id: 用户 ID
@@ -93,11 +93,11 @@ class SessionManager:
             bool: 是否创建成功
         """
         try:
-            # 1. 先使该用户的旧会话失效（单设备限制）
+            # 1. 先使该用户的旧会话失效(单设备限制)
             await self.invalidate_all_sessions(user_id)
 
             # 2. 计算过期秒数
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             ttl_seconds = int((expires_at - now).total_seconds())
             if ttl_seconds <= 0:
                 logger.warning(f"会话过期时间无效: user_id={user_id}, expires_at={expires_at}")
@@ -115,7 +115,7 @@ class SessionManager:
             }
             await self.redis.setex(session_key, ttl_seconds, json.dumps(session_data))
 
-            # 4. 记录用户当前会话（用于单设备查询）
+            # 4. 记录用户当前会话(用于单设备查询)
             user_session_key = f"{self.USER_SESSION_PREFIX}{user_id}"
             await self.redis.setex(user_session_key, ttl_seconds, jti)
 
@@ -133,7 +133,7 @@ class SessionManager:
             jti: JWT 令牌唯一 ID
 
         Returns:
-            dict | None: 会话数据，无效则返回 None
+            dict | None: 会话数据,无效则返回 None
         """
         try:
             session_key = f"{self.SESSION_PREFIX}{jti}"
@@ -144,7 +144,7 @@ class SessionManager:
 
             data = json.loads(session_data)
 
-            # 检查是否是当前用户的活跃会话（单设备验证）
+            # 检查是否是当前用户的活跃会话(单设备验证)
             user_id = data.get("user_id")
             if user_id:
                 user_session_key = f"{self.USER_SESSION_PREFIX}{user_id}"
@@ -180,7 +180,7 @@ class SessionManager:
                 # 删除会话
                 await self.redis.delete(session_key)
 
-                # 如果这是用户当前会话，也清除用户会话记录
+                # 如果这是用户当前会话,也清除用户会话记录
                 if user_id:
                     user_session_key = f"{self.USER_SESSION_PREFIX}{user_id}"
                     current_jti = await self.redis.get(user_session_key)
@@ -253,7 +253,7 @@ class SessionManager:
             return None
 
     async def force_logout(self, user_id: str) -> bool:
-        """强制用户下线（管理员功能）.
+        """强制用户下线(管理员功能).
 
         Args:
             user_id: 用户 ID

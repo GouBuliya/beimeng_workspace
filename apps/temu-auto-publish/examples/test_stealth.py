@@ -44,13 +44,13 @@ async def test_stealth():
 
         print("✓ 访问反爬虫检测网站成功")
         print("\n" + "=" * 60)
-        print("请手动查看浏览器页面：")
-        print("  - WebDriver: 应该显示 false（通过反检测）")
+        print("请手动查看浏览器页面:")
+        print("  - WebDriver: 应该显示 false(通过反检测)")
         print("  - Chrome: 应该显示正常")
         print("  - Permissions: 应该显示正常")
         print("=" * 60)
 
-        # 自动等待5秒（pytest环境无法交互）
+        # 自动等待5秒(pytest环境无法交互)
         print("\n等待5秒以便查看...")
         await page.wait_for_timeout(5000)
 

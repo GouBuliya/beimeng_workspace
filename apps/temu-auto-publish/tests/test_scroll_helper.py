@@ -380,7 +380,7 @@ class TestScrollToFindElement:
         from src.utils.scroll_helper import scroll_to_find_element
 
         target_locator = MagicMock()
-        # 第一次不可见，scroll_into_view后可见
+        # 第一次不可见,scroll_into_view后可见
         target_locator.is_visible = AsyncMock(side_effect=[False, True])
         target_locator.scroll_into_view_if_needed = AsyncMock()
 

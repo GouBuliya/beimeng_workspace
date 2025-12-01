@@ -67,7 +67,7 @@ class TestCollectionToEditWorkflowInit:
             from src.workflows.collection_to_edit_workflow import CollectionToEditWorkflow
 
             output_dir = tmp_path / "new_output" / "nested"
-            workflow = CollectionToEditWorkflow(output_dir=str(output_dir))
+            CollectionToEditWorkflow(output_dir=str(output_dir))
 
             assert output_dir.exists()
 

@@ -1,7 +1,7 @@
 """
 @PURPOSE: 快速验证编辑流程 - 检查现有产品并测试编辑
 @OUTLINE:
-  - quick_test(): 快速测试编辑流程（使用现有产品）
+  - quick_test(): 快速测试编辑流程(使用现有产品)
   - main(): 主函数
 @DEPENDENCIES:
   - 内部: src.browser控制器
@@ -26,7 +26,6 @@ if env_file.exists():
     load_dotenv(env_file)
 
 from loguru import logger
-
 from src.browser.first_edit_controller import FirstEditController
 from src.browser.login_controller import LoginController
 from src.browser.miaoshou_controller import MiaoshouController
@@ -61,7 +60,7 @@ async def quick_test():
         # 查找"我知道了"按钮
         know_btn_count = await page.locator("button:has-text('我知道了')").count()
         if know_btn_count > 0:
-            logger.info("发现弹窗，点击「我知道了」...")
+            logger.info("发现弹窗,点击「我知道了」...")
             await page.locator("button:has-text('我知道了')").first.click()
             await asyncio.sleep(0.5)  # 0.5秒
             logger.success("✓ 已关闭弹窗")
@@ -72,26 +71,26 @@ async def quick_test():
             await page.locator("button:has-text('关闭')").first.click()
             await asyncio.sleep(0.3)  # 0.3秒
     except Exception as e:
-        logger.warning(f"关闭弹窗时出错（可忽略）: {e}")
+        logger.warning(f"关闭弹窗时出错(可忽略): {e}")
 
-    # 切换到"全部"tab（SOP要求：先切换到全部tab）
+    # 切换到"全部"tab(SOP要求:先切换到全部tab)
     logger.info("正在切换到「全部」tab...")
     try:
-        # 方法1: 使用正则表达式匹配完整的tab文本（包含数字），例如 "全部 (7661)"
+        # 方法1: 使用正则表达式匹配完整的tab文本(包含数字),例如 "全部 (7661)"
         all_tab_regex = await page.locator("text=/全部.*\\(\\d+\\)/").count()
         if all_tab_regex > 0:
             await page.locator("text=/全部.*\\(\\d+\\)/").click()
             await asyncio.sleep(1)  # 1秒
-            logger.success("✓ 已切换到「全部」tab（方法1）")
+            logger.success("✓ 已切换到「全部」tab(方法1)")
         else:
             # 方法2: 尝试通过radio button的class定位
             radio_buttons = await page.locator(".jx-radio-button:has-text('全部')").count()
             if radio_buttons > 0:
                 await page.locator(".jx-radio-button:has-text('全部')").first.click()
                 await asyncio.sleep(1)  # 1秒
-                logger.success("✓ 已切换到「全部」tab（方法2）")
+                logger.success("✓ 已切换到「全部」tab(方法2)")
             else:
-                logger.warning("未找到「全部」tab，可能已经在全部tab")
+                logger.warning("未找到「全部」tab,可能已经在全部tab")
 
         # 等待页面加载完成
         await page.wait_for_load_state("networkidle", timeout=10000)
@@ -99,7 +98,7 @@ async def quick_test():
     except Exception as e:
         logger.warning(f"切换tab失败: {e}")
 
-    # 选择创建人员：柯诗俊(keshijun123)
+    # 选择创建人员:柯诗俊(keshijun123)
     logger.info("正在筛选创建人员...")
     try:
         # 查找"创建人员"下拉框
@@ -116,29 +115,29 @@ async def quick_test():
             # 输入搜索
             await page.keyboard.type("柯诗俊")
             await asyncio.sleep(0.5)  # 0.5秒
-            # 选择结果（查找包含"柯诗俊"的选项）
+            # 选择结果(查找包含"柯诗俊"的选项)
             keshijun_option = await page.locator("text='柯诗俊'").count()
             if keshijun_option > 0:
                 await page.locator("text='柯诗俊'").first.click()
                 await asyncio.sleep(0.3)  # 0.3秒
-                logger.success("✓ 已选择创建人员：柯诗俊")
+                logger.success("✓ 已选择创建人员:柯诗俊")
             else:
-                logger.warning("未找到「柯诗俊」选项，尝试直接搜索")
+                logger.warning("未找到「柯诗俊」选项,尝试直接搜索")
 
         # 点击搜索按钮
         search_btn = await page.locator("button:has-text('搜索')").count()
         if search_btn > 0:
             await page.locator("button:has-text('搜索')").first.click()
             logger.info("✓ 已点击搜索按钮")
-            await asyncio.sleep(2)  # 2秒，等待搜索结果加载
+            await asyncio.sleep(2)  # 2秒,等待搜索结果加载
 
             # 等待搜索结果加载完成
             await page.wait_for_load_state("networkidle", timeout=10000)
             logger.success("✓ 搜索结果已加载")
     except Exception as e:
-        logger.warning(f"选择创建人员失败（可能不需要）: {e}")
+        logger.warning(f"选择创建人员失败(可能不需要): {e}")
 
-    # 移除了重复的切换到"全部"tab代码，因为已经在前面完成
+    # 移除了重复的切换到"全部"tab代码,因为已经在前面完成
 
     # 检查产品
     logger.info("正在检查产品...")
@@ -148,11 +147,11 @@ async def quick_test():
     total = counts.get("claimed", 0) + counts.get("unclaimed", 0)
     if total == 0:
         logger.warning("\n⚠️ 采集箱中暂无产品")
-        logger.info("\n请按以下步骤手动采集测试产品：")
-        logger.info("1. 在当前浏览器窗口，点击顶部菜单「产品」->「产品采集」")
-        logger.info("2. 或直接访问：https://erp.91miaoshou.com/common_collect_box/index")
-        logger.info("3. 粘贴商品链接（1688/淘宝），选择平台，点击「采集并自动认领」")
-        logger.info("\n程序会等待2分钟，供您完成采集...")
+        logger.info("\n请按以下步骤手动采集测试产品:")
+        logger.info("1. 在当前浏览器窗口,点击顶部菜单「产品」->「产品采集」")
+        logger.info("2. 或直接访问:https://erp.91miaoshou.com/common_collect_box/index")
+        logger.info("3. 粘贴商品链接(1688/淘宝),选择平台,点击「采集并自动认领」")
+        logger.info("\n程序会等待2分钟,供您完成采集...")
         await asyncio.sleep(120)
 
         # 重新检查
@@ -171,17 +170,17 @@ async def quick_test():
             await asyncio.sleep(2)
             await page.locator("text=/全部.*\\(\\d+\\)/").click()
             await asyncio.sleep(1)
-        except:
+        except Exception:
             pass
 
         counts = await miaoshou_controller.get_product_count(page)
         total = counts.get("claimed", 0) + counts.get("unclaimed", 0)
 
         if total == 0:
-            logger.error("仍然没有产品，测试终止")
+            logger.error("仍然没有产品,测试终止")
             return False
 
-    # 不需要切换tab了，已经在"全部"tab
+    # 不需要切换tab了,已经在"全部"tab
     logger.info("准备编辑产品...")
     await asyncio.sleep(0.5)  # 0.5秒
 
@@ -218,7 +217,7 @@ async def quick_test():
         "dimensions": (random.randint(20, 40), random.randint(20, 40), random.randint(10, 30)),
     }
 
-    logger.info(f"\n测试数据：")
+    logger.info("\n测试数据:")
     logger.info(f"  标题: {test_data['title']}")
     logger.info(f"  价格: {test_data['price']} CNY")
     logger.info(f"  库存: {test_data['stock']}")
@@ -241,7 +240,7 @@ async def quick_test():
     )
 
     if success:
-        logger.success("\n🎉 编辑流程测试通过！")
+        logger.success("\n🎉 编辑流程测试通过!")
         await asyncio.sleep(5)
         return True
     else:

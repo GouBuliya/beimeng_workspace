@@ -1,5 +1,5 @@
 """
-@PURPOSE: 随机数据生成器，生成符合SOP规则的随机重量和尺寸
+@PURPOSE: 随机数据生成器,生成符合SOP规则的随机重量和尺寸
 @OUTLINE:
   - class RandomDataGenerator: 随机数据生成器主类
   - def generate_weight(): 生成重量 (5000-9999G)
@@ -21,20 +21,20 @@ from loguru import logger
 
 
 class RandomDataGenerator:
-    """随机数据生成器（基于SOP v2.0规则）.
+    """随机数据生成器(基于SOP v2.0规则).
 
-    生成符合SOP手册要求的随机数据，用于批量编辑填充。
+    生成符合SOP手册要求的随机数据,用于批量编辑填充.
 
-    SOP规则：
-    - 重量: 5000-9999G（步骤7.9）
-    - 尺寸: 50-99cm，且长>宽>高（步骤7.10）
-    - 外包装: 长方体、硬包装（步骤7.5）
+    SOP规则:
+    - 重量: 5000-9999G(步骤7.9)
+    - 尺寸: 50-99cm,且长>宽>高(步骤7.10)
+    - 外包装: 长方体,硬包装(步骤7.5)
 
     Attributes:
-        weight_min: 最小重量（克），默认5000
-        weight_max: 最大重量（克），默认9999
-        dimension_min: 最小尺寸（厘米），默认50
-        dimension_max: 最大尺寸（厘米），默认99
+        weight_min: 最小重量(克),默认5000
+        weight_max: 最大重量(克),默认9999
+        dimension_min: 最小尺寸(厘米),默认50
+        dimension_max: 最大尺寸(厘米),默认99
 
     Examples:
         >>> generator = RandomDataGenerator()
@@ -46,28 +46,28 @@ class RandomDataGenerator:
         True
     """
 
-    # SOP规则常量（不要随意修改）
-    DEFAULT_WEIGHT_MIN = 5000  # 克，步骤7.9
-    DEFAULT_WEIGHT_MAX = 9999  # 克，步骤7.9
-    DEFAULT_DIMENSION_MIN = 50  # 厘米，步骤7.10
-    DEFAULT_DIMENSION_MAX = 99  # 厘米，步骤7.10
+    # SOP规则常量(不要随意修改)
+    DEFAULT_WEIGHT_MIN = 5000  # 克,步骤7.9
+    DEFAULT_WEIGHT_MAX = 9999  # 克,步骤7.9
+    DEFAULT_DIMENSION_MIN = 50  # 厘米,步骤7.10
+    DEFAULT_DIMENSION_MAX = 99  # 厘米,步骤7.10
 
     def __init__(
         self,
-        weight_min: int = None,
-        weight_max: int = None,
-        dimension_min: int = None,
-        dimension_max: int = None,
-        seed: int = None,
+        weight_min: int | None = None,
+        weight_max: int | None = None,
+        dimension_min: int | None = None,
+        dimension_max: int | None = None,
+        seed: int | None = None,
     ):
         """初始化随机数据生成器.
 
         Args:
-            weight_min: 最小重量（克），默认使用SOP规则5000
-            weight_max: 最大重量（克），默认使用SOP规则9999
-            dimension_min: 最小尺寸（厘米），默认使用SOP规则50
-            dimension_max: 最大尺寸（厘米），默认使用SOP规则99
-            seed: 随机种子，用于可重现的测试
+            weight_min: 最小重量(克),默认使用SOP规则5000
+            weight_max: 最大重量(克),默认使用SOP规则9999
+            dimension_min: 最小尺寸(厘米),默认使用SOP规则50
+            dimension_max: 最大尺寸(厘米),默认使用SOP规则99
+            seed: 随机种子,用于可重现的测试
         """
         self.weight_min = weight_min or self.DEFAULT_WEIGHT_MIN
         self.weight_max = weight_max or self.DEFAULT_WEIGHT_MAX
@@ -75,23 +75,23 @@ class RandomDataGenerator:
         self.dimension_max = dimension_max or self.DEFAULT_DIMENSION_MAX
         self.seed = seed
 
-        # 如果设置了种子，使用独立的Random实例以避免全局状态污染
+        # 如果设置了种子,使用独立的Random实例以避免全局状态污染
         if seed is not None:
             self._random = random.Random(seed)
         else:
             self._random = random
 
         logger.info(
-            f"随机数据生成器初始化（SOP v2.0），"
+            f"随机数据生成器初始化(SOP v2.0),"
             f"重量: {self.weight_min}-{self.weight_max}G, "
             f"尺寸: {self.dimension_min}-{self.dimension_max}cm"
         )
 
     def generate_weight(self) -> int:
-        """生成随机重量（克，SOP步骤7.9）.
+        """生成随机重量(克,SOP步骤7.9).
 
         Returns:
-            随机重量（克）
+            随机重量(克)
 
         Examples:
             >>> generator = RandomDataGenerator()
@@ -104,10 +104,10 @@ class RandomDataGenerator:
         return weight
 
     def generate_weight_kg(self) -> float:
-        """生成随机重量（千克）.
+        """生成随机重量(千克).
 
         Returns:
-            随机重量（千克，保留2位小数）
+            随机重量(千克,保留2位小数)
 
         Examples:
             >>> generator = RandomDataGenerator()
@@ -121,12 +121,12 @@ class RandomDataGenerator:
         return weight_kg
 
     def generate_dimensions(self) -> tuple[int, int, int]:
-        """生成随机尺寸（厘米，SOP步骤7.10）.
+        """生成随机尺寸(厘米,SOP步骤7.10).
 
-        SOP要求：长 > 宽 > 高
+        SOP要求:长 > 宽 > 高
 
         Returns:
-            尺寸元组 (长, 宽, 高)，单位厘米
+            尺寸元组 (长, 宽, 高),单位厘米
 
         Examples:
             >>> generator = RandomDataGenerator()
@@ -146,13 +146,13 @@ class RandomDataGenerator:
         return length, width, height
 
     def generate_packaging_dimensions(self) -> tuple[int, int, int]:
-        """生成外包装尺寸（厘米）.
+        """生成外包装尺寸(厘米).
 
-        用于SOP步骤7.5的外包装信息。
-        与商品尺寸类似，但可能稍大。
+        用于SOP步骤7.5的外包装信息.
+        与商品尺寸类似,但可能稍大.
 
         Returns:
-            外包装尺寸元组 (长, 宽, 高)，单位厘米
+            外包装尺寸元组 (长, 宽, 高),单位厘米
 
         Examples:
             >>> generator = RandomDataGenerator()
@@ -174,13 +174,13 @@ class RandomDataGenerator:
     def generate_batch_data(self, count: int = 20) -> list[dict]:
         """批量生成随机数据.
 
-        用于批量编辑20条商品时的数据填充。
+        用于批量编辑20条商品时的数据填充.
 
         Args:
-            count: 生成数量，默认20（SOP规定的批量数量）
+            count: 生成数量,默认20(SOP规定的批量数量)
 
         Returns:
-            随机数据列表，每个元素包含weight和dimensions
+            随机数据列表,每个元素包含weight和dimensions
 
         Examples:
             >>> generator = RandomDataGenerator()
@@ -208,19 +208,19 @@ class RandomDataGenerator:
                 }
             )
 
-        logger.info(f"批量生成完成，共 {count} 条随机数据")
+        logger.info(f"批量生成完成,共 {count} 条随机数据")
         return data_list
 
     def validate_dimensions(self, length: int, width: int, height: int) -> bool:
         """验证尺寸是否符合SOP规则.
 
         Args:
-            length: 长度（厘米）
-            width: 宽度（厘米）
-            height: 高度（厘米）
+            length: 长度(厘米)
+            width: 宽度(厘米)
+            height: 高度(厘米)
 
         Returns:
-            是否符合规则（长>宽>高 且 在范围内）
+            是否符合规则(长>宽>高 且 在范围内)
 
         Examples:
             >>> generator = RandomDataGenerator()
@@ -234,47 +234,44 @@ class RandomDataGenerator:
             return False
 
         # 检查顺序: 长>宽>高
-        if not (length > width > height):
-            return False
-
-        return True
+        return length > width > height
 
 
 # 测试代码
 if __name__ == "__main__":
     print("=" * 60)
-    print("随机数据生成器测试（SOP v2.0规则）")
+    print("随机数据生成器测试(SOP v2.0规则)")
     print("=" * 60)
 
     generator = RandomDataGenerator()
 
     # 测试生成重量
-    print("\n生成重量（克）:")
+    print("\n生成重量(克):")
     for i in range(5):
         weight = generator.generate_weight()
         print(f"  {i + 1}. {weight}G")
 
-    # 测试生成重量（千克）
-    print("\n生成重量（千克）:")
+    # 测试生成重量(千克)
+    print("\n生成重量(千克):")
     for i in range(5):
         weight_kg = generator.generate_weight_kg()
         print(f"  {i + 1}. {weight_kg}KG")
 
     # 测试生成尺寸
-    print("\n生成尺寸（厘米）:")
+    print("\n生成尺寸(厘米):")
     for i in range(5):
         length, width, height = generator.generate_dimensions()
         is_valid = generator.validate_dimensions(length, width, height)
         print(f"  {i + 1}. {length}×{width}×{height}cm (长>宽>高: {is_valid})")
 
     # 测试生成外包装尺寸
-    print("\n生成外包装尺寸（厘米）:")
+    print("\n生成外包装尺寸(厘米):")
     for i in range(3):
         length, width, height = generator.generate_packaging_dimensions()
         print(f"  {i + 1}. {length}×{width}×{height}cm")
 
     # 测试批量生成
-    print("\n批量生成（20条）:")
+    print("\n批量生成(20条):")
     data_list = generator.generate_batch_data(20)
     for data in data_list[:3]:  # 只显示前3条
         print(

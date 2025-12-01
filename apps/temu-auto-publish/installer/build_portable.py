@@ -1,5 +1,5 @@
 """
-@PURPOSE: 构建便携版安装包 - 单个 exe 安装程序，包含所有依赖
+@PURPOSE: 构建便携版安装包 - 单个 exe 安装程序,包含所有依赖
 @OUTLINE:
   - 下载嵌入式 Python
   - 安装依赖到便携目录
@@ -13,8 +13,6 @@
 import os
 import shutil
 import subprocess
-import sys
-import tempfile
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -156,7 +154,7 @@ def build_portable():
     create_env_template(portable_dir)
 
     print("\n" + "=" * 60)
-    print(f"✅ 便携版构建完成！")
+    print("✅ 便携版构建完成!")
     print(f"   位置: {portable_dir}")
     print("=" * 60)
 
@@ -214,7 +212,7 @@ def create_env_template(portable_dir: Path) -> None:
 MIAOSHOU_USERNAME=your_username
 MIAOSHOU_PASSWORD=your_password
 
-# AI标题生成（阿里云 DashScope）
+# AI标题生成(阿里云 DashScope)
 DASHSCOPE_API_KEY=your_api_key
 
 # 可选配置
@@ -269,14 +267,14 @@ Filename: "{app}\\{#AppExeName}"; Description: "立即启动 {#AppName}"; Flags:
     installer_dir = Path("installer")
     installer_dir.mkdir(exist_ok=True)
     (installer_dir / "installer.iss").write_text(iss_content, encoding="utf-8")
-    print(f"已创建 Inno Setup 脚本: installer/installer.iss")
+    print("已创建 Inno Setup 脚本: installer/installer.iss")
 
 
 def create_7z_sfx() -> None:
     """创建 7z 自解压包"""
     sfx_config = """;!@Install@!UTF-8!
 Title="Temu Web Panel"
-BeginPrompt="是否安装 Temu Web Panel？"
+BeginPrompt="是否安装 Temu Web Panel?"
 RunProgram="TemuWebPanel.bat"
 ;!@InstallEnd@!
 """
@@ -285,7 +283,7 @@ RunProgram="TemuWebPanel.bat"
     (installer_dir / "sfx_config.txt").write_text(sfx_config, encoding="utf-8")
 
     print("""
-要创建自解压包，请执行:
+要创建自解压包,请执行:
 
 1. 安装 7-Zip
 2. 运行以下命令:

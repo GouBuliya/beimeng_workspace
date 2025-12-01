@@ -1,5 +1,5 @@
 """
-@PURPOSE: 提供统一的页面等待能力，减少硬编码等待时间并提升脚本效率
+@PURPOSE: 提供统一的页面等待能力,减少硬编码等待时间并提升脚本效率
 @OUTLINE:
   - def ensure_dom_ready(): 为页面入口方法提供 DOM 初始化等待的装饰器
   - @dataclass WaitStrategy: 存放等待策略
@@ -13,7 +13,7 @@
     - async def safe_fill(): 确保可见的安全填充
 @GOTCHAS:
   - DOM稳定检测依赖页面执行JavaScript
-  - 网络空闲在内网站点可能无法自动触发，需要兜底等待
+  - 网络空闲在内网站点可能无法自动触发,需要兜底等待
 @DEPENDENCIES:
   - 外部: playwright, loguru
 @RELATED: smart_locator.py, browser_manager.py
@@ -23,12 +23,14 @@ from __future__ import annotations
 
 import asyncio
 import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from functools import wraps
-from typing import Awaitable, Callable, Optional, ParamSpec, TypeVar
+from typing import ParamSpec, TypeVar
 
 from loguru import logger
-from playwright.async_api import Locator, Page, TimeoutError as PlaywrightTimeoutError
+from playwright.async_api import Locator, Page
+from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 P = ParamSpec("P")
 R = TypeVar("R")
@@ -36,11 +38,11 @@ R = TypeVar("R")
 
 @dataclass(slots=True)
 class WaitStrategy:
-    """等待策略配置。
+    """等待策略配置.
 
     性能优化说明:
-    - 原默认参数较为保守，最小等待 900ms (3次检测 × 300ms间隔)
-    - 优化后参数平衡稳定性和性能，最小等待 300ms (2次检测 × 150ms间隔)
+    - 原默认参数较为保守,最小等待 900ms (3次检测 × 300ms间隔)
+    - 优化后参数平衡稳定性和性能,最小等待 300ms (2次检测 × 150ms间隔)
     - 可通过 conservative()/balanced()/aggressive() 工厂方法选择预设模式
     """
 
@@ -57,8 +59,8 @@ class WaitStrategy:
     quick_check_interval_ms: int = 50
 
     @classmethod
-    def conservative(cls) -> "WaitStrategy":
-        """保守模式 - 更长的等待时间，适合不稳定的网络环境。"""
+    def conservative(cls) -> WaitStrategy:
+        """保守模式 - 更长的等待时间,适合不稳定的网络环境."""
         return cls(
             wait_after_action_ms=300,
             wait_for_stability_timeout_ms=3750,
@@ -73,13 +75,13 @@ class WaitStrategy:
         )
 
     @classmethod
-    def balanced(cls) -> "WaitStrategy":
-        """平衡模式 - 默认配置，平衡稳定性和性能。"""
+    def balanced(cls) -> WaitStrategy:
+        """平衡模式 - 默认配置,平衡稳定性和性能."""
         return cls()  # 使用默认值
 
     @classmethod
-    def aggressive(cls) -> "WaitStrategy":
-        """激进模式 - 更短的等待时间，适合稳定的网络环境。"""
+    def aggressive(cls) -> WaitStrategy:
+        """激进模式 - 更短的等待时间,适合稳定的网络环境."""
         return cls(
             wait_after_action_ms=50,
             wait_for_stability_timeout_ms=1000,
@@ -94,15 +96,15 @@ class WaitStrategy:
         )
 
     def next_retry_delay(self, attempt: int) -> float:
-        """根据重试次数计算指数退避延迟（秒）。"""
+        """根据重试次数计算指数退避延迟(秒)."""
 
         delay_ms = self.retry_initial_delay_ms * (self.retry_backoff_factor**attempt)
         delay_ms = min(delay_ms, self.retry_max_delay_ms)
         return max(delay_ms, 0) / 1000
 
 
-def ensure_dom_ready(func: Callable[P, Awaitable[R]]) -> Callable[P, Awaitable[R]]:
-    """页面入口装饰器：确保 DOMContentLoaded + DOM 稳定只等待一次。"""
+def ensure_dom_ready[**P, R](func: Callable[P, Awaitable[R]]) -> Callable[P, Awaitable[R]]:
+    """页面入口装饰器:确保 DOMContentLoaded + DOM 稳定只等待一次."""
 
     @wraps(func)
     async def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
@@ -137,10 +139,10 @@ def ensure_dom_ready(func: Callable[P, Awaitable[R]]) -> Callable[P, Awaitable[R
 
 
 class PageWaiter:
-    """可复用的页面等待工具。"""
+    """可复用的页面等待工具."""
 
     def __init__(self, page: Page, strategy: WaitStrategy | None = None):
-        """初始化等待工具。
+        """初始化等待工具.
 
         Args:
             page: Playwright Page 对象
@@ -155,7 +157,7 @@ class PageWaiter:
         wait_for_network_idle: bool = True,
         wait_for_dom_stable: bool = True,
     ) -> None:
-        """执行操作后等待页面稳定。"""
+        """执行操作后等待页面稳定."""
 
         if wait_for_network_idle:
             await self.wait_for_network_idle()
@@ -166,42 +168,42 @@ class PageWaiter:
         if not wait_for_network_idle and not wait_for_dom_stable:
             await asyncio.sleep(self.strategy.wait_after_action_ms / 1000)
 
-    async def wait_for_network_idle(self, timeout_ms: Optional[int] = None) -> None:
-        """等待网络空闲。"""
+    async def wait_for_network_idle(self, timeout_ms: int | None = None) -> None:
+        """等待网络空闲."""
 
         timeout = timeout_ms or self.strategy.wait_for_network_idle_timeout_ms
 
         try:
             await self.page.wait_for_load_state("networkidle", timeout=timeout)
         except PlaywrightTimeoutError:
-            logger.debug("等待 networkidle 超时，继续执行后续逻辑")
+            logger.debug("等待 networkidle 超时,继续执行后续逻辑")
 
     async def wait_for_dom_stable(
         self,
-        timeout_ms: Optional[int] = None,
-        checks: Optional[int] = None,
-        interval_ms: Optional[int] = None,
+        timeout_ms: int | None = None,
+        checks: int | None = None,
+        interval_ms: int | None = None,
         enable_quick_check: bool = True,
     ) -> bool:
-        """等待 DOM 稳定或达成超时。
+        """等待 DOM 稳定或达成超时.
 
-        性能优化: 添加快速检测机制，如果页面在短时间内已稳定则提前返回。
+        性能优化: 添加快速检测机制,如果页面在短时间内已稳定则提前返回.
 
         Args:
-            timeout_ms: 超时时间（毫秒）
+            timeout_ms: 超时时间(毫秒)
             checks: 需要连续稳定的采样次数
-            interval_ms: 采样间隔（毫秒）
-            enable_quick_check: 是否启用快速检测（默认启用）
+            interval_ms: 采样间隔(毫秒)
+            enable_quick_check: 是否启用快速检测(默认启用)
 
         Returns:
-            True 表示检测到稳定，False 表示超时
+            True 表示检测到稳定,False 表示超时
         """
         timeout = timeout_ms or self.strategy.wait_for_stability_timeout_ms
         required_checks = checks or self.strategy.dom_stable_checks
         poll_interval = interval_ms or self.strategy.dom_stable_interval_ms
         quick_interval = self.strategy.quick_check_interval_ms
 
-        # 快速检测: 先用短间隔检测一次，如果已稳定则立即返回
+        # 快速检测: 先用短间隔检测一次,如果已稳定则立即返回
         if enable_quick_check:
             try:
                 first_snapshot = await self._capture_dom_snapshot()
@@ -209,11 +211,11 @@ class PageWaiter:
                 second_snapshot = await self._capture_dom_snapshot()
 
                 if first_snapshot == second_snapshot:
-                    # 页面已稳定，无需继续等待
-                    logger.debug("DOM 快速检测通过，页面已稳定")
+                    # 页面已稳定,无需继续等待
+                    logger.debug("DOM 快速检测通过,页面已稳定")
                     return True
             except Exception as exc:
-                logger.debug(f"快速检测失败: {exc}，继续标准检测")
+                logger.debug(f"快速检测失败: {exc},继续标准检测")
 
         # 标准检测流程
         deadline = time.monotonic() + timeout / 1000
@@ -238,11 +240,11 @@ class PageWaiter:
 
             await asyncio.sleep(poll_interval / 1000)
 
-        logger.debug("等待 DOM 稳定超时，继续后续流程。")
+        logger.debug("等待 DOM 稳定超时,继续后续流程.")
         return False
 
     async def apply_retry_backoff(self, attempt: int) -> None:
-        """应用指数退避等待。"""
+        """应用指数退避等待."""
 
         delay = self.strategy.next_retry_delay(attempt)
         if delay > 0:
@@ -252,10 +254,10 @@ class PageWaiter:
     async def wait_for_condition(
         self,
         condition: Callable[[Page], Awaitable[bool]],
-        timeout_ms: Optional[int] = None,
-        interval_ms: Optional[int] = None,
+        timeout_ms: int | None = None,
+        interval_ms: int | None = None,
     ) -> bool:
-        """等待自定义条件成立。"""
+        """等待自定义条件成立."""
 
         timeout = timeout_ms or self.strategy.wait_for_stability_timeout_ms
         poll_interval = interval_ms or self.strategy.dom_stable_interval_ms
@@ -277,7 +279,7 @@ class PageWaiter:
         self,
         locator: Locator | None,
         *,
-        timeout_ms: Optional[int] = None,
+        timeout_ms: int | None = None,
         ensure_visible: bool = True,
         ensure_enabled: bool = True,
         scroll: bool = True,
@@ -286,18 +288,18 @@ class PageWaiter:
         quick_wait: bool = False,
         name: str | None = None,
     ) -> bool:
-        """安全点击：可见/可用校验 + 可选滚动。
+        """安全点击:可见/可用校验 + 可选滚动.
 
         Args:
             locator: 目标元素定位器
-            timeout_ms: 超时时间（毫秒）
+            timeout_ms: 超时时间(毫秒)
             ensure_visible: 是否确保元素可见
             ensure_enabled: 是否确保元素可用
             scroll: 是否滚动到元素位置
             force: 是否强制点击
             wait_after: 是否在点击后等待
-            quick_wait: 快速等待模式（仅等待50ms，用于连续操作）
-            name: 元素名称（用于日志）
+            quick_wait: 快速等待模式(仅等待50ms,用于连续操作)
+            name: 元素名称(用于日志)
 
         Returns:
             点击是否成功
@@ -330,7 +332,7 @@ class PageWaiter:
 
             if wait_after:
                 if quick_wait:
-                    # 快速等待模式：仅短暂等待，用于连续操作
+                    # 快速等待模式:仅短暂等待,用于连续操作
                     await asyncio.sleep(self.strategy.quick_check_interval_ms / 1000)
                 else:
                     await self.post_action_wait(
@@ -350,7 +352,7 @@ class PageWaiter:
         locator: Locator | None,
         value: str,
         *,
-        timeout_ms: Optional[int] = None,
+        timeout_ms: int | None = None,
         ensure_visible: bool = True,
         click_first: bool = False,
         clear: bool = True,
@@ -358,18 +360,18 @@ class PageWaiter:
         quick_wait: bool = False,
         name: str | None = None,
     ) -> bool:
-        """安全填充：可见校验 + 可选点击/保留原值。
+        """安全填充:可见校验 + 可选点击/保留原值.
 
         Args:
             locator: 目标元素定位器
             value: 要填充的值
-            timeout_ms: 超时时间（毫秒）
+            timeout_ms: 超时时间(毫秒)
             ensure_visible: 是否确保元素可见
             click_first: 是否先点击元素
-            clear: 是否清除原有内容（True=fill, False=type）
+            clear: 是否清除原有内容(True=fill, False=type)
             wait_after: 是否在填充后等待
-            quick_wait: 快速等待模式（仅等待50ms，用于连续操作）
-            name: 元素名称（用于日志）
+            quick_wait: 快速等待模式(仅等待50ms,用于连续操作)
+            name: 元素名称(用于日志)
 
         Returns:
             填充是否成功
@@ -398,7 +400,7 @@ class PageWaiter:
 
             if wait_after:
                 if quick_wait:
-                    # 快速等待模式：仅短暂等待，用于连续操作
+                    # 快速等待模式:仅短暂等待,用于连续操作
                     await asyncio.sleep(self.strategy.quick_check_interval_ms / 1000)
                 else:
                     await self.post_action_wait(
@@ -414,9 +416,9 @@ class PageWaiter:
             return False
 
     async def wait_for_locator_hidden(
-        self, locator: Locator, timeout_ms: Optional[int] = None
+        self, locator: Locator, timeout_ms: int | None = None
     ) -> bool:
-        """等待指定定位器隐藏。"""
+        """等待指定定位器隐藏."""
 
         timeout = timeout_ms or self.strategy.validation_timeout_ms
 
@@ -427,7 +429,7 @@ class PageWaiter:
             return False
 
     async def _capture_dom_snapshot(self) -> tuple[int, int]:
-        """采集页面 DOM 摘要。"""
+        """采集页面 DOM 摘要."""
 
         return await self.page.evaluate(
             """

@@ -9,6 +9,7 @@ import asyncio
 import os
 import sys
 from pathlib import Path
+
 from dotenv import load_dotenv
 
 # 添加项目根目录到路径
@@ -25,8 +26,8 @@ if env_path.exists():
     load_dotenv(env_path)
     logger.info(f"✓ 已加载环境变量: {env_path}")
 
-from src.browser.login_controller import LoginController
 from src.browser.batch_edit_controller_v2 import BatchEditController
+from src.browser.login_controller import LoginController
 
 
 async def debug_packaging_page():
@@ -43,7 +44,7 @@ async def debug_packaging_page():
     try:
         # 登录
         logger.info("=" * 60)
-        logger.info("第1步：登录")
+        logger.info("第1步:登录")
         logger.info("=" * 60)
 
         login_controller = LoginController()
@@ -59,7 +60,7 @@ async def debug_packaging_page():
 
         # 进入批量编辑
         logger.info("\n" + "=" * 60)
-        logger.info("第2步：进入批量编辑")
+        logger.info("第2步:进入批量编辑")
         logger.info("=" * 60)
 
         batch_controller = BatchEditController(page)
@@ -74,7 +75,7 @@ async def debug_packaging_page():
 
         # 点击外包装步骤
         logger.info("\n" + "=" * 60)
-        logger.info("第3步：进入外包装页面")
+        logger.info("第3步:进入外包装页面")
         logger.info("=" * 60)
 
         if not await batch_controller.click_step("外包装", "7.5"):
@@ -86,7 +87,7 @@ async def debug_packaging_page():
 
         # 获取页面HTML
         logger.info("\n" + "=" * 60)
-        logger.info("第4步：分析页面结构")
+        logger.info("第4步:分析页面结构")
         logger.info("=" * 60)
 
         # 截图

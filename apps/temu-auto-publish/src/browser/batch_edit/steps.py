@@ -1,5 +1,5 @@
 """
-@PURPOSE: 批量编辑步骤混入，封装 18 个具体步骤与重试逻辑
+@PURPOSE: 批量编辑步骤混入,封装 18 个具体步骤与重试逻辑
 @OUTLINE:
   - class BatchEditStepsMixin: 提供 step_01 ~ step_18 方法
 @DEPENDENCIES:
@@ -9,28 +9,26 @@
 
 from __future__ import annotations
 
-import random
 from contextlib import suppress
 from pathlib import Path
-from typing import Optional
 
 from loguru import logger
 from playwright.async_api import expect
 
 from ...utils.batch_edit_helpers import retry_on_failure
-from ...utils.selector_race import TIMEOUTS
-from ...utils.page_waiter import PageWaiter, WaitStrategy
 from ...utils.page_load_decorator import (
     wait_dom_loaded,
     wait_network_idle,
 )
+from ...utils.page_waiter import PageWaiter, WaitStrategy
+from ...utils.selector_race import TIMEOUTS
 
 
 class BatchEditStepsMixin:
     """提供批量编辑 18 个步骤的混入类."""
 
     def _get_wait_strategy(self) -> WaitStrategy:
-        """获取等待策略，默认退回快速策略."""
+        """获取等待策略,默认退回快速策略."""
 
         strategy = getattr(self, "wait_strategy", None)
         if isinstance(strategy, WaitStrategy):
@@ -56,20 +54,20 @@ class BatchEditStepsMixin:
         return PageWaiter(page, self._get_wait_strategy())
 
     async def step_01_title(self) -> bool:
-        """步骤7.1：标题（不改动）."""
+        """步骤7.1:标题(不改动)."""
         if not await self.click_step("标题", "7.1"):
             return False
 
-        logger.info("  ℹ️ 标题不改动，直接预览+保存")
+        logger.info("  ℹ️ 标题不改动,直接预览+保存")
         return await self.click_preview_and_save("标题")
 
     async def step_02_english_title(self) -> bool:
-        """步骤7.2：英语标题（按空格）."""
+        """步骤7.2:英语标题(按空格)."""
         if not await self.click_step("英语标题", "7.2"):
             return False
 
         try:
-            logger.info("  填写英语标题（输入空格）...")
+            logger.info("  填写英语标题(输入空格)...")
 
             waiter = self._build_waiter()
             await waiter.wait_for_dom_stable(timeout_ms=TIMEOUTS.SLOW)
@@ -96,24 +94,24 @@ class BatchEditStepsMixin:
             await target.fill(" ")
             await waiter.wait_for_dom_stable(timeout_ms=TIMEOUTS.NORMAL)
 
-            logger.success("  ✓ 已输入空格（精准定位）")
+            logger.success("  ✓ 已输入空格(精准定位)")
             return await self.click_preview_and_save("英语标题")
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.error(f"  ✗ 操作失败: {exc}")
             return False
 
     async def step_03_category_attrs(self) -> bool:
-        """步骤7.3：类目属性（参考采集链接填写）."""
+        """步骤7.3:类目属性(参考采集链接填写)."""
         if not await self.click_step("类目属性", "7.3"):
             return False
 
         logger.info("  ℹ️ 类目属性需要参考原商品链接")
-        logger.info("  ℹ️ 当前跳过，实际使用时需要填写")
+        logger.info("  ℹ️ 当前跳过,实际使用时需要填写")
 
         return await self.click_preview_and_save("类目属性")
 
     async def step_04_main_sku(self) -> bool:
-        """步骤7.4：主货号（填写或保持默认）."""
+        """步骤7.4:主货号(填写或保持默认)."""
         if not await self.click_step("主货号", "7.4"):
             return False
 
@@ -122,7 +120,7 @@ class BatchEditStepsMixin:
             waiter = self._build_waiter()
             await waiter.wait_for_dom_stable(timeout_ms=TIMEOUTS.SLOW)
 
-            # 精准定位：排除disabled/readonly
+            # 精准定位:排除disabled/readonly
             precise_selectors = [
                 "input[placeholder*='货号']:not([disabled]):not([readonly])",
                 "input[placeholder*='SKU']:not([disabled]):not([readonly])",
@@ -142,28 +140,28 @@ class BatchEditStepsMixin:
 
                         current_value = await input_elem.input_value()
                         if current_value:
-                            logger.info(f"  ℹ️ 主货号已有值：{current_value}，保持不变")
+                            logger.info(f"  ℹ️ 主货号已有值:{current_value},保持不变")
                         else:
-                            logger.info("  ℹ️ 主货号为空，保持默认")
+                            logger.info("  ℹ️ 主货号为空,保持默认")
                         input_found = True
                         break
 
                     if input_found:
                         break
-                except Exception:  # noqa: BLE001
+                except Exception:
                     continue
 
             return await self.click_preview_and_save("主货号")
 
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.error(f"  ✗ 操作失败: {exc}")
             return False
 
-    async def step_05_packaging(self, image_url: Optional[str] = None) -> bool:
-        """步骤7.5：外包装（长方体+硬包装）.
+    async def step_05_packaging(self, image_url: str | None = None) -> bool:
+        """步骤7.5:外包装(长方体+硬包装).
 
         Args:
-            image_url: 外包装图片来源（可为 URL 或本地文件路径）
+            image_url: 外包装图片来源(可为 URL 或本地文件路径)
         """
         if not await self.click_step("外包装", "7.5"):
             return False
@@ -174,12 +172,12 @@ class BatchEditStepsMixin:
             # 等待页面 DOM 加载
             await wait_dom_loaded(self.page, TIMEOUTS.SLOW, context=" [packaging]")
 
-            # 1. 选择外包装形状：长方体（使用下拉选择框）
-            logger.info("    - 外包装形状：长方体")
+            # 1. 选择外包装形状:长方体(使用下拉选择框)
+            logger.info("    - 外包装形状:长方体")
             shape_selected = False
 
             try:
-                # 查找"外包装形状"标签，然后找到对应的下拉框
+                # 查找"外包装形状"标签,然后找到对应的下拉框
                 shape_label = self.page.locator("text='外包装形状'").first
                 if await shape_label.count() > 0:
                     # 找到同一行的el-select下拉框
@@ -208,14 +206,14 @@ class BatchEditStepsMixin:
                                     logger.info("      ✓ 已选择长方体")
                                     shape_selected = True
                                     break
-                            except Exception as err:  # noqa: BLE001
+                            except Exception as err:
                                 logger.debug(f"      选项选择器 {selector} 失败: {err}")
                                 continue
                     else:
                         logger.warning("      ⚠️ 未找到外包装形状下拉框")
                 else:
                     logger.warning("      ⚠️ 未找到'外包装形状'标签")
-            except Exception as err:  # noqa: BLE001
+            except Exception as err:
                 logger.warning(f"      ⚠️ 选择外包装形状失败: {err}")
 
             if not shape_selected:
@@ -223,15 +221,15 @@ class BatchEditStepsMixin:
                 try:
                     await self.page.screenshot(path="debug_packaging_shape.png")
                     logger.info("      📸 已保存截图: debug_packaging_shape.png")
-                except Exception:  # noqa: BLE001
+                except Exception:
                     pass
 
-            # 2. 选择外包装类型：硬包装（使用下拉选择框）
-            logger.info("    - 外包装类型：硬包装")
+            # 2. 选择外包装类型:硬包装(使用下拉选择框)
+            logger.info("    - 外包装类型:硬包装")
             type_selected = False
 
             try:
-                # 查找"外包装类型"标签，然后找到对应的下拉框
+                # 查找"外包装类型"标签,然后找到对应的下拉框
                 type_label = self.page.locator("text='外包装类型'").first
                 if await type_label.count() > 0:
                     parent = type_label.locator("..").locator("..")
@@ -256,14 +254,14 @@ class BatchEditStepsMixin:
                                     logger.info("      ✓ 已选择硬包装")
                                     type_selected = True
                                     break
-                            except Exception as err:  # noqa: BLE001
+                            except Exception as err:
                                 logger.debug(f"      选项选择器 {selector} 失败: {err}")
                                 continue
                     else:
                         logger.warning("      ⚠️ 未找到外包装类型下拉框")
                 else:
                     logger.warning("      ⚠️ 未找到'外包装类型'标签")
-            except Exception as err:  # noqa: BLE001
+            except Exception as err:
                 logger.warning(f"      ⚠️ 选择外包装类型失败: {err}")
 
             if not type_selected:
@@ -271,7 +269,7 @@ class BatchEditStepsMixin:
                 try:
                     await self.page.screenshot(path="debug_packaging_type.png")
                     logger.info("      📸 已保存截图: debug_packaging_type.png")
-                except Exception:  # noqa: BLE001
+                except Exception:
                     pass
 
             def _is_url(value: str) -> bool:
@@ -305,7 +303,7 @@ class BatchEditStepsMixin:
                                 logger.warning("      ⚠️ 未找到图片URL输入框")
                         else:
                             logger.debug("      未找到网络图片按钮")
-                    except Exception as err:  # noqa: BLE001
+                    except Exception as err:
                         logger.warning(f"      ⚠️ 图片上传失败: {err}")
                 else:
                     file_path = Path(upload_source)
@@ -318,26 +316,26 @@ class BatchEditStepsMixin:
                                 logger.success("      ✓ 本地图片已上传")
                             else:
                                 logger.warning("      ⚠️ 未找到图片文件选择框")
-                        except Exception as err:  # noqa: BLE001
+                        except Exception as err:
                             logger.warning(f"      ⚠️ 上传本地图片失败: {err}")
                     else:
                         logger.warning(f"      ⚠️ 图片文件不存在: {file_path}")
             else:
-                logger.info("    - 跳过图片上传（未提供图片）")
+                logger.info("    - 跳过图片上传(未提供图片)")
 
             return await self.click_preview_and_save("外包装")
 
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.error(f"  ✗ 操作失败: {exc}")
             return False
 
     async def step_06_origin(self) -> bool:
-        """步骤7.6：产地（先输入\"浙江\"，然后选择\"中国大陆 / 浙江省\"）."""
+        """步骤7.6:产地(先输入\"浙江\",然后选择\"中国大陆 / 浙江省\")."""
         if not await self.click_step("产地", "7.6"):
             return False
 
         try:
-            logger.info("  填写产地：浙江 -> 中国大陆 / 浙江省...")
+            logger.info("  填写产地:浙江 -> 中国大陆 / 浙江省...")
 
             await wait_dom_loaded(self.page, TIMEOUTS.SLOW, context=" [origin]")
 
@@ -363,19 +361,17 @@ class BatchEditStepsMixin:
                                 await input_elem.clear()
                                 await input_elem.fill("浙江")
                                 logger.success(
-                                    f"  ✓ 已输入搜索关键词：浙江（精准定位第 {idx + 1} 个）",
+                                    f"  ✓ 已输入搜索关键词:浙江(精准定位第 {idx + 1} 个)",
                                 )
                                 input_found = True
 
                                 # 等待下拉选项出现
-                                try:
+                                with suppress(Exception):
                                     await self.page.wait_for_selector(
                                         ".el-select-dropdown__item:visible",
                                         state="visible",
                                         timeout=TIMEOUTS.NORMAL,
                                     )
-                                except Exception:  # noqa: BLE001
-                                    pass
 
                                 option_selectors = [
                                     "text='中国大陆 / 浙江省'",
@@ -399,15 +395,15 @@ class BatchEditStepsMixin:
                                                     and "浙江" in option_text
                                                 ):
                                                     await option.click(timeout=2000)
-                                                    logger.success(f"  ✓ 已选择：{option_text}")
+                                                    logger.success(f"  ✓ 已选择:{option_text}")
                                                     selected = True
                                                     break
-                                            except Exception:  # noqa: BLE001
+                                            except Exception:
                                                 continue
 
                                         if selected:
                                             break
-                                    except Exception:  # noqa: BLE001
+                                    except Exception:
                                         continue
 
                                 if not selected:
@@ -415,21 +411,21 @@ class BatchEditStepsMixin:
                                         await input_elem.press("ArrowDown")
                                         await input_elem.press("Enter")
                                         logger.info("  ✓ 已按ArrowDown+Enter确认")
-                                    except Exception:  # noqa: BLE001
-                                        logger.warning("  ⚠️ 未找到下拉选项，但已输入文本")
+                                    except Exception:
+                                        logger.warning("  ⚠️ 未找到下拉选项,但已输入文本")
 
                                 break
 
-                            except Exception:  # noqa: BLE001
+                            except Exception:
                                 continue
 
-                        except Exception:  # noqa: BLE001
+                        except Exception:
                             continue
 
                     if input_found:
                         break
 
-                except Exception as err:  # noqa: BLE001
+                except Exception as err:
                     logger.debug(f"  选择器失败: {str(err)[:60]}")
                     continue
 
@@ -438,41 +434,41 @@ class BatchEditStepsMixin:
                 try:
                     await self.page.screenshot(path="debug_origin.png")
                     logger.info("  📸 已保存截图: debug_origin.png")
-                except Exception:  # noqa: BLE001
+                except Exception:
                     pass
 
             return await self.click_preview_and_save("产地")
 
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.error(f"  ✗ 操作失败: {exc}")
             return False
 
     async def step_07_customization(self) -> bool:
-        """步骤7.7：定制品（不改动）."""
+        """步骤7.7:定制品(不改动)."""
         if not await self.click_step("定制品", "7.7"):
             return False
 
-        logger.info("  ℹ️ 定制品不改动，直接预览+保存")
+        logger.info("  ℹ️ 定制品不改动,直接预览+保存")
         return await self.click_preview_and_save("定制品")
 
     async def step_08_sensitive_attrs(self) -> bool:
-        """步骤7.8：敏感属性（不改动）."""
+        """步骤7.8:敏感属性(不改动)."""
         if not await self.click_step("敏感属性", "7.8"):
             return False
 
-        logger.info("  ℹ️ 敏感属性不改动，直接预览+保存")
+        logger.info("  ℹ️ 敏感属性不改动,直接预览+保存")
         return await self.click_preview_and_save("敏感属性")
 
     async def step_09_weight(
         self,
-        weight: Optional[int] = None,
-        product_name: Optional[str] = None,
+        weight: int | None = None,
+        product_name: str | None = None,
     ) -> bool:
-        """步骤7.9：重量（5000-9999G）.
+        """步骤7.9:重量(5000-9999G).
 
         Args:
-            weight: 重量（克），如果不提供则尝试从Excel读取或随机生成
-            product_name: 产品名称，用于从Excel读取数据
+            weight: 重量(克),如果不提供则尝试从Excel读取或随机生成
+            product_name: 产品名称,用于从Excel读取数据
         """
         if not await self.click_step("重量", "7.9"):
             return False
@@ -486,7 +482,7 @@ class BatchEditStepsMixin:
                     weight = reader.get_weight(product_name)
                     if weight:
                         logger.info(f"  从Excel读取到重量: {weight}G")
-                except Exception as err:  # noqa: BLE001
+                except Exception as err:
                     logger.debug(f"  从Excel读取重量失败: {err}")
 
             if weight is None:
@@ -495,7 +491,7 @@ class BatchEditStepsMixin:
                 weight = ProductDataReader.generate_random_weight()
                 logger.info(f"  使用随机重量: {weight}G")
 
-            logger.info(f"  填写重量：{weight}G...")
+            logger.info(f"  填写重量:{weight}G...")
 
             precise_selectors = [
                 "input[placeholder*='重量']:not([disabled]):not([readonly])",
@@ -507,25 +503,25 @@ class BatchEditStepsMixin:
                     weight_input = self.page.locator(selector).first
                     if await weight_input.count() > 0 and await weight_input.is_visible():
                         await weight_input.fill(str(weight))
-                        logger.info(f"  ✓ 已输入：{weight}G")
+                        logger.info(f"  ✓ 已输入:{weight}G")
                         break
-                except Exception:  # noqa: BLE001
+                except Exception:
                     continue
 
             return await self.click_preview_and_save("重量")
 
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.error(f"  ✗ 操作失败: {exc}")
             return False
 
     async def step_10_dimensions(
         self,
-        length: Optional[int] = None,
-        width: Optional[int] = None,
-        height: Optional[int] = None,
-        product_name: Optional[str] = None,
+        length: int | None = None,
+        width: int | None = None,
+        height: int | None = None,
+        product_name: str | None = None,
     ) -> bool:
-        """步骤7.10：尺寸（50-99cm，长>宽>高）."""
+        """步骤7.10:尺寸(50-99cm,长>宽>高)."""
         if not await self.click_step("尺寸", "7.10"):
             return False
 
@@ -541,7 +537,7 @@ class BatchEditStepsMixin:
                         width = dimensions["width"]
                         height = dimensions["height"]
                         logger.info(f"  从Excel读取到尺寸: {length} × {width} × {height} cm")
-                except Exception as err:  # noqa: BLE001
+                except Exception as err:
                     logger.debug(f"  从Excel读取尺寸失败: {err}")
 
             if length is None:
@@ -561,7 +557,7 @@ class BatchEditStepsMixin:
                 height,
             )
 
-            logger.info(f"  填写尺寸：{length} × {width} × {height} cm...")
+            logger.info(f"  填写尺寸:{length} × {width} × {height} cm...")
 
             length_selectors = ["input[placeholder*='长']:not([disabled]):not([readonly])"]
             width_selectors = ["input[placeholder*='宽']:not([disabled]):not([readonly])"]
@@ -574,7 +570,7 @@ class BatchEditStepsMixin:
                         await length_input.fill(str(length))
                         logger.debug(f"  ✓ 长度: {length}cm")
                         break
-                except Exception:  # noqa: BLE001
+                except Exception:
                     continue
 
             for selector in width_selectors:
@@ -584,7 +580,7 @@ class BatchEditStepsMixin:
                         await width_input.fill(str(width))
                         logger.debug(f"  ✓ 宽度: {width}cm")
                         break
-                except Exception:  # noqa: BLE001
+                except Exception:
                     continue
 
             for selector in height_selectors:
@@ -594,19 +590,19 @@ class BatchEditStepsMixin:
                         await height_input.fill(str(height))
                         logger.debug(f"  ✓ 高度: {height}cm")
                         break
-                except Exception:  # noqa: BLE001
+                except Exception:
                     continue
 
-            logger.info(f"  ✓ 已输入尺寸（验证：{length} > {width} > {height}）")
+            logger.info(f"  ✓ 已输入尺寸(验证:{length} > {width} > {height})")
 
             return await self.click_preview_and_save("尺寸")
 
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.error(f"  ✗ 操作失败: {exc}")
             return False
 
     async def step_11_platform_sku(self) -> bool:
-        """步骤7.11：平台SKU（自定义SKU编码）."""
+        """步骤7.11:平台SKU(自定义SKU编码)."""
         if not await self.click_step("平台SKU", "7.11"):
             return False
 
@@ -633,33 +629,33 @@ class BatchEditStepsMixin:
                             break
                     if clicked:
                         break
-                except Exception as err:  # noqa: BLE001
+                except Exception as err:
                     logger.debug(f"  选择器 {selector} 失败: {err}")
                     continue
 
             if not clicked:
-                logger.warning("  ⚠️ 未找到自定义SKU编码按钮，尝试强制点击")
+                logger.warning("  ⚠️ 未找到自定义SKU编码按钮,尝试强制点击")
                 try:
                     await self.page.locator("button:has-text('自定义SKU编码')").first.click(
                         force=True,
                     )
                     logger.info("  ✓ 强制点击成功")
-                except Exception:  # noqa: BLE001
+                except Exception:
                     logger.warning("  ⚠️ 未找到自定义SKU编码按钮")
 
             return await self.click_preview_and_save("平台SKU")
 
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.error(f"  ✗ 操作失败: {exc}")
             return False
 
     async def step_12_sku_category(self) -> bool:
-        """步骤7.12：SKU分类（默认选择单品）."""
+        """步骤7.12:SKU分类(默认选择单品)."""
         if not await self.click_step("SKU分类", "7.12"):
             return False
 
         try:
-            logger.info("  选择SKU分类：单品...")
+            logger.info("  选择SKU分类:单品...")
 
             # 1. 点击分类下拉框
             select_selectors = [
@@ -677,7 +673,7 @@ class BatchEditStepsMixin:
                         logger.debug("  ✓ 已点击分类下拉框")
                         clicked = True
                     break
-                except Exception:  # noqa: BLE001
+                except Exception:
                     continue
 
             if not clicked:
@@ -696,10 +692,10 @@ class BatchEditStepsMixin:
                     option = self.page.locator(selector).first
                     if await option.count() > 0 and await option.is_visible():
                         await option.click()
-                        logger.success("  ✓ 已选择：单品")
+                        logger.success("  ✓ 已选择:单品")
                         selected = True
                         break
-                except Exception:  # noqa: BLE001
+                except Exception:
                     continue
 
             if not selected:
@@ -707,13 +703,13 @@ class BatchEditStepsMixin:
 
             return await self.click_preview_and_save("SKU分类")
 
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.error(f"  ✗ 操作失败: {exc}")
             return False
 
     @retry_on_failure(max_retries=3, delay=0.3, backoff=1.8)
     async def step_13_size_chart(self) -> bool:
-        """步骤7.13：尺码表（不用修改）."""
+        """步骤7.13:尺码表(不用修改)."""
         if not await self.click_step("尺码表", "7.13"):
             raise RuntimeError("未能定位到『尺码表』步骤")
 
@@ -724,10 +720,10 @@ class BatchEditStepsMixin:
 
     async def step_14_suggested_price(
         self,
-        cost_price: Optional[float] = None,
-        product_name: Optional[str] = None,
+        cost_price: float | None = None,
+        product_name: str | None = None,
     ) -> bool:
-        """步骤7.14：建议售价（成本价×10）."""
+        """步骤7.14:建议售价(成本价×10)."""
         if not await self.click_step("建议售价", "7.14"):
             return False
 
@@ -740,12 +736,12 @@ class BatchEditStepsMixin:
                     cost_price = reader.get_cost_price(product_name)
                     if cost_price:
                         logger.info(f"  从Excel读取到成本价: ¥{cost_price}")
-                except Exception as err:  # noqa: BLE001
+                except Exception as err:
                     logger.debug(f"  从Excel读取成本价失败: {err}")
 
             if cost_price:
                 suggested_price = cost_price * 10
-                logger.info(f"  填写建议售价：¥{suggested_price} (成本价 ¥{cost_price} × 10)...")
+                logger.info(f"  填写建议售价:¥{suggested_price} (成本价 ¥{cost_price} × 10)...")
 
                 precise_selectors = [
                     "input[placeholder*='价格']:not([disabled]):not([readonly])[type='number']",
@@ -758,29 +754,29 @@ class BatchEditStepsMixin:
                         price_input = self.page.locator(selector).first
                         if await price_input.count() > 0 and await price_input.is_visible():
                             await price_input.fill(str(suggested_price))
-                            logger.info(f"  ✓ 已输入：¥{suggested_price}")
+                            logger.info(f"  ✓ 已输入:¥{suggested_price}")
                             break
-                    except Exception:  # noqa: BLE001
+                    except Exception:
                         continue
             else:
-                logger.info("  ℹ️ 无成本价数据，跳过填写（SOP要求：不做要求随便填）")
+                logger.info("  ℹ️ 无成本价数据,跳过填写(SOP要求:不做要求随便填)")
 
             return await self.click_preview_and_save("建议售价")
 
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.error(f"  ✗ 操作失败: {exc}")
             return False
 
     async def step_15_package_list(self) -> bool:
-        """步骤7.15：包装清单（不改动）."""
+        """步骤7.15:包装清单(不改动)."""
         if not await self.click_step("包装清单", "7.15"):
             return False
 
-        logger.info("  ℹ️ 包装清单不改动，直接预览+保存")
+        logger.info("  ℹ️ 包装清单不改动,直接预览+保存")
         return await self.click_preview_and_save("包装清单")
 
     async def step_16_carousel_images(self) -> bool:
-        """步骤7.16：轮播图（暂时不需要）."""
+        """步骤7.16:轮播图(暂时不需要)."""
         if not await self.click_step("轮播图", "7.16"):
             return False
 
@@ -788,15 +784,15 @@ class BatchEditStepsMixin:
         return await self.click_preview_and_save("轮播图")
 
     async def step_17_color_images(self) -> bool:
-        """步骤7.17：颜色图（不需要）."""
+        """步骤7.17:颜色图(不需要)."""
         if not await self.click_step("颜色图", "7.17"):
             return False
 
         logger.info("  ℹ️ 颜色图不需要修改")
         return await self.click_preview_and_save("颜色图")
 
-    async def step_18_manual(self, manual_file_path: Optional[str] = None) -> bool:
-        """步骤7.18：产品说明书（上传PDF文件）."""
+    async def step_18_manual(self, manual_file_path: str | None = None) -> bool:
+        """步骤7.18:产品说明书(上传PDF文件)."""
         if not await self.click_step("产品说明书", "7.18"):
             return False
 
@@ -856,7 +852,7 @@ class BatchEditStepsMixin:
                                             await upload_btn.click(button="right")
                                         hovered = True
                                         break
-                                except Exception as err:  # noqa: BLE001
+                                except Exception as err:
                                     logger.debug(f"  悬停选择器 {selector} 失败: {err}")
                                     continue
 
@@ -900,7 +896,7 @@ class BatchEditStepsMixin:
                                                 "  ⚠️ '本地上传' 未触发文件选择器, 尝试下一候选"
                                             )
                                             continue
-                                except Exception as err:  # noqa: BLE001
+                                except Exception as err:
                                     logger.debug(f"  点击选择器 {selector} 失败: {err}")
                                     continue
 
@@ -910,20 +906,20 @@ class BatchEditStepsMixin:
 
                             try:
                                 await file_chooser.set_files(str(file_path))
-                                # 等待上传完成，通过检测上传成功提示
+                                # 等待上传完成,通过检测上传成功提示
                                 try:
                                     await self.page.wait_for_selector(
                                         ".el-message--success:visible, .upload-success:visible",
                                         state="visible",
                                         timeout=TIMEOUTS.SLOW,
                                     )
-                                except Exception:  # noqa: BLE001
+                                except Exception:
                                     await wait_network_idle(
                                         self.page, TIMEOUTS.SLOW, context=" [upload wait]"
                                     )
                                 logger.success(f"  ✅ 已上传产品说明书: {file_path.name}")
                                 uploaded = True
-                            except Exception as err:  # noqa: BLE001
+                            except Exception as err:
                                 logger.error(f"  ❌ 文件选择器上传失败: {err}")
 
                             if not uploaded:
@@ -967,7 +963,7 @@ class BatchEditStepsMixin:
                                         logger.success(f"  ✅ 已上传产品说明书: {file_path.name}")
                                         uploaded = True
                                         break
-                                    except Exception as err:  # noqa: BLE001
+                                    except Exception as err:
                                         logger.debug(f"  上传选择器 {selector} 失败: {err}")
                                         continue
 
@@ -975,11 +971,11 @@ class BatchEditStepsMixin:
                                 success_upload = True
                                 break
                             else:
-                                logger.warning(f"  ⚠️ 第 {attempt} 次尝试仍未上传成功，重试中...")
+                                logger.warning(f"  ⚠️ 第 {attempt} 次尝试仍未上传成功,重试中...")
                                 await wait_dom_loaded(
                                     self.page, TIMEOUTS.SLOW, context=" [retry wait]"
                                 )
-                        except Exception as err:  # noqa: BLE001
+                        except Exception as err:
                             last_error = err
                             logger.warning(f"  ⚠️ 上传尝试 {attempt} 失败: {err}")
                             await wait_dom_loaded(
@@ -991,7 +987,7 @@ class BatchEditStepsMixin:
                             raise last_error
                         raise RuntimeError("说明书上传重试仍未成功")
             else:
-                logger.info("  ℹ️ 未提供说明书文件，跳过上传")
+                logger.info("  ℹ️ 未提供说明书文件,跳过上传")
 
             return await self.click_preview_and_save("产品说明书")
 

@@ -13,15 +13,15 @@ from .base import TIMEOUTS, FirstEditBase
 
 
 class FirstEditSkuMixin(FirstEditBase):
-    """封装首次编辑流程中的 SKU 维度操作。"""
+    """封装首次编辑流程中的 SKU 维度操作."""
 
     async def set_sku_price(self, page: Page, price: float, sku_index: int = 0) -> bool:
         """设置 SKU 价格(SOP 步骤 4.4).
 
         Args:
             page: Playwright 页面对象.
-            price: 目标价格（CNY）.
-            sku_index: 需要写入的 SKU 行索引（0-based）.
+            price: 目标价格(CNY).
+            sku_index: 需要写入的 SKU 行索引(0-based).
 
         Returns:
             是否设置成功.
@@ -66,7 +66,7 @@ class FirstEditSkuMixin(FirstEditBase):
         Args:
             page: Playwright 页面对象.
             stock: 目标库存数量.
-            sku_index: 需要写入的 SKU 行索引（0-based）.
+            sku_index: 需要写入的 SKU 行索引(0-based).
 
         Returns:
             是否设置成功.
@@ -105,8 +105,8 @@ class FirstEditSkuMixin(FirstEditBase):
 
         Args:
             page: Playwright 页面对象.
-            weight: 目标重量（KG）.
-            sku_index: 需要写入的 SKU 行索引（0-based）.
+            weight: 目标重量(KG).
+            sku_index: 需要写入的 SKU 行索引(0-based).
 
         Returns:
             是否设置成功.
@@ -152,10 +152,10 @@ class FirstEditSkuMixin(FirstEditBase):
 
         Args:
             page: Playwright 页面对象.
-            length: 长度（厘米）.
-            width: 宽度（厘米）.
-            height: 高度（厘米）.
-            sku_index: 需要写入的 SKU 行索引（0-based）.
+            length: 长度(厘米).
+            width: 宽度(厘米).
+            height: 高度(厘米).
+            sku_index: 需要写入的 SKU 行索引(0-based).
 
         Returns:
             是否设置成功.

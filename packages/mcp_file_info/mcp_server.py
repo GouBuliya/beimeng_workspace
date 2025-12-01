@@ -1,5 +1,5 @@
 """
-@PURPOSE: MCP服务器实现，提供文件元信息提取工具
+@PURPOSE: MCP服务器实现,提供文件元信息提取工具
 @OUTLINE:
   - get_file_metadata: 获取文件全部元信息
   - get_specific_metadata: 获取指定字段的元信息
@@ -17,7 +17,6 @@
 
 import asyncio
 import json
-from pathlib import Path
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
@@ -43,13 +42,13 @@ async def list_tools() -> list[Tool]:
     return [
         Tool(
             name="get_file_metadata",
-            description="获取文件的全部元信息。读取文件头部的元数据注释并返回所有字段。",
+            description="获取文件的全部元信息.读取文件头部的元数据注释并返回所有字段.",
             inputSchema={
                 "type": "object",
                 "properties": {
                     "file_path": {
                         "type": "string",
-                        "description": "要读取的文件路径（绝对路径或相对路径）",
+                        "description": "要读取的文件路径(绝对路径或相对路径)",
                     }
                 },
                 "required": ["file_path"],
@@ -57,7 +56,7 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="get_specific_metadata",
-            description="获取文件的特定元信息字段。可以指定要获取的字段名称列表。",
+            description="获取文件的特定元信息字段.可以指定要获取的字段名称列表.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -68,7 +67,7 @@ async def list_tools() -> list[Tool]:
                     "fields": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": f"要获取的字段名称列表。可用字段: {', '.join(METADATA_FIELDS.keys())}",
+                        "description": f"要获取的字段名称列表.可用字段: {', '.join(METADATA_FIELDS.keys())}",
                     },
                 },
                 "required": ["file_path", "fields"],

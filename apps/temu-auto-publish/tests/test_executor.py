@@ -9,12 +9,12 @@
 """
 
 import json
-import pytest
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
-from src.core.executor import WorkflowState, WorkflowExecutor
+import pytest
+from src.core.executor import WorkflowExecutor, WorkflowState
 
 
 class TestWorkflowState:
@@ -178,7 +178,7 @@ class TestWorkflowExecutor:
 
         mock_page = MagicMock()
 
-        result = await executor.execute(
+        await executor.execute(
             workflow_func=multi_stage_workflow, page=mock_page, config={}
         )
 
@@ -311,14 +311,14 @@ class TestWorkflowExecutorRetry:
         mock_page = MagicMock()
 
         # 这里需要根据实际executor的重试配置
-        # 如果executor内置重试，应该成功
+        # 如果executor内置重试,应该成功
         try:
             result = await executor.execute(
                 workflow_func=flaky_workflow, page=mock_page, config={}, max_retries=3
             )
             assert result is not None
         except Exception:
-            # 如果不支持重试参数，至少验证调用了
+            # 如果不支持重试参数,至少验证调用了
             assert call_count >= 1
 
 
@@ -343,7 +343,7 @@ class TestWorkflowExecutorMetrics:
                 workflow_func=workflow_with_metrics, page=mock_page, config={}
             )
 
-            # 验证指标收集器被调用（如果executor集成了）
+            # 验证指标收集器被调用(如果executor集成了)
             assert result is not None
 
 

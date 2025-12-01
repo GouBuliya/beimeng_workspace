@@ -1,5 +1,5 @@
 """
-@PURPOSE: 实现商品采集功能（SOP步骤1-3）
+@PURPOSE: 实现商品采集功能(SOP步骤1-3)
 @OUTLINE:
   - class CollectionController: 商品采集控制器
   - async def visit_store(): 访问前端店铺
@@ -14,23 +14,20 @@
 
 import json
 from pathlib import Path
-from typing import Dict, List, Optional
 
 from loguru import logger
-from playwright.async_api import Page, TimeoutError as PlaywrightTimeout
-
-from src.browser.browser_manager import BrowserManager
-from src.utils.selector_race import TIMEOUTS
+from playwright.async_api import Page
 from src.utils.page_load_decorator import (
     wait_dom_loaded,
     wait_network_idle,
 )
+from src.utils.selector_race import TIMEOUTS
 
 
 class CollectionController:
-    """商品采集控制器（SOP步骤1-3）.
+    """商品采集控制器(SOP步骤1-3).
 
-    负责：
+    负责:
     - 访问Temu前端店铺
     - 站内搜索同款商品
     - 采集符合要求的商品链接
@@ -44,8 +41,8 @@ class CollectionController:
 
     def __init__(
         self,
-        config_path: Optional[str] = None,
-        temu_cookie_path: Optional[str] = None,
+        config_path: str | None = None,
+        temu_cookie_path: str | None = None,
     ):
         """初始化采集控制器.
 
@@ -65,9 +62,9 @@ class CollectionController:
             or Path(__file__).resolve().parents[2] / "data" / "input" / "temu_cookies.json"
         )
         self._temu_cookies_loaded = False
-        logger.info("采集控制器初始化（SOP步骤1-3）")
+        logger.info("采集控制器初始化(SOP步骤1-3)")
 
-    def _load_selectors(self) -> Dict:
+    def _load_selectors(self) -> dict:
         """加载选择器配置.
 
         Returns:
@@ -78,15 +75,15 @@ class CollectionController:
             >>> print(selectors.keys())
         """
         try:
-            with open(self.config_path, "r", encoding="utf-8") as f:
+            with open(self.config_path, encoding="utf-8") as f:
                 selectors = json.load(f)
             logger.debug(f"选择器配置已加载: {self.config_path}")
             return selectors
         except FileNotFoundError:
-            logger.warning(f"选择器配置文件不存在: {self.config_path}，使用默认选择器")
+            logger.warning(f"选择器配置文件不存在: {self.config_path},使用默认选择器")
             return self._get_default_selectors()
 
-    def _get_default_selectors(self) -> Dict:
+    def _get_default_selectors(self) -> dict:
         """获取默认选择器.
 
         Returns:
@@ -112,9 +109,9 @@ class CollectionController:
         }
 
     async def visit_store(self, page: Page) -> bool:
-        """访问前端店铺（SOP步骤1）.
+        """访问前端店铺(SOP步骤1).
 
-        在Temu商家后台首页点击"一键访问店铺"。
+        在Temu商家后台首页点击"一键访问店铺".
 
         Args:
             page: Playwright页面对象
@@ -127,7 +124,7 @@ class CollectionController:
             True
         """
         logger.info("============================================================")
-        logger.info("【SOP步骤1】访问前端店铺")
+        logger.info("[SOP步骤1]访问前端店铺")
         logger.info("============================================================")
 
         try:
@@ -143,7 +140,7 @@ class CollectionController:
 
             if visit_btn_count == 0:
                 logger.warning("⚠️ 未找到'一键访问店铺'按钮")
-                # 可能已经在店铺页面，检查URL
+                # 可能已经在店铺页面,检查URL
                 current_url = page.url
                 if "temu.com" in current_url and "/product" not in current_url:
                     logger.info("✓ 已在店铺页面")
@@ -183,7 +180,7 @@ class CollectionController:
             return False
 
         try:
-            with open(self.temu_cookie_path, "r", encoding="utf-8") as file:
+            with open(self.temu_cookie_path, encoding="utf-8") as file:
                 cookies = json.load(file)
 
             await page.context.add_cookies(cookies)
@@ -195,16 +192,16 @@ class CollectionController:
             return False
 
     async def search_products(
-        self, page: Page, keyword: str, filters: Optional[Dict] = None
+        self, page: Page, keyword: str, filters: dict | None = None
     ) -> bool:
-        """站内搜索同款商品（SOP步骤2）.
+        """站内搜索同款商品(SOP步骤2).
 
-        根据选品表的关键词，在Temu前端搜索同款商品。
+        根据选品表的关键词,在Temu前端搜索同款商品.
 
         Args:
             page: Playwright页面对象
-            keyword: 搜索关键词（如"药箱收纳盒"）
-            filters: 筛选条件（如颜色、尺寸等）
+            keyword: 搜索关键词(如"药箱收纳盒")
+            filters: 筛选条件(如颜色,尺寸等)
 
         Returns:
             是否成功搜索到商品
@@ -216,7 +213,7 @@ class CollectionController:
             True
         """
         logger.info("============================================================")
-        logger.info(f"【SOP步骤2】站内搜索同款商品: {keyword}")
+        logger.info(f"[SOP步骤2]站内搜索同款商品: {keyword}")
         logger.info("============================================================")
 
         try:
@@ -248,7 +245,7 @@ class CollectionController:
             if search_btn_count > 0:
                 await page.locator(search_btn_selector).first.click()
             else:
-                # 如果没有搜索按钮，按回车
+                # 如果没有搜索按钮,按回车
                 await page.locator(search_input_selector).first.press("Enter")
 
             # 等待搜索结果加载
@@ -263,24 +260,24 @@ class CollectionController:
             product_count = await page.locator(item_card_selector).count()
 
             if product_count > 0:
-                logger.success(f"✓ 搜索成功，找到 {product_count} 个商品")
+                logger.success(f"✓ 搜索成功,找到 {product_count} 个商品")
                 return True
             else:
-                logger.warning("⚠️ 未找到商品，请检查关键词")
+                logger.warning("⚠️ 未找到商品,请检查关键词")
                 return False
 
         except Exception as e:
             logger.error(f"搜索商品失败: {e}")
             return False
 
-    async def collect_links(self, page: Page, count: int = 5, validate: bool = True) -> List[Dict]:
-        """一次性采集N个同款商品链接（SOP步骤3）.
+    async def collect_links(self, page: Page, count: int = 5, validate: bool = True) -> list[dict]:
+        """一次性采集N个同款商品链接(SOP步骤3).
 
-        从搜索结果中采集指定数量的商品链接。
+        从搜索结果中采集指定数量的商品链接.
 
         Args:
             page: Playwright页面对象
-            count: 采集数量（默认5个）
+            count: 采集数量(默认5个)
             validate: 是否验证商品规格一致性
 
         Returns:
@@ -292,7 +289,7 @@ class CollectionController:
             >>> print(links[0].keys())  # ['url', 'title', 'price', 'image']
         """
         logger.info("============================================================")
-        logger.info(f"【SOP步骤3】一次性采集 {count} 个同款商品链接")
+        logger.info(f"[SOP步骤3]一次性采集 {count} 个同款商品链接")
         logger.info("============================================================")
 
         collected_links = []
@@ -316,7 +313,7 @@ class CollectionController:
             product_cards = await page.locator(item_card_selector).all()
 
             if len(product_cards) < count:
-                logger.warning(f"⚠️ 商品数量不足，需要 {count} 个，实际 {len(product_cards)} 个")
+                logger.warning(f"⚠️ 商品数量不足,需要 {count} 个,实际 {len(product_cards)} 个")
 
             # 采集前N个商品
             for i in range(min(count, len(product_cards))):
@@ -368,7 +365,7 @@ class CollectionController:
                     continue
 
             logger.info(f"\n{'=' * 60}")
-            logger.info(f"采集完成：成功采集 {len(collected_links)} 个商品链接")
+            logger.info(f"采集完成:成功采集 {len(collected_links)} 个商品链接")
             logger.info(f"{'=' * 60}\n")
 
             return collected_links
@@ -378,26 +375,26 @@ class CollectionController:
             return collected_links
 
     async def add_to_miaoshou_collection_box(
-        self, page: Page, product_urls: List[str], max_retries: int = 3, use_plugin: bool = True
-    ) -> Dict:
-        """将Temu商品链接添加到妙手采集箱（工业化版本）.
+        self, page: Page, product_urls: list[str], max_retries: int = 3, use_plugin: bool = True
+    ) -> dict:
+        """将Temu商品链接添加到妙手采集箱(工业化版本).
 
-        使用妙手浏览器插件自动采集商品到妙手ERP采集箱。
-        支持多种策略：插件自动化、API导入、手动fallback。
+        使用妙手浏览器插件自动采集商品到妙手ERP采集箱.
+        支持多种策略:插件自动化,API导入,手动fallback.
 
         Args:
             page: Playwright页面对象
             product_urls: 商品链接列表
             max_retries: 每个商品的最大重试次数
-            use_plugin: 是否使用妙手插件（True: 插件模式, False: API模式）
+            use_plugin: 是否使用妙手插件(True: 插件模式, False: API模式)
 
         Returns:
-            采集结果字典，包含：
+            采集结果字典,包含:
             - success_count: 成功数量
             - failed_count: 失败数量
             - total: 总数量
             - failed_urls: 失败的URL列表
-            - method: 使用的方法（plugin/api/manual）
+            - method: 使用的方法(plugin/api/manual)
 
         Examples:
             >>> urls = ["https://www.temu.com/product/123", ...]
@@ -405,7 +402,7 @@ class CollectionController:
             >>> print(f"成功: {result['success_count']}/{result['total']}")
         """
         logger.info("=" * 80)
-        logger.info(f"【关键衔接】将 {len(product_urls)} 个Temu商品添加到妙手采集箱")
+        logger.info(f"[关键衔接]将 {len(product_urls)} 个Temu商品添加到妙手采集箱")
         logger.info("=" * 80)
 
         result = {
@@ -420,13 +417,13 @@ class CollectionController:
             # 策略1: 使用妙手浏览器插件
             result = await self._add_via_plugin(page, product_urls, max_retries)
         else:
-            # 策略2: 使用妙手ERP API（如果可用）
+            # 策略2: 使用妙手ERP API(如果可用)
             result = await self._add_via_api(page, product_urls, max_retries)
 
-        # 如果两种方法都失败，提供手动fallback
+        # 如果两种方法都失败,提供手动fallback
         if result["success_count"] == 0 and len(product_urls) > 0:
-            logger.warning("⚠️  自动采集失败，请使用手动模式")
-            logger.info("💡 手动模式：")
+            logger.warning("⚠️  自动采集失败,请使用手动模式")
+            logger.info("💡 手动模式:")
             logger.info("   1. 打开Temu商品详情页")
             logger.info("   2. 点击妙手插件的「采集商品」按钮")
             logger.info("   3. 确认商品已添加到妙手采集箱")
@@ -439,11 +436,11 @@ class CollectionController:
         return result
 
     async def _add_via_plugin(
-        self, page: Page, product_urls: List[str], max_retries: int = 3
-    ) -> Dict:
+        self, page: Page, product_urls: list[str], max_retries: int = 3
+    ) -> dict:
         """通过妙手浏览器插件添加商品.
 
-        插件识别策略：
+        插件识别策略:
         1. 查找妙手插件的固定按钮
         2. 支持多种插件版本的选择器
         3. 等待插件加载完成
@@ -456,21 +453,21 @@ class CollectionController:
             "method": "plugin",
         }
 
-        # 妙手插件可能的选择器（按优先级排列）
+        # 妙手插件可能的选择器(按优先级排列)
         plugin_selectors = [
             # 妙手插件常见的ID和class
             "#miaoshou-collect-btn",
             ".miaoshou-collect-button",
             "button[data-miaoshou='collect']",
-            # 文本匹配（中英文）
+            # 文本匹配(中英文)
             "button:has-text('采集到妙手')",
             "button:has-text('采集商品')",
             "button:has-text('妙手采集')",
             "button:has-text('Collect to Miaoshou')",
-            # 通用采集按钮（可能是插件）
+            # 通用采集按钮(可能是插件)
             "button[title*='采集']",
             "div[class*='collect'] button",
-            # iframe中的按钮（插件可能使用iframe）
+            # iframe中的按钮(插件可能使用iframe)
             "iframe[src*='miaoshou'] button",
         ]
 
@@ -512,7 +509,7 @@ class CollectionController:
                                         if await plugin_button.is_visible(timeout=2000):
                                             plugin_found = True
                                             logger.debug(
-                                                f"    ✓ 找到妙手插件按钮（iframe）: {selector}"
+                                                f"    ✓ 找到妙手插件按钮(iframe): {selector}"
                                             )
                                             break
                                 except:
@@ -526,7 +523,7 @@ class CollectionController:
                             continue
 
                     if not plugin_found:
-                        logger.warning(f"    ⚠️  未找到妙手插件按钮")
+                        logger.warning("    ⚠️  未找到妙手插件按钮")
                         retry_count += 1
                         continue
 
@@ -550,14 +547,14 @@ class CollectionController:
                         try:
                             if await page.locator(indicator).count() > 0:
                                 success_detected = True
-                                logger.success(f"    ✓ 检测到采集成功提示")
+                                logger.success("    ✓ 检测到采集成功提示")
                                 break
                         except:
                             continue
 
-                    # 即使没有明确的成功提示，如果点击成功也认为采集成功
+                    # 即使没有明确的成功提示,如果点击成功也认为采集成功
                     if not success_detected:
-                        logger.info("    ℹ️  未检测到明确的成功提示，假设采集成功")
+                        logger.info("    ℹ️  未检测到明确的成功提示,假设采集成功")
                         success_detected = True
 
                     if success_detected:
@@ -574,17 +571,17 @@ class CollectionController:
             if not success:
                 result["failed_count"] += 1
                 result["failed_urls"].append(url)
-                logger.error(f"✗ 第 {i + 1} 个商品采集失败（已重试{max_retries}次）")
+                logger.error(f"✗ 第 {i + 1} 个商品采集失败(已重试{max_retries}次)")
 
         return result
 
-    async def _add_via_api(self, page: Page, product_urls: List[str], max_retries: int = 3) -> Dict:
-        """通过妙手ERP API添加商品（备用方案）.
+    async def _add_via_api(self, page: Page, product_urls: list[str], max_retries: int = 3) -> dict:
+        """通过妙手ERP API添加商品(备用方案).
 
-        注意：此方法需要妙手ERP提供公开API，目前作为占位符。
+        注意:此方法需要妙手ERP提供公开API,目前作为占位符.
         """
         logger.warning("⚠️  妙手ERP API方式暂未实现")
-        logger.info("💡 建议：使用插件模式或手动模式")
+        logger.info("💡 建议:使用插件模式或手动模式")
 
         return {
             "success_count": 0,
@@ -594,10 +591,10 @@ class CollectionController:
             "method": "api_not_available",
         }
 
-    async def add_to_collection_box(self, page: Page, links: List[str]) -> bool:
-        """将采集的链接添加到妙手采集箱（兼容旧接口）.
+    async def add_to_collection_box(self, page: Page, links: list[str]) -> bool:
+        """将采集的链接添加到妙手采集箱(兼容旧接口).
 
-        此方法保留用于向后兼容，内部调用新的add_to_miaoshou_collection_box。
+        此方法保留用于向后兼容,内部调用新的add_to_miaoshou_collection_box.
 
         Args:
             page: Playwright页面对象
@@ -610,9 +607,9 @@ class CollectionController:
         return result["success_count"] == result["total"]
 
     async def search_and_collect(
-        self, page: Page, keyword: str, count: int = 5, filters: Optional[Dict] = None
-    ) -> List[Dict]:
-        """搜索并采集商品（步骤2+3的组合）.
+        self, page: Page, keyword: str, count: int = 5, filters: dict | None = None
+    ) -> list[dict]:
+        """搜索并采集商品(步骤2+3的组合).
 
         Args:
             page: Playwright页面对象
@@ -627,12 +624,12 @@ class CollectionController:
             >>> links = await ctrl.search_and_collect(page, "药箱收纳盒", count=5)
             >>> print(len(links))  # 5
         """
-        # 步骤2：搜索
+        # 步骤2:搜索
         if not await self.search_products(page, keyword, filters):
-            logger.error("搜索失败，无法进行采集")
+            logger.error("搜索失败,无法进行采集")
             return []
 
-        # 步骤3：采集
+        # 步骤3:采集
         links = await self.collect_links(page, count=count)
 
         return links

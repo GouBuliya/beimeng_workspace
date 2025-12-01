@@ -8,11 +8,9 @@
   - 外部: pytest, pytest-asyncio
 """
 
-import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-
 from src.browser.smart_wait_mixin import (
     AdaptiveWaitConfig,
     SmartWaitMixin,
@@ -171,12 +169,12 @@ class TestSmartWaitMixin:
 
         result = await wait_mixin._wait_for_network_quiet(mock_page, timeout_ms=100)
 
-        # 超时不阻塞，返回 False
+        # 超时不阻塞,返回 False
         assert result is False
 
     async def test_wait_for_dom_stable_success(self, wait_mixin, mock_page):
         """测试 DOM 稳定等待成功"""
-        # 模拟稳定的 DOM（返回相同值）
+        # 模拟稳定的 DOM(返回相同值)
         mock_page.evaluate = AsyncMock(return_value=(1000, 50))
 
         result = await wait_mixin._wait_for_dom_stable(
@@ -207,7 +205,7 @@ class TestSmartWaitMixin:
             interval_ms=10,
         )
 
-        # DOM 持续变化，应该超时
+        # DOM 持续变化,应该超时
         assert result is False
 
     def test_boxes_equal(self, wait_mixin):
@@ -222,7 +220,7 @@ class TestSmartWaitMixin:
         assert wait_mixin._boxes_equal(box1, box3, tolerance=1.0) is False
 
     async def test_batch_wait_any(self, wait_mixin, mock_page):
-        """测试批量等待（任一满足）"""
+        """测试批量等待(任一满足)"""
 
         async def always_true(page):
             return True
@@ -241,7 +239,7 @@ class TestSmartWaitMixin:
         assert results == [True, False]
 
     async def test_batch_wait_all(self, wait_mixin, mock_page):
-        """测试批量等待（全部满足）"""
+        """测试批量等待(全部满足)"""
 
         async def always_true(page):
             return True
@@ -249,7 +247,7 @@ class TestSmartWaitMixin:
         async def always_false(page):
             return False
 
-        overall, results = await wait_mixin.batch_wait(
+        overall, _results = await wait_mixin.batch_wait(
             mock_page,
             [always_true, always_false],
             timeout_ms=1000,

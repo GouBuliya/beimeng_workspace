@@ -1,5 +1,5 @@
 """
-@PURPOSE: 数据模型模块，使用Pydantic定义所有数据结构
+@PURPOSE: 数据模型模块,使用Pydantic定义所有数据结构
 @OUTLINE:
   - ProductInput, TaskProduct, TaskData: 任务相关模型
   - SearchResult, EditResult, PublishResult, BrowserResult: 结果相关模型

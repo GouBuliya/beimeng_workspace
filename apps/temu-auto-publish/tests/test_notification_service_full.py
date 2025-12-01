@@ -13,9 +13,10 @@
   - 内部: src.core.notification_service
 """
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 
 # ==================== NotificationMessage 数据类测试 ====================
@@ -26,10 +27,7 @@ class TestNotificationMessage:
         """测试只用必填字段创建"""
         from src.core.notification_service import NotificationMessage
 
-        msg = NotificationMessage(
-            title="测试标题",
-            content="测试内容"
-        )
+        msg = NotificationMessage(title="测试标题", content="测试内容")
 
         assert msg.title == "测试标题"
         assert msg.content == "测试内容"
@@ -46,7 +44,7 @@ class TestNotificationMessage:
             content="错误内容",
             level="error",
             timestamp=ts,
-            extra={"key": "value"}
+            extra={"key": "value"},
         )
 
         assert msg.title == "错误标题"
@@ -78,7 +76,7 @@ class TestWorkflowResult:
             success=True,
             total_items=10,
             processed_items=10,
-            failed_items=0
+            failed_items=0,
         )
 
         assert result.workflow_name == "测试工作流"
@@ -97,7 +95,7 @@ class TestWorkflowResult:
             total_items=10,
             processed_items=5,
             failed_items=5,
-            error_message="处理失败"
+            error_message="处理失败",
         )
 
         assert result.success is False
@@ -114,7 +112,7 @@ class TestWorkflowResult:
             total_items=100,
             processed_items=100,
             failed_items=0,
-            duration_seconds=120.5
+            duration_seconds=120.5,
         )
 
         assert result.duration_seconds == 120.5
@@ -129,7 +127,7 @@ class TestWorkflowResult:
             total_items=5,
             processed_items=5,
             failed_items=0,
-            details={"sku_list": ["SKU1", "SKU2"]}
+            details={"sku_list": ["SKU1", "SKU2"]},
         )
 
         assert result.details == {"sku_list": ["SKU1", "SKU2"]}
@@ -143,7 +141,9 @@ class TestDingTalkChannel:
         """测试使用 webhook 初始化"""
         from src.core.notification_service import DingTalkChannel
 
-        channel = DingTalkChannel(webhook_url="https://oapi.dingtalk.com/robot/send?access_token=xxx")
+        channel = DingTalkChannel(
+            webhook_url="https://oapi.dingtalk.com/robot/send?access_token=xxx"
+        )
 
         assert channel.webhook_url == "https://oapi.dingtalk.com/robot/send?access_token=xxx"
         assert channel.secret is None
@@ -153,8 +153,7 @@ class TestDingTalkChannel:
         from src.core.notification_service import DingTalkChannel
 
         channel = DingTalkChannel(
-            webhook_url="https://oapi.dingtalk.com/robot/send?access_token=xxx",
-            secret="SEC123456"
+            webhook_url="https://oapi.dingtalk.com/robot/send?access_token=xxx", secret="SEC123456"
         )
 
         assert channel.secret == "SEC123456"
@@ -164,7 +163,9 @@ class TestDingTalkChannel:
         """测试发送成功"""
         from src.core.notification_service import DingTalkChannel, NotificationMessage
 
-        channel = DingTalkChannel(webhook_url="https://oapi.dingtalk.com/robot/send?access_token=xxx")
+        channel = DingTalkChannel(
+            webhook_url="https://oapi.dingtalk.com/robot/send?access_token=xxx"
+        )
 
         msg = NotificationMessage(title="测试", content="测试内容")
 
@@ -185,7 +186,9 @@ class TestDingTalkChannel:
         """测试发送失败"""
         from src.core.notification_service import DingTalkChannel, NotificationMessage
 
-        channel = DingTalkChannel(webhook_url="https://oapi.dingtalk.com/robot/send?access_token=xxx")
+        channel = DingTalkChannel(
+            webhook_url="https://oapi.dingtalk.com/robot/send?access_token=xxx"
+        )
 
         msg = NotificationMessage(title="测试", content="测试内容")
 
@@ -206,7 +209,9 @@ class TestDingTalkChannel:
         """测试网络错误"""
         from src.core.notification_service import DingTalkChannel, NotificationMessage
 
-        channel = DingTalkChannel(webhook_url="https://oapi.dingtalk.com/robot/send?access_token=xxx")
+        channel = DingTalkChannel(
+            webhook_url="https://oapi.dingtalk.com/robot/send?access_token=xxx"
+        )
 
         msg = NotificationMessage(title="测试", content="测试内容")
 
@@ -228,16 +233,20 @@ class TestWeComChannel:
         """测试初始化"""
         from src.core.notification_service import WeComChannel
 
-        channel = WeComChannel(webhook_url="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx")
+        channel = WeComChannel(
+            webhook_url="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx"
+        )
 
         assert channel.webhook_url == "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx"
 
     @pytest.mark.asyncio
     async def test_send_success(self):
         """测试发送成功"""
-        from src.core.notification_service import WeComChannel, NotificationMessage
+        from src.core.notification_service import NotificationMessage, WeComChannel
 
-        channel = WeComChannel(webhook_url="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx")
+        channel = WeComChannel(
+            webhook_url="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx"
+        )
 
         msg = NotificationMessage(title="测试", content="测试内容")
 
@@ -256,9 +265,11 @@ class TestWeComChannel:
     @pytest.mark.asyncio
     async def test_send_failure(self):
         """测试发送失败"""
-        from src.core.notification_service import WeComChannel, NotificationMessage
+        from src.core.notification_service import NotificationMessage, WeComChannel
 
-        channel = WeComChannel(webhook_url="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx")
+        channel = WeComChannel(
+            webhook_url="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx"
+        )
 
         msg = NotificationMessage(title="测试", content="测试内容")
 
@@ -287,7 +298,7 @@ class TestEmailChannel:
             smtp_port=587,
             username="user@example.com",
             password="password",
-            recipients=["admin@example.com"]
+            recipients=["admin@example.com"],
         )
 
         assert channel.smtp_host == "smtp.example.com"
@@ -304,7 +315,7 @@ class TestEmailChannel:
             smtp_port=587,
             username="user@example.com",
             password="password",
-            recipients=["admin1@example.com", "admin2@example.com"]
+            recipients=["admin1@example.com", "admin2@example.com"],
         )
 
         assert len(channel.recipients) == 2
@@ -319,7 +330,7 @@ class TestEmailChannel:
             smtp_port=587,
             username="user@example.com",
             password="password",
-            recipients=["admin@example.com"]
+            recipients=["admin@example.com"],
         )
 
         msg = NotificationMessage(title="测试邮件", content="测试内容")
@@ -349,7 +360,7 @@ class TestNotificationService:
 
     def test_add_channel(self):
         """测试添加渠道"""
-        from src.core.notification_service import NotificationService, DingTalkChannel
+        from src.core.notification_service import DingTalkChannel, NotificationService
 
         service = NotificationService()
         channel = DingTalkChannel(webhook_url="https://example.com")
@@ -359,11 +370,7 @@ class TestNotificationService:
 
     def test_add_multiple_channels(self):
         """测试添加多个渠道"""
-        from src.core.notification_service import (
-            NotificationService,
-            DingTalkChannel,
-            WeComChannel
-        )
+        from src.core.notification_service import DingTalkChannel, NotificationService, WeComChannel
 
         service = NotificationService()
         service.add_channel(DingTalkChannel(webhook_url="https://dingtalk.com"))
@@ -374,7 +381,7 @@ class TestNotificationService:
     @pytest.mark.asyncio
     async def test_notify_no_channels(self):
         """测试无渠道时通知"""
-        from src.core.notification_service import NotificationService, NotificationMessage
+        from src.core.notification_service import NotificationMessage, NotificationService
 
         service = NotificationService()
         msg = NotificationMessage(title="测试", content="内容")
@@ -385,7 +392,7 @@ class TestNotificationService:
     @pytest.mark.asyncio
     async def test_notify_all_channels(self):
         """测试通知所有渠道"""
-        from src.core.notification_service import NotificationService, NotificationMessage
+        from src.core.notification_service import NotificationMessage, NotificationService
 
         service = NotificationService()
 
@@ -407,7 +414,7 @@ class TestNotificationService:
     @pytest.mark.asyncio
     async def test_notify_partial_failure(self):
         """测试部分渠道失败"""
-        from src.core.notification_service import NotificationService, NotificationMessage
+        from src.core.notification_service import NotificationMessage, NotificationService
 
         service = NotificationService()
 
@@ -426,10 +433,7 @@ class TestNotificationService:
     @pytest.mark.asyncio
     async def test_notify_workflow_result(self):
         """测试通知工作流结果"""
-        from src.core.notification_service import (
-            NotificationService,
-            WorkflowResult
-        )
+        from src.core.notification_service import NotificationService, WorkflowResult
 
         service = NotificationService()
 
@@ -442,7 +446,7 @@ class TestNotificationService:
             success=True,
             total_items=10,
             processed_items=10,
-            failed_items=0
+            failed_items=0,
         )
 
         await service.notify_workflow_result(result)
@@ -452,10 +456,7 @@ class TestNotificationService:
     @pytest.mark.asyncio
     async def test_notify_workflow_result_failure(self):
         """测试通知工作流失败结果"""
-        from src.core.notification_service import (
-            NotificationService,
-            WorkflowResult
-        )
+        from src.core.notification_service import NotificationService, WorkflowResult
 
         service = NotificationService()
 
@@ -469,7 +470,7 @@ class TestNotificationService:
             total_items=10,
             processed_items=3,
             failed_items=7,
-            error_message="处理出错"
+            error_message="处理出错",
         )
 
         await service.notify_workflow_result(result)
@@ -500,7 +501,7 @@ class TestConfigureNotifications:
         config = {
             "dingtalk": {
                 "enabled": True,
-                "webhook_url": "https://oapi.dingtalk.com/robot/send?access_token=xxx"
+                "webhook_url": "https://oapi.dingtalk.com/robot/send?access_token=xxx",
             }
         }
 
@@ -515,7 +516,7 @@ class TestConfigureNotifications:
         config = {
             "dingtalk": {
                 "enabled": False,
-                "webhook_url": "https://oapi.dingtalk.com/robot/send?access_token=xxx"
+                "webhook_url": "https://oapi.dingtalk.com/robot/send?access_token=xxx",
             }
         }
 
@@ -530,7 +531,7 @@ class TestConfigureNotifications:
         config = {
             "wecom": {
                 "enabled": True,
-                "webhook_url": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx"
+                "webhook_url": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx",
             }
         }
 
@@ -545,12 +546,12 @@ class TestConfigureNotifications:
         config = {
             "dingtalk": {
                 "enabled": True,
-                "webhook_url": "https://oapi.dingtalk.com/robot/send?access_token=xxx"
+                "webhook_url": "https://oapi.dingtalk.com/robot/send?access_token=xxx",
             },
             "wecom": {
                 "enabled": True,
-                "webhook_url": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx"
-            }
+                "webhook_url": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx",
+            },
         }
 
         service = configure_notifications(config)
@@ -566,9 +567,9 @@ class TestNotificationIntegration:
     async def test_full_workflow_notification(self):
         """测试完整工作流通知"""
         from src.core.notification_service import (
+            NotificationMessage,
             NotificationService,
             WorkflowResult,
-            NotificationMessage
         )
 
         service = NotificationService()
@@ -580,9 +581,7 @@ class TestNotificationIntegration:
 
         # 发送工作流开始通知
         start_msg = NotificationMessage(
-            title="工作流开始",
-            content="开始处理 10 个商品",
-            level="info"
+            title="工作流开始", content="开始处理 10 个商品", level="info"
         )
         await service.notify(start_msg)
 
@@ -593,7 +592,7 @@ class TestNotificationIntegration:
             total_items=10,
             processed_items=10,
             failed_items=0,
-            duration_seconds=60.5
+            duration_seconds=60.5,
         )
         await service.notify_workflow_result(result)
 
@@ -603,10 +602,7 @@ class TestNotificationIntegration:
     @pytest.mark.asyncio
     async def test_error_notification(self):
         """测试错误通知"""
-        from src.core.notification_service import (
-            NotificationService,
-            NotificationMessage
-        )
+        from src.core.notification_service import NotificationMessage, NotificationService
 
         service = NotificationService()
 
@@ -618,7 +614,7 @@ class TestNotificationIntegration:
             title="错误警报",
             content="浏览器连接超时",
             level="error",
-            extra={"error_code": "TIMEOUT_001"}
+            extra={"error_code": "TIMEOUT_001"},
         )
         await service.notify(error_msg)
 

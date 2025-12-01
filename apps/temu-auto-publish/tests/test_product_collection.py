@@ -20,8 +20,6 @@ sys.path.insert(0, str(project_root))
 
 import pytest
 from loguru import logger
-
-from src.browser.browser_manager import BrowserManager
 from src.browser.login_controller import LoginController
 
 
@@ -30,13 +28,13 @@ from src.browser.login_controller import LoginController
 async def test_collect_products():
     """测试产品采集功能.
 
-    手动在浏览器中采集1-2个测试产品。
+    手动在浏览器中采集1-2个测试产品.
 
     Returns:
         bool: 是否成功
     """
     logger.info("=" * 80)
-    logger.info("产品采集测试（手动采集）")
+    logger.info("产品采集测试(手动采集)")
     logger.info("=" * 80)
 
     # 1. 登录
@@ -63,20 +61,20 @@ async def test_collect_products():
 
     # 3. 等待用户手动采集产品
     logger.info("\n" + "=" * 80)
-    logger.info("📝 请手动采集测试产品：")
+    logger.info("📝 请手动采集测试产品:")
     logger.info("=" * 80)
-    logger.info("1. 在当前浏览器页面，找到「链接输入框」")
-    logger.info("2. 粘贴一个1688或淘宝商品链接（推荐低价商品）")
-    logger.info("   示例链接：https://detail.1688.com/offer/xxxxxxxx.html")
-    logger.info("3. 选择平台（如：Temu）")
+    logger.info("1. 在当前浏览器页面,找到「链接输入框」")
+    logger.info("2. 粘贴一个1688或淘宝商品链接(推荐低价商品)")
+    logger.info("   示例链接:https://detail.1688.com/offer/xxxxxxxx.html")
+    logger.info("3. 选择平台(如:Temu)")
     logger.info("4. 点击「采集并自动认领」按钮")
-    logger.info("5. 等待采集完成（大约10-30秒）")
+    logger.info("5. 等待采集完成(大约10-30秒)")
     logger.info("6. 建议采集 1-2 个产品用于测试")
     logger.info("=" * 80)
-    logger.info("\n⏰ 程序会等待 3 分钟，供您完成手动采集...")
-    logger.info("   采集完成后，程序会自动继续\n")
+    logger.info("\n⏰ 程序会等待 3 分钟,供您完成手动采集...")
+    logger.info("   采集完成后,程序会自动继续\n")
 
-    # 等待3分钟，让用户手动采集
+    # 等待3分钟,让用户手动采集
     await asyncio.sleep(180)
 
     # 4. 检查采集箱中的产品数量
@@ -96,17 +94,17 @@ async def test_collect_products():
         logger.info(f"找到 {product_count} 个产品")
 
         if product_count > 0:
-            logger.success(f"✅ 成功！采集箱中有 {product_count} 个产品")
+            logger.success(f"✅ 成功!采集箱中有 {product_count} 个产品")
             return True
         else:
-            logger.warning("⚠️ 采集箱中暂无产品，请检查采集是否成功")
-            logger.info("\n等待额外30秒，以防采集还在进行中...")
+            logger.warning("⚠️ 采集箱中暂无产品,请检查采集是否成功")
+            logger.info("\n等待额外30秒,以防采集还在进行中...")
             await asyncio.sleep(30)
 
             # 再次检查
             product_count = await page.locator("button:has-text('编辑')").count()
             if product_count > 0:
-                logger.success(f"✅ 成功！采集箱中有 {product_count} 个产品")
+                logger.success(f"✅ 成功!采集箱中有 {product_count} 个产品")
                 return True
             else:
                 logger.error("❌ 采集箱中仍然没有产品")
@@ -117,8 +115,8 @@ async def test_collect_products():
         return False
 
     finally:
-        # 暂时不关闭浏览器，方便查看
-        logger.info("\n浏览器将保持打开状态，请按 Ctrl+C 关闭...")
+        # 暂时不关闭浏览器,方便查看
+        logger.info("\n浏览器将保持打开状态,请按 Ctrl+C 关闭...")
         await asyncio.sleep(60)  # 等待1分钟
         await login_controller.browser_manager.close()
 
@@ -133,7 +131,7 @@ async def main():
         success = await test_collect_products()
 
         if success:
-            logger.success("\n✅ 产品采集测试完成！可以继续进行编辑流程测试")
+            logger.success("\n✅ 产品采集测试完成!可以继续进行编辑流程测试")
         else:
             logger.error("\n❌ 产品采集测试失败")
 

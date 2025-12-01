@@ -1,5 +1,5 @@
 """
-@PURPOSE: Hello CLI示例命令行工具，展示CLI应用最佳实践
+@PURPOSE: Hello CLI示例命令行工具,展示CLI应用最佳实践
 @OUTLINE:
   - app: Typer应用实例
   - class OutputFormat: 输出格式枚举
@@ -12,10 +12,9 @@
 """
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
-from typing import Optional
 
 import typer
 import yaml
@@ -57,11 +56,11 @@ class HelloConfig(BaseSettings):
     log_level: str = Field(default="INFO", description="日志级别")
 
 
-def load_config(config_path: Optional[Path] = None) -> HelloConfig:
+def load_config(config_path: Path | None = None) -> HelloConfig:
     """加载配置
 
     Args:
-        config_path: 配置文件路径（可选）
+        config_path: 配置文件路径(可选)
 
     Returns:
         配置对象
@@ -106,14 +105,14 @@ def greet_user(name: str, greeting: str = "Hello") -> str:
 @app.command()
 def greet(
     name: str = typer.Argument(..., help="要问候的名字"),
-    greeting: Optional[str] = typer.Option(None, "--greeting", "-g", help="问候语"),
+    greeting: str | None = typer.Option(None, "--greeting", "-g", help="问候语"),
     output_format: OutputFormat = typer.Option(
         OutputFormat.TEXT,
         "--format",
         "-f",
         help="输出格式",
     ),
-    config_path: Optional[Path] = typer.Option(
+    config_path: Path | None = typer.Option(
         None,
         "--config",
         "-c",
@@ -126,9 +125,9 @@ def greet(
 
     Args:
         name: 要问候的名字
-        greeting: 自定义问候语（可选）
-        output_format: 输出格式（text 或 json）
-        config_path: 配置文件路径（可选）
+        greeting: 自定义问候语(可选)
+        output_format: 输出格式(text 或 json)
+        config_path: 配置文件路径(可选)
     """
     try:
         # 加载配置
@@ -140,7 +139,7 @@ def greet(
 
         # 生成问候消息
         message = greet_user(name, final_greeting)
-        timestamp = datetime.now(timezone.utc).isoformat()
+        timestamp = datetime.now(UTC).isoformat()
 
         logger.debug(f"生成问候消息: {message}")
 

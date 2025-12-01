@@ -102,7 +102,7 @@ def test_completeness_check(parser, sample_files_dir):
     is_complete = metadata.is_complete()
     assert isinstance(is_complete, bool)
 
-    # 如果不完整，应该能获取缺失的字段
+    # 如果不完整,应该能获取缺失的字段
     if not is_complete:
         missing = metadata.missing_required_fields()
         assert isinstance(missing, list)
@@ -119,7 +119,7 @@ def test_parse_multiple_files(parser, sample_files_dir):
     results = parser.parse_multiple_files(files)
 
     assert len(results) == 2
-    for file_path, metadata in results.items():
+    for _file_path, metadata in results.items():
         assert isinstance(metadata, FileMetadata)
 
 
@@ -143,7 +143,7 @@ def test_optional_fields(parser, sample_files_dir):
     tech_debt = metadata.get_field("TECH_DEBT")
     dependencies = metadata.get_field("DEPENDENCIES")
 
-    # 不应该抛出异常，即使字段不存在
+    # 不应该抛出异常,即使字段不存在
     assert isinstance(gotchas, str)
     assert isinstance(tech_debt, str)
     assert isinstance(dependencies, str)
@@ -158,7 +158,7 @@ def test_file_with_no_metadata(parser, tmp_path):
     metadata = parser.parse_file(test_file)
 
     assert metadata.has_metadata is False
-    assert metadata.error is None  # 不是错误，只是没有元信息
+    assert metadata.error is None  # 不是错误,只是没有元信息
     assert len(metadata.fields) == 0
 
 

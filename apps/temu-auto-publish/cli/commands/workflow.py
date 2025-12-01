@@ -7,8 +7,8 @@
   - list(): 列出工作流历史
   - status(): 查看工作流状态
 @GOTCHAS:
-  - 非交互式设计，所有参数通过命令行或配置文件提供
-  - 工作流执行需要浏览器，确保 Playwright 已安装
+  - 非交互式设计,所有参数通过命令行或配置文件提供
+  - 工作流执行需要浏览器,确保 Playwright 已安装
 @DEPENDENCIES:
   - 内部: src.core.executor, src.workflows, src.browser
   - 外部: typer, rich
@@ -18,20 +18,21 @@ import asyncio
 import json
 import os
 from pathlib import Path
-from typing import Optional
 
 import typer
+from config.settings import settings
 from dotenv import load_dotenv
 from loguru import logger
 from rich.console import Console
 from rich.table import Table
 
-from config.settings import settings
-
 # 加载 .env 文件
 env_file = Path(__file__).parent.parent.parent / ".env"
 if env_file.exists():
     load_dotenv(env_file)
+import builtins
+import contextlib
+
 from src.browser.login_controller import LoginController
 from src.core.executor import WorkflowExecutor
 from src.workflows.complete_publish_workflow import CompletePublishWorkflow
@@ -46,29 +47,29 @@ console = Console()
 
 @workflow_app.command("run")
 def run(
-    products_file: Optional[Path] = typer.Option(
-        None, "--products", "-p", help="产品数据文件（JSON）"
+    products_file: Path | None = typer.Option(
+        None, "--products", "-p", help="产品数据文件(JSON)"
     ),
-    config_file: Optional[Path] = typer.Option(
-        None, "--config", "-c", help="工作流配置文件（YAML/JSON）"
+    config_file: Path | None = typer.Option(
+        None, "--config", "-c", help="工作流配置文件(YAML/JSON)"
     ),
-    workflow_id: Optional[str] = typer.Option(None, "--id", help="自定义工作流ID"),
+    workflow_id: str | None = typer.Option(None, "--id", help="自定义工作流ID"),
     enable_batch_edit: bool = typer.Option(
         True, "--batch-edit/--no-batch-edit", help="启用批量编辑"
     ),
     enable_publish: bool = typer.Option(
-        False, "--publish/--no-publish", help="启用发布（默认关闭）"
+        False, "--publish/--no-publish", help="启用发布(默认关闭)"
     ),
-    shop_name: Optional[str] = typer.Option(None, "--shop", help="店铺名称"),
-    staff_name: Optional[str] = typer.Option(
-        None, "--staff", help="人员名称（用于筛选采集箱中的产品）"
+    shop_name: str | None = typer.Option(None, "--shop", help="店铺名称"),
+    staff_name: str | None = typer.Option(
+        None, "--staff", help="人员名称(用于筛选采集箱中的产品)"
     ),
     use_ai_titles: bool = typer.Option(
-        True, "--use-ai-titles/--no-ai-titles", help="是否使用AI生成产品标题（默认启用）"
+        True, "--use-ai-titles/--no-ai-titles", help="是否使用AI生成产品标题(默认启用)"
     ),
-    output: Optional[Path] = typer.Option(None, "--output", "-o", help="结果输出文件"),
+    output: Path | None = typer.Option(None, "--output", "-o", help="结果输出文件"),
 ):
-    """执行完整工作流（5→20→批量编辑→发布）.
+    """执行完整工作流(5→20→批量编辑→发布).
 
     Examples:
         # 使用默认产品数据
@@ -112,7 +113,7 @@ def run(
         ]
         console.print(f"[yellow]⚠[/yellow] 使用默认演示数据: {len(products)} 个产品")
 
-    # 如果指定了人员名称，添加到产品数据中
+    # 如果指定了人员名称,添加到产品数据中
     if staff_name:
         for product in products:
             product["staff_name"] = staff_name
@@ -140,7 +141,7 @@ def run(
 
     if not username or not password:
         console.print("[red]✗[/red] 未找到登录凭证")
-        console.print("  请设置环境变量或在 .env 文件中配置：")
+        console.print("  请设置环境变量或在 .env 文件中配置:")
         console.print("  - MIAOSHOU_USERNAME / TEMU_USERNAME")
         console.print("  - MIAOSHOU_PASSWORD / TEMU_PASSWORD")
         raise typer.Exit(1)
@@ -182,7 +183,7 @@ def run(
     console.print("=" * 80 + "\n")
 
     if result["success"]:
-        console.print("[green]✓ 工作流执行成功！[/green]\n")
+        console.print("[green]✓ 工作流执行成功![/green]\n")
     else:
         console.print("[red]✗ 工作流执行失败[/red]\n")
 
@@ -209,7 +210,7 @@ def run(
 @workflow_app.command("resume")
 def resume(
     state_file: Path = typer.Argument(..., help="工作流状态文件"),
-    output: Optional[Path] = typer.Option(None, "--output", "-o", help="结果输出文件"),
+    output: Path | None = typer.Option(None, "--output", "-o", help="结果输出文件"),
 ):
     """从状态文件恢复并继续执行工作流.
 
@@ -232,7 +233,7 @@ def resume(
 @workflow_app.command("list")
 def list_workflows(
     limit: int = typer.Option(10, "--limit", "-n", help="显示数量"),
-    status: Optional[str] = typer.Option(None, "--status", help="按状态筛选"),
+    status: str | None = typer.Option(None, "--status", help="按状态筛选"),
 ):
     """列出工作流执行历史.
 
@@ -320,21 +321,21 @@ def workflow_status(
     # 已完成阶段
     completed = state_data.get("completed_stages", [])
     if completed:
-        console.print(f"\n[bold]已完成阶段:[/bold]")
+        console.print("\n[bold]已完成阶段:[/bold]")
         for stage in completed:
             console.print(f"  ✓ {stage}")
 
     # 失败阶段
     failed = state_data.get("failed_stages", [])
     if failed:
-        console.print(f"\n[bold]失败阶段:[/bold]")
+        console.print("\n[bold]失败阶段:[/bold]")
         for stage in failed:
             console.print(f"  ✗ {stage}")
 
     # 检查点数据
     checkpoint = state_data.get("checkpoint_data", {})
     if checkpoint:
-        console.print(f"\n[bold]检查点数据:[/bold]")
+        console.print("\n[bold]检查点数据:[/bold]")
         for key, value in checkpoint.items():
             console.print(f"  {key}: {value}")
 
@@ -345,15 +346,15 @@ def workflow_status(
 async def _execute_workflow(
     products: list,
     config: dict,
-    workflow_id: Optional[str],
+    workflow_id: str | None,
     username: str,
     password: str,
     enable_batch_edit: bool,
     enable_publish: bool,
-    shop_name: Optional[str],
+    shop_name: str | None,
     use_ai_titles: bool = True,
 ) -> dict:
-    """执行工作流（内部函数）."""
+    """执行工作流(内部函数)."""
     login_ctrl = None
 
     try:
@@ -399,7 +400,5 @@ async def _execute_workflow(
 
     finally:
         if login_ctrl:
-            try:
+            with contextlib.suppress(builtins.BaseException):
                 await login_ctrl.browser_manager.close()
-            except:
-                pass

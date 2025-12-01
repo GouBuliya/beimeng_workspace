@@ -20,10 +20,13 @@ import asyncio
 import json
 import time
 from datetime import datetime
-from pathlib import Path
 
 import pytest
-
+from src.core.performance_reporter import (
+    ConsoleReporter,
+    create_progress_bar,
+    format_duration,
+)
 from src.core.performance_tracker import (
     ActionMetrics,
     ExecutionStatus,
@@ -35,11 +38,6 @@ from src.core.performance_tracker import (
     reset_tracker,
     track_action,
     track_operation,
-)
-from src.core.performance_reporter import (
-    ConsoleReporter,
-    create_progress_bar,
-    format_duration,
 )
 
 
@@ -375,10 +373,9 @@ class TestContextManagers:
         tracker = PerformanceTracker()
         tracker.start_workflow()
 
-        async with tracker.stage("stage1", "阶段1", order=1):
-            async with tracker.operation("op1"):
-                async with tracker.action("action1", detail="test"):
-                    await asyncio.sleep(0.01)
+        async with tracker.stage("stage1", "阶段1", order=1), tracker.operation("op1"):
+            async with tracker.action("action1", detail="test"):
+                await asyncio.sleep(0.01)
 
         op = tracker.workflow.stages[0].operations[0]
         assert len(op.actions) == 1
@@ -399,11 +396,11 @@ class TestContextManagers:
         assert tracker.workflow.stages[0].status == ExecutionStatus.SUCCESS
 
     def test_operation_without_stage(self):
-        """测试在 Stage 外使用 Operation（应该跳过）"""
+        """测试在 Stage 外使用 Operation(应该跳过)"""
         tracker = PerformanceTracker()
         tracker.start_workflow()
 
-        # 不在 stage 内使用 operation，应该跳过
+        # 不在 stage 内使用 operation,应该跳过
         with tracker.operation_sync("orphan_op"):
             pass
 
@@ -457,9 +454,8 @@ class TestDecorators:
             await asyncio.sleep(0.01)
             return "action_done"
 
-        async with tracker.stage("stage1", "阶段1", order=1):
-            async with tracker.operation("op1"):
-                result = await action_func()
+        async with tracker.stage("stage1", "阶段1", order=1), tracker.operation("op1"):
+            result = await action_func()
 
         assert result == "action_done"
         op = tracker.workflow.stages[0].operations[0]
@@ -471,7 +467,7 @@ class TestGlobalTracker:
     """测试全局追踪器"""
 
     def test_get_tracker_singleton(self):
-        """测试获取全局追踪器（单例）"""
+        """测试获取全局追踪器(单例)"""
         reset_tracker()  # 确保干净状态
         tracker1 = get_tracker()
         tracker2 = get_tracker()
@@ -513,9 +509,8 @@ class TestGlobalTracker:
         def global_action_func():
             return "action"
 
-        with tracker.stage_sync("stage1", "阶段1", order=1):
-            with tracker.operation_sync("op1"):
-                result = global_action_func()
+        with tracker.stage_sync("stage1", "阶段1", order=1), tracker.operation_sync("op1"):
+            result = global_action_func()
 
         assert result == "action"
 
@@ -596,8 +591,8 @@ class TestConsoleReporter:
         reporter.print_summary()
 
         # 应该输出警告但不报错
-        captured = capsys.readouterr()
-        # 由于使用 loguru，可能不会捕获到输出
+        capsys.readouterr()
+        # 由于使用 loguru,可能不会捕获到输出
 
     def test_get_detailed_report(self):
         """测试获取详细报告"""

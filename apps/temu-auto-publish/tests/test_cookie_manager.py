@@ -13,10 +13,8 @@
 
 import json
 from datetime import datetime, timedelta
-from pathlib import Path
 
 import pytest
-
 from src.browser.cookie_manager import CookieManager
 
 
@@ -69,7 +67,7 @@ class TestCookieManagerPersistence:
         return CookieManager(str(cookie_file))
 
     def test_save_cookies_string(self, manager):
-        """测试保存Cookie字符串（旧格式）"""
+        """测试保存Cookie字符串(旧格式)"""
         test_cookies = "session=abc123; token=xyz789"
 
         manager.save(test_cookies)
@@ -339,7 +337,7 @@ class TestCookieManagerValidation:
         cookie_file = tmp_path / "cookies.json"
         manager = CookieManager(str(cookie_file), max_age_hours=24)
 
-        # 直接写入 Playwright 格式（不通过 CookieManager）
+        # 直接写入 Playwright 格式(不通过 CookieManager)
         cookies = [{"name": "test", "value": "123"}]
         cookie_file.parent.mkdir(parents=True, exist_ok=True)
         with open(cookie_file, "w", encoding="utf-8") as f:

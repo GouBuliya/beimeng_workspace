@@ -78,7 +78,7 @@ def example_parse_multiple_files():
             print(f"   目的: {purpose}")
             print(f"   完整性: {'✅' if metadata.is_complete() else '❌'}")
         else:
-            print(f"   状态: 无元信息或解析失败")
+            print("   状态: 无元信息或解析失败")
             if metadata.error:
                 print(f"   错误: {metadata.error}")
         print()
@@ -147,7 +147,7 @@ def main():
     example_check_completeness()
     example_get_specific_fields()
 
-    print("\n✨ 所有示例运行完成！\n")
+    print("\n✨ 所有示例运行完成!\n")
 
 
 if __name__ == "__main__":

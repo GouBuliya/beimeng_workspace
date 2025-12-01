@@ -17,7 +17,8 @@ sys.path.insert(0, str(workspace_root))
 
 # 现在可以导入并启动服务器
 if __name__ == "__main__":
-    from packages.mcp_file_info.mcp_server import main
     import asyncio
+
+    from packages.mcp_file_info.mcp_server import main
 
     asyncio.run(main())

@@ -37,24 +37,26 @@
   - 使用弹性选择器提高元素定位稳定性
 """
 
-import asyncio
-from contextlib import suppress
 import re
-from functools import wraps
+from contextlib import suppress
 from pathlib import Path
-from typing import Any, Callable, TypeVar
+from typing import Any, TypeVar
 
 from loguru import logger
 from playwright.async_api import Page
 
-# 导入优化组件
-from .smart_wait_mixin import smart_wait, get_smart_waiter
-from .resilient_selector import get_resilient_locator, ResilientLocator
+from ..core.enhanced_retry import (
+    RetryPolicy,
+    create_step_retry_policy,
+)
 from ..core.enhanced_retry import (
     smart_retry as enhanced_smart_retry,
-    create_step_retry_policy,
-    RetryPolicy,
 )
+from .resilient_selector import get_resilient_locator
+
+# 导入优化组件
+from .smart_wait_mixin import get_smart_waiter, smart_wait
+
 # 性能追踪已移至工作流层级的 PerformanceTracker
 
 MAX_TITLE_LENGTH = 250
@@ -77,12 +79,12 @@ async def _stabilize(
 ) -> float:
     """使用智能等待替代硬编码 sleep, 失败时退回最小等待.
 
-    性能优化说明：
+    性能优化说明:
     - 默认 min_ms 从 80 减少到 30
     - 默认 max_ms 从 500 减少到 200
     - 调用处的参数会被应用一个缩减因子来加速
     """
-    # 应用性能优化因子（减少约 40-50% 的等待时间）
+    # 应用性能优化因子(减少约 40-50% 的等待时间)
     optimized_min = max(20, int(min_ms * 0.5))
     optimized_max = max(50, int(max_ms * 0.5))
 
@@ -106,17 +108,17 @@ _step_retry_policy = create_step_retry_policy()
 
 
 def smart_retry(max_attempts: int = 2, delay: float = 0.5, exceptions: tuple = (Exception,)):
-    """智能重试装饰器,用于关键操作的自动重试。
+    """智能重试装饰器,用于关键操作的自动重试.
 
-    注意: 此为兼容旧代码的包装器，内部使用增强版重试机制。
+    注意: 此为兼容旧代码的包装器,内部使用增强版重试机制.
 
     Args:
-        max_attempts: 最大尝试次数(默认2次,即1次重试)。
-        delay: 重试间隔秒数(默认0.5秒)。
-        exceptions: 需要捕获并重试的异常类型元组。
+        max_attempts: 最大尝试次数(默认2次,即1次重试).
+        delay: 重试间隔秒数(默认0.5秒).
+        exceptions: 需要捕获并重试的异常类型元组.
 
     Returns:
-        装饰后的函数。
+        装饰后的函数.
     """
     # 使用增强版重试机制
     policy = RetryPolicy(
@@ -135,16 +137,16 @@ async def run_batch_edit(
     *,
     filter_owner: str | None = None,
 ) -> dict[str, Any]:
-    """执行批量编辑 18 步完整流程。
+    """执行批量编辑 18 步完整流程.
 
     Args:
-        page: 已经登录并选中产品的页面对象(需在 Temu 全托管采集箱)。
+        page: 已经登录并选中产品的页面对象(需在 Temu 全托管采集箱).
         payload: 业务参数字典,包含:
-            - category_path: list[str] - 类目路径,如 ["收纳用品", "收纳篮、箱子、盒子", "盖式储物箱"]
+            - category_path: list[str] - 类目路径,如 ["收纳用品", "收纳篮,箱子,盒子", "盖式储物箱"]
             - category_attrs: dict - 类目属性,包含 product_use, shape, material, closure_type, style
             - outer_package_image: str - 外包装图片文件路径(绝对路径)
             - manual_file: str - 产品说明书 PDF 文件路径(绝对路径)
-        filter_owner: 按创建人员筛选的用户名（与首次编辑、认领阶段保持一致）。
+        filter_owner: 按创建人员筛选的用户名(与首次编辑,认领阶段保持一致).
 
     Returns:
         执行结果字典:
@@ -156,11 +158,11 @@ async def run_batch_edit(
             }
 
     Raises:
-        无直接抛出,所有异常被捕获并记录到返回结果中。
+        无直接抛出,所有异常被捕获并记录到返回结果中.
 
     Examples:
         >>> payload = {
-        ...     "category_path": ["收纳用品", "收纳篮、箱子、盒子", "盖式储物箱"],
+        ...     "category_path": ["收纳用品", "收纳篮,箱子,盒子", "盖式储物箱"],
         ...     "category_attrs": {
         ...         "product_use": "多用途",
         ...         "shape": "其他形状",
@@ -203,9 +205,9 @@ async def run_batch_edit(
         # 1. 检测并关闭弹窗
         await _close_popups(page)
 
-        # 1.5 按创建人员筛选（与首次编辑、认领阶段保持一致）
+        # 1.5 按创建人员筛选(与首次编辑,认领阶段保持一致)
         if filter_owner:
-            logger.info(f"二次编辑：按创建人员筛选: {filter_owner}")
+            logger.info(f"二次编辑:按创建人员筛选: {filter_owner}")
             await _apply_user_filter(page, filter_owner)
 
         # 2. 全选产品 - 使用弹性选择器
@@ -221,7 +223,7 @@ async def run_batch_edit(
                 state="visible", timeout=300
             )
         except Exception:
-            logger.debug("复选框选中状态验证超时，继续执行")
+            logger.debug("复选框选中状态验证超时,继续执行")
 
         # 3. 打开批量编辑弹窗
         logger.info("打开批量编辑菜单...")
@@ -232,7 +234,7 @@ async def run_batch_edit(
         try:
             await _wait_for_dialog_open(page)
         except Exception:
-            logger.debug("批量编辑弹窗等待超时，继续执行")
+            logger.debug("批量编辑弹窗等待超时,继续执行")
 
         logger.info("批量编辑弹窗已打开")
 
@@ -269,7 +271,7 @@ async def run_batch_edit(
                 await step_factory()
                 result["completed_steps"] = idx
 
-                # 步骤完成后使用智能等待（极速模式: 最小等待）
+                # 步骤完成后使用智能等待(极速模式: 最小等待)
                 await smart_wait(page, f"step_{idx}_{step_name}", min_ms=5, max_ms=50)
 
                 step_elapsed = (time.perf_counter() - step_start) * 1000
@@ -289,9 +291,9 @@ async def run_batch_edit(
                 )
                 logger.error(f"步骤 {idx}/18 失败: {step_name} - {step_exc}")
 
-                # 非关键步骤失败可以继续（步骤13-17为非关键）
-                if idx in (13, 16, 17):  # 尺码表、轮播图、颜色图
-                    logger.warning(f"非关键步骤 {step_name} 失败，继续执行后续步骤")
+                # 非关键步骤失败可以继续(步骤13-17为非关键)
+                if idx in (13, 16, 17):  # 尺码表,轮播图,颜色图
+                    logger.warning(f"非关键步骤 {step_name} 失败,继续执行后续步骤")
                     result["completed_steps"] = idx
                     continue
                 raise
@@ -318,26 +320,24 @@ async def run_batch_edit(
 
 
 async def _open_batch_edit_popover(page: Page) -> None:
-    """打开批量编辑弹窗(前提:已全选产品)。
+    """打开批量编辑弹窗(前提:已全选产品).
 
     Args:
-        page: Playwright 页面对象。
+        page: Playwright 页面对象.
     """
     # 点击第一个复选框(全选)
     checkbox = page.locator(".jx-checkbox").first
     await checkbox.click()
     # 智能等待: 等待选中状态生效
-    try:
+    with suppress(Exception):
         await page.locator(".jx-checkbox.is-checked").first.wait_for(state="visible", timeout=300)
-    except Exception:
-        pass
 
 
 async def _close_popups(page: Page) -> None:
-    """检测并关闭页面弹窗（优化版：精简选择器，减少超时）。
+    """检测并关闭页面弹窗(优化版:精简选择器,减少超时).
 
     Args:
-        page: Playwright 页面对象。
+        page: Playwright 页面对象.
     """
     logger.debug("快速检测页面弹窗...")
 
@@ -356,7 +356,7 @@ async def _close_popups(page: Page) -> None:
 
             if count > 0:
                 logger.debug(f"发现 {count} 个弹窗(选择器: {selector})")
-                # 只点击第一个可见的（优化: 不遍历所有）
+                # 只点击第一个可见的(优化: 不遍历所有)
                 try:
                     button = close_buttons.first
                     if await button.is_visible(timeout=300):  # 优化: 1000 -> 300
@@ -364,10 +364,8 @@ async def _close_popups(page: Page) -> None:
                         closed_count += 1
                         logger.debug("已关闭弹窗")
                         # 优化: 减少等待 800 -> 200
-                        try:
+                        with suppress(Exception):
                             await button.wait_for(state="hidden", timeout=200)
-                        except Exception:
-                            pass
                 except Exception:
                     continue
         except Exception:
@@ -381,10 +379,10 @@ async def _close_popups(page: Page) -> None:
 
 @smart_retry(max_attempts=1, delay=0.2)
 async def _step_01_title(page: Page) -> None:
-    """步骤 1: 标题 - 保持原样点击预览保存。
+    """步骤 1: 标题 - 保持原样点击预览保存.
 
     Args:
-        page: Playwright 页面对象。
+        page: Playwright 页面对象.
     """
     await page.locator("div").filter(has_text=re.compile(r"^标题$")).click()
     # 智能等待: 等待标题编辑对话框打开
@@ -437,12 +435,10 @@ async def _ensure_title_length(page: Page) -> None:
                 len(new_title),
             )
             # 智能等待: 等待输入值生效
-            try:
+            with suppress(Exception):
                 await locator.evaluate(
                     "el => el.dispatchEvent(new Event('input', { bubbles: true }))"
                 )
-            except Exception:
-                pass
             return
         except Exception as exc:
             logger.debug("标题长度检查选择器 {} 失败: {}", selector, exc)
@@ -451,10 +447,10 @@ async def _ensure_title_length(page: Page) -> None:
 
 
 async def _step_02_english_title(page: Page) -> None:
-    """步骤 2: 英语标题 - 输入空格。
+    """步骤 2: 英语标题 - 输入空格.
 
     Args:
-        page: Playwright 页面对象。
+        page: Playwright 页面对象.
     """
     await page.get_by_text("英语标题").click()
     input_box = (
@@ -472,11 +468,11 @@ async def _step_02_english_title(page: Page) -> None:
 
 @smart_retry(max_attempts=1, delay=0.2)
 async def _step_03_category_attrs(page: Page, payload: dict[str, Any]) -> None:
-    """步骤 3: 类目属性 - 参数化类目路径和属性值。
+    """步骤 3: 类目属性 - 参数化类目路径和属性值.
 
     Args:
-        page: Playwright 页面对象。
-        payload: 包含 category_path 和 category_attrs 的字典。
+        page: Playwright 页面对象.
+        payload: 包含 category_path 和 category_attrs 的字典.
     """
     await page.get_by_text("类目属性").click()
 
@@ -488,10 +484,10 @@ async def _step_03_category_attrs(page: Page, payload: dict[str, Any]) -> None:
 
 
 async def _step_04_main_sku(page: Page) -> None:
-    """步骤 4: 主货号 - 保持原样。
+    """步骤 4: 主货号 - 保持原样.
 
     Args:
-        page: Playwright 页面对象。
+        page: Playwright 页面对象.
     """
     await page.get_by_role("dialog").get_by_text("主货号").click()
     await page.get_by_role("button", name="预览").click()
@@ -502,11 +498,11 @@ async def _step_04_main_sku(page: Page) -> None:
 
 @smart_retry(max_attempts=1, delay=0.2)
 async def _step_05_outer_package(page: Page, image_path: str | None) -> None:
-    """步骤 5: 外包装 - 固定形状/类型,参数化图片路径。
+    """步骤 5: 外包装 - 固定形状/类型,参数化图片路径.
 
     Args:
-        page: Playwright 页面对象。
-        image_path: 外包装图片文件路径(绝对路径)。
+        page: Playwright 页面对象.
+        image_path: 外包装图片文件路径(绝对路径).
     """
     await page.get_by_text("外包装").click()
 
@@ -541,7 +537,7 @@ async def _step_05_outer_package(page: Page, image_path: str | None) -> None:
             await radio_btn.click()
             # 优化: 移除固定等待100ms
 
-        # 尝试直接找到文件输入框（可能已经存在）
+        # 尝试直接找到文件输入框(可能已经存在)
         file_inputs = page.locator("input[type='file']")
         if await file_inputs.count() > 0:
             # 直接使用已存在的文件输入框
@@ -565,10 +561,10 @@ async def _step_05_outer_package(page: Page, image_path: str | None) -> None:
 
 @smart_retry(max_attempts=3, delay=0.8)
 async def _step_06_origin(page: Page) -> None:
-    """步骤 6: 产地 - 固定为浙江。
+    """步骤 6: 产地 - 固定为浙江.
 
     Args:
-        page: Playwright 页面对象。
+        page: Playwright 页面对象.
     """
     dialog = page.get_by_role("dialog")
 
@@ -686,10 +682,10 @@ async def _step_06_origin(page: Page) -> None:
 
 
 async def _step_07_customized(page: Page) -> None:
-    """步骤 7: 定制品 - 保持原样。
+    """步骤 7: 定制品 - 保持原样.
 
     Args:
-        page: Playwright 页面对象。
+        page: Playwright 页面对象.
     """
     # 录制中这一步只是点击预览保存,没有修改
     await page.get_by_text("定制品").click()
@@ -701,10 +697,10 @@ async def _step_07_customized(page: Page) -> None:
 
 
 async def _step_08_sensitive(page: Page) -> None:
-    """步骤 8: 敏感属性 - 保持原样。
+    """步骤 8: 敏感属性 - 保持原样.
 
     Args:
-        page: Playwright 页面对象。
+        page: Playwright 页面对象.
     """
     await page.get_by_text("敏感属性").click()
     await page.get_by_role("button", name="预览").click()
@@ -714,12 +710,12 @@ async def _step_08_sensitive(page: Page) -> None:
 
 
 async def _step_09_weight(page: Page) -> None:
-    """步骤 9: 重量 - 固定 6000g。
+    """步骤 9: 重量 - 固定 6000g.
 
     Args:
-        page: Playwright 页面对象。
+        page: Playwright 页面对象.
     """
-    # 使用类选择器精确定位菜单项，避免匹配产品标题中的"重量"文本
+    # 使用类选择器精确定位菜单项,避免匹配产品标题中的"重量"文本
     await page.locator(".J_batchWeight").click()
     await page.get_by_role("spinbutton").nth(2).click()
     await page.get_by_role("spinbutton").nth(2).fill("6000.00")
@@ -730,10 +726,10 @@ async def _step_09_weight(page: Page) -> None:
 
 
 async def _step_10_dimensions(page: Page) -> None:
-    """步骤 10: 尺寸 - 固定 75x71x65 cm。
+    """步骤 10: 尺寸 - 固定 75x71x65 cm.
 
     Args:
-        page: Playwright 页面对象。
+        page: Playwright 页面对象.
     """
     dialog = page.get_by_role("dialog")
     await dialog.get_by_text("尺寸", exact=True).click()
@@ -787,10 +783,10 @@ async def _step_10_dimensions(page: Page) -> None:
 
 
 async def _step_11_platform_sku(page: Page) -> None:
-    """步骤 11: 平台 SKU - 全选。
+    """步骤 11: 平台 SKU - 全选.
 
     Args:
-        page: Playwright 页面对象。
+        page: Playwright 页面对象.
     """
     await page.get_by_role("dialog").get_by_text("平台SKU").click()
     await page.locator(
@@ -804,7 +800,7 @@ async def _step_11_platform_sku(page: Page) -> None:
 
 @smart_retry(max_attempts=4, delay=1.0)
 async def _step_12_sku_category(page: Page) -> None:
-    """步骤 12: SKU 分类 - 点击分类下拉框选择单品，然后保存。"""
+    """步骤 12: SKU 分类 - 点击分类下拉框选择单品,然后保存."""
     dialog = page.get_by_role("dialog")
 
     # 等待加载遮罩消失
@@ -913,17 +909,17 @@ async def _step_12_sku_category(page: Page) -> None:
     try:
         await save_btn.click(timeout=2000)
     except Exception as e:
-        logger.warning(f"点击保存修改失败: {e}，尝试备用选择器")
+        logger.warning(f"点击保存修改失败: {e},尝试备用选择器")
         await page.locator("button:has-text('保存修改')").first.click(timeout=2000)
 
     await _close_edit_dialog(page)
 
 
 async def _step_13_size_chart(page: Page) -> None:
-    """步骤 13: 尺码表 - 跳过(录制中只是点击)。
+    """步骤 13: 尺码表 - 跳过(录制中只是点击).
 
     Args:
-        page: Playwright 页面对象。
+        page: Playwright 页面对象.
     """
     await page.get_by_text("尺码表").click()
     # 录制中没有实际操作,等待对话框打开后直接继续
@@ -932,10 +928,10 @@ async def _step_13_size_chart(page: Page) -> None:
 
 @smart_retry(max_attempts=1, delay=0.2)
 async def _step_14_suggested_price(page: Page) -> None:
-    """步骤 14: 建议售价 - 固定倍数 10。
+    """步骤 14: 建议售价 - 固定倍数 10.
 
     Args:
-        page: Playwright 页面对象。
+        page: Playwright 页面对象.
     """
     await page.get_by_text("建议售价").click()
 
@@ -953,10 +949,10 @@ async def _step_14_suggested_price(page: Page) -> None:
 
 
 async def _step_15_packing_list(page: Page) -> None:
-    """步骤 15: 包装清单 - 保持原样。
+    """步骤 15: 包装清单 - 保持原样.
 
     Args:
-        page: Playwright 页面对象。
+        page: Playwright 页面对象.
     """
     await page.get_by_text("包装清单").click()
     await page.get_by_role("button", name="预览").click()
@@ -966,10 +962,10 @@ async def _step_15_packing_list(page: Page) -> None:
 
 
 async def _step_16_carousel(page: Page) -> None:
-    """步骤 16: 轮播图 - 保持原样。
+    """步骤 16: 轮播图 - 保持原样.
 
     Args:
-        page: Playwright 页面对象。
+        page: Playwright 页面对象.
     """
     await page.get_by_text("轮播图").click()
     # 录制中没有实际操作,等待对话框打开后直接继续
@@ -977,10 +973,10 @@ async def _step_16_carousel(page: Page) -> None:
 
 
 async def _step_17_color_image(page: Page) -> None:
-    """步骤 17: 颜色图 - 保持原样。
+    """步骤 17: 颜色图 - 保持原样.
 
     Args:
-        page: Playwright 页面对象。
+        page: Playwright 页面对象.
     """
     await page.get_by_text("颜色图").click()
     # 录制中没有实际操作,等待对话框打开后直接继续
@@ -989,11 +985,11 @@ async def _step_17_color_image(page: Page) -> None:
 
 @smart_retry(max_attempts=1, delay=0.2)
 async def _step_18_manual(page: Page, file_path: str) -> None:
-    """步骤 18: 产品说明书 - 参数化文件路径。
+    """步骤 18: 产品说明书 - 参数化文件路径.
 
     Args:
-        page: Playwright 页面对象。
-        file_path: 产品说明书 PDF 文件路径(绝对路径)。
+        page: Playwright 页面对象.
+        file_path: 产品说明书 PDF 文件路径(绝对路径).
     """
     dialog = page.get_by_role("dialog")
 
@@ -1002,13 +998,13 @@ async def _step_18_manual(page: Page, file_path: str) -> None:
     await _stabilize(page, "manual_nav", min_ms=220, max_ms=360)
 
     if not file_path:
-        logger.warning("⚠️ 未提供产品说明书文件路径，跳过上传")
+        logger.warning("⚠️ 未提供产品说明书文件路径,跳过上传")
         await page.get_by_role("button", name="预览").click()
         await page.get_by_role("button", name="保存修改").click()
         await _close_edit_dialog(page)
         return
 
-    # 2. hover 到"上传文件"按钮，触发下拉菜单
+    # 2. hover 到"上传文件"按钮,触发下拉菜单
     upload_btn_selectors = [
         dialog.locator("button:has-text('上传文件')").first,
         page.locator("button:has-text('上传文件')").first,
@@ -1076,11 +1072,11 @@ async def _step_18_manual(page: Page, file_path: str) -> None:
 
 
 async def _wait_for_save_toast(page: Page, timeout: int = 150) -> None:
-    """等待保存成功提示并等待其消失(极速模式 v2)。
+    """等待保存成功提示并等待其消失(极速模式 v2).
 
     Args:
-        page: Playwright 页面对象。
-        timeout: 超时时间(毫秒),默认 150（优化: 200 -> 150）。
+        page: Playwright 页面对象.
+        timeout: 超时时间(毫秒),默认 150(优化: 200 -> 150).
     """
     try:
         toast = page.locator("text=保存成功")
@@ -1088,29 +1084,27 @@ async def _wait_for_save_toast(page: Page, timeout: int = 150) -> None:
         # 优化: 100 -> 50
         await smart_wait(page, "wait_save_toast", min_ms=8, max_ms=50, wait_for_network=False)
     except Exception:
-        # 静默失败（优化: 30 -> 20）
+        # 静默失败(优化: 30 -> 20)
         await smart_wait(page, "wait_save_fallback", min_ms=8, max_ms=20)
 
 
 async def _wait_for_dropdown_options(page: Page, timeout: int = 100) -> None:
-    """等待下拉选项列表出现(极速模式 v2)。
+    """等待下拉选项列表出现(极速模式 v2).
 
     Args:
-        page: Playwright 页面对象。
-        timeout: 超时时间(毫秒),默认 100（优化: 150 -> 100）。
+        page: Playwright 页面对象.
+        timeout: 超时时间(毫秒),默认 100(优化: 150 -> 100).
     """
-    try:
+    with suppress(Exception):
         await page.locator(".el-select-dropdown").wait_for(state="visible", timeout=timeout)
-    except Exception:
-        pass
 
 
 async def _wait_for_dialog_open(page: Page, timeout: int = 200) -> None:
-    """等待编辑对话框完全打开(极速模式 v2)。
+    """等待编辑对话框完全打开(极速模式 v2).
 
     Args:
-        page: Playwright 页面对象。
-        timeout: 超时时间(毫秒),默认 200（优化: 300 -> 200）。
+        page: Playwright 页面对象.
+        timeout: 超时时间(毫秒),默认 200(优化: 300 -> 200).
     """
     try:
         dialog = page.get_by_role("dialog")
@@ -1118,15 +1112,15 @@ async def _wait_for_dialog_open(page: Page, timeout: int = 200) -> None:
         # 优化: 50 -> 30
         await smart_wait(page, "dialog_open", min_ms=8, max_ms=30)
     except Exception:
-        # 降级（优化: 50 -> 30）
+        # 降级(优化: 50 -> 30)
         await smart_wait(page, "dialog_open_fallback", min_ms=8, max_ms=30)
 
 
 async def _close_edit_dialog(page: Page) -> None:
-    """关闭编辑对话框(极速模式)。
+    """关闭编辑对话框(极速模式).
 
     Args:
-        page: Playwright 页面对象。
+        page: Playwright 页面对象.
     """
     # 极速: 800 -> 300
     close_locator = await _resilient_locator.locate(page, "close_button", timeout=300)
@@ -1158,41 +1152,41 @@ async def _close_edit_dialog(page: Page) -> None:
         await smart_wait(page, "close_dialog_icon", min_ms=10, max_ms=30)
         return
     except Exception:
-        logger.warning("无法关闭编辑对话框，继续执行")
+        logger.warning("无法关闭编辑对话框,继续执行")
 
 
 async def _apply_user_filter(page: Page, filter_owner: str) -> bool:
-    """在 Temu 全托管采集箱页面按创建人员筛选。
+    """在 Temu 全托管采集箱页面按创建人员筛选.
 
-    与首次编辑、认领阶段的筛选逻辑保持一致。
+    与首次编辑,认领阶段的筛选逻辑保持一致.
 
     Args:
-        page: Playwright 页面对象。
-        filter_owner: 要筛选的创建人员名称。
+        page: Playwright 页面对象.
+        filter_owner: 要筛选的创建人员名称.
 
     Returns:
-        是否成功应用筛选。
+        是否成功应用筛选.
     """
     # 等待页面加载完成
     logger.info("等待 Temu 全托管采集箱页面加载...")
     await _stabilize(page, "temu_collect_load", min_ms=500, max_ms=1000, wait_for_network=True)
 
-    # 等待表格行出现，确认页面已加载
+    # 等待表格行出现,确认页面已加载
     try:
         await page.locator(".pro-virtual-table__row-body").first.wait_for(
             state="visible", timeout=5000
         )
         logger.debug("页面表格已加载")
     except Exception:
-        logger.warning("等待表格加载超时，继续尝试筛选")
+        logger.warning("等待表格加载超时,继续尝试筛选")
 
     # 方案1: 通过"所属人员"标签找到对应的 jx-select 组件
     logger.info(f"尝试按所属人员筛选: {filter_owner}")
 
     filter_applied = False
 
-    # 策略1: 找到包含"所属人员"文本的 form-item，然后定位其中的输入框
-    # 注意：Temu 全托管采集箱使用"所属人员"而不是"创建人员"
+    # 策略1: 找到包含"所属人员"文本的 form-item,然后定位其中的输入框
+    # 注意:Temu 全托管采集箱使用"所属人员"而不是"创建人员"
     try:
         # 查找包含"所属人员"标签的表单项
         form_item_selectors = [
@@ -1200,7 +1194,7 @@ async def _apply_user_filter(page: Page, filter_owner: str) -> bool:
             ".jx-form-item:has-text('所属人员')",
             ".pro-form-item-wrapper:has(label:has-text('所属人员'))",
             "div:has(> label:has-text('所属人员'))",
-            # 备选：创建人员
+            # 备选:创建人员
             ".jx-form-item:has(label:has-text('创建人员'))",
             ".jx-form-item:has-text('创建人员')",
         ]
@@ -1212,19 +1206,19 @@ async def _apply_user_filter(page: Page, filter_owner: str) -> bool:
 
             logger.debug(f"找到人员筛选表单项: {form_selector}")
 
-            # 点击整个 jx-select 容器（而不是 input），避免被其他元素拦截
+            # 点击整个 jx-select 容器(而不是 input),避免被其他元素拦截
             select_wrapper = form_item.locator(".jx-select__wrapper").first
             if await select_wrapper.count() > 0:
                 await select_wrapper.click()
                 logger.debug("点击 jx-select__wrapper")
             else:
-                # 备选：点击 jx-select 容器
+                # 备选:点击 jx-select 容器
                 select_container = form_item.locator(".jx-select").first
                 if await select_container.count() > 0:
                     await select_container.click()
                     logger.debug("点击 jx-select 容器")
                 else:
-                    # 最后备选：强制点击 input
+                    # 最后备选:强制点击 input
                     input_element = form_item.locator("input.jx-select__input").first
                     if await input_element.count() > 0:
                         await input_element.click(force=True)
@@ -1266,10 +1260,10 @@ async def _apply_user_filter(page: Page, filter_owner: str) -> bool:
         try:
             logger.debug("使用策略2: 通过 label 文本直接定位所属人员")
 
-            # 找到"所属人员"标签，然后定位其父元素中的 jx-select
+            # 找到"所属人员"标签,然后定位其父元素中的 jx-select
             label = page.locator("label:has-text('所属人员')").first
             if await label.count() > 0:
-                # 获取 label 的 for 属性，找到对应的 input
+                # 获取 label 的 for 属性,找到对应的 input
                 label_for = await label.get_attribute("for")
                 if label_for:
                     input_element = page.locator(f"#{label_for}")
@@ -1302,13 +1296,13 @@ async def _apply_user_filter(page: Page, filter_owner: str) -> bool:
             logger.debug(f"策略2筛选失败: {exc}")
 
     if not filter_applied:
-        logger.warning(f"二次编辑人员筛选未成功应用: {filter_owner}，将继续使用全部产品")
+        logger.warning(f"二次编辑人员筛选未成功应用: {filter_owner},将继续使用全部产品")
 
     return filter_applied
 
 
 async def _click_dropdown_option(page: Page, filter_owner: str) -> bool:
-    """点击下拉菜单中匹配的选项。"""
+    """点击下拉菜单中匹配的选项."""
     option_selectors = [
         f"li.el-select-dropdown__item:has-text('{filter_owner}')",
         f".jx-select-dropdown__item:has-text('{filter_owner}')",
@@ -1333,7 +1327,7 @@ async def _click_dropdown_option(page: Page, filter_owner: str) -> bool:
 
 
 async def _click_search_button(page: Page) -> bool:
-    """点击搜索按钮。"""
+    """点击搜索按钮."""
     search_btn_selectors = [
         "button.J_queryFormSearch",
         "button[type='submit']:has-text('搜索')",

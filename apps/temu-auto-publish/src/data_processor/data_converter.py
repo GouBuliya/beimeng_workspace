@@ -1,33 +1,31 @@
 """
-@PURPOSE: 数据格式转换器，负责在不同工作流阶段之间转换数据格式
+@PURPOSE: 数据格式转换器,负责在不同工作流阶段之间转换数据格式
 @OUTLINE:
   - class DataConverter: 数据转换器主类
   - @staticmethod selection_to_collection(): 选品表 → 采集输入
   - @staticmethod collection_to_edit(): 采集结果 → 首次编辑输入
   - @staticmethod edit_to_claim(): 首次编辑结果 → 认领输入
 @GOTCHAS:
-  - 必须保持数据一致性，特别是型号编号
-  - 价格计算使用标准公式（成本价×倍数）
+  - 必须保持数据一致性,特别是型号编号
+  - 价格计算使用标准公式(成本价×倍数)
   - 所有转换都需要验证必填字段
 @DEPENDENCIES:
   - 内部: data_processor.selection_table_reader
   - 外部: pydantic
 @RELATED: selection_table_reader.py, collection_workflow.py
 @CHANGELOG:
-  - 2025-11-01: 初始创建，实现完整数据转换功能
+  - 2025-11-01: 初始创建,实现完整数据转换功能
 """
 
-from typing import Dict, List, Optional
 
 from loguru import logger
-
 from src.data_processor.selection_table_reader import ProductSelectionRow
 
 
 class DataConverter:
     """数据格式转换器.
 
-    负责在不同阶段之间转换数据格式，确保数据流畅传递：
+    负责在不同阶段之间转换数据格式,确保数据流畅传递:
     1. Excel选品表 → 采集输入
     2. 采集结果 → 首次编辑输入
     3. 首次编辑结果 → 认领输入
@@ -47,17 +45,17 @@ class DataConverter:
     """
 
     @staticmethod
-    def selection_to_collection(products: List[ProductSelectionRow]) -> List[Dict]:
+    def selection_to_collection(products: list[ProductSelectionRow]) -> list[dict]:
         """选品表 → 采集输入格式转换.
 
-        将Excel选品表数据转换为采集控制器所需的格式。
+        将Excel选品表数据转换为采集控制器所需的格式.
 
         Args:
             products: 选品表产品列表
 
         Returns:
-            采集输入格式列表，每个元素包含：
-            - keyword: 搜索关键词（产品名称）
+            采集输入格式列表,每个元素包含:
+            - keyword: 搜索关键词(产品名称)
             - collect_count: 采集数量
             - model_number: 型号编号
             - owner: 负责人
@@ -88,28 +86,28 @@ class DataConverter:
                 f"  - {product.product_name} ({product.model_number}): 采集{product.collect_count}个"
             )
 
-        logger.success(f"✓ 转换完成，共 {len(collection_input)} 个产品")
+        logger.success(f"✓ 转换完成,共 {len(collection_input)} 个产品")
         return collection_input
 
     @staticmethod
     def collection_to_edit(
-        collection_results: List[Dict],
-        selection_products: List[ProductSelectionRow],
+        collection_results: list[dict],
+        selection_products: list[ProductSelectionRow],
         default_cost: float = 150.0,
         default_stock: int = 100,
-    ) -> List[Dict]:
+    ) -> list[dict]:
         """采集结果 → 首次编辑输入格式转换.
 
-        将采集结果转换为首次编辑控制器所需的格式。
+        将采集结果转换为首次编辑控制器所需的格式.
 
         Args:
             collection_results: 采集结果列表
-            selection_products: 原始选品表数据（用于补充信息）
-            default_cost: 默认成本价（如果选品表未提供）
-            default_stock: 默认库存（如果选品表未提供）
+            selection_products: 原始选品表数据(用于补充信息)
+            default_cost: 默认成本价(如果选品表未提供)
+            default_stock: 默认库存(如果选品表未提供)
 
         Returns:
-            首次编辑输入格式列表，每个元素包含：
+            首次编辑输入格式列表,每个元素包含:
             - index: 产品索引
             - keyword: 关键词
             - model_number: 型号编号
@@ -129,7 +127,7 @@ class DataConverter:
 
         edit_input = []
 
-        # 创建选品表的快速查找映射（通过产品名称）
+        # 创建选品表的快速查找映射(通过产品名称)
         selection_map = {product.product_name: product for product in selection_products}
 
         for i, result in enumerate(collection_results):
@@ -153,7 +151,7 @@ class DataConverter:
                 "collect_count": product_info.get("collect_count", 5),
             }
 
-            # 补充选品表中的额外信息（如果有）
+            # 补充选品表中的额外信息(如果有)
             if selection_product:
                 edit_data["color_spec"] = selection_product.color_spec
                 edit_data["size_chart_url"] = selection_product.size_chart
@@ -166,14 +164,14 @@ class DataConverter:
                 f"  - 产品 {i + 1}: {product_name} ({model_number}) - {links_count} 个链接"
             )
 
-        logger.success(f"✓ 转换完成，共 {len(edit_input)} 个产品")
+        logger.success(f"✓ 转换完成,共 {len(edit_input)} 个产品")
         return edit_input
 
     @staticmethod
-    def edit_to_claim(edit_results: Dict, claim_times: int = 4) -> List[Dict]:
+    def edit_to_claim(edit_results: dict, claim_times: int = 4) -> list[dict]:
         """首次编辑结果 → 认领输入格式转换.
 
-        将首次编辑结果转换为认领控制器所需的格式。
+        将首次编辑结果转换为认领控制器所需的格式.
 
         Args:
             edit_results: 首次编辑结果字典
@@ -199,14 +197,14 @@ class DataConverter:
             }
             claim_input.append(claim_data)
 
-        logger.success(f"✓ 转换完成，共 {len(claim_input)} 个产品待认领")
+        logger.success(f"✓ 转换完成,共 {len(claim_input)} 个产品待认领")
         return claim_input
 
     @staticmethod
-    def validate_collection_results(results: List[Dict], expected_count: int) -> Dict:
+    def validate_collection_results(results: list[dict], expected_count: int) -> dict:
         """验证采集结果的完整性.
 
-        检查采集结果是否满足要求：
+        检查采集结果是否满足要求:
         1. 产品数量是否正确
         2. 每个产品是否有足够的链接
         3. 必填字段是否完整
@@ -216,7 +214,7 @@ class DataConverter:
             expected_count: 期望的产品数量
 
         Returns:
-            验证结果字典：
+            验证结果字典:
             - valid: 是否验证通过
             - issues: 问题列表
             - summary: 汇总信息
@@ -258,12 +256,12 @@ class DataConverter:
 
     @staticmethod
     def merge_collection_and_selection(
-        collection_results: List[Dict], selection_products: List[ProductSelectionRow]
-    ) -> List[Dict]:
+        collection_results: list[dict], selection_products: list[ProductSelectionRow]
+    ) -> list[dict]:
         """合并采集结果和选品表数据.
 
-        将采集到的链接和选品表中的详细信息合并，
-        生成完整的产品数据。
+        将采集到的链接和选品表中的详细信息合并,
+        生成完整的产品数据.
 
         Args:
             collection_results: 采集结果
@@ -305,5 +303,5 @@ class DataConverter:
             else:
                 logger.warning(f"  ⚠️  未找到选品表数据: {product_name}")
 
-        logger.success(f"✓ 合并完成，共 {len(merged_data)} 个产品")
+        logger.success(f"✓ 合并完成,共 {len(merged_data)} 个产品")
         return merged_data

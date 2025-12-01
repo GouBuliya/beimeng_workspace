@@ -1,5 +1,5 @@
 """
-@PURPOSE: 基础工作流示例，演示如何使用temu-auto-publish系统处理选品表
+@PURPOSE: 基础工作流示例,演示如何使用temu-auto-publish系统处理选品表
 @OUTLINE:
   - def main(): 运行基础工作流示例
   - 步骤1: 配置路径
@@ -10,11 +10,9 @@
 @RELATED: test_env.py
 """
 
-from pathlib import Path
-
-from loguru import logger
 
 from config.settings import settings
+from loguru import logger
 from src.data_processor.processor import DataProcessor
 
 
@@ -34,7 +32,7 @@ def main():
     # 检查文件是否存在
     if not excel_file.exists():
         logger.warning(f"示例文件不存在: {excel_file}")
-        logger.info("请创建示例 Excel 文件，包含以下列：")
+        logger.info("请创建示例 Excel 文件,包含以下列:")
         logger.info("  - 商品名称")
         logger.info("  - 成本价")
         logger.info("  - 类目")
@@ -54,7 +52,7 @@ def main():
         task_data = processor.process_excel(excel_file, output_file)
 
         # 显示结果
-        logger.success("\n✓ 处理完成！")
+        logger.success("\n✓ 处理完成!")
         logger.info(f"  任务 ID: {task_data.task_id}")
         logger.info(f"  产品数量: {len(task_data.products)}")
         logger.info(f"  输出文件: {output_file}")

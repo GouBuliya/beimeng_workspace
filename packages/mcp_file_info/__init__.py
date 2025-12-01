@@ -14,11 +14,11 @@ from .models import METADATA_FIELDS, FileMetadata, MetadataField
 from .parser import FileInfoParser
 
 __all__ = [
+    "COMMENT_PATTERNS",
+    "METADATA_FIELDS",
+    "SUPPORTED_EXTENSIONS",
     "FileInfoParser",
     "FileMetadata",
     "MetadataField",
-    "METADATA_FIELDS",
     "ParserConfig",
-    "COMMENT_PATTERNS",
-    "SUPPORTED_EXTENSIONS",
 ]

@@ -1,13 +1,13 @@
 """
-@PURPOSE: 登录控制器，使用Playwright自动化登录妙手ERP系统
+@PURPOSE: 登录控制器,使用Playwright自动化登录妙手ERP系统
 @OUTLINE:
   - class LoginController: 登录控制器主类
   - async def login(): 执行登录流程
-  - async def login_if_needed(): 如果需要则登录（检查状态后按需登录）
-  - async def _check_login_status(): 检查登录状态（私有方法）
+  - async def login_if_needed(): 如果需要则登录(检查状态后按需登录)
+  - async def _check_login_status(): 检查登录状态(私有方法)
 @GOTCHAS:
-  - 使用aria-ref定位元素（妙手ERP特有）
-  - 优先使用Cookie登录，失效后才执行完整登录
+  - 使用aria-ref定位元素(妙手ERP特有)
+  - 优先使用Cookie登录,失效后才执行完整登录
   - Cookie有效期24小时
 @DEPENDENCIES:
   - 内部: .browser_manager, .cookie_manager
@@ -16,6 +16,7 @@
 """
 
 import asyncio
+import contextlib
 import json
 from datetime import datetime
 from pathlib import Path
@@ -33,7 +34,7 @@ from .cookie_manager import CookieManager
 class LoginController:
     """登录控制器.
 
-    管理妙手ERP登录流程，包括 Cookie 管理和自动化登录。
+    管理妙手ERP登录流程,包括 Cookie 管理和自动化登录.
 
     Attributes:
         browser_manager: 浏览器管理器
@@ -54,7 +55,7 @@ class LoginController:
 
         Args:
             config_path: 浏览器配置文件路径
-            selector_path: 选择器配置文件路径（默认使用v2文本定位器版本）
+            selector_path: 选择器配置文件路径(默认使用v2文本定位器版本)
         """
         self.browser_manager = BrowserManager(config_path)
         self.cookie_manager = CookieManager()
@@ -87,10 +88,10 @@ class LoginController:
     async def _is_browser_valid(self) -> bool:
         """检查浏览器是否仍然有效且可响应.
 
-        执行多层检查：
+        执行多层检查:
         1. 对象存在性检查
         2. 浏览器连接状态检查
-        3. 页面响应检查（带超时）
+        3. 页面响应检查(带超时)
         4. 上下文活跃性检查
 
         Returns:
@@ -114,7 +115,7 @@ class LoginController:
                 logger.debug("浏览器已断开连接")
                 return False
 
-            # 3. 页面响应检查（带超时）
+            # 3. 页面响应检查(带超时)
             try:
                 result = await asyncio.wait_for(
                     self.browser_manager.page.evaluate("() => document.readyState"), timeout=5.0
@@ -122,7 +123,7 @@ class LoginController:
                 if result not in ("complete", "interactive", "loading"):
                     logger.debug(f"页面状态异常: {result}")
                     return False
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 logger.debug("页面响应超时 (5s)")
                 return False
 
@@ -143,12 +144,12 @@ class LoginController:
             return False
 
     async def _cleanup_browser(self) -> dict[str, bool]:
-        """清理失效的浏览器资源，返回清理结果.
+        """清理失效的浏览器资源,返回清理结果.
 
-        每个资源独立清理，带超时控制，确保即使某个资源清理失败也不影响其他资源。
+        每个资源独立清理,带超时控制,确保即使某个资源清理失败也不影响其他资源.
 
         Returns:
-            清理结果字典，格式: {"page": True/False, "context": True/False, ...}
+            清理结果字典,格式: {"page": True/False, "context": True/False, ...}
         """
         cleanup_results = {
             "page_waiter": False,
@@ -161,7 +162,7 @@ class LoginController:
         async def safe_close(
             resource: Any, name: str, close_method: str = "close", timeout: float = 5.0
         ) -> bool:
-            """安全关闭资源，带超时和异常处理."""
+            """安全关闭资源,带超时和异常处理."""
             if resource is None:
                 return True  # 资源不存在视为成功
 
@@ -173,14 +174,14 @@ class LoginController:
 
                 await asyncio.wait_for(method(), timeout=timeout)
                 return True
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 logger.warning(f"{name}.{close_method}() 超时 ({timeout}s)")
                 return False
             except Exception as e:
                 logger.debug(f"{name}.{close_method}() 失败: {type(e).__name__}: {e}")
                 return False
 
-        # 1. 清理 PageWaiter（防止内存泄漏）
+        # 1. 清理 PageWaiter(防止内存泄漏)
         if self.browser_manager.page and hasattr(self.browser_manager.page, "_bemg_cleanup_waiter"):
             try:
                 self.browser_manager.page._bemg_cleanup_waiter()
@@ -234,7 +235,7 @@ class LoginController:
         Args:
             username: 用户名
             password: 密码
-            force: 强制重新登录（忽略 Cookie）
+            force: 强制重新登录(忽略 Cookie)
             headless: 是否无头模式
 
         Returns:
@@ -250,7 +251,7 @@ class LoginController:
 
         # 1. 检查 Cookie
         if not force and self.cookie_manager.is_valid():
-            logger.success("✓ Cookie 有效，尝试使用 Cookie 登录")
+            logger.success("✓ Cookie 有效,尝试使用 Cookie 登录")
 
             # 启动浏览器并加载 Cookie
             await self.browser_manager.start(headless=headless)
@@ -280,24 +281,24 @@ class LoginController:
                     logger.success("✓ Cookie 登录成功")
                     return True
                 else:
-                    logger.warning("Cookie 已失效，需要重新登录")
+                    logger.warning("Cookie 已失效,需要重新登录")
                     self.cookie_manager.clear()
 
         # 2. 执行自动化登录
         logger.info("开始自动化登录妙手ERP...")
 
         try:
-            # 启动浏览器（如果未启动或已失效）
+            # 启动浏览器(如果未启动或已失效)
             browser_valid = await self._is_browser_valid()
             if not browser_valid:
-                logger.info("浏览器未启动或已失效，正在重新启动...")
+                logger.info("浏览器未启动或已失效,正在重新启动...")
                 # 清理旧的浏览器资源
                 await self._cleanup_browser()
                 await self.browser_manager.start(headless=headless)
 
             page = self.browser_manager.page
             if not page:
-                raise RuntimeError("浏览器页面未初始化，无法执行登录")
+                raise RuntimeError("浏览器页面未初始化,无法执行登录")
             waiter = PageWaiter(page)
 
             # 导航到登录页
@@ -307,7 +308,7 @@ class LoginController:
             await page.goto(login_url, timeout=60000)
             await wait_dom_loaded(page, context=" [login page]")
 
-            # 使用文本定位器（更稳定）
+            # 使用文本定位器(更稳定)
             username_selector = login_config.get("username_input", "input[type='text']")
             password_selector = login_config.get("password_input", "input[type='password']")
             login_btn_selector = login_config.get("login_button", "button:has-text('登录')")
@@ -346,12 +347,12 @@ class LoginController:
                 name="login.submit",
             )
             if not login_clicked:
-                logger.debug("登录按钮 safe_click 失败，尝试直接 click + Enter 兜底")
+                logger.debug("登录按钮 safe_click 失败,尝试直接 click + Enter 兜底")
                 try:
                     await login_btn.click(timeout=TIMEOUTS.SLOW)
                     login_clicked = True
                 except Exception as exc:
-                    logger.debug(f"直接点击失败，尝试回车提交: {exc}")
+                    logger.debug(f"直接点击失败,尝试回车提交: {exc}")
                     try:
                         await page.keyboard.press("Enter")
                         login_clicked = True
@@ -361,7 +362,7 @@ class LoginController:
                 logger.error("登录按钮点击失败")
                 return False
 
-            # 等待登录结果（跳转到首页或显示错误）
+            # 等待登录结果(跳转到首页或显示错误)
             logger.info("等待登录结果...")
 
             try:
@@ -371,23 +372,21 @@ class LoginController:
             except Exception as e:
                 logger.debug(f"未能等待到URL变化: {e}")
                 # 激进优化: 条件等待替代固定2秒等待
-                try:
+                with contextlib.suppress(Exception):
                     await page.wait_for_selector(
                         ".jx-main, .pro-layout, .el-message--error, [class*='error']",
                         state="visible",
                         timeout=2000,
                     )
-                except Exception:
-                    pass
 
             # 验证登录状态
             if await self._check_login_status():
                 logger.success("✓ 登录成功")
 
-                # 保存 Cookie（使用 CookieManager 管理时间戳）
+                # 保存 Cookie(使用 CookieManager 管理时间戳)
                 cookies = await self.browser_manager.context.cookies()
                 self.cookie_manager.save_playwright_cookies(cookies)
-                logger.debug("✓ Cookie 已保存（{} 条）", len(cookies))
+                logger.debug("✓ Cookie 已保存({} 条)", len(cookies))
 
                 await self._dismiss_overlays_if_any(skip_health=True)
 
@@ -418,16 +417,16 @@ class LoginController:
             return False
 
         finally:
-            # 如果是 headless 模式，关闭浏览器
+            # 如果是 headless 模式,关闭浏览器
             if headless and not keep_browser_open:
                 await self.browser_manager.close()
 
     async def ensure_collect_box_ready(self, target_url: str) -> None:
-        """登录后跳转到指定采集箱，并清理弹窗/新手教程."""
+        """登录后跳转到指定采集箱,并清理弹窗/新手教程."""
 
         page = self.browser_manager.page
         if not page:
-            raise RuntimeError("浏览器页面未初始化，无法导航到采集箱")
+            raise RuntimeError("浏览器页面未初始化,无法导航到采集箱")
 
         logger.info("导航到采集箱页面: {}", target_url)
         await page.goto(target_url, timeout=60_000)
@@ -455,14 +454,14 @@ class LoginController:
         """登录后尝试关闭广告或提示弹窗 - 优化版.
 
         优化说明:
-        - 快速检测弹窗存在性，无弹窗立即返回（避免无意义等待）
-        - 使用并行竞速关闭，提升响应速度
-        - 循环次数 5→3，减少最大等待时间
+        - 快速检测弹窗存在性,无弹窗立即返回(避免无意义等待)
+        - 使用并行竞速关闭,提升响应速度
+        - 循环次数 5→3,减少最大等待时间
         - 移除 wait_for_dom_stable 调用
         - 移除调试快照功能
 
         Args:
-            skip_health: True 时跳过"店铺健康功能迁移"弹窗，由调用方单独处理。
+            skip_health: True 时跳过"店铺健康功能迁移"弹窗,由调用方单独处理.
         """
         page = self.browser_manager.page
         if not page:
@@ -475,16 +474,16 @@ class LoginController:
             ".n-modal, .n-dialog"
         )
 
-        # 优化: 快速检测是否存在弹窗，无弹窗立即返回
+        # 优化: 快速检测是否存在弹窗,无弹窗立即返回
         try:
             overlay_count = await page.locator(overlay_selector).count()
             if overlay_count == 0:
-                logger.debug("无弹窗，跳过关闭流程")
+                logger.debug("无弹窗,跳过关闭流程")
                 return
         except Exception:
             pass
 
-        # 关闭按钮选择器（按优先级排序）
+        # 关闭按钮选择器(按优先级排序)
         close_selectors = [
             # 高优先级 - 常见关闭按钮
             ".ant-modal-close",
@@ -522,7 +521,7 @@ class LoginController:
 
         if not skip_health:
             # 添加"我已知晓"按钮到关闭选择器列表最前面
-            close_selectors = ["button:has-text('我已知晓')"] + close_selectors
+            close_selectors = ["button:has-text('我已知晓')", *close_selectors]
 
         # 优化: 减少循环次数 5 → 3
         for attempt in range(3):
@@ -551,8 +550,8 @@ class LoginController:
                 )
 
             if not closed:
-                # 没有可关闭的弹窗，退出循环
-                logger.warning("⚠️ 弹窗仍存在但无法关闭，强制继续后续流程")
+                # 没有可关闭的弹窗,退出循环
+                logger.warning("⚠️ 弹窗仍存在但无法关闭,强制继续后续流程")
                 break
 
         # 处理"店铺健康功能迁移"弹窗
@@ -596,7 +595,7 @@ class LoginController:
             if not overlay_found:
                 return
 
-            logger.info("检测到新手教程引导，尝试跳过 (第{}次)", attempt + 1)
+            logger.info("检测到新手教程引导,尝试跳过 (第{}次)", attempt + 1)
             skipped = False
             for selector in skip_button_selectors:
                 locator = page.locator(selector)
@@ -619,7 +618,7 @@ class LoginController:
                     pass
 
             if not skipped:
-                logger.warning("未能自动跳过新手教程，引导仍在")
+                logger.warning("未能自动跳过新手教程,引导仍在")
                 break
 
     def _collect_page_scopes(self, page):
@@ -646,13 +645,13 @@ class LoginController:
     ) -> bool:
         """并行竞速尝试关闭弹窗.
 
-        使用 selector_race 并行检测多个关闭按钮选择器，
-        第一个找到的立即点击关闭。
+        使用 selector_race 并行检测多个关闭按钮选择器,
+        第一个找到的立即点击关闭.
 
         Args:
             page: Playwright 页面对象
             close_selectors: 关闭按钮选择器列表
-            timeout_ms: 超时时间（毫秒）
+            timeout_ms: 超时时间(毫秒)
 
         Returns:
             True 如果成功关闭了弹窗
@@ -686,7 +685,7 @@ class LoginController:
         """在多作用域内点击首个可见元素.
 
         优化说明:
-        - 先检测 count，为 0 直接跳过（避免无意义的超时等待）
+        - 先检测 count,为 0 直接跳过(避免无意义的超时等待)
         - 减少默认超时时间
         """
         for selector in selectors:
@@ -695,7 +694,7 @@ class LoginController:
                     locator = scope.locator(selector)
                     count = await locator.count()
                 except Exception:
-                    continue  # 静默跳过，减少日志噪音
+                    continue  # 静默跳过,减少日志噪音
 
                 if count == 0:
                     continue
@@ -713,7 +712,7 @@ class LoginController:
                         )
                         return True
                 except Exception:
-                    continue  # 静默跳过，减少日志噪音
+                    continue  # 静默跳过,减少日志噪音
 
         return False
 
@@ -721,7 +720,7 @@ class LoginController:
         """关闭'店铺健康功能迁移'等弹窗 - 优化版.
 
         优化说明:
-        - 移除 wait_dom_loaded 调用（节省约 2.5s）
+        - 移除 wait_dom_loaded 调用(节省约 2.5s)
         - 使用并行竞速选择器替代串行遍历
         - 无按钮时早退出
         """
@@ -746,7 +745,7 @@ class LoginController:
             )
 
             if btn is None:
-                # 没有按钮，早退出
+                # 没有按钮,早退出
                 break
 
             try:
@@ -783,7 +782,7 @@ class LoginController:
                 logger.debug("✓ 已在后台页面")
                 return True
 
-            # 检查是否有产品菜单元素（首页特有）
+            # 检查是否有产品菜单元素(首页特有)
             homepage_config = self.selectors.get("homepage", {})
             product_menu_selector = homepage_config.get("product_menu", "text='产品'")
 
@@ -803,16 +802,16 @@ class LoginController:
         username: str | None = None,
         password: str | None = None,
     ) -> bool:
-        """如果需要则登录（检查登录状态，未登录则执行登录）.
+        """如果需要则登录(检查登录状态,未登录则执行登录).
 
-        这个方法会：
-        1. 启动浏览器（如果未启动）
+        这个方法会:
+        1. 启动浏览器(如果未启动)
         2. 检查登录状态
-        3. 如果未登录，使用提供的或环境变量中的凭据执行登录
+        3. 如果未登录,使用提供的或环境变量中的凭据执行登录
 
         Args:
-            username: 用户名（可选，如果不提供则从环境变量读取）
-            password: 密码（可选，如果不提供则从环境变量读取）
+            username: 用户名(可选,如果不提供则从环境变量读取)
+            password: 密码(可选,如果不提供则从环境变量读取)
 
         Returns:
             True 如果已登录或登录成功
@@ -825,20 +824,20 @@ class LoginController:
         """
         import os
 
-        # 1. 启动浏览器（如果未启动）
+        # 1. 启动浏览器(如果未启动)
         if not self.browser_manager.browser:
-            logger.info("浏览器未启动，正在启动...")
+            logger.info("浏览器未启动,正在启动...")
             await self.browser_manager.start()
 
         # 2. 检查是否已经登录
         try:
             if await self._check_login_status():
-                logger.info("已登录，无需重新登录")
+                logger.info("已登录,无需重新登录")
                 return True
         except Exception as e:
             logger.debug(f"检查登录状态时出错: {e}")
 
-        # 3. 需要登录，获取凭据
+        # 3. 需要登录,获取凭据
         if username is None:
             username = os.getenv("MIAOSHOU_USERNAME")
             if not username:
@@ -852,7 +851,7 @@ class LoginController:
                 return False
 
         # 4. 执行登录
-        logger.info(f"需要登录，使用用户名: {username}")
+        logger.info(f"需要登录,使用用户名: {username}")
         return await self.login(username, password)
 
 
@@ -863,7 +862,7 @@ if __name__ == "__main__":
     async def test():
         controller = LoginController()
 
-        # 测试登录（需要实际账号）
+        # 测试登录(需要实际账号)
         username = "test_user"
         password = "test_pass"
 

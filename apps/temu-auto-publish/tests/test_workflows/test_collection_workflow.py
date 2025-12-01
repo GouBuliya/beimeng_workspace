@@ -12,8 +12,7 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
-from tests.mocks import MockPage, MockBrowserManager
+from tests.mocks import MockBrowserManager, MockPage
 
 
 class TestCollectionWorkflow:
@@ -242,9 +241,7 @@ class TestCollectionWorkflowConfig:
         def validate_config(config):
             if config.get("timeout_ms", 0) <= 0:
                 return False
-            if config.get("max_collect_count", 0) <= 0:
-                return False
-            return True
+            return not config.get("max_collect_count", 0) <= 0
 
         valid_config = {"timeout_ms": 30000, "max_collect_count": 5}
         invalid_config = {"timeout_ms": -1, "max_collect_count": 0}

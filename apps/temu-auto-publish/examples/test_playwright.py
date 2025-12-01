@@ -1,7 +1,7 @@
 """
-@PURPOSE: 测试 Playwright 环境，验证浏览器自动化基本功能
+@PURPOSE: 测试 Playwright 环境,验证浏览器自动化基本功能
 @OUTLINE:
-  - async def test_playwright(): 测试浏览器启动、导航、截图
+  - async def test_playwright(): 测试浏览器启动,导航,截图
   - main: 运行测试
 @GOTCHAS:
   - 需要先运行 playwright install chromium 安装浏览器
@@ -67,7 +67,7 @@ async def test_playwright():
         print("✓ 浏览器已关闭")
 
         print("\n" + "=" * 60)
-        print("✓✓✓ Playwright 环境测试通过！")
+        print("✓✓✓ Playwright 环境测试通过!")
         print("=" * 60)
 
 

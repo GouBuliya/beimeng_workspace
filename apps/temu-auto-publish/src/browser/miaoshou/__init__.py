@@ -1,4 +1,3 @@
-# ruff: noqa: N999
 """
 @PURPOSE: Expose Miaoshou controller components.
 @OUTLINE:

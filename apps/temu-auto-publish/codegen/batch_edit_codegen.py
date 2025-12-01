@@ -1,5 +1,6 @@
 import re
-from playwright.sync_api import Playwright, sync_playwright, expect
+
+from playwright.sync_api import Playwright, sync_playwright
 
 
 def run(playwright: Playwright) -> None:
@@ -13,16 +14,16 @@ def run(playwright: Playwright) -> None:
     page.get_by_role("textbox", name="密码").fill("Lyl12345678.")
     page.get_by_role("button", name="立即登录").click()
     page.get_by_role("dialog").filter(
-        has_text="【线上直播】11月11日—11月13日线上直播预告2025"
+        has_text="[线上直播]11月11日—11月13日线上直播预告2025"
     ).click()
     page.locator(".jx-image-viewer__btn > .jx-icon > svg").click()
     page.get_by_role("dialog").filter(
-        has_text="【线上直播】11月11日—11月13日线上直播预告2025"
+        has_text="[线上直播]11月11日—11月13日线上直播预告2025"
     ).get_by_label("关闭此对话框").click()
     page.get_by_role("button", name="关闭此对话框").click()
     page.get_by_role("link", name="公用采集箱").click()
     page.get_by_role(
-        "tooltip", name="通过采集设置，在采集商品时可以对来源商品进行预处理 我知道了"
+        "tooltip", name="通过采集设置,在采集商品时可以对来源商品进行预处理 我知道了"
     ).click()
     page.get_by_role("button", name="我知道了").click()
     page.get_by_text("全部 (7690)").click()
@@ -31,48 +32,48 @@ def run(playwright: Playwright) -> None:
     ).first.click()
     page.get_by_role("group", name="产品视频 :").get_by_role("img").click()
     page.get_by_text("网络上传").click()
-    page.get_by_role("textbox", name="输入视频URL地址，必须以“.文件格式后缀”结尾，建议上传").click()
-    page.get_by_role("textbox", name="输入视频URL地址，必须以“.文件格式后缀”结尾，建议上传").fill(
+    page.get_by_role("textbox", name="输入视频URL地址,必须以“.文件格式后缀”结尾,建议上传").click()
+    page.get_by_role("textbox", name="输入视频URL地址,必须以“.文件格式后缀”结尾,建议上传").fill(
         "https://erp.91miaoshou.com/sub_account/users"
     )
     page.get_by_role("button", name="确定").click()
     page.get_by_role("button", name="确定").click()
     page.get_by_role("button", name="确定").click()
     page.locator("#jx-id-8142-860").click()
-    page.get_by_role("textbox", name="输入视频URL地址，必须以“.文件格式后缀”结尾，建议上传").click()
-    page.get_by_role("textbox", name="输入视频URL地址，必须以“.文件格式后缀”结尾，建议上传").press(
+    page.get_by_role("textbox", name="输入视频URL地址,必须以“.文件格式后缀”结尾,建议上传").click()
+    page.get_by_role("textbox", name="输入视频URL地址,必须以“.文件格式后缀”结尾,建议上传").press(
         "ControlOrMeta+a"
     )
-    page.get_by_role("textbox", name="输入视频URL地址，必须以“.文件格式后缀”结尾，建议上传").fill(
+    page.get_by_role("textbox", name="输入视频URL地址,必须以“.文件格式后缀”结尾,建议上传").fill(
         'fetch("https://miaoshou-tuchuang-beimeng.oss-cn-hangzhou.aliyuncs.com/video/A026.mp4", { method: "HEAD" })\n  .then(res => console.log("status:", res.status))\n  .catch(err => console.error(err)); '
     )
-    page.get_by_role("textbox", name="输入视频URL地址，必须以“.文件格式后缀”结尾，建议上传").press(
+    page.get_by_role("textbox", name="输入视频URL地址,必须以“.文件格式后缀”结尾,建议上传").press(
         "ControlOrMeta+a"
     )
-    page.get_by_role("textbox", name="输入视频URL地址，必须以“.文件格式后缀”结尾，建议上传").fill(
+    page.get_by_role("textbox", name="输入视频URL地址,必须以“.文件格式后缀”结尾,建议上传").fill(
         "https://goods-vod.kwcdn.com/goods-video/1ad6e3c82f89ee54450b4513187a1c4477345229.f30.mp4"
     )
     page.get_by_role("button", name="确定").click()
     page.get_by_role("button", name="确定").press("ControlOrMeta+a")
-    page.get_by_role("textbox", name="输入视频URL地址，必须以“.文件格式后缀”结尾，建议上传").click()
-    page.get_by_role("textbox", name="输入视频URL地址，必须以“.文件格式后缀”结尾，建议上传").press(
+    page.get_by_role("textbox", name="输入视频URL地址,必须以“.文件格式后缀”结尾,建议上传").click()
+    page.get_by_role("textbox", name="输入视频URL地址,必须以“.文件格式后缀”结尾,建议上传").press(
         "ControlOrMeta+a"
     )
-    page.get_by_role("textbox", name="输入视频URL地址，必须以“.文件格式后缀”结尾，建议上传").fill(
+    page.get_by_role("textbox", name="输入视频URL地址,必须以“.文件格式后缀”结尾,建议上传").fill(
         "https://miaoshou-tuchuang-beimeng.oss-cn-hangzhou.aliyuncs.com/video/A026.mp4"
     )
     page.get_by_role("button", name="确定").click()
     page.get_by_role("button", name="确定").click()
     page.get_by_role("button", name="确定").click()
-    page.get_by_role("textbox", name="输入视频URL地址，必须以“.文件格式后缀”结尾，建议上传").click()
-    page.get_by_role("textbox", name="输入视频URL地址，必须以“.文件格式后缀”结尾，建议上传").click()
+    page.get_by_role("textbox", name="输入视频URL地址,必须以“.文件格式后缀”结尾,建议上传").click()
+    page.get_by_role("textbox", name="输入视频URL地址,必须以“.文件格式后缀”结尾,建议上传").click()
     page.get_by_role(
-        "textbox", name="输入视频URL地址，必须以“.文件格式后缀”结尾，建议上传"
+        "textbox", name="输入视频URL地址,必须以“.文件格式后缀”结尾,建议上传"
     ).dblclick()
-    page.get_by_role("textbox", name="输入视频URL地址，必须以“.文件格式后缀”结尾，建议上传").press(
+    page.get_by_role("textbox", name="输入视频URL地址,必须以“.文件格式后缀”结尾,建议上传").press(
         "ControlOrMeta+a"
     )
-    page.get_by_role("textbox", name="输入视频URL地址，必须以“.文件格式后缀”结尾，建议上传").press(
+    page.get_by_role("textbox", name="输入视频URL地址,必须以“.文件格式后缀”结尾,建议上传").press(
         "ControlOrMeta+c"
     )
     page.get_by_role("dialog", name="上传视频").get_by_label("关闭此对话框").click()
@@ -83,26 +84,26 @@ def run(playwright: Playwright) -> None:
         "A045_A046.mp4"
     )
     page.get_by_text("网络上传").click()
-    page.get_by_role("textbox", name="输入视频URL地址，必须以“.文件格式后缀”结尾，建议上传").click()
-    page.get_by_role("textbox", name="输入视频URL地址，必须以“.文件格式后缀”结尾，建议上传").fill(
+    page.get_by_role("textbox", name="输入视频URL地址,必须以“.文件格式后缀”结尾,建议上传").click()
+    page.get_by_role("textbox", name="输入视频URL地址,必须以“.文件格式后缀”结尾,建议上传").fill(
         "https://miaoshou-tuchuang-beimeng.oss-cn-hangzhou.aliyuncs.com/video/A026.mp4"
     )
     page.get_by_role("button", name="确定").click()
     page.get_by_role("button", name="确定").click()
-    page.get_by_role("textbox", name="输入视频URL地址，必须以“.文件格式后缀”结尾，建议上传").click()
+    page.get_by_role("textbox", name="输入视频URL地址,必须以“.文件格式后缀”结尾,建议上传").click()
     page.locator(
         ".vue-recycle-scroller__item-view.hover > .pro-virtual-scroll__row > .pro-virtual-table__row-body > .is-fixed-right > .jx-button-group > .jx-button.jx-button--primary.jx-button--small.is-text.pro-button.J_commonCollectBoxEdit"
     ).click()
     page.get_by_role("group", name="产品视频 :").get_by_role("img").click()
     page.get_by_text("网络上传").click()
     page.get_by_text("网络上传").click()
-    page.get_by_role("textbox", name="输入视频URL地址，必须以“.文件格式后缀”结尾，建议上传").fill(
+    page.get_by_role("textbox", name="输入视频URL地址,必须以“.文件格式后缀”结尾,建议上传").fill(
         ""
     )
-    page.get_by_role("textbox", name="输入视频URL地址，必须以“.文件格式后缀”结尾，建议上传").press(
+    page.get_by_role("textbox", name="输入视频URL地址,必须以“.文件格式后缀”结尾,建议上传").press(
         "ControlOrMeta+a"
     )
-    page.get_by_role("textbox", name="输入视频URL地址，必须以“.文件格式后缀”结尾，建议上传").press(
+    page.get_by_role("textbox", name="输入视频URL地址,必须以“.文件格式后缀”结尾,建议上传").press(
         "ControlOrMeta+c"
     )
     page.get_by_role("dialog", name="保存修改").click()
@@ -134,15 +135,15 @@ def run(playwright: Playwright) -> None:
     ).first.click()
     page.get_by_role("group", name="尺寸图表 :").get_by_role("img").nth(4).click()
     page.get_by_text("使用网络图片").click()
-    page.get_by_role("textbox", name="请输入图片链接，若要输入多个链接，请以回车换行").click()
-    page.get_by_role("textbox", name="请输入图片链接，若要输入多个链接，请以回车换行").fill(
+    page.get_by_role("textbox", name="请输入图片链接,若要输入多个链接,请以回车换行").click()
+    page.get_by_role("textbox", name="请输入图片链接,若要输入多个链接,请以回车换行").fill(
         "  https://miaoshou-tuchuang-beimeng.oss-cn-hangzhou.aliyuncs.com/10%E6%9C%88%E6%96%B0%E5%93%81%E5%8F%AF%E6%8E%A8/A062.jpg"
     )
     page.get_by_role("button", name="确定").click()
     page.get_by_role("group", name="产品视频 :").get_by_role("img").click()
     page.get_by_text("网络上传").click()
-    page.get_by_role("textbox", name="输入视频URL地址，必须以“.文件格式后缀”结尾，建议上传").click()
-    page.get_by_role("textbox", name="输入视频URL地址，必须以“.文件格式后缀”结尾，建议上传").fill(
+    page.get_by_role("textbox", name="输入视频URL地址,必须以“.文件格式后缀”结尾,建议上传").click()
+    page.get_by_role("textbox", name="输入视频URL地址,必须以“.文件格式后缀”结尾,建议上传").fill(
         "https://miaoshou-tuchuang-beimeng.oss-cn-hangzhou.aliyuncs.com/video/A045_A046.mp4"
     )
     page.get_by_role("button", name="确定").click()
@@ -154,8 +155,8 @@ def run(playwright: Playwright) -> None:
     page.get_by_label("上传视频").get_by_role("button", name="取消").click()
     page.locator(".video-wrap").click()
     page.get_by_text("网络上传").click()
-    page.get_by_role("textbox", name="输入视频URL地址，必须以“.文件格式后缀”结尾，建议上传").click()
-    page.get_by_role("textbox", name="输入视频URL地址，必须以“.文件格式后缀”结尾，建议上传").fill(
+    page.get_by_role("textbox", name="输入视频URL地址,必须以“.文件格式后缀”结尾,建议上传").click()
+    page.get_by_role("textbox", name="输入视频URL地址,必须以“.文件格式后缀”结尾,建议上传").fill(
         "s"
     )
     page.get_by_role("button", name="确定").click()
@@ -172,7 +173,7 @@ def run(playwright: Playwright) -> None:
     page.get_by_role("button", name="确定").click()
     page.get_by_role("dialog", name="上传视频").click()
     page.get_by_role("dialog", name="上传视频").click()
-    page.get_by_role("textbox", name="输入视频URL地址，必须以“.文件格式后缀”结尾，建议上传").click()
+    page.get_by_role("textbox", name="输入视频URL地址,必须以“.文件格式后缀”结尾,建议上传").click()
     page.get_by_label("上传视频").get_by_role("button", name="取消").click()
     page.get_by_role("button", name="关闭此对话框").click()
     page.locator(

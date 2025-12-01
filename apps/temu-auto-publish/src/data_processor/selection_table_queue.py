@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable, Sequence
 
 import pandas as pd
 from loguru import logger
@@ -39,7 +39,7 @@ class SelectionBatch:
     ) -> Iterable[tuple[int, int, int, ProductSelectionRow]]:
         """Yield rows with absolute index, page index and index on page.
 
-        Useful for UI脚本：序号>20 需翻页，点击位置可用 num % page_size 计算。
+        Useful for UI脚本:序号>20 需翻页,点击位置可用 num % page_size 计算.
         """
 
         if page_size <= 0:
@@ -64,7 +64,7 @@ class SelectionTableQueue:
         self.selection_table_path = Path(selection_table_path).expanduser().resolve()
         self.reader = SelectionTableReader()
         self._processed_count = 0  # 用于计算序号和翻页位置
-        self._cached_rows: list[ProductSelectionRow] | None = None  # 只在首次读取，后续复用
+        self._cached_rows: list[ProductSelectionRow] | None = None  # 只在首次读取,后续复用
 
         if archive_root:
             self.archive_root = Path(archive_root).expanduser().resolve()
@@ -81,7 +81,7 @@ class SelectionTableQueue:
 
         rows = self._load_rows()
         if not rows:
-            raise SelectionTableEmptyError(f"选品表 {self.selection_table_path} 无数据，停止运行")
+            raise SelectionTableEmptyError(f"选品表 {self.selection_table_path} 无数据,停止运行")
 
         batch_rows = rows[:batch_size]
         remaining_rows = rows[batch_size:]
@@ -152,21 +152,21 @@ class SelectionTableQueue:
         """Quick check whether the selection table still contains rows."""
 
         try:
-            # 只读检查，无需复制列表（性能优化）
+            # 只读检查,无需复制列表(性能优化)
             rows = self._load_rows(copy=False)
         except SelectionTableFormatError:
             return False
         return bool(rows)
 
     def _load_rows(self, *, copy: bool = True) -> list[ProductSelectionRow]:
-        """加载选品行数据。
+        """加载选品行数据.
 
         Args:
-            copy: 是否返回副本。默认 True 以防止外部修改缓存。
-                  在只读场景（如 has_pending_rows）可设为 False 以提升性能。
+            copy: 是否返回副本.默认 True 以防止外部修改缓存.
+                  在只读场景(如 has_pending_rows)可设为 False 以提升性能.
         """
         if self._cached_rows is not None:
-            # 性能优化：只读场景下避免不必要的列表复制
+            # 性能优化:只读场景下避免不必要的列表复制
             return list(self._cached_rows) if copy else self._cached_rows
 
         try:
@@ -176,11 +176,11 @@ class SelectionTableQueue:
         except FileNotFoundError as exc:
             raise FileNotFoundError(f"选品表不存在: {self.selection_table_path}") from exc
         except Exception as exc:
-            raise SelectionTableFormatError(f"选品表格式异常，无法解析: {exc}") from exc
+            raise SelectionTableFormatError(f"选品表格式异常,无法解析: {exc}") from exc
 
     def _write_rows(self, rows: Sequence[ProductSelectionRow]) -> None:
         df = self._rows_to_dataframe(rows)
-        # pandas 会在空 DataFrame 中保留列结构，方便继续填写
+        # pandas 会在空 DataFrame 中保留列结构,方便继续填写
         df.to_excel(self.selection_table_path, index=False)
         self._cached_rows = list(rows)
 

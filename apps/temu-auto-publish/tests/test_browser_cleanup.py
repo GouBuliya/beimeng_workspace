@@ -11,7 +11,6 @@ import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from src.browser.browser_manager import BrowserManager
 from src.browser.login_controller import LoginController
 
@@ -47,11 +46,11 @@ class TestBrowserManagerClose:
         manager.config = {}
         manager.tracing_config = {}
 
-        # Mock 资源，page.close() 会失败
+        # Mock 资源,page.close() 会失败
         manager.page = AsyncMock()
         manager.page.close = AsyncMock(side_effect=Exception("模拟 page 关闭错误"))
 
-        # 保存引用用于后续断言（close() 会置为 None）
+        # 保存引用用于后续断言(close() 会置为 None)
         context_mock = AsyncMock()
         browser_mock = AsyncMock()
         playwright_mock = AsyncMock()
@@ -60,7 +59,7 @@ class TestBrowserManagerClose:
         manager.browser = browser_mock
         manager.playwright = playwright_mock
 
-        # 即使 page.close() 失败，其他资源也应该被清理
+        # 即使 page.close() 失败,其他资源也应该被清理
         await manager.close(save_state=False)
 
         # 验证所有资源被置为 None
@@ -81,7 +80,7 @@ class TestBrowserManagerClose:
         manager.config = {}
         manager.tracing_config = {}
 
-        # Mock 资源，page.close() 会超时
+        # Mock 资源,page.close() 会超时
         async def slow_close():
             await asyncio.sleep(10)  # 超过 5s 超时
 
@@ -94,7 +93,7 @@ class TestBrowserManagerClose:
         # 应该超时但继续清理
         await manager.close(save_state=False)
 
-        # 验证所有资源被置为 None（即使超时）
+        # 验证所有资源被置为 None(即使超时)
         assert manager.page is None
         assert manager.context is None
         assert manager.browser is None

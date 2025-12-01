@@ -12,10 +12,9 @@
 """
 
 import json
-import pytest
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
+import pytest
 from src.browser.browser_manager import BrowserManager
 
 
@@ -111,7 +110,7 @@ class TestBrowserManagerOperations:
 
     @pytest.mark.asyncio
     async def test_start_and_close(self, tmp_path):
-        """测试启动和关闭浏览器（使用Mock）"""
+        """测试启动和关闭浏览器(使用Mock)"""
         config_file = tmp_path / "config.json"
         config = {
             "browser": {"type": "chromium", "headless": True},
@@ -255,7 +254,7 @@ class TestBrowserManagerHelpers:
         assert result == ["--arg1"]
 
     def test_collect_channel_candidates_with_config(self):
-        """测试收集渠道候选（有配置）"""
+        """测试收集渠道候选(有配置)"""
         config = {"channel": "chrome", "channel_fallbacks": ["msedge", "chromium"]}
 
         candidates = BrowserManager._collect_channel_candidates(config)
@@ -266,7 +265,7 @@ class TestBrowserManagerHelpers:
         assert candidates[0] == "chrome"  # 配置的应该在前面
 
     def test_collect_channel_candidates_default(self):
-        """测试收集渠道候选（无配置）"""
+        """测试收集渠道候选(无配置)"""
         config = {}
 
         candidates = BrowserManager._collect_channel_candidates(config)

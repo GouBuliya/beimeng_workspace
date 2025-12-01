@@ -1,5 +1,5 @@
 """
-@PURPOSE: 搜索采集控制器，使用Playwright实现站内搜索和商品采集
+@PURPOSE: 搜索采集控制器,使用Playwright实现站内搜索和商品采集
 @OUTLINE:
   - class SearchController: 搜索采集控制器主类
   - async def search_and_collect(): 搜索并采集商品链接
@@ -30,7 +30,7 @@ from .browser_manager import BrowserManager
 class SearchController:
     """搜索采集控制器.
 
-    负责在 Temu 后台搜索商品并采集链接。
+    负责在 Temu 后台搜索商品并采集链接.
 
     Attributes:
         browser_manager: 浏览器管理器实例
@@ -58,12 +58,12 @@ class SearchController:
     ) -> SearchResult:
         """搜索并采集商品链接.
 
-        完整流程：导航 → 搜索 → 等待结果 → 提取商品信息
+        完整流程:导航 → 搜索 → 等待结果 → 提取商品信息
 
         Args:
             product_id: 对应的产品ID
             keyword: 搜索关键词
-            collect_count: 采集数量，默认5
+            collect_count: 采集数量,默认5
 
         Returns:
             SearchResult: 搜索采集结果
@@ -125,7 +125,7 @@ class SearchController:
     async def _navigate_to_search(self) -> None:
         """导航到搜索页面.
 
-        导航到 Temu 卖家后台的商品搜索页面。
+        导航到 Temu 卖家后台的商品搜索页面.
 
         Raises:
             Exception: 如果导航失败
@@ -134,7 +134,7 @@ class SearchController:
 
         # TODO: 根据实际的 Temu 后台结构调整 URL
         # 这里需要根据实际页面确定搜索页面的 URL
-        search_url = f"{self.base_url}/goods/search"  # 示例URL，需要调整
+        search_url = f"{self.base_url}/goods/search"  # 示例URL,需要调整
 
         logger.info(f"导航到搜索页: {search_url}")
         await page.goto(search_url, wait_until="networkidle")
@@ -156,7 +156,7 @@ class SearchController:
         logger.info(f"输入关键词: {keyword}")
 
         # TODO: 根据实际页面结构调整选择器
-        # 定位搜索输入框（需要根据实际页面调整选择器）
+        # 定位搜索输入框(需要根据实际页面调整选择器)
         search_input = page.locator(
             'input[type="text"][placeholder*="搜索"], input[name*="search"], input[class*="search"]'
         ).first
@@ -174,7 +174,7 @@ class SearchController:
         try:
             await search_button.click()
         except:
-            # 如果没有搜索按钮，尝试按回车
+            # 如果没有搜索按钮,尝试按回车
             await search_input.press("Enter")
 
         logger.debug("已触发搜索")
@@ -183,7 +183,7 @@ class SearchController:
         """等待搜索结果加载.
 
         Args:
-            timeout: 超时时间（毫秒），默认30秒
+            timeout: 超时时间(毫秒),默认30秒
 
         Raises:
             Exception: 如果等待超时
@@ -202,7 +202,7 @@ class SearchController:
             # 等待网络空闲
             await wait_network_idle(page, context=" [search results]")
 
-            # 额外等待，确保动态内容加载完成
+            # 额外等待,确保动态内容加载完成
             waiter = PageWaiter(page)
             await waiter.wait_for_dom_stable(timeout_ms=2_000)
             await waiter.wait_for_network_idle(timeout_ms=1_500)
@@ -211,18 +211,18 @@ class SearchController:
 
         except Exception as e:
             logger.warning(f"等待搜索结果超时: {e}")
-            # 尝试继续，可能是选择器问题
+            # 尝试继续,可能是选择器问题
 
     async def _extract_products(self, count: int) -> list[dict[str, str]]:
         """提取商品信息.
 
-        从搜索结果页面提取指定数量的商品信息。
+        从搜索结果页面提取指定数量的商品信息.
 
         Args:
             count: 需要采集的商品数量
 
         Returns:
-            商品信息列表，每个元素包含 url, title, price 等字段
+            商品信息列表,每个元素包含 url, title, price 等字段
 
         Raises:
             Exception: 如果提取失败
@@ -236,7 +236,7 @@ class SearchController:
         # TODO: 根据实际页面结构调整选择器
         # 这里需要根据实际的 Temu 后台商品列表结构来定位
 
-        # 示例实现（需要根据实际页面调整）:
+        # 示例实现(需要根据实际页面调整):
         try:
             # 定位商品项
             product_items = page.locator('.product-item, [class*="goods-item"]')
@@ -253,7 +253,7 @@ class SearchController:
                     item = product_items.nth(i)
 
                     # 提取商品信息
-                    # 注意：以下选择器需要根据实际页面结构调整
+                    # 注意:以下选择器需要根据实际页面结构调整
                     title_elem = item.locator('[class*="title"], h3, h4').first
                     price_elem = item.locator('[class*="price"], .price').first
                     link_elem = item.locator("a").first
@@ -291,7 +291,7 @@ class SearchController:
 
         except Exception as e:
             logger.error(f"提取商品信息失败: {e}")
-            # 返回空列表，让调用者决定如何处理
+            # 返回空列表,让调用者决定如何处理
 
         return products
 
@@ -310,7 +310,7 @@ if __name__ == "__main__":
         # 登录
         success = await controller.login("test_user", "test_pass", headless=False)
         if not success:
-            logger.error("登录失败，无法测试搜索")
+            logger.error("登录失败,无法测试搜索")
             return
 
         # 创建搜索控制器

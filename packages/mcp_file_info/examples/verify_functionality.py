@@ -12,8 +12,8 @@ from pathlib import Path
 package_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(package_dir))
 
-from parser import FileInfoParser
 from config import SUPPORTED_EXTENSIONS
+from parser import FileInfoParser
 
 print("=" * 60)
 print("MCP File Info - 功能验证")
@@ -73,5 +73,5 @@ if sample_files:
     print(f"  - 成功提取元信息: {success_count}/{len(results)}")
 
 print("\n" + "=" * 60)
-print("✨ 所有测试完成！")
+print("✨ 所有测试完成!")
 print("=" * 60)

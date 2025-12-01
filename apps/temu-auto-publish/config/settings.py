@@ -1,5 +1,5 @@
 """
-@PURPOSE: 应用配置管理，使用Pydantic Settings管理配置，支持多环境和从YAML加载
+@PURPOSE: 应用配置管理,使用Pydantic Settings管理配置,支持多环境和从YAML加载
 @OUTLINE:
   - class DebugConfig: 调试配置
   - class LoggingConfig: 日志配置
@@ -12,7 +12,7 @@
   - def load_environment_config(): 加载环境配置
   - def get_settings(): 获取全局配置实例
 @GOTCHAS:
-  - 敏感信息（账号密码）应存储在.env文件中
+  - 敏感信息(账号密码)应存储在.env文件中
   - 不要将.env提交到git
   - 环境配置文件优先级: 环境变量 > YAML > 默认值
 @TECH_DEBT:
@@ -25,12 +25,11 @@
 
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import yaml
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
 
 # ========== 子配置类 ==========
 
@@ -75,7 +74,7 @@ class LoggingConfig(BaseSettings):
 
     level: str = Field(default="INFO", description="日志级别")
     format: str = Field(default="detailed", description="日志格式")
-    output: List[str] = Field(default=["console", "file"], description="输出目标")
+    output: list[str] = Field(default=["console", "file"], description="输出目标")
     file_path: str = Field(default="data/logs/app.log", description="文件路径")
     rotation: str = Field(default="10 MB", description="轮转大小")
     retention: str = Field(default="7 days", description="保留时间")
@@ -86,17 +85,17 @@ class BrowserConfig(BaseSettings):
 
     Attributes:
         headless: 无头模式
-        slow_mo: 慢速模式（毫秒）
-        timeout: 默认超时（毫秒）
+        slow_mo: 慢速模式(毫秒)
+        timeout: 默认超时(毫秒)
         viewport: 视口大小
         user_agent: 用户代理
     """
 
     headless: bool = Field(default=False, description="无头模式")
-    slow_mo: int = Field(default=0, description="慢速模式（毫秒）")
-    timeout: int = Field(default=30000, description="默认超时（毫秒）")
-    viewport: Dict[str, int] = Field(default={"width": 1280, "height": 720}, description="视口大小")
-    user_agent: Optional[str] = Field(default=None, description="用户代理")
+    slow_mo: int = Field(default=0, description="慢速模式(毫秒)")
+    timeout: int = Field(default=30000, description="默认超时(毫秒)")
+    viewport: dict[str, int] = Field(default={"width": 1280, "height": 720}, description="视口大小")
+    user_agent: str | None = Field(default=None, description="用户代理")
 
 
 class RetryConfig(BaseSettings):
@@ -106,15 +105,15 @@ class RetryConfig(BaseSettings):
         enabled: 是否启用重试
         max_attempts: 最大重试次数
         backoff_factor: 退避因子
-        initial_delay: 初始延迟（秒）
-        max_delay: 最大延迟（秒）
+        initial_delay: 初始延迟(秒)
+        max_delay: 最大延迟(秒)
     """
 
     enabled: bool = Field(default=True, description="是否启用重试")
     max_attempts: int = Field(default=3, ge=1, description="最大重试次数")
     backoff_factor: float = Field(default=2.0, ge=1.0, description="退避因子")
-    initial_delay: float = Field(default=1.0, ge=0.1, description="初始延迟（秒）")
-    max_delay: float = Field(default=60.0, ge=1.0, description="最大延迟（秒）")
+    initial_delay: float = Field(default=1.0, ge=0.1, description="初始延迟(秒)")
+    max_delay: float = Field(default=60.0, ge=1.0, description="最大延迟(秒)")
 
 
 class MetricsConfig(BaseSettings):
@@ -175,11 +174,11 @@ class AuthConfig(BaseSettings):
 
     Attributes:
         server_url: 认证服务器地址
-        timeout: 请求超时时间（秒）
+        timeout: 请求超时时间(秒)
     """
 
     server_url: str = Field(default="http://121.199.32.74:8001", description="认证服务器地址")
-    timeout: float = Field(default=10.0, description="请求超时时间（秒）")
+    timeout: float = Field(default=10.0, description="请求超时时间(秒)")
 
 
 # ========== 主配置类 ==========
@@ -188,8 +187,8 @@ class AuthConfig(BaseSettings):
 class Settings(BaseSettings):
     """应用配置主类.
 
-    从环境变量、.env文件和YAML配置文件加载配置。
-    优先级：环境变量 > YAML > 默认值
+    从环境变量,.env文件和YAML配置文件加载配置.
+    优先级:环境变量 > YAML > 默认值
 
     Attributes:
         environment: 运行环境
@@ -219,7 +218,7 @@ class Settings(BaseSettings):
     # 环境配置
     environment: str = Field(default="development", description="运行环境")
 
-    # Temu 账号配置（从.env加载）
+    # Temu 账号配置(从.env加载)
     temu_username: str = Field(default="", description="Temu 用户名")
     temu_password: str = Field(default="", description="Temu 密码")
     miaoshou_username: str = Field(default="", description="妙手 用户名")
@@ -289,8 +288,8 @@ class Settings(BaseSettings):
             full_path = self.get_absolute_path(dir_path)
             full_path.mkdir(parents=True, exist_ok=True)
 
-    def to_dict(self) -> Dict[str, Any]:
-        """转换为字典（隐藏敏感信息）."""
+    def to_dict(self) -> dict[str, Any]:
+        """转换为字典(隐藏敏感信息)."""
         data = self.model_dump()
         # 隐藏密码
         if data.get("temu_password"):
@@ -303,13 +302,13 @@ class Settings(BaseSettings):
 # ========== 配置加载 ==========
 
 
-def load_environment_config(env: str = "development") -> Dict[str, Any]:
-    """从YAML文件加载环境配置，支持别名引用."""
+def load_environment_config(env: str = "development") -> dict[str, Any]:
+    """从YAML文件加载环境配置,支持别名引用."""
 
     config_dir = Path(__file__).parent / "environments"
     target_file = config_dir / f"{env}.yaml"
 
-    def _load(file_path: Path, seen: set[Path]) -> Dict[str, Any]:
+    def _load(file_path: Path, seen: set[Path]) -> dict[str, Any]:
         if file_path in seen:
             raise ValueError(f"检测到环境配置的循环引用: {file_path}")
         seen.add(file_path)
@@ -345,11 +344,11 @@ def load_environment_config(env: str = "development") -> Dict[str, Any]:
     return _load(target_file, set())
 
 
-def create_settings(env: Optional[str] = None) -> Settings:
+def create_settings(env: str | None = None) -> Settings:
     """创建配置实例.
 
     Args:
-        env: 环境名称，如果为None则从环境变量获取
+        env: 环境名称,如果为None则从环境变量获取
 
     Returns:
         配置实例
@@ -361,7 +360,7 @@ def create_settings(env: Optional[str] = None) -> Settings:
     # 加载YAML配置
     yaml_config = load_environment_config(env)
 
-    # 创建配置实例（YAML配置作为默认值）
+    # 创建配置实例(YAML配置作为默认值)
     settings = Settings(
         environment=env,
         debug=DebugConfig(**yaml_config.get("debug", {})),

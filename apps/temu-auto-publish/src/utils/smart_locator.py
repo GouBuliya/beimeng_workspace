@@ -1,5 +1,5 @@
 """
-@PURPOSE: 智能选择器工具，处理动态页面的元素定位
+@PURPOSE: 智能选择器工具,处理动态页面的元素定位
 @OUTLINE:
   - class SmartLocator: 智能定位器主类
   - async def find_element(): 使用多重策略查找元素
@@ -7,10 +7,10 @@
   - async def find_by_text(): 根据文本内容查找
   - async def wait_and_find(): 等待并查找元素
   - class WaitStrategy: 等待策略配置
-  - class PageWaiter: 页面等待工具（从page_waiter导入）
+  - class PageWaiter: 页面等待工具(从page_waiter导入)
 @GOTCHAS:
   - 避免使用动态的aria-ref属性
-  - 优先使用文本定位器（稳定）
+  - 优先使用文本定位器(稳定)
   - 支持多个后备选择器
   - 处理页面加载延迟
 @DEPENDENCIES:
@@ -19,20 +19,21 @@
 """
 
 from loguru import logger
-from playwright.async_api import Locator, Page, TimeoutError as PlaywrightTimeoutError
+from playwright.async_api import Locator, Page
+from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 from .page_waiter import PageWaiter, WaitStrategy
 
 
 class SmartLocator:
-    """智能选择器工具（处理动态页面）.
+    """智能选择器工具(处理动态页面).
 
-    解决问题：
+    解决问题:
     1. aria-ref等动态属性值会变化
     2. 页面结构可能调整
     3. 元素加载时机不确定
 
-    策略：
+    策略:
     1. 使用稳定的文本定位器
     2. 支持多个后备选择器
     3. 智能等待和重试
@@ -58,9 +59,9 @@ class SmartLocator:
 
         Args:
             page: Playwright页面对象
-            default_timeout: 默认超时时间（毫秒）
+            default_timeout: 默认超时时间(毫秒)
             retry_count: 重试次数
-            wait_after_action: 操作后等待时间（毫秒，兼容旧配置）
+            wait_after_action: 操作后等待时间(毫秒,兼容旧配置)
             wait_strategy: 自定义等待策略
         """
         self.page = page
@@ -89,12 +90,12 @@ class SmartLocator:
         """使用多重策略查找元素.
 
         Args:
-            selectors: 选择器字符串或列表（按优先级排序）
-            timeout: 超时时间（毫秒），None使用默认值
+            selectors: 选择器字符串或列表(按优先级排序)
+            timeout: 超时时间(毫秒),None使用默认值
             must_be_visible: 是否必须可见
 
         Returns:
-            找到的元素Locator，未找到返回None
+            找到的元素Locator,未找到返回None
 
         Examples:
             >>> element = await locator.find_element([
@@ -127,7 +128,7 @@ class SmartLocator:
                 logger.debug(f"选择器失败: {selector}, 错误: {e}")
                 continue
 
-        logger.warning(f"未找到元素，尝试了 {len(selectors)} 个选择器")
+        logger.warning(f"未找到元素,尝试了 {len(selectors)} 个选择器")
         return None
 
     async def find_by_text(
@@ -141,12 +142,12 @@ class SmartLocator:
 
         Args:
             text: 要查找的文本
-            element_type: 元素类型（button, input等），None表示任意类型
+            element_type: 元素类型(button, input等),None表示任意类型
             exact: 是否精确匹配
-            timeout: 超时时间（毫秒）
+            timeout: 超时时间(毫秒)
 
         Returns:
-            找到的元素Locator，未找到返回None
+            找到的元素Locator,未找到返回None
 
         Examples:
             >>> button = await locator.find_by_text("保存", element_type="button")
@@ -154,15 +155,9 @@ class SmartLocator:
         timeout = timeout or self.default_timeout
 
         # 构建选择器
-        if exact:
-            text_selector = f":text-is('{text}')"
-        else:
-            text_selector = f":text('{text}')"
+        text_selector = f":text-is('{text}')" if exact else f":text('{text}')"
 
-        if element_type:
-            selector = f"{element_type}:has-text('{text}')"
-        else:
-            selector = text_selector
+        selector = f"{element_type}:has-text('{text}')" if element_type else text_selector
 
         return await self.find_element(selector, timeout=timeout)
 
@@ -172,11 +167,11 @@ class SmartLocator:
         """根据标签文本查找输入框.
 
         Args:
-            label_text: 标签文本（如"重量"、"长度"）
-            timeout: 超时时间（毫秒）
+            label_text: 标签文本(如"重量","长度")
+            timeout: 超时时间(毫秒)
 
         Returns:
-            找到的输入框Locator，未找到返回None
+            找到的输入框Locator,未找到返回None
 
         Examples:
             >>> weight_input = await locator.find_input_by_label("重量")
@@ -197,10 +192,10 @@ class SmartLocator:
 
         Args:
             label_text: 标签文本
-            timeout: 超时时间（毫秒）
+            timeout: 超时时间(毫秒)
 
         Returns:
-            找到的下拉框Locator，未找到返回None
+            找到的下拉框Locator,未找到返回None
 
         Examples:
             >>> origin_select = await locator.find_select_by_label("产地")
@@ -216,11 +211,11 @@ class SmartLocator:
     async def click_with_retry(
         self, selectors: str | list[str], max_retries: int | None = None
     ) -> bool:
-        """点击元素（带重试）.
+        """点击元素(带重试).
 
         Args:
             selectors: 选择器字符串或列表
-            max_retries: 最大重试次数，None使用默认值
+            max_retries: 最大重试次数,None使用默认值
 
         Returns:
             是否点击成功
@@ -246,7 +241,7 @@ class SmartLocator:
                     await self.waiter.apply_retry_backoff(attempt)
                     continue
 
-        logger.error(f"点击失败，已重试 {max_retries} 次")
+        logger.error(f"点击失败,已重试 {max_retries} 次")
         return False
 
     async def _is_select_value(self, element: Locator, target: str) -> bool:
@@ -276,7 +271,7 @@ class SmartLocator:
         value: str,
         max_retries: int | None = None,
     ) -> bool:
-        """填写输入框（带重试）.
+        """填写输入框(带重试).
 
         Args:
             selectors: 选择器字符串或列表
@@ -308,7 +303,7 @@ class SmartLocator:
                     current_value = ""
 
                 if current_value == target_value:
-                    logger.debug("输入框已包含目标值，跳过填写。")
+                    logger.debug("输入框已包含目标值,跳过填写.")
                     return True
 
                 await element.fill("")
@@ -316,7 +311,7 @@ class SmartLocator:
                 actual_value = await element.input_value()
 
                 if actual_value != target_value:
-                    raise ValueError(f"填写后值不匹配，期望 {target_value}，实际 {actual_value}")
+                    raise ValueError(f"填写后值不匹配,期望 {target_value},实际 {actual_value}")
 
                 await self.waiter.post_action_wait()
                 logger.debug(f"✓ 填写成功: {value} (尝试 {attempt + 1}/{max_retries})")
@@ -327,7 +322,7 @@ class SmartLocator:
                     await self.waiter.apply_retry_backoff(attempt)
                     continue
 
-        logger.error(f"填写失败，已重试 {max_retries} 次")
+        logger.error(f"填写失败,已重试 {max_retries} 次")
         return False
 
     async def select_option_with_retry(
@@ -336,7 +331,7 @@ class SmartLocator:
         value: str,
         max_retries: int | None = None,
     ) -> bool:
-        """选择下拉选项（带重试）.
+        """选择下拉选项(带重试).
 
         Args:
             selectors: 选择器字符串或列表
@@ -361,7 +356,7 @@ class SmartLocator:
                     raise ValueError("未找到下拉框")
 
                 if await self._is_select_value(element, value):
-                    logger.debug("下拉框已选择目标值，跳过选择。")
+                    logger.debug("下拉框已选择目标值,跳过选择.")
                     return True
 
                 await element.select_option(label=value)
@@ -381,7 +376,7 @@ class SmartLocator:
                     await self.waiter.apply_retry_backoff(attempt)
                     continue
 
-        logger.error(f"选择失败，已重试 {max_retries} 次")
+        logger.error(f"选择失败,已重试 {max_retries} 次")
         return False
 
 
@@ -391,32 +386,32 @@ if __name__ == "__main__":
     print("SmartLocator - 智能选择器工具")
     print("=" * 60)
     print()
-    print("功能：")
+    print("功能:")
     print("1. 多重后备选择器")
     print("2. 智能等待和重试")
     print("3. 文本定位器优先")
     print("4. 处理动态aria-ref")
     print()
-    print("使用示例：")
+    print("使用示例:")
     print("""
     from smart_locator import SmartLocator
-    
+
     locator = SmartLocator(page)
-    
+
     # 使用多个后备选择器
     button = await locator.find_element([
         "button:has-text('保存')",
         "button:has-text('确定')",
         "[role='button']:has-text('保存')"
     ])
-    
+
     # 根据标签查找输入框
     weight_input = await locator.find_input_by_label("重量")
-    
-    # 点击（带重试）
+
+    # 点击(带重试)
     await locator.click_with_retry("button:has-text('下一步')")
-    
-    # 填写（带重试）
+
+    # 填写(带重试)
     await locator.fill_with_retry("input[placeholder*='重量']", "7500")
     """)
     print("=" * 60)

@@ -22,19 +22,19 @@ from pathlib import Path
 app_root = Path(__file__).parent
 sys.path.insert(0, str(app_root))
 
+from dotenv import load_dotenv
 from loguru import logger
 from rich.console import Console
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
-from dotenv import load_dotenv
 
 # 加载环境变量
 load_dotenv()
 
+from src.browser.batch_edit_controller import BatchEditController
+from src.browser.first_edit_controller import FirstEditController
 from src.browser.login_controller import LoginController
 from src.browser.miaoshou_controller import MiaoshouController
-from src.browser.first_edit_controller import FirstEditController
-from src.browser.batch_edit_controller import BatchEditController
 from src.data_processor.price_calculator import PriceCalculator
 from src.data_processor.random_generator import RandomDataGenerator
 
@@ -58,13 +58,13 @@ async def run_business_flow():
         return False
 
     console.print(f"\n[dim]登录账号: {username}[/dim]")
-    console.print("[dim]浏览器模式: 有界面（headless=false）[/dim]\n")
+    console.print("[dim]浏览器模式: 有界面(headless=false)[/dim]\n")
 
     # 初始化控制器
     login_controller = LoginController()
     miaoshou_controller = MiaoshouController()
-    first_edit_controller = FirstEditController()
-    batch_edit_controller = BatchEditController()
+    FirstEditController()
+    BatchEditController()
 
     try:
         # ==================== 步骤1: 登录 ====================
@@ -80,7 +80,7 @@ async def run_business_flow():
                 username,
                 password,
                 headless=False,  # 显示浏览器界面
-                force=False,  # 使用已保存的cookie（如果有效）
+                force=False,  # 使用已保存的cookie(如果有效)
             )
             progress.update(task, completed=True)
 
@@ -88,7 +88,7 @@ async def run_business_flow():
             console.print("[red]❌ 登录失败[/red]")
             return False
 
-        console.print("[green]✅ 登录成功！[/green]\n")
+        console.print("[green]✅ 登录成功![/green]\n")
 
         page = login_controller.browser_manager.page
 
@@ -103,7 +103,7 @@ async def run_business_flow():
             task = progress.add_task("正在导航...", total=None)
             success = await miaoshou_controller.navigate_to_collection_box(
                 page,
-                use_sidebar=False,  # 直接使用URL导航（更可靠）
+                use_sidebar=False,  # 直接使用URL导航(更可靠)
             )
             progress.update(task, completed=True)
 
@@ -113,7 +113,7 @@ async def run_business_flow():
 
         # 获取产品数量
         counts = await miaoshou_controller.get_product_count(page)
-        console.print(f"[green]✅ 导航成功！[/green]")
+        console.print("[green]✅ 导航成功![/green]")
         console.print(
             f"[dim]产品统计: 全部={counts.get('all', 0)}, "
             f"未认领={counts.get('unclaimed', 0)}, "
@@ -129,15 +129,15 @@ async def run_business_flow():
         console.print("[dim]说明: 当前可以看到公用采集箱中的所有产品[/dim]\n")
 
         # ==================== 步骤4: 测试首次编辑功能 ====================
-        console.print("[bold blue]📝 步骤4/5: 测试首次编辑功能（演示）[/bold blue]")
-        console.print("[yellow]⚠️  注意: 这是演示模式，不会实际保存修改[/yellow]")
+        console.print("[bold blue]📝 步骤4/5: 测试首次编辑功能(演示)[/bold blue]")
+        console.print("[yellow]⚠️  注意: 这是演示模式,不会实际保存修改[/yellow]")
 
         # 生成测试数据
         price_calc = PriceCalculator()
         random_gen = RandomDataGenerator()
 
         test_data = {
-            "title": "【测试】智能手表 A9999型号",
+            "title": "[测试]智能手表 A9999型号",
             "price": 150.0,
             "weight": random_gen.generate_weight(),
             "dimensions": random_gen.generate_dimensions(),
@@ -146,7 +146,7 @@ async def run_business_flow():
         price_results = price_calc.calculate_batch([test_data["price"]])
         price_result = price_results[0]
 
-        console.print(f"[dim]生成的测试数据:[/dim]")
+        console.print("[dim]生成的测试数据:[/dim]")
         console.print(f"  • 标题: {test_data['title']}")
         console.print(f"  • 成本价: ¥{test_data['price']}")
         console.print(f"  • 建议售价: ¥{price_result.suggested_price}")
@@ -156,28 +156,28 @@ async def run_business_flow():
             f"  • 尺寸: {test_data['dimensions'][0]}×{test_data['dimensions'][1]}×{test_data['dimensions'][2]}cm"
         )
 
-        console.print("\n[dim]说明: 首次编辑功能包括填写标题、价格、库存、重量、尺寸等信息[/dim]")
+        console.print("\n[dim]说明: 首次编辑功能包括填写标题,价格,库存,重量,尺寸等信息[/dim]")
         console.print("[green]✅ 首次编辑逻辑已实现[/green]\n")
 
         # ==================== 步骤5: 测试批量编辑功能 ====================
-        console.print("[bold blue]📝 步骤5/5: 测试批量编辑功能（18步流程）[/bold blue]")
-        console.print("[yellow]⚠️  注意: 这是演示模式，不会实际执行批量编辑[/yellow]")
+        console.print("[bold blue]📝 步骤5/5: 测试批量编辑功能(18步流程)[/bold blue]")
+        console.print("[yellow]⚠️  注意: 这是演示模式,不会实际执行批量编辑[/yellow]")
 
         # 显示批量编辑的18个步骤
         steps = [
             "01. 点击全选复选框",
             "02. 点击批量编辑按钮",
             "03. 填写英文标题",
-            "04. 选择产品类目（手动）",
-            "05. 选择外包装（长方体、硬包装）",
-            "06. 上传商品图片（手动）",
-            "07. 填写商品属性（手动）",
-            "08. 填写商品规格（手动）",
+            "04. 选择产品类目(手动)",
+            "05. 选择外包装(长方体,硬包装)",
+            "06. 上传商品图片(手动)",
+            "07. 填写商品属性(手动)",
+            "08. 填写商品规格(手动)",
             "09. 填写重量",
-            "10. 填写尺寸（长×宽×高）",
+            "10. 填写尺寸(长×宽×高)",
             "11. 填写包装尺寸",
-            "12. 上传包装图片（手动）",
-            "13. 上传尺寸标注图（手动）",
+            "12. 上传包装图片(手动)",
+            "13. 上传尺寸标注图(手动)",
             "14. 填写建议售价",
             "15. 选择发货时效",
             "16. 选择商品备货类型",
@@ -195,14 +195,14 @@ async def run_business_flow():
             console.print(f"  {step} {auto_tag}")
 
         console.print(
-            "\n[dim]说明: 批量编辑控制器已实现，使用SmartLocator智能定位器处理动态选择器[/dim]"
+            "\n[dim]说明: 批量编辑控制器已实现,使用SmartLocator智能定位器处理动态选择器[/dim]"
         )
         console.print("[green]✅ 批量编辑逻辑已实现[/green]\n")
 
         # ==================== 总结 ====================
         console.print(
             Panel.fit(
-                "[bold green]✅ 业务流程演示完成！[/bold green]\n\n"
+                "[bold green]✅ 业务流程演示完成![/bold green]\n\n"
                 "[dim]已验证的功能:[/dim]\n"
                 "• 自动登录妙手ERP ✓\n"
                 "• 导航到公用采集箱 ✓\n"
@@ -215,7 +215,7 @@ async def run_business_flow():
                 "[yellow]待完善的功能:[/yellow]\n"
                 "• Claude AI标题生成\n"
                 "• 图片验证功能\n"
-                "• 认领机制（5条×4次）\n"
+                "• 认领机制(5条×4次)\n"
                 "• 店铺选择和供货价设置\n"
                 "• 批量发布功能",
                 border_style="green",

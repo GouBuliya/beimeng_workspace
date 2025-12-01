@@ -1,5 +1,5 @@
 """
-@PURPOSE: 增强的重试机制 - 提供智能重试策略、恢复动作和详细指标
+@PURPOSE: 增强的重试机制 - 提供智能重试策略,恢复动作和详细指标
 @OUTLINE:
   - @dataclass RetryPolicy: 可配置的重试策略
   - @dataclass RetryResult: 重试执行结果
@@ -19,32 +19,32 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import functools
-import time
 import traceback
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from typing import (
     Any,
-    Awaitable,
-    Callable,
     ParamSpec,
     TypeVar,
-    Generic,
 )
 
 from loguru import logger
 
 # 从现有模块导入基础错误类型
 from .retry_handler import (
-    RetryableError,
-    NetworkError,
-    ElementNotFoundError,
-    TimeoutError as RetryTimeoutError,
-    NonRetryableError,
-    ValidationError,
     ConfigurationError,
+    ElementNotFoundError,
+    NetworkError,
+    NonRetryableError,
+    RetryableError,
+    ValidationError,
+)
+from .retry_handler import (
+    TimeoutError as RetryTimeoutError,
 )
 
 # 类型变量
@@ -55,7 +55,7 @@ R = TypeVar("R")
 class RetryOutcome(str, Enum):
     """重试结果枚举"""
 
-    SUCCESS = "success"  # 成功（可能经过重试）
+    SUCCESS = "success"  # 成功(可能经过重试)
     EXHAUSTED = "exhausted"  # 重试次数耗尽
     NON_RETRYABLE = "non_retryable"  # 遇到不可重试错误
     CANCELLED = "cancelled"  # 被取消
@@ -97,7 +97,7 @@ class RetryPolicy:
         asyncio.TimeoutError,
     )
 
-    # 不可重试的异常类型（优先级高于retryable）
+    # 不可重试的异常类型(优先级高于retryable)
     non_retryable_exceptions: tuple[type[Exception], ...] = (
         NonRetryableError,
         ValidationError,
@@ -106,36 +106,36 @@ class RetryPolicy:
         SystemExit,
     )
 
-    # 智能重试触发条件：(异常, 当前尝试次数) -> 是否继续重试
+    # 智能重试触发条件:(异常, 当前尝试次数) -> 是否继续重试
     should_retry: Callable[[Exception, int], bool] | None = None
 
-    # 重试前的恢复动作（异步）
+    # 重试前的恢复动作(异步)
     pre_retry_action: Callable[[], Awaitable[None]] | None = None
 
-    # 是否添加随机抖动（避免多实例同时重试）
+    # 是否添加随机抖动(避免多实例同时重试)
     jitter: bool = True
-    jitter_factor: float = 0.1  # 抖动范围：delay * (1 ± jitter_factor)
+    jitter_factor: float = 0.1  # 抖动范围:delay * (1 ± jitter_factor)
 
     # 是否在最后一次失败后仍执行恢复动作
     recovery_on_final_failure: bool = False
 
-    # 恢复验证器：验证恢复动作是否成功（返回 True 表示可继续重试）
+    # 恢复验证器:验证恢复动作是否成功(返回 True 表示可继续重试)
     recovery_validator: Callable[[], Awaitable[bool]] | None = None
 
     # 恢复验证失败时的处理策略
-    skip_retry_on_validation_failure: bool = True  # True=跳过本次重试，False=仍然重试
+    skip_retry_on_validation_failure: bool = True  # True=跳过本次重试,False=仍然重试
 
-    # 状态检查器：每次重试前检查系统是否处于可重试状态
+    # 状态检查器:每次重试前检查系统是否处于可重试状态
     state_checker: Callable[[], Awaitable[bool]] | None = None
 
     def get_delay(self, attempt: int) -> float:
-        """计算第N次重试的延迟时间（秒）
+        """计算第N次重试的延迟时间(秒)
 
         Args:
-            attempt: 当前尝试次数（从1开始）
+            attempt: 当前尝试次数(从1开始)
 
         Returns:
-            延迟时间（秒）
+            延迟时间(秒)
         """
         delay_ms = self.initial_delay_ms * (self.backoff_factor ** (attempt - 1))
         delay_ms = min(delay_ms, self.max_delay_ms)
@@ -179,10 +179,10 @@ class RetryPolicy:
 
 
 @dataclass
-class RetryResult(Generic[R]):
+class RetryResult[R]:
     """重试执行结果
 
-    包含执行结果、重试统计和错误信息。
+    包含执行结果,重试统计和错误信息.
     """
 
     outcome: RetryOutcome
@@ -224,14 +224,14 @@ class EnhancedRetryHandler:
         >>> handler = EnhancedRetryHandler(RetryPolicy(max_attempts=3))
         >>> result = await handler.execute(some_async_func, arg1, arg2)
         >>> if result.success:
-        ...     print(f"成功，共尝试 {result.total_attempts} 次")
+        ...     print(f"成功,共尝试 {result.total_attempts} 次")
     """
 
     def __init__(self, policy: RetryPolicy | None = None):
         """初始化处理器
 
         Args:
-            policy: 重试策略，默认使用 RetryPolicy()
+            policy: 重试策略,默认使用 RetryPolicy()
         """
         self.policy = policy or RetryPolicy()
         self._metrics: dict[str, Any] = {
@@ -322,20 +322,23 @@ class EnhancedRetryHandler:
                 )
                 logger.info(f"  等待 {delay:.2f}秒 后重试...")
 
-                # 状态检查：重试前验证系统是否处于可重试状态
+                # 状态检查:重试前验证系统是否处于可重试状态
                 if self.policy.state_checker is not None:
                     try:
                         state_ok = await self.policy.state_checker()
                         if not state_ok:
-                            logger.warning("状态检查失败，系统不处于可重试状态")
+                            logger.warning("状态检查失败,系统不处于可重试状态")
+                            result.outcome = RetryOutcome.STATE_CHECK_FAILED
                             result.errors.append(
                                 {
                                     "attempt": attempt,
                                     "error_type": "StateCheckFailed",
-                                    "error_message": "状态检查失败，系统不处于可重试状态",
+                                    "error_message": "状态检查失败,系统不处于可重试状态",
                                     "timestamp": datetime.now().isoformat(),
                                 }
                             )
+                            result.end_time = datetime.now().isoformat()
+                            self._metrics["total_failures"] += 1
                             break  # 终止重试
                     except Exception as state_error:
                         logger.warning(f"状态检查器执行失败: {state_error}")
@@ -347,12 +350,12 @@ class EnhancedRetryHandler:
                         logger.debug("执行重试前恢复动作...")
                         await self.policy.pre_retry_action()
 
-                        # 恢复验证：验证恢复动作是否成功
+                        # 恢复验证:验证恢复动作是否成功
                         if self.policy.recovery_validator is not None:
                             try:
                                 recovery_success = await self.policy.recovery_validator()
                                 if not recovery_success:
-                                    logger.warning("恢复验证失败，恢复动作未能恢复系统状态")
+                                    logger.warning("恢复验证失败,恢复动作未能恢复系统状态")
                                     self._metrics["recovery_validation_failures"] = (
                                         self._metrics.get("recovery_validation_failures", 0) + 1
                                     )
@@ -361,13 +364,13 @@ class EnhancedRetryHandler:
                                             {
                                                 "attempt": attempt,
                                                 "error_type": "RecoveryValidationFailed",
-                                                "error_message": "恢复验证失败，跳过本次重试",
+                                                "error_message": "恢复验证失败,跳过本次重试",
                                                 "timestamp": datetime.now().isoformat(),
                                             }
                                         )
-                                        continue  # 跳过本次重试，进入下一次
+                                        continue  # 跳过本次重试,进入下一次
                                 else:
-                                    logger.debug("恢复验证通过，系统状态已恢复")
+                                    logger.debug("恢复验证通过,系统状态已恢复")
                             except Exception as validation_error:
                                 logger.warning(f"恢复验证器执行失败: {validation_error}")
                                 recovery_success = False
@@ -377,17 +380,16 @@ class EnhancedRetryHandler:
 
                 await asyncio.sleep(delay)
 
-        # 所有重试都失败
-        result.outcome = RetryOutcome.EXHAUSTED
-        result.end_time = datetime.now().isoformat()
-        self._metrics["total_failures"] += 1
+        # 所有重试都失败（检查是否因状态检查提前终止）
+        if result.outcome not in (RetryOutcome.STATE_CHECK_FAILED, RetryOutcome.SUCCESS):
+            result.outcome = RetryOutcome.EXHAUSTED
+            result.end_time = result.end_time or datetime.now().isoformat()
+            self._metrics["total_failures"] += 1
 
         # 最终失败后的恢复动作
         if self.policy.recovery_on_final_failure and self.policy.pre_retry_action:
-            try:
+            with contextlib.suppress(Exception):
                 await self.policy.pre_retry_action()
-            except Exception:
-                pass
 
         if last_exception:
             raise last_exception
@@ -416,18 +418,22 @@ def smart_retry(
     backoff_factor: float | None = None,
     retryable_exceptions: tuple[type[Exception], ...] | None = None,
     pre_retry_action: Callable[[], Awaitable[None]] | None = None,
+    recovery_validator: Callable[[], Awaitable[bool]] | None = None,
+    state_checker: Callable[[], Awaitable[bool]] | None = None,
 ):
     """智能重试装饰器
 
-    支持通过参数或 RetryPolicy 配置重试行为。
+    支持通过参数或 RetryPolicy 配置重试行为.
 
     Args:
-        policy: 完整的重试策略（优先级最高）
+        policy: 完整的重试策略(优先级最高)
         max_attempts: 最大尝试次数
-        initial_delay_ms: 初始延迟（毫秒）
+        initial_delay_ms: 初始延迟(毫秒)
         backoff_factor: 退避因子
         retryable_exceptions: 可重试的异常类型
         pre_retry_action: 重试前的恢复动作
+        recovery_validator: 恢复验证器(验证恢复动作是否成功)
+        state_checker: 状态检查器(检查系统是否处于可重试状态)
 
     Returns:
         装饰器函数
@@ -460,6 +466,10 @@ def smart_retry(
                 effective_policy.retryable_exceptions = retryable_exceptions
             if pre_retry_action is not None:
                 effective_policy.pre_retry_action = pre_retry_action
+            if recovery_validator is not None:
+                effective_policy.recovery_validator = recovery_validator
+            if state_checker is not None:
+                effective_policy.state_checker = state_checker
 
             handler = EnhancedRetryHandler(effective_policy)
             result = await handler.execute(func, *args, **kwargs)
@@ -467,7 +477,7 @@ def smart_retry(
             if result.success:
                 return result.value  # type: ignore
 
-            # 如果失败，异常已经在 execute 中抛出
+            # 如果失败,异常已经在 execute 中抛出
             # 这里只是为了类型检查
             raise RuntimeError(f"重试失败: {result.errors[-1] if result.errors else '未知错误'}")
 
@@ -479,9 +489,9 @@ def smart_retry(
 def create_step_retry_policy(
     pre_retry_action: Callable[[], Awaitable[None]] | None = None,
 ) -> RetryPolicy:
-    """创建步骤级重试策略（轻量级，快速重试）
+    """创建步骤级重试策略(轻量级,快速重试)
 
-    适用于单个UI操作步骤，如点击按钮、填写表单等。
+    适用于单个UI操作步骤,如点击按钮,填写表单等.
 
     Args:
         pre_retry_action: 重试前的恢复动作
@@ -503,12 +513,12 @@ def create_step_retry_policy(
 def create_stage_retry_policy(
     pre_retry_action: Callable[[], Awaitable[None]] | None = None,
 ) -> RetryPolicy:
-    """创建阶段级重试策略（较重，有恢复动作）
+    """创建阶段级重试策略(较重,有恢复动作)
 
-    适用于完整的工作流阶段，如"首次编辑"、"批量编辑"等。
+    适用于完整的工作流阶段,如"首次编辑","批量编辑"等.
 
     Args:
-        pre_retry_action: 重试前的恢复动作（如刷新页面）
+        pre_retry_action: 重试前的恢复动作(如刷新页面)
 
     Returns:
         配置好的 RetryPolicy
@@ -528,7 +538,7 @@ def create_stage_retry_policy(
 def create_network_retry_policy() -> RetryPolicy:
     """创建网络操作重试策略
 
-    适用于网络请求、页面导航等操作。
+    适用于网络请求,页面导航等操作.
 
     Returns:
         配置好的 RetryPolicy
@@ -551,20 +561,20 @@ def create_network_retry_policy() -> RetryPolicy:
 
 # 导出
 __all__ = [
+    "ConfigurationError",
+    "ElementNotFoundError",
+    "EnhancedRetryHandler",
+    "NetworkError",
+    "NonRetryableError",
+    "RetryOutcome",
     "RetryPolicy",
     "RetryResult",
-    "RetryOutcome",
-    "EnhancedRetryHandler",
-    "smart_retry",
-    "create_step_retry_policy",
-    "create_stage_retry_policy",
-    "create_network_retry_policy",
+    "RetryTimeoutError",
     # 重新导出基础错误类型
     "RetryableError",
-    "NetworkError",
-    "ElementNotFoundError",
-    "RetryTimeoutError",
-    "NonRetryableError",
     "ValidationError",
-    "ConfigurationError",
+    "create_network_retry_policy",
+    "create_stage_retry_policy",
+    "create_step_retry_policy",
+    "smart_retry",
 ]

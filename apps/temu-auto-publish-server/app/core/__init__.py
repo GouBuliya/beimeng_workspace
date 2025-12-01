@@ -1,5 +1,5 @@
 """
-@PURPOSE: 核心模块包，包含配置、数据库、安全等基础设施
+@PURPOSE: 核心模块包,包含配置,数据库,安全等基础设施
 @OUTLINE:
   - config: 应用配置
   - database: 数据库连接

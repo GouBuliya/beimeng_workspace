@@ -10,9 +10,10 @@
   - 外部: pytest, pytest-asyncio
 """
 
-import pytest
-from pathlib import Path
 import sys
+from pathlib import Path
+
+import pytest
 
 # 添加项目根目录到路径
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -118,15 +119,15 @@ class TestImageManager:
 
     def test_delete_image_invalid_type(self):
         """测试删除图片时的类型验证."""
-        manager = ImageManager()
+        ImageManager()
 
-        with pytest.raises(ValueError) as exc_info:
-            # 使用异步运行时需要特殊处理，这里仅测试类型验证逻辑
+        with pytest.raises(ValueError):
+            # 使用异步运行时需要特殊处理,这里仅测试类型验证逻辑
             # 实际调用会在集成测试中进行
             pass
 
         # 类型验证会在实际调用时触发
-        assert True  # 占位符，实际逻辑在delete_image中
+        assert True  # 占位符,实际逻辑在delete_image中
 
     def test_constants(self):
         """测试常量定义."""

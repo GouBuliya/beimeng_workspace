@@ -29,19 +29,19 @@ def fix_get_original_title(lines, start_line):
                         bracket_count -= lines[selector_end].count("]")
                     selector_end += 1
 
-                # 创建新的选择器列表（优先通过表单结构定位"产品标题"）
+                # 创建新的选择器列表(优先通过表单结构定位"产品标题")
                 new_selectors = """            # 优先通过表单结构定位"产品标题"字段
             title_selectors = [
-                # 方法1：通过相邻的label文本定位（最准确）
+                # 方法1:通过相邻的label文本定位(最准确)
                 "xpath=//label[contains(text(), '产品标题')]/following::textarea[1]",
                 "xpath=//div[contains(@class, 'jx-form-item')]//label[contains(text(), '产品标题')]/..//textarea",
-                
-                # 方法2：通过placeholder定位
+
+                # 方法2:通过placeholder定位
                 "textarea[placeholder*='产品标题']",
                 "textarea[placeholder*='请输入产品标题']",
-                
-                # 方法3：通过排除简易描述（降级方案）
-                "textarea.jx-textarea__inner",  # 会找到第一个，可能是简易描述
+
+                # 方法3:通过排除简易描述(降级方案)
+                "textarea.jx-textarea__inner",  # 会找到第一个,可能是简易描述
             ]
 """
                 # 替换选择器列表
@@ -57,7 +57,7 @@ def fix_edit_title(lines, start_line):
 
 
 # 读取文件
-with open("src/browser/first_edit_controller.py", "r", encoding="utf-8") as f:
+with open("src/browser/first_edit_controller.py", encoding="utf-8") as f:
     lines = f.readlines()
 
 # 找到get_original_title方法
@@ -72,21 +72,21 @@ for i, line in enumerate(lines):
         edit_title_line = i
         print(f"找到 edit_title 方法在第 {i + 1} 行")
 
-# 修复两个方法（从后往前改，避免行号变化）
+# 修复两个方法(从后往前改,避免行号变化)
 if edit_title_line > 0:
     fix_edit_title(lines, edit_title_line)
-    print(f"✓ 已修复 edit_title 方法的选择器")
+    print("✓ 已修复 edit_title 方法的选择器")
 
 if get_original_title_line > 0:
     fix_get_original_title(lines, get_original_title_line)
-    print(f"✓ 已修复 get_original_title 方法的选择器")
+    print("✓ 已修复 get_original_title 方法的选择器")
 
 # 写回文件
 with open("src/browser/first_edit_controller.py", "w", encoding="utf-8") as f:
     f.writelines(lines)
 
-print("\n✅ 修复完成！")
-print("\n新的选择器策略：")
-print("1. 优先：通过label文本'产品标题'定位 (XPath)")
-print("2. 备选：通过placeholder='产品标题'定位")
-print("3. 降级：使用通用textarea（可能是简易描述）")
+print("\n✅ 修复完成!")
+print("\n新的选择器策略:")
+print("1. 优先:通过label文本'产品标题'定位 (XPath)")
+print("2. 备选:通过placeholder='产品标题'定位")
+print("3. 降级:使用通用textarea(可能是简易描述)")

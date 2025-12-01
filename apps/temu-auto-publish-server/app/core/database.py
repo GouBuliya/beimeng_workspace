@@ -1,5 +1,5 @@
 """
-@PURPOSE: 数据库连接管理，提供异步 SQLAlchemy 引擎和会话
+@PURPOSE: 数据库连接管理,提供异步 SQLAlchemy 引擎和会话
 @OUTLINE:
   - engine: 异步数据库引擎
   - async_session_maker: 异步会话工厂
@@ -47,7 +47,7 @@ class Base(DeclarativeBase):
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    """FastAPI 依赖注入：获取数据库会话.
+    """FastAPI 依赖注入:获取数据库会话.
 
     Yields:
         AsyncSession: 数据库会话对象

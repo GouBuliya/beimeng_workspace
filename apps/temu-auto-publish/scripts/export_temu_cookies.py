@@ -12,11 +12,10 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Optional
 
 import typer
 from loguru import logger
-from playwright.sync_api import Browser, BrowserContext, Playwright, sync_playwright
+from playwright.sync_api import Browser, Playwright, sync_playwright
 
 DEFAULT_OUTPUT = Path("data/input/temu_cookies.json")
 TEMU_HOME_URL = "https://www.temu.com/"
@@ -32,7 +31,7 @@ class CookieExporter:
         *,
         output_file: Path,
         headless: bool = False,
-        channel: Optional[str] = None,
+        channel: str | None = None,
         auto_close: bool = True,
     ) -> None:
         self.output_file = output_file
@@ -50,8 +49,8 @@ class CookieExporter:
             logger.info("打开 Temu 首页: {}", TEMU_HOME_URL)
             page.goto(TEMU_HOME_URL, wait_until="domcontentloaded")
 
-            typer.echo("\n请在弹出的浏览器窗口中完成 Temu 登录。")
-            typer.echo("确认已登录后切回终端, 按 Enter 键导出 cookie。\n")
+            typer.echo("\n请在弹出的浏览器窗口中完成 Temu 登录.")
+            typer.echo("确认已登录后切回终端, 按 Enter 键导出 cookie.\n")
             typer.prompt("按 Enter 继续", default="", show_default=False)
 
             cookies = context.cookies()
@@ -63,7 +62,7 @@ class CookieExporter:
                 context.close()
                 browser.close()
             else:
-                typer.echo("浏览器窗口已保留, 可自行关闭。")
+                typer.echo("浏览器窗口已保留, 可自行关闭.")
 
     def _launch_browser(self, playwright: Playwright) -> Browser:
         launch_kwargs: dict[str, object] = {"headless": self.headless}
@@ -100,7 +99,7 @@ def export_cookies(
         "--headless/--no-headless",
         help="是否使用无头模式运行浏览器",
     ),
-    channel: Optional[str] = typer.Option(
+    channel: str | None = typer.Option(
         None,
         "--channel",
         help="使用指定浏览器渠道 (例如: chrome, msedge)",

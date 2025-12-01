@@ -2,9 +2,9 @@
 @PURPOSE: 测试随机数据生成器功能
 @OUTLINE:
   - test_generate_weight: 测试重量生成
-  - test_generate_weight_kg: 测试重量生成（千克）
+  - test_generate_weight_kg: 测试重量生成(千克)
   - test_generate_dimensions: 测试尺寸生成
-  - test_dimensions_order: 测试尺寸顺序（长>宽>高）
+  - test_dimensions_order: 测试尺寸顺序(长>宽>高)
   - test_validate_dimensions: 测试尺寸验证
   - test_generate_batch_data: 测试批量生成
   - test_custom_ranges: 测试自定义范围
@@ -13,13 +13,12 @@
   - 内部: src.data_processor.random_generator
 """
 
-import pytest
 
 from src.data_processor.random_generator import RandomDataGenerator
 
 
 def test_generate_weight():
-    """测试重量生成（克）."""
+    """测试重量生成(克)."""
     generator = RandomDataGenerator()
 
     for _ in range(10):
@@ -29,7 +28,7 @@ def test_generate_weight():
 
 
 def test_generate_weight_kg():
-    """测试重量生成（千克）."""
+    """测试重量生成(千克)."""
     generator = RandomDataGenerator()
 
     for _ in range(10):
@@ -50,12 +49,12 @@ def test_generate_dimensions():
 
 
 def test_dimensions_order():
-    """测试尺寸顺序（长>宽>高）."""
+    """测试尺寸顺序(长>宽>高)."""
     generator = RandomDataGenerator()
 
     for _ in range(20):
         length, width, height = generator.generate_dimensions()
-        assert length > width > height, f"尺寸顺序错误: {length}×{width}×{height}"
+        assert length > width > height, f"尺寸顺序错误: {length}x{width}x{height}"
 
 
 def test_validate_dimensions():

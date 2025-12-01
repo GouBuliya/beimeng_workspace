@@ -2,7 +2,7 @@
 @PURPOSE: 测试 workflows/full_publish_workflow.py 完整发布工作流
 @OUTLINE:
   - class TestFullPublishWorkflow: 完整发布工作流测试
-  - 测试采集、发布、错误处理等场景
+  - 测试采集,发布,错误处理等场景
 @DEPENDENCIES:
   - 外部: pytest, pytest-asyncio
   - 内部: src.workflows.full_publish_workflow
@@ -137,7 +137,7 @@ class TestFullPublishWorkflow:
         ):
             mock_collection = MagicMock()
             mock_collection.visit_store = AsyncMock(return_value=True)
-            # 第一个产品采集失败，第二个成功
+            # 第一个产品采集失败,第二个成功
             mock_collection.search_and_collect = AsyncMock(
                 side_effect=[
                     [],  # 第一个产品采集失败

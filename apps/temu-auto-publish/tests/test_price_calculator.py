@@ -1,5 +1,5 @@
 """
-@PURPOSE: 测试价格计算器功能（基于SOP v2.0规则）
+@PURPOSE: 测试价格计算器功能(基于SOP v2.0规则)
 @OUTLINE:
   - test_price_result_calculate_sop_rules: 测试SOP规则价格计算
   - test_price_result_rounding: 测试价格四舍五入
@@ -11,10 +11,9 @@
   - 外部: pytest
   - 内部: src.data_processor.price_calculator
 @GOTCHAS:
-  - SOP v2.0规则：建议售价×10，供货价×7.5
+  - SOP v2.0规则:建议售价×10,供货价×7.5
 """
 
-import pytest
 
 from src.data_processor.price_calculator import PriceCalculator, PriceResult
 
@@ -22,10 +21,10 @@ from src.data_processor.price_calculator import PriceCalculator, PriceResult
 def test_price_result_calculate_sop_rules():
     """测试SOP v2.0规则价格计算.
 
-    SOP规则：
-    - 建议售价 = 成本 × 10（步骤7.14）
+    SOP规则:
+    - 建议售价 = 成本 × 10(步骤7.14)
     - 真实供货价 = 成本 × 2.5
-    - 妙手供货价 = 成本 × 7.5（步骤9）
+    - 妙手供货价 = 成本 × 7.5(步骤9)
     """
     result = PriceResult.calculate(150.0)
 
@@ -47,7 +46,7 @@ def test_price_result_rounding():
 
 
 def test_price_calculator_batch():
-    """测试批量计算（使用默认SOP规则）."""
+    """测试批量计算(使用默认SOP规则)."""
     calculator = PriceCalculator()
     results = calculator.calculate_batch([100, 150, 200, 300])
 
@@ -88,14 +87,14 @@ def test_price_calculator_default_sop_rules():
 def test_real_supply_price():
     """测试真实供货价计算.
 
-    SOP规则：真实供货价 = 成本 × 2.5（最低倍率）
+    SOP规则:真实供货价 = 成本 × 2.5(最低倍率)
     妙手供货价 = 真实供货价 × 3 = 成本 × 7.5
     """
     result = PriceResult.calculate(200.0)
 
     assert result.real_supply_price == 500.0  # 200 × 2.5
     assert result.supply_price == 1500.0  # 200 × 7.5
-    # 验证关系：供货价 = 真实供货价 × 3
+    # 验证关系:供货价 = 真实供货价 × 3
     assert result.supply_price == result.real_supply_price * 3
 
 
@@ -105,8 +104,8 @@ def test_price_breakdown():
     breakdown = calculator.get_price_breakdown(150.0)
 
     assert breakdown["成本价"] == 150.0
-    assert breakdown["建议售价（SOP步骤7.14）"] == 1500.0
+    assert breakdown["建议售价(SOP步骤7.14)"] == 1500.0
     assert breakdown["建议售价倍率"] == 10.0
-    assert breakdown["真实供货价（×2.5）"] == 375.0
-    assert breakdown["妙手供货价（SOP步骤9）"] == 1125.0
+    assert breakdown["真实供货价(×2.5)"] == 375.0
+    assert breakdown["妙手供货价(SOP步骤9)"] == 1125.0
     assert breakdown["供货价倍率"] == 7.5

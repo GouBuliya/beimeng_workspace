@@ -21,7 +21,6 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 
 import typer
 import yaml
@@ -33,7 +32,6 @@ from rich.table import Table
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from config.settings import settings
 from src.core.health_checker import get_health_checker
 
 console = Console()
@@ -59,7 +57,7 @@ class ProductionValidator:
         ...     print("验证通过")
     """
 
-    def __init__(self, config_path: Optional[Path] = None):
+    def __init__(self, config_path: Path | None = None):
         """初始化验证器.
 
         Args:
@@ -67,16 +65,16 @@ class ProductionValidator:
         """
         self.config_path = config_path or project_root / "config" / "production.yaml"
         self.config = self._load_config()
-        self.results: List[Tuple[str, bool, str]] = []  # (项目, 是否通过, 消息)
+        self.results: list[tuple[str, bool, str]] = []  # (项目, 是否通过, 消息)
 
-    def _load_config(self) -> Dict:
+    def _load_config(self) -> dict:
         """加载配置文件."""
         if not self.config_path.exists():
             console.print(f"[yellow]⚠[/yellow] 配置文件不存在: {self.config_path}")
             return {}
 
         try:
-            with open(self.config_path, "r", encoding="utf-8") as f:
+            with open(self.config_path, encoding="utf-8") as f:
                 return yaml.safe_load(f) or {}
         except Exception as e:
             console.print(f"[red]✗[/red] 加载配置文件失败: {e}")
@@ -116,7 +114,7 @@ class ProductionValidator:
             if value:
                 console.print(f"  [green]✓[/green] {var_name}: {description}")
             else:
-                console.print(f"  [yellow]⚠[/yellow] {var_name}: {description} (未设置，可选)")
+                console.print(f"  [yellow]⚠[/yellow] {var_name}: {description} (未设置,可选)")
 
         return all_pass
 
@@ -154,7 +152,7 @@ class ProductionValidator:
 
             with sync_playwright() as p:
                 p.chromium.launch(headless=True)
-            console.print(f"  [green]✓[/green] Playwright Chromium 浏览器")
+            console.print("  [green]✓[/green] Playwright Chromium 浏览器")
             self.results.append(("Playwright浏览器", True, "Chromium已安装"))
         except Exception as e:
             console.print(f"  [red]✗[/red] Playwright Chromium 浏览器: {e}")
@@ -229,7 +227,7 @@ class ProductionValidator:
         password = os.getenv("MIAOSHOU_PASSWORD")
 
         if not username or not password:
-            console.print(f"  [red]✗[/red] 登录凭证未配置")
+            console.print("  [red]✗[/red] 登录凭证未配置")
             self.results.append(("登录凭证", False, "未配置"))
             return False
 
@@ -238,7 +236,7 @@ class ProductionValidator:
         self.results.append(("登录凭证", True, f"用户名: {username}"))
 
         # TODO: 可以添加实际登录测试
-        # 但这可能耗时较长，且可能影响账号，所以暂时跳过
+        # 但这可能耗时较长,且可能影响账号,所以暂时跳过
 
         return True
 
@@ -251,14 +249,14 @@ class ProductionValidator:
         with Progress(
             SpinnerColumn(), TextColumn("[progress.description]{task.description}"), console=console
         ) as progress:
-            task = progress.add_task("检查中...", total=None)
+            progress.add_task("检查中...", total=None)
             result = await health_checker.check_all(include_network=True)
 
         status = result.get("status", "unknown")
         summary = result.get("summary", {})
 
         if status == "healthy":
-            console.print(f"  [green]✓[/green] 健康检查通过")
+            console.print("  [green]✓[/green] 健康检查通过")
             self.results.append(("健康检查", True, "所有检查通过"))
             return True
         elif status == "degraded":
@@ -285,7 +283,7 @@ class ProductionValidator:
         notification_config = self.config.get("notification", {})
 
         if not notification_config:
-            console.print(f"  [yellow]⚠[/yellow] 未配置通知服务(可选)")
+            console.print("  [yellow]⚠[/yellow] 未配置通知服务(可选)")
             return True
 
         # 检查各渠道配置
@@ -296,20 +294,20 @@ class ProductionValidator:
         if dingtalk.get("enabled"):
             webhook = dingtalk.get("webhook_url")
             if webhook:
-                console.print(f"  [green]✓[/green] 钉钉通知已配置")
+                console.print("  [green]✓[/green] 钉钉通知已配置")
                 has_any_channel = True
             else:
-                console.print(f"  [yellow]⚠[/yellow] 钉钉通知已启用但未配置Webhook URL")
+                console.print("  [yellow]⚠[/yellow] 钉钉通知已启用但未配置Webhook URL")
 
         # 企业微信
         wecom = notification_config.get("wecom", {})
         if wecom.get("enabled"):
             webhook = wecom.get("webhook_url")
             if webhook:
-                console.print(f"  [green]✓[/green] 企业微信通知已配置")
+                console.print("  [green]✓[/green] 企业微信通知已配置")
                 has_any_channel = True
             else:
-                console.print(f"  [yellow]⚠[/yellow] 企业微信通知已启用但未配置Webhook URL")
+                console.print("  [yellow]⚠[/yellow] 企业微信通知已启用但未配置Webhook URL")
 
         # 邮件
         email = notification_config.get("email", {})
@@ -323,13 +321,13 @@ class ProductionValidator:
                 "to_addrs",
             ]
             if all(email.get(field) for field in required_fields):
-                console.print(f"  [green]✓[/green] 邮件通知已配置")
+                console.print("  [green]✓[/green] 邮件通知已配置")
                 has_any_channel = True
             else:
-                console.print(f"  [yellow]⚠[/yellow] 邮件通知已启用但配置不完整")
+                console.print("  [yellow]⚠[/yellow] 邮件通知已启用但配置不完整")
 
         if not has_any_channel:
-            console.print(f"  [yellow]⚠[/yellow] 没有启用任何通知渠道(可选)")
+            console.print("  [yellow]⚠[/yellow] 没有启用任何通知渠道(可选)")
 
         self.results.append(("通知配置", True, "已检查"))
         return True
@@ -341,10 +339,10 @@ class ProductionValidator:
         console.print("  运行命令: python scripts/run_production.py --dry-run <input_file>")
         return True
 
-    async def validate_all(self) -> Dict:
+    async def validate_all(self) -> dict:
         """执行所有验证."""
         console.print(f"\n[bold blue]{'=' * 60}[/bold blue]")
-        console.print(f"[bold blue]Temu自动发布系统 - 生产环境验证[/bold blue]")
+        console.print("[bold blue]Temu自动发布系统 - 生产环境验证[/bold blue]")
         console.print(f"[bold blue]{'=' * 60}[/bold blue]")
 
         results = {
@@ -365,10 +363,10 @@ class ProductionValidator:
 
         return {"success": all_pass, "results": results, "details": self.results}
 
-    def _display_summary(self, results: Dict[str, bool]):
+    def _display_summary(self, results: dict[str, bool]):
         """显示验证总结."""
         console.print(f"\n[bold blue]{'=' * 60}[/bold blue]")
-        console.print(f"[bold blue]验证总结[/bold blue]")
+        console.print("[bold blue]验证总结[/bold blue]")
         console.print(f"[bold blue]{'=' * 60}[/bold blue]\n")
 
         table = Table(show_header=True, header_style="bold cyan")
@@ -424,8 +422,8 @@ app = typer.Typer(help="生产环境验证工具")
 
 @app.command()
 def validate(
-    config: Optional[Path] = typer.Option(None, "--config", "-c", help="配置文件路径"),
-    output: Optional[Path] = typer.Option(None, "--output", "-o", help="输出验证报告到JSON文件"),
+    config: Path | None = typer.Option(None, "--config", "-c", help="配置文件路径"),
+    output: Path | None = typer.Option(None, "--output", "-o", help="输出验证报告到JSON文件"),
 ):
     """执行生产环境验证.
 

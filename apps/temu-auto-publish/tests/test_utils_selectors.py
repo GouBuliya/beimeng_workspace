@@ -9,7 +9,6 @@
   - 内部: src.utils.selector_race
 """
 
-import asyncio
 import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -73,7 +72,7 @@ def create_async_mock_locator(is_visible: bool = True, count: int = 1):
     return locator
 
 
-def create_async_mock_page(locators: dict = None):
+def create_async_mock_page(locators: dict | None = None):
     """创建支持异步方法的 Mock Page."""
     page = MagicMock()
     locators = locators or {}
@@ -310,7 +309,7 @@ class TestTrySelectorsSequential:
         """测试异常处理 - 继续尝试下一个."""
         from src.utils.selector_race import try_selectors_sequential
 
-        # 第一个抛异常，第二个成功
+        # 第一个抛异常,第二个成功
         error_locator = MagicMock()
         error_locator.count = AsyncMock(side_effect=Exception("模拟错误"))
 

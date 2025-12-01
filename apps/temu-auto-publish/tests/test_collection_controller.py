@@ -3,20 +3,18 @@
 @OUTLINE:
   - TestCollectionController: 测试采集控制器主类
   - TestCollectionControllerSelectors: 测试选择器功能
-  - TestCollectionControllerMethods: 测试采集方法（使用Mock）
+  - TestCollectionControllerMethods: 测试采集方法(使用Mock)
 @DEPENDENCIES:
   - 外部: pytest, pytest-asyncio
   - 内部: src.browser.collection_controller, tests.mocks
 """
 
 import json
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-
 from src.browser.collection_controller import CollectionController
-from tests.mocks import MockPage, MockLocator
+from tests.mocks import MockLocator, MockPage
 
 
 class TestCollectionController:
@@ -77,7 +75,7 @@ class TestCollectionControllerSelectors:
 
 
 class TestCollectionControllerMethods:
-    """测试采集方法（使用Mock）"""
+    """测试采集方法(使用Mock)"""
 
     @pytest.fixture
     def controller(self, tmp_path):
@@ -223,7 +221,7 @@ class TestCollectionControllerEdgeCases:
         mock_page.click = AsyncMock()
         mock_page.locator = MagicMock(return_value=MockLocator())
 
-        result = await controller.search_products(mock_page, "产品【特殊】名称")
+        result = await controller.search_products(mock_page, "产品[特殊]名称")
 
         assert isinstance(result, (list, bool))
 

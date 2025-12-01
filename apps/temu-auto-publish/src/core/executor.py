@@ -1,5 +1,5 @@
 """
-@PURPOSE: 工作流执行器 - 统一管理工作流执行、重试、状态保存和指标收集
+@PURPOSE: 工作流执行器 - 统一管理工作流执行,重试,状态保存和指标收集
 @OUTLINE:
   - class WorkflowState: 工作流状态
   - class WorkflowExecutor: 工作流执行器
@@ -21,17 +21,16 @@
 import asyncio
 import json
 import uuid
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any
 
 from loguru import logger
 from playwright.async_api import Page
-
 from src.core.performance_tracker import PerformanceTracker, get_tracker
 from src.core.retry_handler import RetryHandler
-
 
 # ========== 工作流状态 ==========
 
@@ -42,7 +41,7 @@ class WorkflowState:
 
     Attributes:
         workflow_id: 工作流ID
-        status: 状态（running/completed/failed）
+        status: 状态(running/completed/failed)
         current_stage: 当前阶段
         completed_stages: 已完成的阶段列表
         failed_stages: 失败的阶段列表
@@ -54,15 +53,15 @@ class WorkflowState:
 
     workflow_id: str
     status: str = "running"
-    current_stage: Optional[str] = None
-    completed_stages: List[str] = field(default_factory=list)
-    failed_stages: List[str] = field(default_factory=list)
+    current_stage: str | None = None
+    completed_stages: list[str] = field(default_factory=list)
+    failed_stages: list[str] = field(default_factory=list)
     start_time: str = field(default_factory=lambda: datetime.now().isoformat())
     update_time: str = field(default_factory=lambda: datetime.now().isoformat())
-    context: Dict[str, Any] = field(default_factory=dict)
-    checkpoint_data: Dict[str, Any] = field(default_factory=dict)
+    context: dict[str, Any] = field(default_factory=dict)
+    checkpoint_data: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """转换为字典."""
         return asdict(self)
 
@@ -71,7 +70,7 @@ class WorkflowState:
         return json.dumps(self.to_dict(), indent=2, ensure_ascii=False)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "WorkflowState":
+    def from_dict(cls, data: dict[str, Any]) -> "WorkflowState":
         """从字典创建."""
         return cls(**data)
 
@@ -87,7 +86,7 @@ class WorkflowState:
 class WorkflowExecutor:
     """工作流执行器 - 统一执行入口.
 
-    功能：
+    功能:
     1. 集成重试机制
     2. 集成指标收集
     3. 支持断点续传
@@ -104,9 +103,9 @@ class WorkflowExecutor:
 
     def __init__(
         self,
-        retry_handler: Optional[RetryHandler] = None,
-        perf_tracker: Optional[PerformanceTracker] = None,
-        state_dir: Optional[Path] = None,
+        retry_handler: RetryHandler | None = None,
+        perf_tracker: PerformanceTracker | None = None,
+        state_dir: Path | None = None,
     ):
         """初始化执行器.
 
@@ -120,8 +119,8 @@ class WorkflowExecutor:
         self.state_dir = state_dir or Path("data/workflow_states")
         self.state_dir.mkdir(parents=True, exist_ok=True)
 
-        self.current_workflow_id: Optional[str] = None
-        self.current_state: Optional[WorkflowState] = None
+        self.current_workflow_id: str | None = None
+        self.current_state: WorkflowState | None = None
 
         logger.debug("工作流执行器已初始化")
 
@@ -129,20 +128,20 @@ class WorkflowExecutor:
         self,
         workflow_func: Callable,
         page: Page,
-        config: Dict[str, Any],
-        workflow_id: Optional[str] = None,
+        config: dict[str, Any],
+        workflow_id: str | None = None,
         enable_retry: bool = True,
         enable_metrics: bool = True,
         enable_state_save: bool = True,
         **kwargs,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """执行工作流.
 
         Args:
             workflow_func: 工作流函数
             page: Playwright页面对象
             config: 工作流配置
-            workflow_id: 工作流ID（可选）
+            workflow_id: 工作流ID(可选)
             enable_retry: 是否启用重试
             enable_metrics: 是否启用指标收集
             enable_state_save: 是否启用状态保存
@@ -164,14 +163,14 @@ class WorkflowExecutor:
         if enable_metrics:
             self.perf_tracker.start_workflow(workflow_id)
 
-        logger.info(f"=" * 80)
+        logger.info("=" * 80)
         logger.info(f"开始执行工作流: {workflow_id}")
-        logger.info(f"=" * 80)
+        logger.info("=" * 80)
 
         start_time = asyncio.get_event_loop().time()
 
         try:
-            # 执行工作流（带重试）
+            # 执行工作流(带重试)
             if enable_retry:
                 result = await self.retry_handler.execute(
                     workflow_func, page, config, workflow_id=workflow_id, **kwargs
@@ -211,7 +210,7 @@ class WorkflowExecutor:
 
     async def resume(
         self, workflow_func: Callable, page: Page, state_file: Path, **kwargs
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """从状态文件恢复并继续执行工作流.
 
         Args:
@@ -240,7 +239,7 @@ class WorkflowExecutor:
         logger.info(f"  已完成阶段: {state.completed_stages}")
         logger.info(f"  当前阶段: {state.current_stage}")
 
-        # 构建配置（包含恢复信息）
+        # 构建配置(包含恢复信息)
         config = {
             "resume": True,
             "completed_stages": state.completed_stages,
@@ -253,11 +252,11 @@ class WorkflowExecutor:
             workflow_func, page, config, workflow_id=state.workflow_id, **kwargs
         )
 
-    def save_state(self, state_file: Optional[Path] = None):
+    def save_state(self, state_file: Path | None = None):
         """保存工作流状态.
 
         Args:
-            state_file: 状态文件路径，如果为None则使用默认路径
+            state_file: 状态文件路径,如果为None则使用默认路径
         """
         if self.current_state is None:
             logger.warning("没有活动的工作流状态")
@@ -275,14 +274,14 @@ class WorkflowExecutor:
         except Exception as e:
             logger.error(f"保存状态失败: {e}")
 
-    def load_state(self, state_file: Path) -> Optional[WorkflowState]:
+    def load_state(self, state_file: Path) -> WorkflowState | None:
         """加载工作流状态.
 
         Args:
             state_file: 状态文件路径
 
         Returns:
-            工作流状态，如果加载失败则返回None
+            工作流状态,如果加载失败则返回None
         """
         if not state_file.exists():
             logger.error(f"状态文件不存在: {state_file}")
@@ -297,7 +296,7 @@ class WorkflowExecutor:
             logger.error(f"加载状态失败: {e}")
             return None
 
-    def update_stage(self, stage_name: str, checkpoint_data: Optional[Dict[str, Any]] = None):
+    def update_stage(self, stage_name: str, checkpoint_data: dict[str, Any] | None = None):
         """更新当前阶段.
 
         Args:
@@ -352,7 +351,7 @@ class WorkflowExecutor:
 
 # 便捷函数
 def create_executor(enable_retry: bool = True, max_attempts: int = 3) -> WorkflowExecutor:
-    """创建工作流执行器（便捷方法）.
+    """创建工作流执行器(便捷方法).
 
     Args:
         enable_retry: 是否启用重试

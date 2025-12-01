@@ -10,16 +10,15 @@
   - 内部: src.workflows.complete_publish_workflow
 """
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-from datetime import datetime
+from unittest.mock import AsyncMock, MagicMock
 
+import pytest
+from src.data_processor.price_calculator import PriceResult
 from src.workflows.complete_publish_workflow import (
-    StageOutcome,
     EditedProduct,
+    StageOutcome,
     WorkflowExecutionResult,
 )
-from src.data_processor.price_calculator import PriceResult
 
 
 class TestStageOutcome:
@@ -208,7 +207,7 @@ class TestWorkflowDataValidation:
 
 
 class TestWorkflowIntegration:
-    """工作流集成测试（使用Mock）"""
+    """工作流集成测试(使用Mock)"""
 
     @pytest.mark.asyncio
     async def test_workflow_stage_sequence(self):
@@ -249,7 +248,7 @@ class TestWorkflowIntegration:
             return StageOutcome(name="stage2", success=False, message="Failed")
 
         async def stage3():
-            # 如果前面失败，这个不应该执行
+            # 如果前面失败,这个不应该执行
             stages_executed.append("stage3")
             return StageOutcome(name="stage3", success=True, message="OK")
 
@@ -288,7 +287,7 @@ class TestWorkflowHelpers:
         mock_page = AsyncMock()
         mock_page.content = AsyncMock(return_value="<html><body>Test</body></html>")
 
-        # 捕获快照（函数内部处理路径）
+        # 捕获快照(函数内部处理路径)
         # 这里主要测试不抛异常
         await _capture_html_snapshot(mock_page, "test_snapshot")
 

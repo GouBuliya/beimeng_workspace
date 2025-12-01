@@ -8,8 +8,8 @@
   - 外部: unittest.mock
 """
 
-from typing import Any, Optional, List, Dict
-from unittest.mock import AsyncMock, MagicMock
+from typing import Any
+from unittest.mock import MagicMock
 
 
 class MockLocator:
@@ -74,7 +74,7 @@ class MockLocator:
         """获取输入值"""
         return self._input_value
 
-    async def get_attribute(self, name: str, **kwargs) -> Optional[str]:
+    async def get_attribute(self, name: str, **kwargs) -> str | None:
         """获取属性"""
         return None
 
@@ -110,8 +110,8 @@ class MockPage:
         self._url = url
         self._content = "<html><body></body></html>"
         self._title = "Mock Page"
-        self._cookies: List[Dict] = []
-        self._locators: Dict[str, MockLocator] = {}
+        self._cookies: list[dict] = []
+        self._locators: dict[str, MockLocator] = {}
 
     @property
     def url(self) -> str:
@@ -201,7 +201,7 @@ class MockPage:
         """按键"""
         pass
 
-    async def select_option(self, selector: str, value: Any, **kwargs) -> List[str]:
+    async def select_option(self, selector: str, value: Any, **kwargs) -> list[str]:
         """选择选项"""
         return [str(value)]
 
@@ -242,11 +242,11 @@ class MockPage:
         pass
 
     def set_mock_locator(self, selector: str, locator: MockLocator) -> None:
-        """设置模拟定位器（测试辅助方法）"""
+        """设置模拟定位器(测试辅助方法)"""
         self._locators[selector] = locator
 
     def set_content(self, content: str) -> None:
-        """设置页面内容（测试辅助方法）"""
+        """设置页面内容(测试辅助方法)"""
         self._content = content
 
 
@@ -258,7 +258,7 @@ class MockBrowserManager:
         self.browser = MagicMock()
         self.context = MagicMock()
         self._is_started = False
-        self._cookies: List[Dict] = []
+        self._cookies: list[dict] = []
 
     async def start(self, headless: bool = True) -> None:
         """启动浏览器"""
@@ -272,23 +272,23 @@ class MockBrowserManager:
         """创建新页面"""
         return MockPage()
 
-    async def save_cookies(self, path: str = None) -> bool:
+    async def save_cookies(self, path: str | None = None) -> bool:
         """保存Cookies"""
         return True
 
-    async def load_cookies(self, path: str = None) -> bool:
+    async def load_cookies(self, path: str | None = None) -> bool:
         """加载Cookies"""
         return True
 
-    async def get_cookies(self) -> List[Dict]:
+    async def get_cookies(self) -> list[dict]:
         """获取Cookies"""
         return self._cookies
 
-    async def set_cookies(self, cookies: List[Dict]) -> None:
+    async def set_cookies(self, cookies: list[dict]) -> None:
         """设置Cookies"""
         self._cookies = cookies
 
-    async def screenshot(self, path: str = None) -> bytes:
+    async def screenshot(self, path: str | None = None) -> bytes:
         """截图"""
         return b""
 

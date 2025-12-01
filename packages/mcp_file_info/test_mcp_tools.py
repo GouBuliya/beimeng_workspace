@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-@PURPOSE: 测试 MCP 工具功能（无需 MCP SDK）
+@PURPOSE: 测试 MCP 工具功能(无需 MCP SDK)
 @OUTLINE:
   - test_get_file_metadata: 测试获取全部元信息
   - test_get_specific_metadata: 测试获取特定字段
@@ -8,18 +8,17 @@
   - 内部: packages.mcp_file_info
 """
 
-import sys
 import json
+import sys
 from pathlib import Path
 
 # 添加项目根目录到路径
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from packages.mcp_file_info.parser import FileInfoParser
-from packages.mcp_file_info.models import METADATA_FIELDS
 
 print("=" * 70)
-print("🧪 MCP 工具功能测试（模拟调用）")
+print("🧪 MCP 工具功能测试(模拟调用)")
 print("=" * 70)
 
 parser = FileInfoParser()
@@ -72,10 +71,10 @@ for test_file in test_files:
     if metadata.has_metadata:
         print("\n🔧 工具 2: get_specific_metadata")
         requested_fields = ["PURPOSE", "OUTLINE", "DEPENDENCIES"]
-        print(f"   参数: {{")
+        print("   参数: {")
         print(f'     "file_path": "{test_file}",')
         print(f'     "fields": {requested_fields}')
-        print(f"   }}")
+        print("   }")
 
         result = metadata.get_fields(requested_fields)
 

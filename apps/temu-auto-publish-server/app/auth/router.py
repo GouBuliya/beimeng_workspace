@@ -1,5 +1,5 @@
 """
-@PURPOSE: 认证路由，提供登录、注册、登出、令牌刷新等 API
+@PURPOSE: 认证路由,提供登录,注册,登出,令牌刷新等 API
 @OUTLINE:
   - POST /auth/register: 用户注册
   - POST /auth/login: 用户登录
@@ -72,8 +72,8 @@ async def login(
 ) -> Token:
     """用户登录.
 
-    使用用户名和密码登录，返回访问令牌和刷新令牌。
-    新登录会使该用户之前的所有会话失效（单设备限制）。
+    使用用户名和密码登录,返回访问令牌和刷新令牌.
+    新登录会使该用户之前的所有会话失效(单设备限制).
 
     Args:
         form_data: OAuth2 表单数据
@@ -120,7 +120,7 @@ async def logout(
 
     if success:
         return MessageResponse(message="登出成功", success=True)
-    return MessageResponse(message="登出失败，令牌可能已失效", success=False)
+    return MessageResponse(message="登出失败,令牌可能已失效", success=False)
 
 
 @router.post("/refresh", response_model=Token)
@@ -156,7 +156,7 @@ async def verify_token(
 ) -> TokenVerifyResponse:
     """验证令牌是否有效.
 
-    此接口供客户端调用，验证令牌的有效性。
+    此接口供客户端调用,验证令牌的有效性.
 
     Args:
         token_data: 要验证的令牌
@@ -192,7 +192,7 @@ async def change_password(
 ) -> MessageResponse:
     """修改密码.
 
-    修改密码后，所有会话将失效，需要重新登录。
+    修改密码后,所有会话将失效,需要重新登录.
 
     Args:
         password_data: 密码修改数据
@@ -209,7 +209,7 @@ async def change_password(
             password_data.old_password,
             password_data.new_password,
         )
-        return MessageResponse(message="密码修改成功，请重新登录", success=True)
+        return MessageResponse(message="密码修改成功,请重新登录", success=True)
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -49,11 +48,11 @@ class StageCheckpoint:
 class WorkflowCheckpoint:
     """工作流检查点
 
-    包含工作流的完整状态信息，用于失败后恢复。
+    包含工作流的完整状态信息,用于失败后恢复.
 
     Attributes:
         workflow_id: 工作流唯一标识
-        workflow_type: 工作流类型（如 "complete_publish"）
+        workflow_type: 工作流类型(如 "complete_publish")
         current_stage: 当前执行的阶段名称
         stages: 各阶段的检查点数据
         global_data: 跨阶段共享的数据
@@ -140,7 +139,7 @@ class CheckpointManager:
         Args:
             workflow_id: 工作流唯一标识
             workflow_type: 工作流类型
-            checkpoint_dir: 检查点存储目录（可选）
+            checkpoint_dir: 检查点存储目录(可选)
         """
         self.workflow_id = workflow_id
         self.workflow_type = workflow_type
@@ -168,7 +167,7 @@ class CheckpointManager:
             stage: 阶段名称
             stage_data: 阶段相关数据
             status: 阶段状态 (pending, in_progress, completed, failed)
-            global_data: 跨阶段共享数据（会合并到现有数据）
+            global_data: 跨阶段共享数据(会合并到现有数据)
         """
         async with self._lock:
             # 初始化或更新检查点
@@ -253,7 +252,7 @@ class CheckpointManager:
         """增加重试计数
 
         Args:
-            stage: 阶段名称（为空则增加全局计数）
+            stage: 阶段名称(为空则增加全局计数)
 
         Returns:
             当前重试次数
@@ -276,7 +275,7 @@ class CheckpointManager:
         """加载检查点
 
         Returns:
-            检查点数据，如果不存在则返回 None
+            检查点数据,如果不存在则返回 None
         """
         if not self.checkpoint_file.exists():
             logger.debug(f"检查点文件不存在: {self.checkpoint_file}")
@@ -412,7 +411,7 @@ class CheckpointManager:
 
         Args:
             checkpoint_dir: 检查点目录
-            retention_hours: 保留时间（小时）
+            retention_hours: 保留时间(小时)
 
         Returns:
             清理的文件数量
@@ -498,8 +497,8 @@ def get_checkpoint_manager(
 
 # 导出
 __all__ = [
-    "WorkflowCheckpoint",
-    "StageCheckpoint",
     "CheckpointManager",
+    "StageCheckpoint",
+    "WorkflowCheckpoint",
     "get_checkpoint_manager",
 ]

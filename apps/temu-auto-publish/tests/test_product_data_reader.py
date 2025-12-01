@@ -10,11 +10,8 @@
   - 内部: src.data_processor.product_data_reader
 """
 
-from pathlib import Path
-from unittest.mock import patch, MagicMock
 
 import pytest
-
 from src.data_processor.product_data_reader import ProductDataReader
 
 
@@ -219,7 +216,7 @@ class TestProductDataReaderRandomGeneration:
 
     def test_validate_and_fix_dimensions_wrong_order(self):
         """测试修正错误顺序的尺寸"""
-        # 输入错误顺序：高 > 宽 > 长
+        # 输入错误顺序:高 > 宽 > 长
         length, width, height = ProductDataReader.validate_and_fix_dimensions(50, 60, 80)
 
         # 应该修正为正确顺序

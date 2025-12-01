@@ -1,9 +1,9 @@
 """
-@PURPOSE: 读取并校验选品 Excel/CSV，产出标准化产品行数据供采集与发布流程使用
+@PURPOSE: 读取并校验选品 Excel/CSV,产出标准化产品行数据供采集与发布流程使用
 @OUTLINE:
   - class ProductSelectionRow: 选品表行的 Pydantic 模型与基础校验
-  - class SelectionTableReader: 读取文件、列名标准化、数据解析与示例生成
-  - Helper: CSV 编码检测、JSON 列表解析、价格/数量/URL 构建工具
+  - class SelectionTableReader: 读取文件,列名标准化,数据解析与示例生成
+  - Helper: CSV 编码检测,JSON 列表解析,价格/数量/URL 构建工具
 @DEPENDENCIES:
   - 外部: pandas, pydantic, loguru
   - 内部: 无
@@ -25,31 +25,31 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class ProductSelectionRow(BaseModel):
-    """选品表中的单行产品数据。
+    """选品表中的单行产品数据.
 
-    根据采集 SOP 定义的 Excel 结构，包含型号、数量、媒体等字段。
+    根据采集 SOP 定义的 Excel 结构,包含型号,数量,媒体等字段.
 
     Attributes:
-        owner: 主品负责人。
-        product_name: 产品名称或关键字。
-        model_number: 型号编号（自动补全 A 前缀）。
-        color_spec: 颜色或规格说明。
-        collect_count: 需要采集的数量，范围 1-100。
-        cost_price: 进货价或成本价。
-        spec_unit: 规格单位名称。
-        spec_options: 规格选项列表。
-        variant_costs: 多规格的进货价列表。
-        image_files: 实拍图文件名列表。
-        size_chart_image_url: 尺码图 URL。
-        product_video_url: 产品视频 URL。
-        sku_image_urls: SKU 图 URL 列表（可自动补全前缀）。
+        owner: 主品负责人.
+        product_name: 产品名称或关键字.
+        model_number: 型号编号(自动补全 A 前缀).
+        color_spec: 颜色或规格说明.
+        collect_count: 需要采集的数量,范围 1-100.
+        cost_price: 进货价或成本价.
+        spec_unit: 规格单位名称.
+        spec_options: 规格选项列表.
+        variant_costs: 多规格的进货价列表.
+        image_files: 实拍图文件名列表.
+        size_chart_image_url: 尺码图 URL.
+        product_video_url: 产品视频 URL.
+        sku_image_urls: SKU 图 URL 列表(可自动补全前缀).
     """
 
     model_config = ConfigDict(str_strip_whitespace=True, populate_by_name=True)
 
     owner: str = Field(default="未指定", description="主品负责人")
     product_name: str = Field(default="", description="产品名称/关键字")
-    model_number: str = Field(default="A0000", description="型号编号，例如 A0001")
+    model_number: str = Field(default="A0000", description="型号编号,例如 A0001")
     color_spec: str | None = Field(default=None, description="产品颜色或规格")
     collect_count: int = Field(default=5, ge=1, le=100, description="需要采集的数量")
     cost_price: float | None = Field(default=None, ge=0, description="进货价/成本价")
@@ -60,13 +60,13 @@ class ProductSelectionRow(BaseModel):
     size_chart_image_url: str = Field(default="", description="尺码图 URL")
     product_video_url: str | None = Field(default=None, description="产品视频 URL")
     sku_image_urls: list[str] = Field(
-        default_factory=list, description="SKU 图片 URL 列表（自动补全前缀）"
+        default_factory=list, description="SKU 图片 URL 列表(自动补全前缀)"
     )
 
     @field_validator("model_number")
     @classmethod
     def validate_model_number(cls, value: str) -> str:
-        """确保型号以 A 开头，空值回退到 A0000."""
+        """确保型号以 A 开头,空值回退到 A0000."""
 
         if not value:
             return "A0000"
@@ -79,7 +79,7 @@ class ProductSelectionRow(BaseModel):
 
 
 class SelectionTableReader:
-    """选品表读取器，支持 Excel/CSV 解析、列名标准化和数据校验。
+    """选品表读取器,支持 Excel/CSV 解析,列名标准化和数据校验.
 
     Examples:
         >>> reader = SelectionTableReader()
@@ -95,19 +95,19 @@ class SelectionTableReader:
     def read_excel(
         self, file_path: str, sheet_name: int | str = 0, skip_rows: int = 0
     ) -> list[ProductSelectionRow]:
-        """读取 Excel/CSV 选品表并返回标准化产品列表。
+        """读取 Excel/CSV 选品表并返回标准化产品列表.
 
         Args:
-            file_path: Excel 或 CSV 文件路径。
-            sheet_name: Excel 工作表名称或索引。
-            skip_rows: 需要跳过的行数（处理多余标题）。
+            file_path: Excel 或 CSV 文件路径.
+            sheet_name: Excel 工作表名称或索引.
+            skip_rows: 需要跳过的行数(处理多余标题).
 
         Returns:
-            ProductSelectionRow 列表。
+            ProductSelectionRow 列表.
 
         Raises:
-            FileNotFoundError: 文件不存在。
-            ValueError: 文件解析失败。
+            FileNotFoundError: 文件不存在.
+            ValueError: 文件解析失败.
         """
 
         path = Path(file_path)
@@ -127,7 +127,7 @@ class SelectionTableReader:
                     skiprows=skip_rows,
                     dtype=str,
                 )
-                logger.info("Excel 读取成功，共 {} 行记录", len(df))
+                logger.info("Excel 读取成功,共 {} 行记录", len(df))
         except Exception as exc:
             raise ValueError(f"读取选品表失败: {exc}") from exc
 
@@ -137,25 +137,25 @@ class SelectionTableReader:
         return products
 
     def _read_csv(self, path: Path, skip_rows: int) -> pd.DataFrame:
-        """读取 CSV 选品表，使用 chardet 智能检测编码（性能优化 5-10 倍）。
+        """读取 CSV 选品表,使用 chardet 智能检测编码(性能优化 5-10 倍).
 
         Args:
-            path: CSV 文件路径。
-            skip_rows: 需要跳过的行数。
+            path: CSV 文件路径.
+            skip_rows: 需要跳过的行数.
 
         Returns:
-            解析后的 DataFrame。
+            解析后的 DataFrame.
 
         Raises:
-            ValueError: 无法识别编码或解析失败。
+            ValueError: 无法识别编码或解析失败.
         """
-        # 使用 chardet 智能检测编码，避免多次完整读取文件
+        # 使用 chardet 智能检测编码,避免多次完整读取文件
         detected_encoding = self._detect_encoding(path)
         logger.debug("chardet 检测到编码: {}", detected_encoding)
 
-        # 按优先级尝试编码：检测结果 > 常见编码 > 容错
+        # 按优先级尝试编码:检测结果 > 常见编码 > 容错
         encoding_candidates = [detected_encoding] if detected_encoding else []
-        # 添加常见备选编码（去重）
+        # 添加常见备选编码(去重)
         for enc in ("utf-8-sig", "utf-8", "gbk", "gb2312", "latin-1"):
             if enc not in encoding_candidates:
                 encoding_candidates.append(enc)
@@ -170,14 +170,14 @@ class SelectionTableReader:
                     dtype=str,
                     encoding=encoding,
                 )
-                logger.info("CSV 读取成功（编码={}），共 {} 行", encoding, len(df))
+                logger.info("CSV 读取成功(编码={}),共 {} 行", encoding, len(df))
                 return df
             except UnicodeDecodeError as exc:
                 last_error = str(exc)
-                logger.debug("CSV 编码尝试失败，encoding={}，error={}", encoding, exc)
+                logger.debug("CSV 编码尝试失败,encoding={},error={}", encoding, exc)
             except ParserError as exc:
                 last_error = str(exc)
-                logger.warning("CSV 解析异常，尝试使用 python engine 跳过坏行: {}", exc)
+                logger.warning("CSV 解析异常,尝试使用 python engine 跳过坏行: {}", exc)
                 try:
                     df = pd.read_csv(
                         path,
@@ -188,23 +188,23 @@ class SelectionTableReader:
                         on_bad_lines="skip",
                     )
                     logger.info(
-                        "CSV 读取成功（python engine, encoding={}），共 {} 行",
+                        "CSV 读取成功(python engine, encoding={}),共 {} 行",
                         encoding,
                         len(df),
                     )
                     return df
-                except Exception as fallback_exc:  # noqa: BLE001
+                except Exception as fallback_exc:
                     last_error = str(fallback_exc)
                     logger.debug(
-                        "CSV python engine 失败，encoding={}，error={}",
+                        "CSV python engine 失败,encoding={},error={}",
                         encoding,
                         fallback_exc,
                     )
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 last_error = str(exc)
-                logger.debug("CSV 读取失败，encoding={}，error={}", encoding, exc)
+                logger.debug("CSV 读取失败,encoding={},error={}", encoding, exc)
 
-        # 最后容错：宽松解码 + 跳过坏行
+        # 最后容错:宽松解码 + 跳过坏行
         try:
             df = pd.read_csv(
                 path,
@@ -215,29 +215,29 @@ class SelectionTableReader:
                 engine="python",
                 on_bad_lines="skip",
             )
-            logger.warning("CSV 进入容错模式（utf-8 replace, 跳过异常行），共 {} 行", len(df))
+            logger.warning("CSV 进入容错模式(utf-8 replace, 跳过异常行),共 {} 行", len(df))
             return df
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             last_error = str(exc)
             logger.debug("CSV 容错模式失败: {}", exc)
 
         error_message = (
-            "CSV 文件读取失败，无法识别编码"
+            "CSV 文件读取失败,无法识别编码"
             if last_error is None
-            else f"CSV 文件读取失败，最后错误: {last_error}"
+            else f"CSV 文件读取失败,最后错误: {last_error}"
         )
         raise ValueError(error_message)
 
     @staticmethod
     def _detect_encoding(path: Path, sample_size: int = 10000) -> str | None:
-        """使用 chardet 检测文件编码（只读取前 sample_size 字节）。
+        """使用 chardet 检测文件编码(只读取前 sample_size 字节).
 
         Args:
-            path: 文件路径。
-            sample_size: 采样字节数，默认 10KB。
+            path: 文件路径.
+            sample_size: 采样字节数,默认 10KB.
 
         Returns:
-            检测到的编码名称，检测失败返回 None。
+            检测到的编码名称,检测失败返回 None.
         """
         try:
             with open(path, "rb") as f:
@@ -250,18 +250,18 @@ class SelectionTableReader:
                 return encoding
             logger.debug("编码检测置信度过低: {} ({:.1%})", encoding, confidence)
             return None
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.debug("编码检测失败: {}", exc)
             return None
 
     def _normalize_columns(self, df: pd.DataFrame) -> pd.DataFrame:
-        """标准化列名，将中英文列映射到内部字段。
+        """标准化列名,将中英文列映射到内部字段.
 
         Args:
-            df: 原始 DataFrame。
+            df: 原始 DataFrame.
 
         Returns:
-            列名被映射后的 DataFrame。
+            列名被映射后的 DataFrame.
         """
 
         rename_dict: dict[str, str] = {}
@@ -276,25 +276,25 @@ class SelectionTableReader:
         return df
 
     def extract_products(self, df: pd.DataFrame) -> list[ProductSelectionRow]:
-        """从 DataFrame 中提取产品列表并执行轻量校验。
+        """从 DataFrame 中提取产品列表并执行轻量校验.
 
         Args:
-            df: 已标准化列名的 DataFrame。
+            df: 已标准化列名的 DataFrame.
 
         Returns:
-            解析后的 ProductSelectionRow 列表。
+            解析后的 ProductSelectionRow 列表.
         """
 
         products: list[ProductSelectionRow] = []
         errors: list[str] = []
 
-        # 使用 to_dict('records') 替代 iterrows（性能优化 10-100 倍）
+        # 使用 to_dict('records') 替代 iterrows(性能优化 10-100 倍)
         records = df.to_dict("records")
         for idx, row in enumerate(records):
             try:
                 raw_name = row.get("product_name", "")
                 if self._is_missing(raw_name):
-                    logger.debug("跳过第 {} 行（空产品名）", idx + 1)
+                    logger.debug("跳过第 {} 行(空产品名)", idx + 1)
                     continue
                 product_name = str(raw_name).strip()
 
@@ -324,14 +324,14 @@ class SelectionTableReader:
                 logger.debug(
                     "解析第 {} 行成功: {} ({})", idx + 1, product.product_name, product.model_number
                 )
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 error_msg = f"第 {idx + 1} 行数据错误: {exc}"
                 errors.append(error_msg)
                 logger.warning("⚠️ {}", error_msg)
                 continue
 
         if errors:
-            logger.warning("⚠️ {} 行数据存在问题，已跳过", len(errors))
+            logger.warning("⚠️ {} 行数据存在问题,已跳过", len(errors))
             for err in errors[:5]:
                 logger.warning("  - {}", err)
             if len(errors) > 5:
@@ -341,13 +341,13 @@ class SelectionTableReader:
 
     @staticmethod
     def _is_missing(value: object) -> bool:
-        """判断值是否为空或无效。
+        """判断值是否为空或无效.
 
         Args:
-            value: 原始值。
+            value: 原始值.
 
         Returns:
-            True 表示应视为缺失。
+            True 表示应视为缺失.
         """
 
         if value is None:
@@ -360,13 +360,13 @@ class SelectionTableReader:
         return False
 
     def validate_row(self, row: dict[str, Any]) -> tuple[bool, str | None]:
-        """校验单行数据是否满足最小要求。
+        """校验单行数据是否满足最小要求.
 
         Args:
-            row: 行数据字典。
+            row: 行数据字典.
 
         Returns:
-            (是否有效, 错误信息)。
+            (是否有效, 错误信息).
         """
 
         if not row.get("product_name"):
@@ -376,16 +376,16 @@ class SelectionTableReader:
 
         model = str(row.get("model_number")).strip()
         if not (model.startswith("A") and len(model) == 5 and model[1:].isdigit()):
-            return False, f"型号编号格式错误: {model}，应为A0001-A9999"
+            return False, f"型号编号格式错误: {model},应为A0001-A9999"
 
         return True, None
 
     def create_sample_excel(self, output_path: str, num_samples: int = 3) -> None:
-        """创建示例选品表，便于调试或演示。
+        """创建示例选品表,便于调试或演示.
 
         Args:
-            output_path: 生成文件的保存路径。
-            num_samples: 需要输出的示例行数。
+            output_path: 生成文件的保存路径.
+            num_samples: 需要输出的示例行数.
 
         Examples:
             >>> SelectionTableReader().create_sample_excel("sample.xlsx", num_samples=2)
@@ -432,13 +432,13 @@ class SelectionTableReader:
         logger.info("  包含 {} 个示例产品", len(data))
 
     def _parse_collect_count(self, value: object) -> int:
-        """解析采集数量，落地为 1-100 的整数。
+        """解析采集数量,落地为 1-100 的整数.
 
         Args:
-            value: 原始数量值。
+            value: 原始数量值.
 
         Returns:
-            处理后的数量，默认回退到 5。
+            处理后的数量,默认回退到 5.
         """
         if value is None or (isinstance(value, float) and pd.isna(value)):
             return 5
@@ -450,13 +450,13 @@ class SelectionTableReader:
 
     @staticmethod
     def _parse_scalar(value: object) -> str | None:
-        """解析标量文本，空值返回 None。
+        """解析标量文本,空值返回 None.
 
         Args:
-            value: 原始值。
+            value: 原始值.
 
         Returns:
-            去除空白的字符串或 None。
+            去除空白的字符串或 None.
         """
         if value is None or (isinstance(value, float) and pd.isna(value)):
             return None
@@ -465,13 +465,13 @@ class SelectionTableReader:
 
     @staticmethod
     def _parse_json_list(value: object) -> list[str] | None:
-        """解析列表字段，支持 JSON 字符串或逗号分隔文本。
+        """解析列表字段,支持 JSON 字符串或逗号分隔文本.
 
         Args:
-            value: 原始值。
+            value: 原始值.
 
         Returns:
-            清洗后的字符串列表，若无法解析则返回 None。
+            清洗后的字符串列表,若无法解析则返回 None.
         """
         if value is None or (isinstance(value, float) and pd.isna(value)):
             return None
@@ -493,13 +493,13 @@ class SelectionTableReader:
 
     @staticmethod
     def _parse_costs(value: object) -> tuple[float | None, list[float] | None]:
-        """解析成本价字段，支持单价或列表。
+        """解析成本价字段,支持单价或列表.
 
         Args:
-            value: 原始成本值。
+            value: 原始成本值.
 
         Returns:
-            (单一成本价, 多规格成本列表)。
+            (单一成本价, 多规格成本列表).
         """
         if value is None or (isinstance(value, float) and pd.isna(value)):
             return None, None
@@ -530,13 +530,13 @@ class SelectionTableReader:
             return None, None
 
     def _build_product_image_urls(self, image_files: list[str] | None) -> list[str]:
-        """根据实拍图文件名构建 SKU 图 URL 列表。
+        """根据实拍图文件名构建 SKU 图 URL 列表.
 
         Args:
-            image_files: 实拍图文件名或 URL 列表。
+            image_files: 实拍图文件名或 URL 列表.
 
         Returns:
-            补全后的 URL 列表；若入参为空则返回空列表。
+            补全后的 URL 列表;若入参为空则返回空列表.
         """
         if not image_files:
             return []
@@ -554,17 +554,17 @@ class SelectionTableReader:
         return urls
 
     def _resolve_product_image_base_url(self) -> str | None:
-        """解析环境变量中的图片前缀 URL。"""
+        """解析环境变量中的图片前缀 URL."""
         base_url = os.getenv("PRODUCT_IMAGE_BASE_URL", "")
         text = str(base_url).strip()
         return text or None
 
     @staticmethod
     def _build_column_mapping() -> dict[str, str]:
-        """构建列名映射，覆盖常见的中英文别名。
+        """构建列名映射,覆盖常见的中英文别名.
 
         Returns:
-            列名映射字典。
+            列名映射字典.
         """
 
         return {

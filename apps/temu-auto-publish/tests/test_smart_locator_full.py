@@ -14,8 +14,26 @@
   - 内部: src.utils.smart_locator
 """
 
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from playwright.async_api import TimeoutError as PlaywrightTimeoutError
+
+
+def create_mock_element(wait_for_succeeds=True):
+    """创建完整的 mock element，包含 wait_for"""
+    mock_element = MagicMock()
+    mock_element.first = mock_element
+    if wait_for_succeeds:
+        mock_element.wait_for = AsyncMock()
+    else:
+        mock_element.wait_for = AsyncMock(side_effect=PlaywrightTimeoutError("Timeout"))
+    mock_element.click = AsyncMock()
+    mock_element.fill = AsyncMock()
+    mock_element.input_value = AsyncMock(return_value="")
+    mock_element.select_option = AsyncMock()
+    mock_element.evaluate = AsyncMock(return_value=[])
+    return mock_element
 
 
 # ==================== SmartLocator 初始化测试 ====================
@@ -72,10 +90,7 @@ class TestSmartLocatorFindElement:
         from src.utils.smart_locator import SmartLocator
 
         page = MagicMock()
-        mock_element = MagicMock()
-        mock_element.count = AsyncMock(return_value=1)
-        mock_element.first = mock_element
-        mock_element.is_visible = AsyncMock(return_value=True)
+        mock_element = create_mock_element(wait_for_succeeds=True)
         page.locator = MagicMock(return_value=mock_element)
 
         locator = SmartLocator(page)
@@ -91,17 +106,11 @@ class TestSmartLocatorFindElement:
 
         page = MagicMock()
 
-        # 第一个选择器不可见
-        mock_element1 = MagicMock()
-        mock_element1.count = AsyncMock(return_value=1)
-        mock_element1.first = mock_element1
-        mock_element1.is_visible = AsyncMock(return_value=False)
+        # 第一个选择器超时
+        mock_element1 = create_mock_element(wait_for_succeeds=False)
 
-        # 第二个选择器可见
-        mock_element2 = MagicMock()
-        mock_element2.count = AsyncMock(return_value=1)
-        mock_element2.first = mock_element2
-        mock_element2.is_visible = AsyncMock(return_value=True)
+        # 第二个选择器成功
+        mock_element2 = create_mock_element(wait_for_succeeds=True)
 
         page.locator = MagicMock(side_effect=[mock_element1, mock_element2])
 
@@ -112,12 +121,11 @@ class TestSmartLocatorFindElement:
 
     @pytest.mark.asyncio
     async def test_find_element_no_match(self):
-        """测试所有选择器都不匹配"""
+        """测试所有选择器都不匹配（超时）"""
         from src.utils.smart_locator import SmartLocator
 
         page = MagicMock()
-        mock_element = MagicMock()
-        mock_element.count = AsyncMock(return_value=0)
+        mock_element = create_mock_element(wait_for_succeeds=False)
         page.locator = MagicMock(return_value=mock_element)
 
         locator = SmartLocator(page)
@@ -131,10 +139,7 @@ class TestSmartLocatorFindElement:
         from src.utils.smart_locator import SmartLocator
 
         page = MagicMock()
-        mock_element = MagicMock()
-        mock_element.count = AsyncMock(return_value=1)
-        mock_element.first = mock_element
-        mock_element.is_visible = AsyncMock(return_value=True)
+        mock_element = create_mock_element(wait_for_succeeds=True)
         page.locator = MagicMock(return_value=mock_element)
 
         locator = SmartLocator(page)
@@ -166,17 +171,13 @@ class TestSmartLocatorFindByText:
         from src.utils.smart_locator import SmartLocator
 
         page = MagicMock()
-        mock_element = MagicMock()
-        mock_element.count = AsyncMock(return_value=1)
-        mock_element.first = mock_element
-        mock_element.is_visible = AsyncMock(return_value=True)
-        page.get_by_text = MagicMock(return_value=mock_element)
+        mock_element = create_mock_element(wait_for_succeeds=True)
+        page.locator = MagicMock(return_value=mock_element)
 
         locator = SmartLocator(page)
         result = await locator.find_by_text("确定")
 
         assert result == mock_element
-        page.get_by_text.assert_called()
 
     @pytest.mark.asyncio
     async def test_find_by_text_no_match(self):
@@ -184,9 +185,8 @@ class TestSmartLocatorFindByText:
         from src.utils.smart_locator import SmartLocator
 
         page = MagicMock()
-        mock_element = MagicMock()
-        mock_element.count = AsyncMock(return_value=0)
-        page.get_by_text = MagicMock(return_value=mock_element)
+        mock_element = create_mock_element(wait_for_succeeds=False)
+        page.locator = MagicMock(return_value=mock_element)
 
         locator = SmartLocator(page)
         result = await locator.find_by_text("不存在的文本")
@@ -199,11 +199,8 @@ class TestSmartLocatorFindByText:
         from src.utils.smart_locator import SmartLocator
 
         page = MagicMock()
-        mock_element = MagicMock()
-        mock_element.count = AsyncMock(return_value=1)
-        mock_element.first = mock_element
-        mock_element.is_visible = AsyncMock(return_value=True)
-        page.get_by_text = MagicMock(return_value=mock_element)
+        mock_element = create_mock_element(wait_for_succeeds=True)
+        page.locator = MagicMock(return_value=mock_element)
 
         locator = SmartLocator(page)
         result = await locator.find_by_text("部分", exact=False)
@@ -216,7 +213,7 @@ class TestSmartLocatorFindByText:
         from src.utils.smart_locator import SmartLocator
 
         page = MagicMock()
-        page.get_by_text = MagicMock(side_effect=Exception("Text search error"))
+        page.locator = MagicMock(side_effect=Exception("Text search error"))
 
         locator = SmartLocator(page)
         result = await locator.find_by_text("测试")
@@ -234,17 +231,13 @@ class TestSmartLocatorFindInputByLabel:
         from src.utils.smart_locator import SmartLocator
 
         page = MagicMock()
-        mock_element = MagicMock()
-        mock_element.count = AsyncMock(return_value=1)
-        mock_element.first = mock_element
-        mock_element.is_visible = AsyncMock(return_value=True)
-        page.get_by_label = MagicMock(return_value=mock_element)
+        mock_element = create_mock_element(wait_for_succeeds=True)
+        page.locator = MagicMock(return_value=mock_element)
 
         locator = SmartLocator(page)
         result = await locator.find_input_by_label("用户名")
 
         assert result == mock_element
-        page.get_by_label.assert_called_with("用户名")
 
     @pytest.mark.asyncio
     async def test_find_input_by_label_not_found(self):
@@ -252,9 +245,8 @@ class TestSmartLocatorFindInputByLabel:
         from src.utils.smart_locator import SmartLocator
 
         page = MagicMock()
-        mock_element = MagicMock()
-        mock_element.count = AsyncMock(return_value=0)
-        page.get_by_label = MagicMock(return_value=mock_element)
+        mock_element = create_mock_element(wait_for_succeeds=False)
+        page.locator = MagicMock(return_value=mock_element)
 
         locator = SmartLocator(page)
         result = await locator.find_input_by_label("不存在的标签")
@@ -272,11 +264,8 @@ class TestSmartLocatorFindSelectByLabel:
         from src.utils.smart_locator import SmartLocator
 
         page = MagicMock()
-        mock_element = MagicMock()
-        mock_element.count = AsyncMock(return_value=1)
-        mock_element.first = mock_element
-        mock_element.is_visible = AsyncMock(return_value=True)
-        page.get_by_label = MagicMock(return_value=mock_element)
+        mock_element = create_mock_element(wait_for_succeeds=True)
+        page.locator = MagicMock(return_value=mock_element)
 
         locator = SmartLocator(page)
         result = await locator.find_select_by_label("类别")
@@ -289,9 +278,8 @@ class TestSmartLocatorFindSelectByLabel:
         from src.utils.smart_locator import SmartLocator
 
         page = MagicMock()
-        mock_element = MagicMock()
-        mock_element.count = AsyncMock(return_value=0)
-        page.get_by_label = MagicMock(return_value=mock_element)
+        mock_element = create_mock_element(wait_for_succeeds=False)
+        page.locator = MagicMock(return_value=mock_element)
 
         locator = SmartLocator(page)
         result = await locator.find_select_by_label("不存在")
@@ -309,11 +297,8 @@ class TestSmartLocatorClickWithRetry:
         from src.utils.smart_locator import SmartLocator
 
         page = MagicMock()
-        mock_element = MagicMock()
-        mock_element.count = AsyncMock(return_value=1)
-        mock_element.first = mock_element
-        mock_element.is_visible = AsyncMock(return_value=True)
-        mock_element.click = AsyncMock()
+        page.wait_for_timeout = AsyncMock()
+        mock_element = create_mock_element(wait_for_succeeds=True)
         page.locator = MagicMock(return_value=mock_element)
 
         locator = SmartLocator(page)
@@ -328,16 +313,13 @@ class TestSmartLocatorClickWithRetry:
         from src.utils.smart_locator import SmartLocator
 
         page = MagicMock()
-        mock_element = MagicMock()
-        mock_element.count = AsyncMock(return_value=1)
-        mock_element.first = mock_element
-        mock_element.is_visible = AsyncMock(return_value=True)
-        # 前两次失败，第三次成功
+        page.wait_for_timeout = AsyncMock()
+        mock_element = create_mock_element(wait_for_succeeds=True)
+        # 前两次失败,第三次成功
         mock_element.click = AsyncMock(
             side_effect=[Exception("Click failed"), Exception("Click failed"), None]
         )
         page.locator = MagicMock(return_value=mock_element)
-        page.wait_for_timeout = AsyncMock()
 
         locator = SmartLocator(page, retry_count=3)
         result = await locator.click_with_retry([".button"])
@@ -351,13 +333,10 @@ class TestSmartLocatorClickWithRetry:
         from src.utils.smart_locator import SmartLocator
 
         page = MagicMock()
-        mock_element = MagicMock()
-        mock_element.count = AsyncMock(return_value=1)
-        mock_element.first = mock_element
-        mock_element.is_visible = AsyncMock(return_value=True)
+        page.wait_for_timeout = AsyncMock()
+        mock_element = create_mock_element(wait_for_succeeds=True)
         mock_element.click = AsyncMock(side_effect=Exception("Click failed"))
         page.locator = MagicMock(return_value=mock_element)
-        page.wait_for_timeout = AsyncMock()
 
         locator = SmartLocator(page, retry_count=2)
         result = await locator.click_with_retry([".button"])
@@ -370,11 +349,11 @@ class TestSmartLocatorClickWithRetry:
         from src.utils.smart_locator import SmartLocator
 
         page = MagicMock()
-        mock_element = MagicMock()
-        mock_element.count = AsyncMock(return_value=0)
+        page.wait_for_timeout = AsyncMock()
+        mock_element = create_mock_element(wait_for_succeeds=False)
         page.locator = MagicMock(return_value=mock_element)
 
-        locator = SmartLocator(page)
+        locator = SmartLocator(page, retry_count=1)
         result = await locator.click_with_retry([".not-exist"])
 
         assert result is False
@@ -496,9 +475,7 @@ class TestSmartLocatorSelectOptionWithRetry:
         page.locator = MagicMock(return_value=mock_element)
 
         locator = SmartLocator(page)
-        result = await locator.select_option_with_retry(
-            [".select"], label="选项一"
-        )
+        result = await locator.select_option_with_retry([".select"], label="选项一")
 
         assert result is True
         mock_element.select_option.assert_called()
@@ -555,7 +532,7 @@ class TestSmartLocatorEdgeCases:
         # 零重试应该至少尝试一次
         result = await locator.click_with_retry([".button"])
 
-        # 实现可能返回 False 或抛出异常，这里检查不会崩溃
+        # 实现可能返回 False 或抛出异常,这里检查不会崩溃
         assert result in [True, False]
 
     @pytest.mark.asyncio
@@ -589,6 +566,6 @@ class TestSmartLocatorEdgeCases:
         page.get_by_text = MagicMock(return_value=mock_element)
 
         locator = SmartLocator(page)
-        result = await locator.find_by_text("特殊字符：【】《》")
+        result = await locator.find_by_text("特殊字符:[]<>")
 
         assert result == mock_element

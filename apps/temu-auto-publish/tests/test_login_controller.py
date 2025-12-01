@@ -12,12 +12,11 @@
 """
 
 import json
-import pytest
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from src.browser.login_controller import LoginController
-from tests.mocks import MockPage, MockBrowserManager, MockLocator
+from tests.mocks import MockBrowserManager, MockLocator
 
 
 class TestLoginControllerInit:
@@ -138,9 +137,9 @@ class TestLoginControllerLoginFlow:
                     mock_controller.browser_manager.page.click = AsyncMock()
                     mock_controller.browser_manager.page.wait_for_timeout = AsyncMock()
 
-                    result = await mock_controller.login("testuser", "testpass")
+                    await mock_controller.login("testuser", "testpass")
 
-        # 由于Mock的复杂性，这里主要验证流程不抛异常
+        # 由于Mock的复杂性,这里主要验证流程不抛异常
         # 实际验证在集成测试中进行
 
     @pytest.mark.asyncio
@@ -162,9 +161,9 @@ class TestLoginControllerLoginFlow:
                 with patch.object(mock_controller.browser_manager, "goto", new_callable=AsyncMock):
                     mock_controller.browser_manager.page.wait_for_selector = AsyncMock()
 
-                    result = await mock_controller.login("user", "pass", force=False)
+                    await mock_controller.login("user", "pass", force=False)
 
-        # Cookie有效时应该直接返回成功（理想情况）
+        # Cookie有效时应该直接返回成功(理想情况)
 
 
 class TestLoginControllerCookieLogin:
@@ -207,7 +206,7 @@ class TestLoginControllerCookieLogin:
                 with patch.object(controller.browser_manager, "goto", new_callable=AsyncMock):
                     controller.browser_manager.page.wait_for_selector = AsyncMock()
 
-                    result = await controller.login("user", "pass", force=False)
+                    await controller.login("user", "pass", force=False)
 
         # 应该尝试使用Cookie登录
 
@@ -221,7 +220,7 @@ class TestLoginControllerCookieLogin:
         controller.cookie_manager.clear = MagicMock()
         controller._check_login_status = AsyncMock(
             side_effect=[False, True]
-        )  # 第一次失败，第二次成功
+        )  # 第一次失败,第二次成功
 
         with patch.object(controller.browser_manager, "start", new_callable=AsyncMock):
             with patch.object(
@@ -284,7 +283,7 @@ class TestLoginControllerCheckStatus:
         mock_locator = MockLocator(is_visible=True, count=1)
         controller.browser_manager.page.locator = MagicMock(return_value=mock_locator)
 
-        # 由于_check_login_status是私有方法，我们测试公开接口
+        # 由于_check_login_status是私有方法,我们测试公开接口
         # 这里假设URL不包含login则视为已登录
         assert "login" not in controller.browser_manager.page.url
 
@@ -332,5 +331,5 @@ class TestLoginControllerForceLogin:
                     # 强制登录
                     await controller.login("user", "pass", force=True)
 
-        # 即使Cookie有效，也应该执行登录流程
-        # 验证goto被调用（去登录页）
+        # 即使Cookie有效,也应该执行登录流程
+        # 验证goto被调用(去登录页)

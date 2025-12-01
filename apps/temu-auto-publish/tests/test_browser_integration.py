@@ -8,7 +8,7 @@
   - 外部: pytest, pytest-asyncio
   - 内部: src.browser 模块
 @GOTCHAS:
-  - 这些测试不需要真实浏览器，使用 Mock 模拟浏览器行为
+  - 这些测试不需要真实浏览器,使用 Mock 模拟浏览器行为
   - 标记为 integration 的测试需要真实环境
 """
 
@@ -31,7 +31,7 @@ class TestBrowserManagerIntegration:
         """测试 BrowserManager 初始化."""
         from src.browser.browser_manager import BrowserManager
 
-        # 直接测试初始化，不需要 patch sync_playwright
+        # 直接测试初始化,不需要 patch sync_playwright
         manager = BrowserManager()
         assert manager is not None
 
@@ -207,11 +207,11 @@ class TestLoginControllerIntegration:
         locator.count = AsyncMock(return_value=0)
         page.locator = MagicMock(return_value=locator)
 
-        # 短超时应该失败（但我们只是确保不会抛异常）
+        # 短超时应该失败(但我们只是确保不会抛异常)
         try:
-            result = await controller.wait_for_login(page, timeout=0.1)
+            await controller.wait_for_login(page, timeout=0.1)
         except Exception:
-            pass  # 可能会超时，这是预期的
+            pass  # 可能会超时,这是预期的
 
 
 class TestPublishControllerIntegration:
@@ -341,11 +341,11 @@ class TestBrowserSettingsIntegration:
 
 
 class TestEndToEndMock:
-    """端到端模拟测试（不需要真实浏览器）."""
+    """端到端模拟测试(不需要真实浏览器)."""
 
     @pytest.mark.asyncio
     async def test_full_workflow_mock(self) -> None:
-        """测试完整工作流（使用 mock）."""
+        """测试完整工作流(使用 mock)."""
         with (
             patch("src.workflows.full_publish_workflow.CollectionController") as mock_collection,
             patch("src.workflows.full_publish_workflow.CompletePublishWorkflow") as mock_publish,
@@ -391,7 +391,7 @@ class TestEndToEndMock:
 
 @pytest.mark.integration
 class TestRealBrowserIntegration:
-    """真实浏览器集成测试（需要浏览器环境）."""
+    """真实浏览器集成测试(需要浏览器环境)."""
 
     @pytest.mark.skip(reason="需要真实浏览器环境")
     @pytest.mark.asyncio

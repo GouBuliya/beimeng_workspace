@@ -1,5 +1,5 @@
 """
-@PURPOSE: 认证服务客户端，用于与远程认证服务器通信
+@PURPOSE: 认证服务客户端,用于与远程认证服务器通信
 @OUTLINE:
   - class AuthClient: 认证服务客户端类
     - login(): 用户登录
@@ -9,7 +9,7 @@
     - get_user_info(): 获取用户信息
 @GOTCHAS:
   - 认证服务器地址通过 config/settings.py 的 auth.server_url 配置
-  - 令牌存储在内存中，重启后需要重新登录
+  - 令牌存储在内存中,重启后需要重新登录
 @DEPENDENCIES:
   - 内部: config.settings
   - 外部: httpx, pydantic
@@ -17,13 +17,10 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 import httpx
+from config.settings import settings
 from loguru import logger
 from pydantic import BaseModel
-
-from config.settings import settings
 
 
 class TokenData(BaseModel):
@@ -60,8 +57,8 @@ class AuthClient:
         """初始化认证客户端.
 
         Args:
-            base_url: 认证服务器地址，默认从配置文件读取
-            timeout: 请求超时时间（秒），默认从配置文件读取
+            base_url: 认证服务器地址,默认从配置文件读取
+            timeout: 请求超时时间(秒),默认从配置文件读取
         """
         self.base_url = base_url or settings.auth.server_url
         self.timeout = timeout or settings.auth.timeout
@@ -90,7 +87,7 @@ class AuthClient:
             password: 密码
 
         Returns:
-            TokenData | None: 令牌数据，登录失败返回 None
+            TokenData | None: 令牌数据,登录失败返回 None
         """
         try:
             client = await self._get_client()

@@ -2,23 +2,25 @@
 @PURPOSE: FastAPI 背后的工作流调度与文件存储服务
 @OUTLINE:
   - SelectionFileStore: 负责持久化上传的选品表
-  - WorkflowTaskManager: 管理 Temu 工作流运行、状态与日志
+  - WorkflowTaskManager: 管理 Temu 工作流运行,状态与日志
   - create_task_manager(): 工厂函数, 供 API 层复用
 """
 
 from __future__ import annotations
 
+import contextlib
 import re
 import sys
 import threading
 import time
 from collections import deque
+from collections.abc import Sequence
 from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
-from typing import BinaryIO, Sequence
+from typing import BinaryIO
 
-from loguru import logger
 from config.settings import settings
+from loguru import logger
 from src.browser.login_controller import LoginController
 from src.data_processor.selection_table_queue import (
     SelectionTableEmptyError,
@@ -75,10 +77,8 @@ class SelectionFileStore:
         target_dir.mkdir(parents=True, exist_ok=True)
 
         target = target_dir / f"{safe_stem}{suffix}"
-        try:
+        with contextlib.suppress(AttributeError, OSError):
             stream.seek(0)
-        except (AttributeError, OSError):
-            pass
 
         with target.open("wb") as buffer:
             chunk = stream.read(1024 * 1024)
@@ -176,15 +176,15 @@ class WorkflowTaskManager:
     def _run_continuous(self, options: WorkflowOptions) -> None:
         queue = SelectionTableQueue(options.selection_path)
         processed_batches = 0
-        # 起始轮次偏移：支持从指定轮次开始（模拟已运行次数）
+        # 起始轮次偏移:支持从指定轮次开始(模拟已运行次数)
         start_round_offset = max(0, options.start_round - 1)
         last_workflow_id: str | None = None
-        # 在循环外部创建 LoginController，复用同一个浏览器实例
+        # 在循环外部创建 LoginController,复用同一个浏览器实例
         login_ctrl = LoginController()
 
         if start_round_offset > 0:
             logger.info(
-                f"循环模式: 起始轮次={options.start_round}，将跳过前 "
+                f"循环模式: 起始轮次={options.start_round},将跳过前 "
                 f"{start_round_offset} 轮对应的选品数据",
             )
 

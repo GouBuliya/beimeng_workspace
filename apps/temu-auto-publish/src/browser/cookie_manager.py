@@ -1,8 +1,8 @@
 """
-@PURPOSE: Cookie管理器，负责登录Cookie的保存、加载和验证，支持Playwright原生格式
+@PURPOSE: Cookie管理器,负责登录Cookie的保存,加载和验证,支持Playwright原生格式
 @OUTLINE:
   - class CookieManager: Cookie管理器主类
-  - def save(): 保存Cookie到文件（支持字符串和Playwright数组格式）
+  - def save(): 保存Cookie到文件(支持字符串和Playwright数组格式)
   - def save_playwright_cookies(): 保存Playwright格式Cookie
   - def load(): 从文件加载Cookie
   - def load_playwright_cookies(): 加载Playwright格式Cookie
@@ -25,9 +25,9 @@ from loguru import logger
 class CookieManager:
     """Cookie 管理器.
 
-    管理登录 Cookie，支持两种格式：
-    1. 简单字符串格式（旧版兼容）
-    2. Playwright 原生 JSON 数组格式（推荐）
+    管理登录 Cookie,支持两种格式:
+    1. 简单字符串格式(旧版兼容)
+    2. Playwright 原生 JSON 数组格式(推荐)
 
     Attributes:
         cookie_file: Cookie 文件路径
@@ -49,7 +49,7 @@ class CookieManager:
 
         Args:
             cookie_file: Cookie 文件路径
-            max_age_hours: Cookie 最大有效期（小时）
+            max_age_hours: Cookie 最大有效期(小时)
         """
         self.cookie_file = Path(cookie_file)
         self.max_age = timedelta(hours=max_age_hours)
@@ -62,9 +62,9 @@ class CookieManager:
     def is_valid(self) -> bool:
         """检查 Cookie 是否有效.
 
-        支持两种格式的检查：
-        1. 旧格式：JSON 文件中包含 timestamp 字段
-        2. 新格式：独立的元数据文件存储时间戳
+        支持两种格式的检查:
+        1. 旧格式:JSON 文件中包含 timestamp 字段
+        2. 新格式:独立的元数据文件存储时间戳
 
         Returns:
             True 如果 Cookie 存在且未过期
@@ -79,34 +79,34 @@ class CookieManager:
             return False
 
         try:
-            # 首先尝试从元数据文件读取时间戳（新格式）
+            # 首先尝试从元数据文件读取时间戳(新格式)
             if self.metadata_file.exists():
                 with open(self.metadata_file, encoding="utf-8") as f:
                     metadata = json.load(f)
                 saved_time = datetime.fromisoformat(metadata["timestamp"])
             else:
-                # 尝试从 cookie 文件本身读取时间戳（旧格式兼容）
+                # 尝试从 cookie 文件本身读取时间戳(旧格式兼容)
                 with open(self.cookie_file, encoding="utf-8") as f:
                     data = json.load(f)
 
                 if "timestamp" in data:
                     saved_time = datetime.fromisoformat(data["timestamp"])
                 else:
-                    # 如果是 Playwright 格式（数组），使用文件修改时间
+                    # 如果是 Playwright 格式(数组),使用文件修改时间
                     if isinstance(data, list):
                         mtime = self.cookie_file.stat().st_mtime
                         saved_time = datetime.fromtimestamp(mtime)
                     else:
-                        logger.warning("Cookie 文件格式无法识别，缺少时间戳")
+                        logger.warning("Cookie 文件格式无法识别,缺少时间戳")
                         return False
 
             age = datetime.now() - saved_time
 
             if age > self.max_age:
-                logger.info(f"Cookie 已过期（{age.total_seconds() / 3600:.1f} 小时）")
+                logger.info(f"Cookie 已过期({age.total_seconds() / 3600:.1f} 小时)")
                 return False
 
-            logger.success(f"Cookie 有效（已保存 {age.total_seconds() / 3600:.1f} 小时）")
+            logger.success(f"Cookie 有效(已保存 {age.total_seconds() / 3600:.1f} 小时)")
             return True
 
         except Exception as e:
@@ -116,9 +116,9 @@ class CookieManager:
     def save(self, cookies: str | list[dict[str, Any]]) -> None:
         """保存 Cookie.
 
-        自动检测并保存两种格式：
-        - 字符串：保存为旧格式（带 timestamp）
-        - 列表：保存为 Playwright 格式，时间戳存入元数据文件
+        自动检测并保存两种格式:
+        - 字符串:保存为旧格式(带 timestamp)
+        - 列表:保存为 Playwright 格式,时间戳存入元数据文件
 
         Args:
             cookies: Cookie 字符串或 Playwright 格式的 Cookie 列表
@@ -131,14 +131,14 @@ class CookieManager:
         self.cookie_file.parent.mkdir(parents=True, exist_ok=True)
 
         if isinstance(cookies, list):
-            # Playwright 格式：Cookie 数组
+            # Playwright 格式:Cookie 数组
             self.save_playwright_cookies(cookies)
         else:
-            # 旧格式：字符串
+            # 旧格式:字符串
             data = {"cookies": cookies, "timestamp": datetime.now().isoformat()}
             with open(self.cookie_file, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
-            logger.info(f"Cookie（字符串格式）已保存到: {self.cookie_file}")
+            logger.info(f"Cookie(字符串格式)已保存到: {self.cookie_file}")
 
     def save_playwright_cookies(self, cookies: list[dict[str, Any]]) -> None:
         """保存 Playwright 格式的 Cookie.
@@ -157,13 +157,13 @@ class CookieManager:
         with open(self.cookie_file, "w", encoding="utf-8") as f:
             json.dump(cookies, f, ensure_ascii=False, indent=2)
 
-        # 保存元数据（时间戳）
+        # 保存元数据(时间戳)
         self._save_metadata()
 
-        logger.info(f"Cookie（Playwright 格式，{len(cookies)} 条）已保存到: {self.cookie_file}")
+        logger.info(f"Cookie(Playwright 格式,{len(cookies)} 条)已保存到: {self.cookie_file}")
 
     def _save_metadata(self) -> None:
-        """保存元数据文件（包含时间戳）."""
+        """保存元数据文件(包含时间戳)."""
         metadata = {
             "timestamp": datetime.now().isoformat(),
             "format": "playwright",
@@ -172,9 +172,9 @@ class CookieManager:
             json.dump(metadata, f, ensure_ascii=False, indent=2)
 
     def update_timestamp(self) -> None:
-        """更新 Cookie 时间戳（不重新保存 Cookie 数据）.
+        """更新 Cookie 时间戳(不重新保存 Cookie 数据).
 
-        当 Cookie 验证成功后调用此方法可以延长有效期。
+        当 Cookie 验证成功后调用此方法可以延长有效期.
 
         Examples:
             >>> manager = CookieManager()
@@ -182,7 +182,7 @@ class CookieManager:
             ...     manager.update_timestamp()  # 延长有效期
         """
         if not self.cookie_file.exists():
-            logger.warning("Cookie 文件不存在，无法更新时间戳")
+            logger.warning("Cookie 文件不存在,无法更新时间戳")
             return
 
         self._save_metadata()
@@ -191,10 +191,10 @@ class CookieManager:
     def load(self) -> str | list[dict[str, Any]] | None:
         """加载 Cookie.
 
-        自动检测格式并返回对应类型。
+        自动检测格式并返回对应类型.
 
         Returns:
-            Cookie 字符串或 Playwright 格式列表，如果不存在或无效则返回 None
+            Cookie 字符串或 Playwright 格式列表,如果不存在或无效则返回 None
 
         Examples:
             >>> manager = CookieManager()
@@ -206,18 +206,18 @@ class CookieManager:
         with open(self.cookie_file, encoding="utf-8") as f:
             data = json.load(f)
 
-        # 如果是列表，直接返回（Playwright 格式）
+        # 如果是列表,直接返回(Playwright 格式)
         if isinstance(data, list):
             return data
 
-        # 旧格式：返回 cookies 字段
+        # 旧格式:返回 cookies 字段
         return data.get("cookies")
 
     def load_playwright_cookies(self) -> list[dict[str, Any]] | None:
         """加载 Playwright 格式的 Cookie.
 
         Returns:
-            Playwright 格式的 Cookie 列表，如果不存在或无效则返回 None
+            Playwright 格式的 Cookie 列表,如果不存在或无效则返回 None
 
         Examples:
             >>> manager = CookieManager()
@@ -263,6 +263,6 @@ if __name__ == "__main__":
     manager = CookieManager()
 
     if manager.is_valid():
-        print("✓ Cookie 有效，可以跳过登录")
+        print("✓ Cookie 有效,可以跳过登录")
     else:
-        print("✗ Cookie 无效，需要重新登录")
+        print("✗ Cookie 无效,需要重新登录")

@@ -23,8 +23,6 @@ from app.core.redis_client import get_session_manager
 from app.core.security import decode_token
 from app.models.user import User
 
-from .service import AuthService
-
 # OAuth2 密码模式
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=False)
 
@@ -59,13 +57,13 @@ async def get_current_user(
     if not payload:
         raise credentials_exception
 
-    # 验证会话（单设备检查）
+    # 验证会话(单设备检查)
     session_manager = await get_session_manager()
     session = await session_manager.validate_session(payload.jti)
     if not session:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="会话已失效，请重新登录",
+            detail="会话已失效,请重新登录",
             headers={"WWW-Authenticate": "Bearer"},
         )
 

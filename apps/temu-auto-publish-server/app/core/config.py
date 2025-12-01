@@ -1,7 +1,7 @@
 """
-@PURPOSE: 应用配置管理，使用 Pydantic Settings 加载环境变量
+@PURPOSE: 应用配置管理,使用 Pydantic Settings 加载环境变量
 @OUTLINE:
-  - class Settings: 应用配置类，从环境变量或 .env 文件加载
+  - class Settings: 应用配置类,从环境变量或 .env 文件加载
   - get_settings(): 获取配置单例
 @DEPENDENCIES:
   - 外部: pydantic_settings, functools
@@ -41,7 +41,7 @@ class Settings(BaseSettings):
 
     @property
     def database_url_sync(self) -> str:
-        """同步数据库连接 URL（用于 Alembic）."""
+        """同步数据库连接 URL(用于 Alembic)."""
         return (
             f"postgresql://{self.postgres_user}:{self.postgres_password}"
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"

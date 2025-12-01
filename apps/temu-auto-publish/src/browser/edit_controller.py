@@ -1,17 +1,17 @@
 """
-@PURPOSE: 编辑控制器，使用Playwright实现商品编辑和发布
+@PURPOSE: 编辑控制器,使用Playwright实现商品编辑和发布
 @OUTLINE:
   - class EditController: 编辑控制器主类
-  - async def edit_product(): 编辑商品信息（完整流程）
-  - async def _claim_products(): 认领商品（5→20）
+  - async def edit_product(): 编辑商品信息(完整流程)
+  - async def _claim_products(): 认领商品(5→20)
   - async def _edit_title_and_category(): 编辑标题和类目
   - async def _batch_edit_18_steps(): 批量编辑18步
   - async def _publish_products(): 发布商品
 @GOTCHAS:
-  - 认领商品需要重复操作4次（5条→20条）
+  - 认领商品需要重复操作4次(5条→20条)
   - 标题修改后需要按空格触发AI生成英文标题
   - 类目编辑可能涉及多级树形选择
-  - 批量编辑18步比较复杂，需要分步实现
+  - 批量编辑18步比较复杂,需要分步实现
 @DEPENDENCIES:
   - 内部: .browser_manager
   - 外部: playwright
@@ -32,7 +32,7 @@ from .browser_manager import BrowserManager
 class EditController:
     """编辑控制器.
 
-    负责商品的认领、编辑和发布。实现 Temu 商品编辑的完整流程。
+    负责商品的认领,编辑和发布.实现 Temu 商品编辑的完整流程.
 
     Attributes:
         browser_manager: 浏览器管理器实例
@@ -58,11 +58,11 @@ class EditController:
     async def edit_product(
         self, product: TaskProduct, collected_links: list[dict[str, str]]
     ) -> EditResult:
-        """编辑商品（完整流程）.
+        """编辑商品(完整流程).
 
-        完整流程：
-        1. 认领商品（5条→20条）
-        2. 首次编辑（标题、类目）
+        完整流程:
+        1. 认领商品(5条→20条)
+        2. 首次编辑(标题,类目)
         3. 批量编辑18步
         4. 保存
 
@@ -92,7 +92,7 @@ class EditController:
         result = EditResult(product_id=product.id, status="pending")
 
         try:
-            # 1. 认领商品（5条→20条）
+            # 1. 认领商品(5条→20条)
             logger.info("\n[1/4] 认领商品...")
             claimed_ids = await self._claim_products(collected_links)
             result.claimed_ids = claimed_ids
@@ -102,8 +102,8 @@ class EditController:
             if not claimed_ids:
                 raise Exception("未成功认领任何商品")
 
-            # 2. 首次编辑（标题、类目）
-            logger.info("\n[2/4] 首次编辑（标题、类目）...")
+            # 2. 首次编辑(标题,类目)
+            logger.info("\n[2/4] 首次编辑(标题,类目)...")
             await self._edit_title_and_category(
                 product_url=claimed_ids[0], ai_title=product.ai_title, category=product.category
             )
@@ -113,7 +113,7 @@ class EditController:
             }
             logger.success("✓ 标题和类目编辑完成")
 
-            # 3. 批量编辑18步（简化版）
+            # 3. 批量编辑18步(简化版)
             logger.info("\n[3/4] 批量编辑18步...")
             await self._batch_edit_18_steps(product)
             result.changes["batch_edit"] = {"status": "completed"}
@@ -145,9 +145,9 @@ class EditController:
         return result
 
     async def _claim_products(self, links: list[dict[str, str]]) -> list[str]:
-        """认领商品（5条→20条）.
+        """认领商品(5条→20条).
 
-        流程：循环4次认领，每次认领使采集的5条商品变成20条。
+        流程:循环4次认领,每次认领使采集的5条商品变成20条.
 
         Args:
             links: 搜索采集的商品链接列表
@@ -170,7 +170,7 @@ class EditController:
             try:
                 url = link.get("url")
                 if not url:
-                    logger.warning(f"  [{idx}] 链接无效，跳过")
+                    logger.warning(f"  [{idx}] 链接无效,跳过")
                     continue
 
                 logger.info(f"  [{idx}] 打开商品: {link.get('title', 'Unknown')[:30]}...")
@@ -179,20 +179,20 @@ class EditController:
                 await page.goto(url, wait_until="networkidle")
 
                 # TODO: 定位认领按钮并点击4次
-                # 示例实现（需要根据实际页面调整）:
+                # 示例实现(需要根据实际页面调整):
                 claim_button = page.locator(
                     'button:has-text("认领"), button:has-text("Claim")'
                 ).first
 
                 # 检查按钮是否存在
                 if await claim_button.count() > 0:
-                    # 点击4次认领（5条→20条）
+                    # 点击4次认领(5条→20条)
                     for i in range(4):
                         await claim_button.click()
                         logger.debug(f"    认领第 {i + 1} 次")
 
-                    # 提取商品ID（从URL或页面元素）
-                    product_id = url.split("/")[-1]  # 示例，需根据实际调整
+                    # 提取商品ID(从URL或页面元素)
+                    product_id = url.split("/")[-1]  # 示例,需根据实际调整
                     claimed_ids.append(product_id)
 
                     logger.success(f"  [{idx}] ✓ 认领成功")
@@ -210,7 +210,7 @@ class EditController:
     ) -> None:
         """编辑标题和类目.
 
-        流程：
+        流程:
         1. 打开编辑页面
         2. 修改中文标题
         3. 按空格触发AI生成英文标题
@@ -230,9 +230,9 @@ class EditController:
         logger.info("修改标题和类目...")
 
         # TODO: 根据实际页面结构实现
-        # 1. 打开编辑页面（如果不在编辑页）
+        # 1. 打开编辑页面(如果不在编辑页)
         if "edit" not in page.url:
-            edit_url = f"{product_url}/edit"  # 示例，需根据实际调整
+            edit_url = f"{product_url}/edit"  # 示例,需根据实际调整
             await page.goto(edit_url, wait_until="networkidle")
 
         # 2. 修改中文标题
@@ -247,9 +247,9 @@ class EditController:
         # 等待AI生成完成
         await wait_network_idle(page, 5000, context=" [AI title generation]")
 
-        # 4. 选择类目（简化版，假设只需要输入文本）
+        # 4. 选择类目(简化版,假设只需要输入文本)
         logger.debug("  选择类目...")
-        # TODO: 实现类目树形选择（可能比较复杂）
+        # TODO: 实现类目树形选择(可能比较复杂)
         category_input = page.locator('input[name*="category"], input[placeholder*="类目"]').first
         if await category_input.count() > 0:
             await category_input.fill(category)
@@ -257,27 +257,27 @@ class EditController:
         logger.debug("  ✓ 标题和类目修改完成")
 
     async def _batch_edit_18_steps(self, product: TaskProduct) -> None:
-        """批量编辑18步（简化版）.
+        """批量编辑18步(简化版).
 
-        这是一个简化实现，只包含关键步骤。
-        完整的18步编辑需要根据实际业务需求逐步完善。
+        这是一个简化实现,只包含关键步骤.
+        完整的18步编辑需要根据实际业务需求逐步完善.
 
-        18步概览（来自文档）:
-        1. 修改标题、英语标题（空格键触发）
+        18步概览(来自文档):
+        1. 修改标题,英语标题(空格键触发)
         2. 修改类目属性
-        3. 修改主货号（跳过）
+        3. 修改主货号(跳过)
         4. 修改外包装
         5. 修改产地
-        6-7. 定制品、敏感属性（跳过）
+        6-7. 定制品,敏感属性(跳过)
         8. 修改重量
         9. 修改尺寸
         10. 修改平台SKU
         11. 修改SKU分类
-        12. 尺码表（跳过）
+        12. 尺码表(跳过)
         13. 修改建议售价
-        14. 包装清单（跳过）
-        15. 轮播图（跳过）
-        16. 颜色图/预览图（跳过）
+        14. 包装清单(跳过)
+        15. 轮播图(跳过)
+        16. 颜色图/预览图(跳过)
         17. 产品说明书
         18. 保存并验证
 
@@ -289,10 +289,10 @@ class EditController:
         """
         page = self.browser_manager.page
 
-        logger.info("执行批量编辑（简化版）...")
+        logger.info("执行批量编辑(简化版)...")
 
         # TODO: 根据实际业务需求实现18步编辑
-        # 这里提供一个框架，具体实现需要根据实际页面结构调整
+        # 这里提供一个框架,具体实现需要根据实际页面结构调整
 
         # Step 4: 修改外包装
         logger.debug("  [4] 修改外包装...")
@@ -304,14 +304,14 @@ class EditController:
 
         # Step 8: 修改重量
         logger.debug("  [8] 修改重量: 随机5000-9999g...")
-        weight = random.randint(5000, 9999)
+        random.randint(5000, 9999)
         # TODO: 实现
 
         # Step 9: 修改尺寸
         logger.debug("  [9] 修改尺寸: 随机50-99cm...")
         length = random.randint(50, 99)
         width = random.randint(50, length)
-        height = random.randint(50, width)
+        random.randint(50, width)
         # TODO: 实现
 
         # Step 13: 修改建议售价
@@ -320,13 +320,13 @@ class EditController:
         if await price_input.count() > 0:
             await price_input.fill(str(product.suggested_price))
 
-        logger.debug("  ✓ 批量编辑完成（简化版）")
-        logger.warning("  ⚠️ 注意：完整18步编辑需要根据实际需求进一步实现")
+        logger.debug("  ✓ 批量编辑完成(简化版)")
+        logger.warning("  ⚠️ 注意:完整18步编辑需要根据实际需求进一步实现")
 
     async def _save_product(self) -> None:
         """保存商品.
 
-        点击保存按钮并验证保存结果。
+        点击保存按钮并验证保存结果.
 
         Raises:
             Exception: 如果保存失败
@@ -351,7 +351,7 @@ class EditController:
                 await success_msg.wait_for(timeout=5000)
                 logger.success("✓ 保存成功提示已出现")
             except:
-                logger.warning("⚠️ 未检测到成功提示，但可能已保存")
+                logger.warning("⚠️ 未检测到成功提示,但可能已保存")
         else:
             logger.warning("⚠️ 未找到保存按钮")
 
@@ -372,7 +372,7 @@ if __name__ == "__main__":
         # 登录
         success = await controller.login("test_user", "test_pass", headless=False)
         if not success:
-            logger.error("登录失败，无法测试编辑")
+            logger.error("登录失败,无法测试编辑")
             return
 
         # 搜索
@@ -389,7 +389,7 @@ if __name__ == "__main__":
             id="P001",
             keyword="智能手表",
             original_name="智能手表运动防水",
-            ai_title="【官方正品】多功能智能手表运动防水心率监测",
+            ai_title="[官方正品]多功能智能手表运动防水心率监测",
             cost_price=150.0,
             suggested_price=1125.0,
             supply_price=1500.0,

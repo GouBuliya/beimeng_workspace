@@ -1,5 +1,5 @@
 """
-@PURPOSE: Temu自动发布系统CLI入口，提供命令行接口
+@PURPOSE: Temu自动发布系统CLI入口,提供命令行接口
 @OUTLINE:
   - app: Typer应用实例
   - def process(): 处理Excel选品表主命令
@@ -18,13 +18,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 import typer
-from loguru import logger
+from config.settings import settings
 from rich.console import Console
 from rich.panel import Panel
-
-from config.settings import settings
-from src.data_processor.processor import DataProcessor
 from src.browser.login_controller import LoginController
+from src.data_processor.processor import DataProcessor
 
 app = typer.Typer(
     name="temu-auto-publish",
@@ -40,7 +38,7 @@ def process(
     excel_file: Path = typer.Argument(..., help="选品表 Excel 文件路径"),
     output_dir: Path = typer.Option(None, "--output", "-o", help="输出目录"),
 ):
-    """处理选品表，生成任务数据（完整流程）.
+    """处理选品表,生成任务数据(完整流程).
 
     Examples:
         temu-auto-publish process data/input/products.xlsx
@@ -50,7 +48,7 @@ def process(
 
     if not excel_file.exists():
         console.print(f"[red]✗ 文件不存在: {excel_file}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     # 设置输出路径
     if output_dir is None:
@@ -65,13 +63,13 @@ def process(
 
     try:
         task_data = processor.process_excel(excel_file, output_file)
-        console.print(f"\n[green]✓ 处理完成！[/green]")
+        console.print("\n[green]✓ 处理完成![/green]")
         console.print(f"  任务 ID: {task_data.task_id}")
         console.print(f"  产品数量: {len(task_data.products)}")
         console.print(f"  输出文件: {output_file}")
     except Exception as e:
         console.print(f"[red]✗ 处理失败: {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 @app.command()
@@ -81,7 +79,7 @@ def login(
     force: bool = typer.Option(False, "--force", "-f", help="强制重新登录"),
     headless: bool = typer.Option(False, "--headless", help="无头模式"),
 ):
-    """测试 Temu 登录（使用 Playwright）.
+    """测试 Temu 登录(使用 Playwright).
 
     Examples:
         temu-auto-publish login
@@ -98,7 +96,7 @@ def login(
         console.print("[red]✗ 请提供用户名和密码[/red]")
         console.print("  方式1: 命令行 -u user -p pass")
         console.print("  方式2: 配置 .env 文件")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     # 执行登录
     async def _login():
@@ -108,10 +106,10 @@ def login(
     success = asyncio.run(_login())
 
     if success:
-        console.print("[green]✓ 登录成功！[/green]")
+        console.print("[green]✓ 登录成功![/green]")
     else:
         console.print("[red]✗ 登录失败[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 @app.command()
@@ -170,14 +168,14 @@ def dev_excel(file_path: Path = typer.Argument(..., help="Excel 文件路径")):
         reader = ExcelReader(file_path)
         products = reader.read()
 
-        console.print(f"\n[green]✓ 读取成功！[/green]")
+        console.print("\n[green]✓ 读取成功![/green]")
         console.print(f"  产品数量: {len(products)}")
         console.print("\n前 3 个产品:")
         for p in products[:3]:
             console.print(f"  - {p.name} (¥{p.cost_price})")
     except Exception as e:
         console.print(f"[red]✗ 读取失败: {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 @dev_app.command("price")
@@ -197,7 +195,7 @@ def dev_price(cost: float = typer.Argument(..., help="成本价")):
     )
 
     console.print(f"\n成本价: ¥{result.cost_price}")
-    console.print(f"建议售价: ¥{result.suggested_price} (×{result.multiplier})")
+    console.print(f"建议售价: ¥{result.suggested_price} (x{result.multiplier})")
     console.print(f"供货价: ¥{result.supply_price}")
 
 

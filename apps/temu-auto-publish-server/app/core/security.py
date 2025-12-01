@@ -1,5 +1,5 @@
 """
-@PURPOSE: 安全工具模块，提供密码哈希和 JWT 令牌生成/验证功能
+@PURPOSE: 安全工具模块,提供密码哈希和 JWT 令牌生成/验证功能
 @OUTLINE:
   - verify_password(): 验证密码
   - get_password_hash(): 生成密码哈希
@@ -14,7 +14,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -73,7 +73,7 @@ def create_access_token(user_id: str | uuid.UUID) -> tuple[str, str, datetime]:
         tuple[str, str, datetime]: (令牌, JTI, 过期时间)
     """
     jti = str(uuid.uuid4())
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     expire = now + timedelta(minutes=settings.jwt_access_token_expire_minutes)
 
     payload = {
@@ -98,7 +98,7 @@ def create_refresh_token(user_id: str | uuid.UUID) -> tuple[str, str, datetime]:
         tuple[str, str, datetime]: (令牌, JTI, 过期时间)
     """
     jti = str(uuid.uuid4())
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     expire = now + timedelta(days=settings.jwt_refresh_token_expire_days)
 
     payload = {
@@ -120,7 +120,7 @@ def decode_token(token: str) -> TokenPayload | None:
         token: JWT 令牌字符串
 
     Returns:
-        TokenPayload | None: 解码后的载荷，验证失败返回 None
+        TokenPayload | None: 解码后的载荷,验证失败返回 None
     """
     try:
         payload = jwt.decode(
@@ -131,8 +131,8 @@ def decode_token(token: str) -> TokenPayload | None:
         return TokenPayload(
             sub=payload["sub"],
             jti=payload["jti"],
-            exp=datetime.fromtimestamp(payload["exp"], tz=timezone.utc),
-            iat=datetime.fromtimestamp(payload["iat"], tz=timezone.utc),
+            exp=datetime.fromtimestamp(payload["exp"], tz=UTC),
+            iat=datetime.fromtimestamp(payload["iat"], tz=UTC),
             token_type=payload["token_type"],
         )
     except JWTError:

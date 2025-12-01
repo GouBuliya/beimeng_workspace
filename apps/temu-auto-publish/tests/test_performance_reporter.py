@@ -10,8 +10,7 @@
 """
 
 from datetime import datetime
-from io import StringIO
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -268,7 +267,7 @@ class TestConsoleReporter:
         reporter = ConsoleReporter(tracker)
         reporter.print_summary()
 
-        # 应该只有警告日志，没有输出
+        # 应该只有警告日志,没有输出
 
     def test_print_summary_with_error(self, mock_tracker, capsys) -> None:
         """测试带错误信息的汇总."""

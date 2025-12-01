@@ -1,7 +1,7 @@
 """
 @PURPOSE: 用户数据库模型定义
 @OUTLINE:
-  - class User: 用户表模型，包含用户名、密码哈希、权限等字段
+  - class User: 用户表模型,包含用户名,密码哈希,权限等字段
 @DEPENDENCIES:
   - 内部: app.core.database
   - 外部: sqlalchemy, uuid, datetime

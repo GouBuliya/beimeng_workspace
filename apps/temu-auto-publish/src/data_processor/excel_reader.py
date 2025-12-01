@@ -1,5 +1,5 @@
 """
-@PURPOSE: Excel选品表读取器，负责读取和验证Excel选品表数据
+@PURPOSE: Excel选品表读取器,负责读取和验证Excel选品表数据
 @OUTLINE:
   - class ExcelReader: Excel读取器主类
   - def read(): 读取Excel并返回ProductInput列表
@@ -21,7 +21,7 @@ from ..models.task import ProductInput
 class ExcelReader:
     """Excel 读取器.
 
-    读取选品表 Excel 文件并转换为 ProductInput 对象列表。
+    读取选品表 Excel 文件并转换为 ProductInput 对象列表.
 
     Attributes:
         file_path: Excel 文件路径
@@ -66,7 +66,7 @@ class ExcelReader:
             df = pd.read_excel(self.file_path)
             logger.debug(f"读取到 {len(df)} 行数据")
 
-            # 列名标准化（处理不同的表头格式）
+            # 列名标准化(处理不同的表头格式)
             df.columns = df.columns.str.strip()
             column_mapping = {
                 "商品名称": "name",
@@ -83,11 +83,11 @@ class ExcelReader:
             # 填充默认值
             df["notes"] = df["notes"].fillna("")
 
-            # 转换为 Pydantic 模型 - 使用向量化替代 iterrows（性能优化 10-100 倍）
+            # 转换为 Pydantic 模型 - 使用向量化替代 iterrows(性能优化 10-100 倍)
             products = []
             errors = []
 
-            # 使用 to_dict('records') 替代 iterrows，避免每行创建 Series 对象
+            # 使用 to_dict('records') 替代 iterrows,避免每行创建 Series 对象
             records = df.to_dict("records")
             for idx, record in enumerate(records):
                 try:

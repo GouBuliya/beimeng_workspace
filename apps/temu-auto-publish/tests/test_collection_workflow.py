@@ -11,7 +11,6 @@
   - 内部: src.workflows.collection_workflow
 """
 
-from datetime import datetime
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -61,11 +60,11 @@ class TestCollectionResult:
             product=mock_product,
             collected_links=[],
             success=False,
-            error="搜索失败，未找到商品",
+            error="搜索失败,未找到商品",
         )
 
         assert result.success is False
-        assert result.error == "搜索失败，未找到商品"
+        assert result.error == "搜索失败,未找到商品"
         assert len(result.collected_links) == 0
 
     def test_to_dict(self, mock_product) -> None:
@@ -299,7 +298,7 @@ class TestCollectionWorkflowExecute:
             save_report=False,
         )
 
-        # 第一个产品失败，第二个成功
+        # 第一个产品失败,第二个成功
         assert result["summary"]["success"] == 1
         assert result["summary"]["failed"] == 1
 
@@ -559,7 +558,7 @@ class TestCollectionWorkflowExport:
         with open(output_file, encoding="utf-8") as f:
             content = f.read()
 
-        # 失败的产品不应该出现在导出文件中（除了注释部分）
+        # 失败的产品不应该出现在导出文件中(除了注释部分)
         assert "失败产品" not in content or "## 产品:" not in content.split("失败产品")[0]
 
 
@@ -568,7 +567,7 @@ class TestCollectionWorkflowIntegration:
 
     @pytest.mark.asyncio
     async def test_full_workflow_mock(self, tmp_path) -> None:
-        """测试完整工作流（模拟）."""
+        """测试完整工作流(模拟)."""
         with patch("src.workflows.collection_workflow.CollectionController"):
             from src.workflows.collection_workflow import CollectionWorkflow
 
