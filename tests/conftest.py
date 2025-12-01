@@ -83,6 +83,7 @@ def mock_auth_client(monkeypatch):
     # 同时替换 api 模块中的引用
     try:
         from web_panel import api
+
         monkeypatch.setattr(api, "get_auth_client", lambda: mock_client)
     except ImportError:
         pass  # 如果 api 模块还没加载,跳过
