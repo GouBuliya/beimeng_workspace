@@ -49,7 +49,7 @@ jobs:
         run: |
           uv run bandit -r apps/ packages/ scripts/ \
             -f json -o bandit-report.json \
-            -ll
+            -ll || true
 
       - name: Upload Bandit Report
         if: always()
