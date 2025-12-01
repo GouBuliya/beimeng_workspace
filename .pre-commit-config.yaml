@@ -42,3 +42,11 @@ repos:
         files: \.ai\.json$
         args: [--schemafile, .ai/schemas/component.schema.json]
 
+  # Bandit - Python 安全扫描
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.7.5
+    hooks:
+      - id: bandit
+        args: ['-ll', '-r', 'apps/', 'packages/', 'scripts/']
+        exclude: ^tests/
+
