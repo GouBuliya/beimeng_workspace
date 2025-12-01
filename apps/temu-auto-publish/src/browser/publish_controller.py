@@ -18,7 +18,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -29,6 +28,7 @@ from playwright.async_api import Locator, Page, TimeoutError as PlaywrightTimeou
 
 from ..data_processor.price_calculator import PriceCalculator
 from ..utils.page_load_decorator import wait_dom_loaded
+from ..utils.page_waiter import PageWaiter, ensure_dom_ready
 from ..utils.selector_race import TIMEOUTS
 
 SelectorEntries = Sequence[str] | str | None
@@ -83,7 +83,9 @@ class PublishController:
         self.selectors = self._load_selectors()
         self.price_calculator = PriceCalculator()
         self._publish_context_ready = False
-        logger.info("发布控制器初始化完成，选择器配置路径: %s", self.selector_path)
+        # 供货价功能暂时停用，避免 success 恒为 False
+        self.enable_set_supply_price = False
+        logger.info(f"发布控制器初始化完成，选择器配置路径: {self.selector_path}")
 
     def _resolve_selector_path(self, selector_path: str) -> Path:
         """将选择器配置路径转换为绝对路径."""
@@ -99,7 +101,7 @@ class PublishController:
         """加载选择器配置并做基本校验."""
         if not self.selector_path.exists():
             logger.warning(
-                "选择器配置文件不存在，将使用兜底选择器: %s", self.selector_path
+                f"选择器配置文件不存在，将使用兜底选择器: {self.selector_path}"
             )
             return {}
 
@@ -109,13 +111,12 @@ class PublishController:
             if not isinstance(data, dict):
                 raise ValueError("选择器配置不是字典")
             logger.debug(
-                "选择器配置已加载 version=%s, last_updated=%s",
-                data.get("version"),
-                data.get("last_updated"),
+                f"选择器配置已加载 version={data.get('version')}, "
+                f"last_updated={data.get('last_updated')}"
             )
             return data
         except Exception as exc:  # pragma: no cover - 运行时保护
-            logger.error("加载选择器配置失败，将使用兜底选择器: %s", exc)
+            logger.error(f"加载选择器配置失败，将使用兜底选择器: {exc}")
             return {}
 
     def _invalidate_publish_context(self) -> None:
@@ -148,6 +149,11 @@ class PublishController:
                         candidates.append(item.strip())
         return self._dedup_selectors(candidates)
 
+    def _build_waiter(self, page: Page) -> PageWaiter:
+        """构造页面等待器，减少重复配置."""
+
+        return PageWaiter(page)
+
     async def _click_first_available(
         self,
         page: Page,
@@ -160,48 +166,37 @@ class PublishController:
     ) -> str | None:
         """尝试依次点击第一个可见且可用的选择器."""
         last_error: Exception | None = None
-        #等待页面加载完毕
-        await page.wait_for_load_state("domcontentloaded")
-
+        waiter = self._build_waiter(page)
+        await waiter.wait_for_dom_stable(timeout_ms=visible_timeout_ms)
+        click_timeout = max(visible_timeout_ms, click_timeout_ms)
 
         for attempt in range(attempts):
             for selector in selectors:
                 locator = page.locator(selector).first
-                try:
-                    await locator.wait_for(state="visible", timeout=visible_timeout_ms)
-                    if not await locator.is_enabled():
-                        last_error = RuntimeError("元素未启用")
-                        logger.debug(
-                            "元素禁用 selector=%s ctx=%s", selector, context
-                        )
-                        continue
-                    await locator.scroll_into_view_if_needed(timeout=1_000)
-                    await locator.click(timeout=click_timeout_ms)
+                clicked = await waiter.safe_click(
+                    locator,
+                    timeout_ms=click_timeout,
+                    ensure_visible=True,
+                    ensure_enabled=True,
+                    scroll=True,
+                    wait_after=True,
+                    name=f"{context}:{selector}",
+                )
+                if clicked:
                     logger.debug(
-                        "点击成功 selector=%s ctx=%s attempt=%s/%s",
-                        selector,
-                        context,
-                        attempt + 1,
-                        attempts,
+                        f"selector={selector} ctx={context} attempt={attempt + 1}/{attempts}",
                     )
                     return selector
-                except PlaywrightTimeoutError as exc:
-                    last_error = exc
-                    logger.debug(
-                        "等待可见超时 selector=%s ctx=%s err=%s",
-                        selector,
-                        context,
-                        exc,
-                    )
-                except Exception as exc:  # pragma: no cover - 运行时保护
-                    last_error = exc
-                    logger.debug(
-                        "点击失败 selector=%s ctx=%s err=%s", selector, context, exc
-                    )
+
+                last_error = PlaywrightTimeoutError("safe_click_failed")
+                logger.debug(
+                    f"selector={selector} ctx={context} attempt={attempt + 1}/{attempts}",
+                )
             if attempt < attempts - 1:
-                await asyncio.sleep(0.3 + 0.2 * attempt)
+                await waiter.wait_for_dom_stable(timeout_ms=visible_timeout_ms)
+                await waiter.apply_retry_backoff(attempt + 1)
         if last_error:
-            logger.debug("所有选择器均不可用 ctx=%s err=%s", context, last_error)
+            logger.debug(f"所有选择器均不可用 ctx={context} err={last_error}")
         return None
 
     async def _first_visible_locator(
@@ -220,13 +215,11 @@ class PublishController:
                 return locator
             except Exception as exc:  # pragma: no cover - 运行时保护
                 logger.debug(
-                    "等待可见失败 selector=%s ctx=%s err=%s",
-                    selector,
-                    context,
-                    exc,
+                    f"等待可见失败 selector={selector} ctx={context} err={exc}",
                 )
         return None
 
+    @ensure_dom_ready
     async def _ensure_publish_context(
         self,
         page: Page,
@@ -234,7 +227,6 @@ class PublishController:
         force: bool = False,
     ) -> None:
         """确保当前在发布页且已全选 20 条商品."""
-        await page.wait_for_load_state("domcontentloaded")
 
         if self._publish_context_ready and not force:
             return
@@ -248,6 +240,7 @@ class PublishController:
             raise RuntimeError("全选商品失败，无法继续发布流程")
         self._publish_context_ready = True
 
+    @ensure_dom_ready
     async def select_all_20_products(
         self,
         page: Page,
@@ -255,11 +248,12 @@ class PublishController:
         require_load_state: bool = True,
     ) -> bool:
         """全选当前页 20 条产品."""
-        await page.wait_for_load_state("domcontentloaded")
 
         logger.info("全选当前页产品（目标 20 条）...")
+        logger.info(f"全选当前页产品（目标 20 条）...")
         if require_load_state:
             await wait_dom_loaded(page, context="[select all 20]")
+            logger.info(f"全选当前页产品（目标 20 条）...")
 
         collection_box_config = self.selectors.get("collection_box", {})
         pagination_config = collection_box_config.get("pagination", {})
@@ -281,17 +275,17 @@ class PublishController:
             if not clicked_selector:
                 raise RuntimeError("未命中『全选』按钮")
 
-            logger.success("已全选当前页产品 selector=%s", clicked_selector)
+            logger.success(f"已全选当前页产品 selector={clicked_selector}")
             self._publish_context_ready = True
             return True
         except Exception as exc:  # pragma: no cover - 运行时保护
-            logger.error("全选产品失败: %s", exc)
+            logger.error(f"全选产品失败: {exc}")
             self._invalidate_publish_context()
             return False
 
+    @ensure_dom_ready
     async def _reset_to_all_tab(self, page: Page) -> None:
         """复位到「全部」TAB，确保后续操作在正确的列表."""
-        await page.wait_for_load_state("domcontentloaded")
 
         temu_tabs = (
             self.selectors.get("temu_collect_box", {})
@@ -325,15 +319,15 @@ class PublishController:
             context="reset_all_tab",
         )
         if clicked_selector:
-            logger.info("已复位到「全部」TAB selector=%s", clicked_selector)
+            logger.info(f"已复位到「全部」TAB selector={clicked_selector}")
         else:
             logger.warning("复位到「全部」TAB 失败，未找到可用的 TAB 按钮")
 
+    @ensure_dom_ready
     async def select_shop(self, page: Page, shop_name: str | None = None) -> bool:
         """选择店铺（SOP 步骤 8）."""
         logger.info("=" * 60)
         logger.info("[SOP 步骤 8] 选择店铺")
-        await page.wait_for_load_state("domcontentloaded")
 
         logger.info("=" * 60)
         try:
@@ -370,16 +364,14 @@ class PublishController:
             }
 
             if not skip_specific_shop:
-                logger.info("选择店铺: %s", normalized_name)
+                logger.info(f"选择店铺: {normalized_name}")
                 target = page.get_by_text(normalized_name, exact=False).first
                 try:
                     await target.wait_for(state="visible", timeout=TIMEOUTS.SLOW)
                     await target.click(timeout=TIMEOUTS.NORMAL)
                 except Exception as exc:
                     logger.warning(
-                        "定位店铺失败，将尝试全选店铺 name=%s err=%s",
-                        normalized_name,
-                        exc,
+                        f"定位店铺失败，将尝试全选店铺 name={normalized_name} err={exc}"
                     )
                     await self._select_all_shops(page)
             else:
@@ -391,10 +383,11 @@ class PublishController:
             logger.success("店铺选择完成")
             return True
         except Exception as exc:  # pragma: no cover - 运行时保护
-            logger.error("选择店铺失败: %s", exc)
+            logger.error(f"选择店铺失败: {exc}")
             self._invalidate_publish_context()
             return False
 
+    @ensure_dom_ready
     async def _select_all_shops(self, page: Page) -> None:
         """在店铺弹窗中勾选“全选”复选框."""
         selectors = self._get_selector_candidates(
@@ -404,7 +397,6 @@ class PublishController:
             "text='全选'",
             "input[type='checkbox'][aria-label*='全选']",
         )
-        await page.wait_for_load_state("domcontentloaded")
 
         clicked_selector = await self._click_first_available(
             page,
@@ -415,11 +407,12 @@ class PublishController:
             context="select_all_shops",
         )
         if clicked_selector:
-            logger.success("已全选所有店铺 selector=%s", clicked_selector)
+            logger.success(f"已全选所有店铺 selector={clicked_selector}")
             return
 
         raise RuntimeError("未找到可用的“全选”选项，无法继续选择店铺")
 
+    @ensure_dom_ready
     async def _confirm_shop_selection(self, page: Page) -> None:
         """点击店铺选择弹窗中的“确定/确认”按钮."""
         confirm_selectors = self._get_selector_candidates(
@@ -430,7 +423,6 @@ class PublishController:
             "footer button.jx-button--primary",
             "button[type='button']:has-text('确定')",
         )
-        await page.wait_for_load_state("domcontentloaded")
 
         clicked_selector = await self._click_first_available(
             page,
@@ -441,7 +433,7 @@ class PublishController:
             context="confirm_shop",
         )
         if clicked_selector:
-            logger.success("已点击店铺确认按钮 selector=%s", clicked_selector)
+            logger.success(f"已点击店铺确认按钮 selector={clicked_selector}")
             return
 
         try:
@@ -471,9 +463,9 @@ class PublishController:
             costs.append(cost_value)
         return costs
 
+    @ensure_dom_ready
     async def _close_dialog_safely(self, page: Page) -> None:
         """尝试关闭当前弹窗，避免阻塞后续流程."""
-        await page.wait_for_load_state("domcontentloaded")
 
         close_selectors = self._get_selector_candidates(
             "button:has-text('关闭')",
@@ -491,6 +483,7 @@ class PublishController:
             context="close_dialog",
         )
 
+    @ensure_dom_ready
     async def set_supply_price(
         self,
         page: Page,
@@ -636,6 +629,7 @@ class PublishController:
         #     return False
         #禁用供货价设置
 
+    @ensure_dom_ready
     async def _handle_pre_publish_modal(self, page: Page) -> None:
         """处理批量发布前置提示弹窗（可选出现）。"""
         confirm_first_selectors = self._get_selector_candidates(
@@ -644,7 +638,6 @@ class PublishController:
             "button:has-text('确定')",
             "text='我知道了'",
         )
-        await page.wait_for_load_state("domcontentloaded")
 
         confirm_first_clicked = await self._click_first_available(
             page,
@@ -655,16 +648,16 @@ class PublishController:
             context="batch_publish.pre_modal",
         )
         if confirm_first_clicked:
-            logger.info("已关闭前置提示弹窗 selector=%s", confirm_first_clicked)
-            await asyncio.sleep(0.2)
+            logger.info(f"已关闭前置提示弹窗 selector={confirm_first_clicked}")
+            await self._build_waiter(page).wait_for_dom_stable(timeout_ms=TIMEOUTS.FAST)
 
+    @ensure_dom_ready
     async def batch_publish(self, page: Page) -> bool:
         """批量发布（SOP 步骤 10）."""
         logger.info("=" * 60)
         logger.info("[SOP 步骤 10] 批量发布")
         logger.info("=" * 60)
         try:
-            await page.wait_for_load_state("domcontentloaded")
 
             publish_cfg = self.selectors.get("publish", {})
             repeat_cfg = publish_cfg.get("repeat_per_batch", 5)
@@ -684,12 +677,10 @@ class PublishController:
                 "button:has-text('批量发布')",
                 "button:has-text('发布')",
             )
-            flag = False
+            waiter = self._build_waiter(page)
             for round_idx in range(repeat_per_batch):
                 logger.info(
-                    ">>> 批量发布 %s/%s 次，共 20 条产品",
-                    round_idx + 1,
-                    repeat_per_batch,
+                    f">>> 批量发布 {round_idx + 1}/{repeat_per_batch} 次，共 20 条产品"
                 )
                 await self._reset_to_all_tab(page)
                 await self._ensure_publish_context(page, force=True)
@@ -706,32 +697,34 @@ class PublishController:
                 if not publish_clicked:
                     self._invalidate_publish_context()
                     raise RuntimeError("未能点击「批量发布」按钮")
-                logger.info("批量发布按钮命中 selector=%s", publish_clicked)
-                # 硬编码等待 5.5s，等待弹窗渲染
-                if not flag:
-                    await asyncio.sleep(5.5)
-                    await self._handle_pre_publish_modal(page)
-                    flag = True
+                logger.info(f"批量发布按钮命中 selector={publish_clicked}")
+                await waiter.wait_for_dom_stable(timeout_ms=TIMEOUTS.SLOW)
+                await self._handle_pre_publish_modal(page)
 
                 confirm_publish_selectors = self._get_selector_candidates(
                     "button:has-text('确认发布')",
                 )
                 logger.info("[2/2] 确认发布...")
-                await page.wait_for_load_state("domcontentloaded")
-                await asyncio.sleep(1)
-                
+                confirm_ready = await self._first_visible_locator(
+                    page,
+                    confirm_publish_selectors,
+                    timeout_ms=TIMEOUTS.SLOW,
+                    context="batch_publish.confirm_ready",
+                )
+                if not confirm_ready:
+                    self._invalidate_publish_context()
+                    raise RuntimeError("确认发布弹窗未出现")
+                await waiter.wait_for_dom_stable(timeout_ms=TIMEOUTS.NORMAL)
+
                 confirm_publish_clicked = await self._click_first_available(
                     page,
                     confirm_publish_selectors,
                     visible_timeout_ms=1_000,
                     click_timeout_ms=1_000,
-                    attempts=5,
+                    attempts=3,#不可更改
                     context="batch_publish.confirm",
                 )
-                if not confirm_publish_clicked:
-                    self._invalidate_publish_context()
-                    raise RuntimeError("未能点击「确认发布」按钮")
-
+                
                 close_retry_cfg = (
                     self.selectors.get("publish_confirm", {}).get("close_retry", 5)
                 )
@@ -743,7 +736,7 @@ class PublishController:
 
                 close_button_selectors = self._get_selector_candidates(
                     "button:has-text('关闭')",
-                    "button:has-text('取消')",
+                    "button:has-text('关闭此对话框')",
                     "button:has-text('确定')",
                 )
 
@@ -754,18 +747,18 @@ class PublishController:
                         close_button_selectors,
                         visible_timeout_ms=1_000,
                         click_timeout_ms=1_000,
-                        attempts=3,
+                        attempts=1,
                         context=f"batch_publish.close[{attempt+1}/{close_retry}]",
                     )
                     if close_button:
                         logger.info(
-                            "关闭按钮命中 selector=%s (尝试 %s/%s)",
-                            close_button,
-                            attempt + 1,
-                            close_retry,
+                            f"关闭按钮命中 selector={close_button} "
+                            f"(尝试 {attempt + 1}/{close_retry})"
                         )
                         break
-                    await asyncio.sleep(0.3)
+                    await waiter.wait_for_dom_stable(timeout_ms=TIMEOUTS.NORMAL)
+                    if attempt < close_retry - 1:
+                        await waiter.apply_retry_backoff(attempt + 1)
 
                 if not close_button:
                     dialog_selectors = self._get_selector_candidates(
@@ -788,17 +781,16 @@ class PublishController:
                 self._invalidate_publish_context()
 
             logger.success(
-                "批量发布完成 20 条产品 %s 次，共 %s 条产品",
-                repeat_per_batch,
-                20 * repeat_per_batch,
+                f"批量发布完成 20 条产品 {repeat_per_batch} 次，共 {20 * repeat_per_batch} 条产品"
             )
             return True
         except Exception as exc:  # pragma: no cover - 运行时保护
-            logger.error("批量发布失败: %s", exc)
+            logger.error(f"批量发布失败: {exc}")
             return False
         finally:
             self._invalidate_publish_context()
 
+    @ensure_dom_ready
     async def execute_publish_workflow(
         self,
         page: Page,
@@ -827,11 +819,11 @@ class PublishController:
 
             logger.info("\n" + "=" * 80)
             logger.info("发布工作流执行完毕")
-            logger.info("执行结果: %s", "✅ 成功" if result.success else "❌ 失败")
+            logger.info(f"执行结果: {'✅ 成功' if result.success else '❌ 失败'}")
             logger.info("=" * 80)
             return result.to_dict()
         except Exception as exc:  # pragma: no cover - 运行时保护
-            logger.error("发布工作流执行失败: %s", exc)
+            logger.error(f"发布工作流执行失败: {exc}")
             return result.to_dict()
 
 

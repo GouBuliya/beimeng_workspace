@@ -41,12 +41,12 @@ from pathlib import Path
 from typing import Any, List
 
 from loguru import logger
-from playwright.async_api import Page
+from playwright.async_api import Page, expect
 
 from ...data_processor.price_calculator import PriceCalculator
 from ...data_processor.random_generator import RandomDataGenerator
 from ...utils.smart_locator import SmartLocator
-from ...utils.page_waiter import WaitStrategy
+from ...utils.page_waiter import PageWaiter, WaitStrategy
 from ...utils.batch_edit_helpers import (
     retry_on_failure,
     performance_monitor,
@@ -97,6 +97,7 @@ class BatchEditController:
             self.smart_locator_config.get("timeout_per_selector", 5000)
         )
         self.smart_locator_retry = int(self.smart_locator_config.get("retry_count", 3))
+        self.wait_strategy = self._build_wait_strategy(self.smart_locator_config)
 
         # 初始化工具类
         self.price_calculator = PriceCalculator()
@@ -188,6 +189,11 @@ class BatchEditController:
             dom_stable_interval_ms=int(cfg.get("dom_stable_interval_ms", 120)),
         )
 
+    def _build_waiter(self, page: Page) -> PageWaiter:
+        """创建统一等待器（基于 fast timing 配置）."""
+
+        return PageWaiter(page, self.wait_strategy)
+
     def _create_locator(self, page: Page) -> SmartLocator:
         """创建带统一等待策略的智能定位器."""
 
@@ -195,7 +201,7 @@ class BatchEditController:
             page,
             default_timeout=self.smart_locator_timeout,
             retry_count=self.smart_locator_retry,
-            wait_strategy=self._build_wait_strategy(self.smart_locator_config),
+            wait_strategy=self.wait_strategy,
         )
 
     async def select_all_products(self, page: Page) -> bool:
@@ -209,7 +215,8 @@ class BatchEditController:
         try:
             # TODO: 使用codegen获取选择器
             # await page.click(self.select_all_checkbox)
-            await wait_dom_loaded(page, TIMEOUTS.SLOW, context=" [select all products]")
+            waiter = self._build_waiter(page)
+            await waiter.wait_for_dom_stable(timeout_ms=TIMEOUTS.SLOW)
 
             # 验证选中数量
             # selected_count = await page.locator('.selected').count()
@@ -237,7 +244,8 @@ class BatchEditController:
             # await page.click(self.batch_edit_button)
 
             # 等待批量编辑页面加载
-            await wait_dom_loaded(page, TIMEOUTS.SLOW, context=" [batch edit mode]")
+            waiter = self._build_waiter(page)
+            await waiter.wait_for_dom_stable(timeout_ms=TIMEOUTS.SLOW)
 
             # 验证是否进入批量编辑
             if "batch" in page.url.lower() or "批量" in await page.title():
@@ -358,14 +366,17 @@ class BatchEditController:
                 logger.warning("未找到英文标题输入框选择器")
                 return False
 
+            waiter = self._build_waiter(page)
+            await waiter.wait_for_dom_stable(timeout_ms=TIMEOUTS.SLOW)
+
             input_element = page.locator(input_selector).first
-            if not await input_element.is_visible(timeout=5000):
-                logger.warning("英文标题输入框不可见")
-                return False
+            await input_element.wait_for(state="visible", timeout=TIMEOUTS.SLOW)
+            await expect(input_element).to_be_enabled(timeout=TIMEOUTS.NORMAL)
 
             # 按空格键（SOP要求）
             await input_element.click()
             await input_element.press("Space")
+            await waiter.wait_for_dom_stable(timeout_ms=TIMEOUTS.NORMAL)
 
             logger.success("✓ 英文标题已填写（空格键）")
 
@@ -416,8 +427,12 @@ class BatchEditController:
         try:
             # 1. 点击预览按钮
             preview_selector = "button:has-text('预览'), button:contains('预览')"
+            waiter = self._build_waiter(page)
             try:
-                await page.locator(preview_selector).first.click(timeout=TIMEOUTS.NORMAL)
+                preview_btn = page.locator(preview_selector).first
+                await preview_btn.wait_for(state="visible", timeout=TIMEOUTS.NORMAL)
+                await expect(preview_btn).to_be_enabled(timeout=TIMEOUTS.NORMAL)
+                await preview_btn.click(timeout=TIMEOUTS.NORMAL)
                 logger.info("  已点击预览")
             except Exception as e:
                 logger.warning(f"  预览按钮点击失败: {e}")
@@ -427,9 +442,11 @@ class BatchEditController:
                 "button:has-text('保存修改'), button:has-text('保存'), button:contains('保存')"
             )
             try:
-                await page.locator(save_selector).first.click(timeout=TIMEOUTS.NORMAL)
-                # 等待保存完成
-                await wait_network_idle(page, TIMEOUTS.SLOW, context=" [save main sku]")
+                save_btn = page.locator(save_selector).first
+                await save_btn.wait_for(state="visible", timeout=TIMEOUTS.SLOW)
+                await expect(save_btn).to_be_enabled(timeout=TIMEOUTS.SLOW)
+                await save_btn.click(timeout=TIMEOUTS.NORMAL)
+                await waiter.wait_for_dom_stable(timeout_ms=TIMEOUTS.SLOW)
                 logger.success("  ✓ 已保存修改")
             except Exception as e:
                 logger.warning(f"  保存按钮点击失败: {e}")

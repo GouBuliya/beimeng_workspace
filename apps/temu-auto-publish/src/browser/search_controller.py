@@ -17,14 +17,13 @@
 @RELATED: browser_manager.py, edit_controller.py
 """
 
-import asyncio
-import random
 from datetime import datetime
 
 from loguru import logger
 
 from ..models.result import SearchResult
 from ..utils.page_load_decorator import wait_network_idle
+from ..utils.page_waiter import PageWaiter
 from .browser_manager import BrowserManager
 
 
@@ -141,7 +140,7 @@ class SearchController:
         await page.goto(search_url, wait_until="networkidle")
 
         # 等待页面稳定
-        await asyncio.sleep(1 + random.random())  # 随机延迟 1-2 秒
+        await PageWaiter(page).wait_for_dom_stable(timeout_ms=1_200)
 
     async def _input_and_search(self, keyword: str) -> None:
         """输入关键词并执行搜索.
@@ -166,8 +165,8 @@ class SearchController:
         await search_input.clear()
         await search_input.fill(keyword)
 
-        # 模拟真实用户输入，添加随机延迟
-        await asyncio.sleep(0.5 + random.random() * 0.5)
+        # 等待输入框稳定
+        await PageWaiter(page).wait_for_dom_stable(timeout_ms=800)
 
         # 点击搜索按钮或按回车
         search_button = page.locator('button:has-text("搜索"), button[type="submit"]').first
@@ -204,7 +203,9 @@ class SearchController:
             await wait_network_idle(page, context=" [search results]")
 
             # 额外等待，确保动态内容加载完成
-            await asyncio.sleep(2 + random.random())
+            waiter = PageWaiter(page)
+            await waiter.wait_for_dom_stable(timeout_ms=2_000)
+            await waiter.wait_for_network_idle(timeout_ms=1_500)
 
             logger.debug("✓ 搜索结果已加载")
 

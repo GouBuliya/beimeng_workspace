@@ -34,6 +34,7 @@ from loguru import logger
 from playwright.async_api import Locator, Page
 
 from ..core.performance import profile
+from ..utils.page_waiter import PageWaiter
 from .first_edit.sku_spec_replace import fill_first_spec_unit, replace_sku_spec_options
 from .first_edit.retry import first_edit_step_retry
 
@@ -57,6 +58,18 @@ FIELD_KEYWORDS: dict[str, list[str]] = {
 
 # 定义泛型类型
 T = TypeVar("T")
+
+
+def _resolve_page(args: tuple[Any, ...], kwargs: dict[str, Any]) -> Page | None:
+    """尝试从参数中提取 Page."""
+
+    for arg in args:
+        if isinstance(arg, Page):
+            return arg
+    for value in kwargs.values():
+        if isinstance(value, Page):
+            return value
+    return None
 
 
 def smart_retry(max_attempts: int = 2, delay: float = 0.5, exceptions: tuple = (Exception,)):
@@ -84,7 +97,12 @@ def smart_retry(max_attempts: int = 2, delay: float = 0.5, exceptions: tuple = (
                         logger.warning(
                             f"⚠ {func.__name__} 执行失败(第{attempt}次尝试),{delay}秒后重试: {exc}"
                         )
-                        await asyncio.sleep(delay)
+                        page = _resolve_page(args, kwargs)
+                        if page:
+                            waiter = PageWaiter(page)
+                            await waiter.wait_for_dom_stable(timeout_ms=int(delay * 1000))
+                        else:
+                            await asyncio.sleep(delay)
                     else:
                         logger.error(f"✗ {func.__name__} 执行失败(已达最大重试次数{max_attempts})")
             raise last_exception  # type: ignore
@@ -456,7 +474,7 @@ async def _click_save(page: Page) -> bool:
                 await save_btn.click()
                 logger.success("✓ 已点击保存按钮")
 
-                await _wait_button_completion(save_btn)
+                await _wait_button_completion(save_btn, page)
 
                 toast = page.locator(".jx-message--success, .el-message--success")
                 try:
@@ -868,12 +886,24 @@ async def _wait_for_visibility(locator: Locator, timeout: int) -> Locator | None
         return None
 
 
-async def _wait_button_completion(button: Locator, timeout_ms: int = 1_000) -> None:
+async def _wait_button_completion(button: Locator, page: Page | None = None, timeout_ms: int = 1_000) -> None:
     """等待按钮被禁用或从页面移除，用于确认操作完成."""
 
-    end_time = asyncio.get_running_loop().time() + timeout_ms / 1_000
-    poll_interval = 0.1
+    waiter = PageWaiter(page) if page else None
 
+    try:
+        await button.wait_for(state="hidden", timeout=timeout_ms)
+        return
+    except Exception:
+        pass
+
+    try:
+        await button.wait_for(state="detached", timeout=timeout_ms)
+        return
+    except Exception:
+        pass
+
+    end_time = asyncio.get_running_loop().time() + timeout_ms / 1_000
     while asyncio.get_running_loop().time() < end_time:
         try:
             if not await button.count():
@@ -882,7 +912,10 @@ async def _wait_button_completion(button: Locator, timeout_ms: int = 1_000) -> N
                 return
         except Exception:
             return
-        await asyncio.sleep(poll_interval)
+        if waiter:
+            await waiter.wait_for_dom_stable(timeout_ms=120)
+        else:
+            await asyncio.sleep(0.1)
 
 
 async def _collect_input_candidates(

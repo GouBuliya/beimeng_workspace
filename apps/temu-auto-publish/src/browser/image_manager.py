@@ -427,10 +427,7 @@ class ImageManager:
 
         if target_count > row_count:
             logger.warning(
-                "SKU 图片 URL 数量(%s) 超过 SKU 行数(%s), 仅处理前 %s 行",
-                target_count,
-                row_count,
-                row_count,
+                f"SKU 图片 URL 数量({target_count}) 超过 SKU 行数({row_count}), 仅处理前 {row_count} 行"
             )
             target_count = row_count
 
@@ -454,10 +451,8 @@ class ImageManager:
             logger.success("✓ SKU 图片同步完成, 共 {} 张", uploads)
         else:
             logger.warning(
-                "SKU 图片同步部分失败: 成功 %s/%s (DOM校验=%s)",
-                uploads,
-                target_count,
-                "通过" if inventory_ok else "未通过",
+                f"SKU 图片同步部分失败: 成功 {uploads}/{target_count} "
+                f"(DOM校验={'通过' if inventory_ok else '未通过'})"
             )
         return all_success
 
@@ -695,9 +690,7 @@ class ImageManager:
         try:
             sku_section = page.get_by_label("SKU图片:", exact=False)
             await sku_section.wait_for(state="visible", timeout=TIMEOUTS.SLOW)
-            logger.debug(
-                "SKU 区域定位成功 (耗时 %sms)", _elapsed_ms(overall_start)
-            )
+            logger.debug(f"SKU 区域定位成功 (耗时 {_elapsed_ms(overall_start)}ms)")
         except Exception:
             logger.warning("未能定位到『SKU图片』区域, 跳过删除")
             return False
@@ -728,8 +721,7 @@ class ImageManager:
 
         await self._wait_for_sku_cleanup(page, sku_section)
         logger.success(
-            "✓ SKU 区域旧图片已清空 (总耗时 %sms)",
-            _elapsed_ms(overall_start),
+            f"✓ SKU 区域旧图片已清空 (总耗时 {_elapsed_ms(overall_start)}ms)"
         )
         return True
 
@@ -745,7 +737,7 @@ class ImageManager:
                 selector,
                 timeout=timeout,
             )
-            logger.debug("SKU 图片清理完成 (耗时 %sms)", _elapsed_ms(wait_start))
+            logger.debug(f"SKU 图片清理完成 (耗时 {_elapsed_ms(wait_start)}ms)")
             return
 
         # 降级: 使用指数退避轮询
@@ -757,14 +749,14 @@ class ImageManager:
             try:
                 items = sku_section.locator(selector)
                 if await items.count() == 0:
-                    logger.debug("SKU 图片清理完成 (耗时 %sms)", _elapsed_ms(wait_start))
+                    logger.debug(f"SKU 图片清理完成 (耗时 {_elapsed_ms(wait_start)}ms)")
                     return
             except Exception:
                 pass
             await asyncio.sleep(poll_interval)
             poll_interval = min(poll_interval * 1.5, max_interval)  # 指数退避
 
-        logger.debug("SKU 图片清理等待超时 (耗时 %sms)", _elapsed_ms(wait_start))
+        logger.debug(f"SKU 图片清理等待超时 (耗时 {_elapsed_ms(wait_start)}ms)")
 
     async def _wait_for_total_sku_images(
         self, sku_section: Locator, expected: int, timeout: int = TIMEOUTS.SLOW * 5
@@ -803,7 +795,9 @@ class ImageManager:
             await asyncio.sleep(poll_interval)
             poll_interval = min(poll_interval * 1.5, max_interval)  # 指数退避
 
-        logger.warning("SKU 图片总数未在 %sms 内达到预期(%s)", timeout, expected)
+        logger.warning(
+            f"SKU 图片总数未在 {timeout}ms 内达到预期({expected})"
+        )
         return False
 
     async def _wait_for_row_image_increment(
@@ -844,9 +838,7 @@ class ImageManager:
             await button.wait_for(state="visible", timeout=timeout)
             await button.click()
             logger.debug(
-                "已点击%s按钮 (耗时 %sms)",
-                log_label,
-                _elapsed_ms(overall_start),
+                f"已点击{log_label}按钮 (耗时 {_elapsed_ms(overall_start)}ms)"
             )
             return True
         except Exception as exc:
@@ -873,12 +865,11 @@ class ImageManager:
 
         if dialog is None:
             logger.warning(
-                "未检测到删除确认弹窗 (耗时 %sms)",
-                _elapsed_ms(dialog_start),
+                f"未检测到删除确认弹窗 (耗时 {_elapsed_ms(dialog_start)}ms)",
             )
             return False
 
-        logger.debug("删除确认弹窗出现 (耗时 %sms)", _elapsed_ms(dialog_start))
+        logger.debug(f"删除确认弹窗出现 (耗时 {_elapsed_ms(dialog_start)}ms)")
 
         # 在弹窗范围内查找确定按钮
         button_selectors = [
@@ -917,8 +908,7 @@ class ImageManager:
             try:
                 await btn.click(timeout=TIMEOUTS.SLOW)
                 logger.debug(
-                    "删除确认弹窗已点击按钮 (耗时 %sms)",
-                    _elapsed_ms(dialog_start),
+                    f"删除确认弹窗已点击按钮 (耗时 {_elapsed_ms(dialog_start)}ms)"
                 )
                 await self._wait_for_message_box_dismissal(page)
                 return True
@@ -930,8 +920,7 @@ class ImageManager:
             await page.keyboard.press("Escape")
             await self._wait_for_message_box_dismissal(page)
             logger.debug(
-                "删除确认弹窗通过 Escape 关闭 (耗时 %sms)",
-                _elapsed_ms(dialog_start),
+                f"删除确认弹窗通过 Escape 关闭 (耗时 {_elapsed_ms(dialog_start)}ms)"
             )
             return True
 

@@ -594,10 +594,8 @@ def _persist_publish_preferences(repeat_per_batch: int, close_retry: int) -> Non
             encoding="utf-8",
         )
         logger.info(
-            "已更新发布配置: repeat_per_batch=%s, close_retry=%s -> %s",
-            repeat_per_batch,
-            close_retry,
-            SELECTOR_FILE,
+            f"已更新发布配置: repeat_per_batch={repeat_per_batch}, "
+            f"close_retry={close_retry} -> {SELECTOR_FILE}"
         )
     except Exception as exc:  # pragma: no cover - 运行时保护
         logger.warning("更新发布配置失败: {}", exc)

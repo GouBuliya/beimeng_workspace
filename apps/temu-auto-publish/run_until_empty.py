@@ -124,10 +124,8 @@ async def run_batch(
     result = await workflow.execute_async()
 
     logger.info(
-        "Batch completed: success=%s, stages=%s, errors=%s",
-        result.total_success,
-        [stage.name for stage in result.stages],
-        result.errors,
+        f"Batch completed: success={result.total_success}, "
+        f"stages={[stage.name for stage in result.stages]}, errors={result.errors}"
     )
 
     return result.total_success
@@ -145,11 +143,8 @@ async def main_async() -> None:
     target_collect_url = "https://erp.91miaoshou.com/common_collect_box/items"
 
     logger.info(
-        "Start continuous publish: input=%s, batch_size=%s, interval=%.1fs, start_round=%s",
-        selection_path,
-        batch_size,
-        args.interval,
-        execution_round,
+        f"Start continuous publish: input={selection_path}, batch_size={batch_size}, "
+        f"interval={args.interval:.1f}s, start_round={execution_round}"
     )
 
     try:
@@ -174,7 +169,7 @@ async def main_async() -> None:
                     login_ctrl=login_ctrl,
                 )
             except Exception as exc:
-                logger.exception("Publish workflow raised: %s", exc)
+                logger.exception(f"Publish workflow raised: {exc}")
                 queue.return_batch(batch.rows)
                 raise SystemExit(1) from exc
 

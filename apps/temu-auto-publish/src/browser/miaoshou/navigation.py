@@ -1019,7 +1019,7 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
             # 先滚动到行可见
             with suppress(Exception):
                 await row.scroll_into_view_if_needed()
-            await page.wait_for_timeout(200)
+            await wait_dom_loaded(page, 500, context="edit_row_visible")
 
             # 在行内查找编辑按钮
             for selector in edit_selectors:
@@ -1045,5 +1045,4 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
         except Exception as exc:
             logger.debug(f"行内点击编辑按钮异常: {exc}")
             return False
-
 

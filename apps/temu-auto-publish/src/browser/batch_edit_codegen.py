@@ -66,6 +66,34 @@ T = TypeVar("T")
 _smart_waiter = get_smart_waiter()
 _resilient_locator = get_resilient_locator()
 
+
+async def _stabilize(
+    page: Page,
+    label: str,
+    *,
+    min_ms: int = 80,
+    max_ms: int = 500,
+    wait_for_network: bool = False,
+) -> float:
+    """使用智能等待替代硬编码 sleep, 失败时退回最小等待."""
+
+    try:
+        return await smart_wait(
+            page,
+            label,
+            min_ms=min_ms,
+            max_ms=max_ms,
+            wait_for_network=wait_for_network,
+            wait_for_dom=True,
+        )
+    except Exception as exc:  # pragma: no cover - 调试保护
+        logger.debug(
+            f"智能等待失败 label={label} err={exc}, fallback={min_ms}ms"
+        )
+        await page.wait_for_timeout(min_ms)
+        return float(min_ms)
+
+
 # 步骤级重试策略
 _step_retry_policy = create_step_retry_policy()
 
@@ -509,7 +537,7 @@ async def _step_05_outer_package(page: Page, image_path: str | None) -> None:
             # 直接使用已存在的文件输入框
             await file_inputs.last.set_input_files(chosen_path)
             logger.success("✓ 外包装图片已上传: {}", chosen_path)
-            await page.wait_for_timeout(50)  # 极速模式: 150 -> 50
+            await _stabilize(page, "outer_package_upload", min_ms=40, max_ms=80, wait_for_network=True)
         else:
             # 如果没有文件输入框,尝试通过下拉菜单触发
             logger.warning("未找到文件输入框,跳过外包装图片上传")
@@ -564,7 +592,7 @@ async def _step_06_origin(page: Page) -> None:
     # 等待加载
     with suppress(Exception):
         await loading_mask.wait_for(state="hidden", timeout=1000)
-    await page.wait_for_timeout(300)
+    await _stabilize(page, "origin_loading", min_ms=180, max_ms=320, wait_for_network=True)
 
     # 2. 点击输入框 - 多种选择器
     input_clicked = False
@@ -589,7 +617,7 @@ async def _step_06_origin(page: Page) -> None:
     if not input_clicked:
         raise RuntimeError("未能点击产地输入框")
 
-    await page.wait_for_timeout(200)
+    await _stabilize(page, "origin_input_focus", min_ms=150, max_ms=260)
 
     # 3. 填写"浙江"
     fill_success = False
@@ -613,7 +641,7 @@ async def _step_06_origin(page: Page) -> None:
     if not fill_success:
         raise RuntimeError("未能填写产地关键词")
 
-    await page.wait_for_timeout(500)
+    await _stabilize(page, "origin_keyword_set", min_ms=300, max_ms=520)
 
     # 4. 选择"中国大陆 / 浙江省" - 多种选择器
     option_clicked = False
@@ -638,7 +666,7 @@ async def _step_06_origin(page: Page) -> None:
     if not option_clicked:
         raise RuntimeError("未能选择产地选项")
 
-    await page.wait_for_timeout(200)
+    await _stabilize(page, "origin_option_before_save", min_ms=150, max_ms=260)
 
     # 5. 保存修改
     await page.get_by_role("button", name="保存修改").click()
@@ -800,7 +828,7 @@ async def _step_12_sku_category(page: Page) -> None:
     # 等待加载
     with suppress(Exception):
         await loading_mask.wait_for(state="hidden", timeout=2000)
-    await page.wait_for_timeout(600)  # 等待内容加载
+    await _stabilize(page, "sku_category_loading", min_ms=350, max_ms=650, wait_for_network=True)
     
     # 2. 点击"分类"下拉框 - 多种选择器尝试
     dropdown_clicked = False
@@ -837,7 +865,7 @@ async def _step_12_sku_category(page: Page) -> None:
         raise RuntimeError("未找到SKU分类下拉框")
 
     # 等待下拉菜单出现
-    await page.wait_for_timeout(500)
+    await _stabilize(page, "sku_category_dropdown", min_ms=300, max_ms=550)
     
     # 3. 在下拉菜单中选择"单品"
     option_clicked = False
@@ -864,7 +892,7 @@ async def _step_12_sku_category(page: Page) -> None:
     if not option_clicked:
         raise RuntimeError("未找到'单品'选项")
 
-    await page.wait_for_timeout(300)
+    await _stabilize(page, "sku_category_pre_save", min_ms=220, max_ms=360)
     
     # 4. 点击保存修改
     save_btn = page.get_by_role("button", name="保存修改")
@@ -957,7 +985,7 @@ async def _step_18_manual(page: Page, file_path: str) -> None:
     
     # 1. 点击左侧导航"产品说明书"
     await page.get_by_text("产品说明书").click()
-    await page.wait_for_timeout(300)
+    await _stabilize(page, "manual_nav", min_ms=220, max_ms=360)
     
     if not file_path:
         logger.warning("⚠️ 未提供产品说明书文件路径，跳过上传")
@@ -979,7 +1007,7 @@ async def _step_18_manual(page: Page, file_path: str) -> None:
             if await upload_btn.count() and await upload_btn.is_visible():
                 # hover 到"上传文件"按钮
                 await upload_btn.hover(timeout=500)
-                await page.wait_for_timeout(300)  # 等待下拉菜单出现
+                await _stabilize(page, "manual_hover_menu", min_ms=220, max_ms=360)
                 hover_done = True
                 logger.debug("✓ hover 到上传文件按钮")
                 break
@@ -1013,13 +1041,13 @@ async def _step_18_manual(page: Page, file_path: str) -> None:
         logger.warning("⚠️ 未找到本地上传选项")
     
     # 4. 上传文件
-    await page.wait_for_timeout(200)
+    await _stabilize(page, "manual_before_upload", min_ms=150, max_ms=240)
     try:
         file_inputs = page.locator("input[type='file']")
         if await file_inputs.count() > 0:
             await file_inputs.last.set_input_files(file_path)
             logger.success(f"✓ 产品说明书已上传: {file_path}")
-            await page.wait_for_timeout(500)  # 等待上传完成
+            await _stabilize(page, "manual_after_upload", min_ms=350, max_ms=600, wait_for_network=True)
         else:
             logger.warning("⚠️ 未找到文件输入框")
     except Exception as exc:
@@ -1131,7 +1159,7 @@ async def _apply_user_filter(page: Page, filter_owner: str) -> bool:
     """
     # 等待页面加载完成
     logger.info("等待 Temu 全托管采集箱页面加载...")
-    await page.wait_for_timeout(1000)
+    await _stabilize(page, "temu_collect_load", min_ms=500, max_ms=1000, wait_for_network=True)
     
     # 等待表格行出现，确认页面已加载
     try:
@@ -1188,22 +1216,22 @@ async def _apply_user_filter(page: Page, filter_owner: str) -> bool:
                     else:
                         continue
             
-            await page.wait_for_timeout(300)
+            await _stabilize(page, "filter_focus_primary", min_ms=220, max_ms=340)
             
             # 在输入框中输入筛选内容
             input_element = form_item.locator("input.jx-select__input").first
             if await input_element.count() > 0:
                 await input_element.fill("")
                 await input_element.type(filter_owner, delay=80)
-                await page.wait_for_timeout(1000)
+                await _stabilize(page, "filter_type_primary", min_ms=850, max_ms=1100)
                 
                 # 点击匹配的下拉选项
                 option_clicked = await _click_dropdown_option(page, filter_owner)
                 
                 if option_clicked:
-                    await page.wait_for_timeout(300)
+                    await _stabilize(page, "filter_option_primary", min_ms=220, max_ms=340)
                     await _click_search_button(page)
-                    await page.wait_for_timeout(1500)
+                    await _stabilize(page, "filter_apply_primary", min_ms=1200, max_ms=1600, wait_for_network=True)
                     filter_applied = True
                     logger.success(f"✓ 二次编辑人员筛选成功: {filter_owner}")
                     break
@@ -1226,17 +1254,17 @@ async def _apply_user_filter(page: Page, filter_owner: str) -> bool:
                     if await input_element.count() > 0:
                         # 点击 input 的父级 wrapper
                         await input_element.click(force=True)
-                        await page.wait_for_timeout(300)
+                        await _stabilize(page, "filter_focus_strategy2", min_ms=220, max_ms=340)
                         await input_element.fill("")
                         await input_element.type(filter_owner, delay=80)
-                        await page.wait_for_timeout(1000)
+                        await _stabilize(page, "filter_type_strategy2", min_ms=850, max_ms=1100)
                         
                         option_clicked = await _click_dropdown_option(page, filter_owner)
                         
                         if option_clicked:
-                            await page.wait_for_timeout(300)
+                            await _stabilize(page, "filter_option_strategy2", min_ms=220, max_ms=340)
                             await _click_search_button(page)
-                            await page.wait_for_timeout(1500)
+                            await _stabilize(page, "filter_apply_strategy2", min_ms=1200, max_ms=1600, wait_for_network=True)
                             filter_applied = True
                             logger.success(f"✓ 二次编辑人员筛选成功(策略2): {filter_owner}")
                     

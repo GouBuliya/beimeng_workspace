@@ -23,6 +23,7 @@
 
 
 
+import fnmatch
 import importlib.metadata as importlib_metadata
 import json
 import os
@@ -79,6 +80,10 @@ class BrowserManager:
         self.context: BrowserContext | None = None
         self.page: Page | None = None
         self.timing_config: dict[str, Any] = self.config.get("timing", {})
+        self.resource_blocking_config: dict[str, Any] = self.config.get(
+            "resource_blocking", {}
+        )
+        self.tracing_config: dict[str, Any] = self.config.get("tracing", {})
         self.network_idle_trigger_ms = getattr(
             self,
             "network_idle_trigger_ms",
@@ -282,6 +287,7 @@ class BrowserManager:
             logger.debug("Storage state 文件不存在, 跳过预加载")
 
         self.context = await self.browser.new_context(**context_options)
+        await self._apply_resource_blocking()
 
         if stealth_config.get("enabled", True):
             await self._apply_stealth()
@@ -304,6 +310,7 @@ class BrowserManager:
         )
 
         self.page = await self.context.new_page()
+        await self._maybe_start_tracing()
         self._patch_page_wait(self.page)
 
         default_timeout = self.config.get("timeouts", {}).get("default", 30000)
@@ -419,6 +426,88 @@ class BrowserManager:
         page.wait_for_timeout = smart_wait_for_timeout  # type: ignore[assignment]
         page._bemg_smart_wait_patched = True  # type: ignore[attr-defined]
         page._bemg_original_wait_for_timeout = original_wait_for_timeout  # type: ignore[attr-defined]
+
+    async def _apply_resource_blocking(self) -> None:
+        """按配置阻断不必要的资源以加速执行."""
+
+        if getattr(self, "_resource_blocking_applied", False):
+            return
+
+        cfg = self.resource_blocking_config or {}
+        if not cfg.get("enabled"):
+            logger.debug("资源阻断未启用")
+            return
+
+        if not self.context:
+            logger.debug("浏览器上下文未初始化，跳过资源阻断")
+            return
+
+        blocked_types = {str(t).lower() for t in cfg.get("blocked_resource_types", [])}
+        blocked_url_globs = [str(pat) for pat in cfg.get("blocked_url_globs", [])]
+        allow_url_globs = [str(pat) for pat in cfg.get("allow_url_globs", [])]
+        log_blocked = bool(cfg.get("log_blocked", False))
+
+        if not blocked_types and not blocked_url_globs:
+            logger.debug("资源阻断未配置 block 列表，跳过")
+            return
+
+        def _match_any(url: str, patterns: list[str]) -> bool:
+            return any(fnmatch.fnmatch(url, pattern) for pattern in patterns)
+
+        async def handle_route(route) -> None:
+            request = route.request
+            url = request.url
+            resource_type = (request.resource_type or "").lower()
+
+            try:
+                if allow_url_globs and _match_any(url, allow_url_globs):
+                    await route.continue_()
+                    return
+
+                if resource_type in blocked_types or _match_any(url, blocked_url_globs):
+                    if log_blocked:
+                        logger.debug(f"资源已阻断 type={resource_type} url={url}")
+                    await route.abort()
+                    return
+
+                await route.continue_()
+            except Exception as exc:  # pragma: no cover - 运行时保护
+                logger.warning(f"处理资源阻断失败，放行当前请求: {exc}")
+                await route.continue_()
+
+        await self.context.route("**/*", handle_route)
+        setattr(self, "_resource_blocking_applied", True)
+        logger.info(
+            f"资源阻断已启用: types={','.join(sorted(blocked_types)) or '-'}, "
+            f"blocked={len(blocked_url_globs)}, allow={len(allow_url_globs)}",
+        )
+
+    async def _maybe_start_tracing(self) -> None:
+        """按配置启动 Playwright tracing."""
+
+        cfg = self.tracing_config or {}
+        if not cfg.get("enabled"):
+            return
+        if not self.context:
+            logger.debug("浏览器上下文未初始化，跳过 tracing")
+            return
+
+        screenshots = bool(cfg.get("screenshots", True))
+        snapshots = bool(cfg.get("snapshots", True))
+        sources = bool(cfg.get("sources", False))
+
+        try:
+            await self.context.tracing.start(
+                screenshots=screenshots,
+                snapshots=snapshots,
+                sources=sources,
+            )
+            logger.info(
+                f"已开启 Playwright tracing (screenshots={screenshots}, "
+                f"snapshots={snapshots}, sources={sources})"
+            )
+        except Exception as exc:  # pragma: no cover - 运行时保护
+            logger.warning(f"开启 tracing 失败，已跳过: {exc}")
 
     def get_timing_config(self) -> dict[str, Any]:
         """获取时序配置."""
@@ -641,6 +730,21 @@ class BrowserManager:
 
     async def close(self) -> None:
         """关闭浏览器."""
+        tracing_cfg = self.tracing_config or {}
+        if tracing_cfg.get("enabled") and self.context:
+            trace_path = tracing_cfg.get("path")
+            try:
+                if trace_path:
+                    path_obj = Path(trace_path)
+                    path_obj.parent.mkdir(parents=True, exist_ok=True)
+                    await self.context.tracing.stop(path=str(path_obj))
+                    logger.info(f"Tracing 已保存: {path_obj}")
+                else:
+                    await self.context.tracing.stop()
+                    logger.info("Tracing 已停止（未指定保存路径）")
+            except Exception as exc:  # pragma: no cover - 运行时保护
+                logger.warning(f"停止 tracing 失败: {exc}")
+
         if self.page:
             await self.page.close()
         if self.context:

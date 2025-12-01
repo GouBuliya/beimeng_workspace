@@ -143,8 +143,8 @@ class WorkflowTaskManager:
 
     def _run_workflow(self, options: WorkflowOptions) -> None:
         logger.info(
-            "Web Panel 启动 Temu 工作流 (%s)",
-            "单次模式" if options.single_run else "循环模式",
+            f"Web Panel 启动 Temu 工作流 "
+            f"({'单次模式' if options.single_run else '循环模式'})"
         )
         try:
             if options.single_run:
@@ -152,7 +152,7 @@ class WorkflowTaskManager:
             else:
                 self._run_continuous(options)
         except Exception as exc:  # pragma: no cover - 运行时错误
-            logger.exception("Temu 工作流运行失败: %s", exc)
+            logger.exception(f"Temu 工作流运行失败: {exc}")
             self._mark_failure(str(exc))
         finally:
             self._detach_log_sink()
@@ -185,9 +185,8 @@ class WorkflowTaskManager:
 
         if start_round_offset > 0:
             logger.info(
-                "循环模式: 起始轮次=%s，将跳过前 %s 轮对应的选品数据",
-                options.start_round,
-                start_round_offset,
+                f"循环模式: 起始轮次={options.start_round}，将跳过前 "
+                f"{start_round_offset} 轮对应的选品数据",
             )
 
         while True:
@@ -215,10 +214,8 @@ class WorkflowTaskManager:
             # 计算实际轮次 = 起始偏移 + 当前处理批次 + 1
             actual_round = start_round_offset + processed_batches + 1
             logger.info(
-                "循环模式: 开始处理批次 #%s (实际轮次=%s, 条目=%s)",
-                processed_batches + 1,
-                actual_round,
-                batch.size,
+                f"循环模式: 开始处理批次 #{processed_batches + 1} "
+                f"(实际轮次={actual_round}, 条目={batch.size})"
             )
             try:
                 result = self._execute_workflow(

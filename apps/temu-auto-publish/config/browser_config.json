@@ -22,6 +22,30 @@
     "toast_visible_ms": 100,
     "toast_hidden_ms": 200
   },
+  "resource_blocking": {
+    "enabled": false,
+    "blocked_resource_types": ["image", "font"],
+    "blocked_url_globs": [
+      "**/analytics/**",
+      "**/collect/**",
+      "**/umeng/**",
+      "**/hm.baidu.com/**",
+      "**/gtag/js**",
+      "**/googletagmanager/**"
+    ],
+    "allow_url_globs": [
+      "**/erp.91miaoshou.com/**",
+      "**/91miaoshou.com/**"
+    ],
+    "log_blocked": false
+  },
+  "tracing": {
+    "enabled": false,
+    "screenshots": true,
+    "snapshots": true,
+    "sources": false,
+    "path": "data/temp/trace/trace.zip"
+  },
   "timing": {
     "slow_mo_ms": 0,
     "wait_after_action_ms": 10,
@@ -93,7 +117,3 @@
     "directory": "data/temp/screenshots"
   }
 }
-
-
-
-

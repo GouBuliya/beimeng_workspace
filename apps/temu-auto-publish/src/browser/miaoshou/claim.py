@@ -29,6 +29,7 @@ from ...utils.page_load_decorator import (
     ensure_page_loaded,
     with_network_idle,
 )
+from ...utils.page_waiter import PageWaiter
 from .navigation import MiaoshouNavigationMixin
 from .navigation_codegen import fallback_apply_user_filter, fallback_switch_tab
 
@@ -202,6 +203,8 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
         if target_page <= 1:
             return True
 
+        waiter = PageWaiter(page)
+
         selectors = [
             'input.jx-input__inner[type="number"][aria-label="页"]',
             'input.jx-input__inner[type="number"][aria-label]',
@@ -218,7 +221,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                 await locator.fill(str(target_page))
                 with suppress(Exception):
                     await locator.press('Enter')
-                await page.wait_for_timeout(800)
+                await waiter.wait_for_dom_stable(timeout_ms=800)
                 with suppress(Exception):
                     await self._wait_for_rows(page)
                 logger.info('认领流程：已跳转到第 {} 页', target_page)
@@ -255,6 +258,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
         Returns:
             True when all target products were selected, otherwise False.
         """
+        waiter = PageWaiter(page)
         logger.info(f"Selecting up to {count} product rows (direct locate)")
 
         rows = page.locator(self._ROW_SELECTOR)
@@ -317,7 +321,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                     for rel_idx in page_relative_indexes[page_selected:]:
                         from ...utils.scroll_helper import scroll_to_product_position
                         await scroll_to_product_position(page, target_index=rel_idx)
-                        await page.wait_for_timeout(500)
+                        await waiter.wait_for_dom_stable(timeout_ms=500)
                         if await self._click_checkbox_by_js(page, 0):
                             selected += 1
                         else:
@@ -1076,10 +1080,8 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
             if result.get("success"):
                 if target == "checkbox":
                     logger.success(
-                        "✓ JS 勾选成功，索引=%s, 容器=%s, 匹配Y=%s",
-                        index,
-                        result.get("scrollerInfo"),
-                        result.get("matchedY"),
+                        f"✓ JS 勾选成功，索引={index}, 容器={result.get('scrollerInfo')}, "
+                        f"匹配Y={result.get('matchedY')}"
                     )
                 else:
                     logger.success(
@@ -1125,6 +1127,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
         success_count = 0
         fail_count = 0
         total_click_success = 0
+        waiter = PageWaiter(page)
 
         async def _wait_for_virtual_list_ready() -> bool:
             """等待虚拟滚动列表重新加载完成。"""
@@ -1146,7 +1149,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         return True
                 except Exception:
                     pass
-                await page.wait_for_timeout(500)
+                await waiter.wait_for_dom_stable(timeout_ms=500)
             return False
 
         for idx in indexes:
@@ -1168,7 +1171,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         f"索引 {idx} 第 {click_num + 1}/{repeat_per_product} 次认领成功, "
                         f"选项={result.get('optionText')}"
                     )
-                    await page.wait_for_timeout(800)
+                    await waiter.wait_for_dom_stable(timeout_ms=800)
                     # 认领后行可能移除，后续固定使用首行索引防止漂移
                     current_idx = 0
                 else:
@@ -1176,7 +1179,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         f"索引 {idx} 第 {click_num + 1}/{repeat_per_product} 次认领失败: "
                         f"{result.get('error')}"
                     )
-                    await page.wait_for_timeout(500)
+                    await waiter.wait_for_dom_stable(timeout_ms=500)
                     await _wait_for_virtual_list_ready()
                     # 失败后同样使用首行索引尝试
                     current_idx = 0
@@ -1230,7 +1233,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         return True
                 except Exception:
                     pass
-                await page.wait_for_timeout(300)
+                await waiter.wait_for_dom_stable(timeout_ms=300)
             return False
 
         for idx in indexes:
@@ -1249,9 +1252,11 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                 if result.get("success"):
                     selected = True
                     break
-                logger.warning("索引 %s 第 %s 次勾选失败: %s", idx, attempt + 1, result.get("error"))
+                logger.warning(
+                    f"索引 {idx} 第 {attempt + 1} 次勾选失败: {result.get('error')}"
+                )
                 current_idx = 0
-                await page.wait_for_timeout(300)
+                await waiter.wait_for_dom_stable(timeout_ms=300)
 
             if selected:
                 success_count += 1
@@ -1260,7 +1265,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
 
             await _wait_for_virtual_list_ready()
 
-        logger.info("复选框勾选完成: 成功=%s, 失败=%s", success_count, fail_count)
+        logger.info(f"复选框勾选完成: 成功={success_count}, 失败={fail_count}")
         return success_count, fail_count
 
     async def _find_row_by_translate_y(self, page: Page, index: int):
@@ -1697,11 +1702,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                 if await wrapper.is_visible():
                     candidate_scopes.append((f"wrapper[{wrapper_idx}]", wrapper))
             except Exception as exc:
-                logger.debug(
-                    "确认弹窗 wrapper[%s] 可见性检查失败: %s",
-                    wrapper_idx,
-                    exc,
-                )
+                logger.debug(f"确认弹窗 wrapper[{wrapper_idx}] 可见性检查失败: {exc}")
 
         for scope_name, scope in candidate_scopes:
             scope_candidates: list[tuple[str, Locator]] = []
@@ -1743,10 +1744,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                     count = await buttons.count()
                 except Exception as exc:
                     logger.debug(
-                        "确认弹窗候选按钮定位异常: scope=%s selector=%s error=%s",
-                        scope_name,
-                        selector,
-                        exc,
+                        f"确认弹窗候选按钮定位异常: scope={scope_name} selector={selector} error={exc}"
                     )
                     continue
 
@@ -1754,10 +1752,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                     continue
 
                 logger.debug(
-                    "确认弹窗候选按钮: scope=%s selector=%s count=%s",
-                    scope_name,
-                    selector,
-                    count,
+                    f"确认弹窗候选按钮: scope={scope_name} selector={selector} count={count}"
                 )
 
                 for idx in range(count):
@@ -1780,40 +1775,27 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                     try:
                         if not await button.is_enabled():
                             logger.debug(
-                                "确认弹窗按钮不可用: scope=%s selector=%s index=%s text=%s",
-                                scope_name,
-                                selector,
-                                idx,
-                                text,
+                                f"确认弹窗按钮不可用: scope={scope_name} "
+                                f"selector={selector} index={idx} text={text}"
                             )
                             continue
                     except Exception as exc:
                         logger.debug(
-                            "确认弹窗按钮可用性检查失败: scope=%s selector=%s index=%s error=%s",
-                            scope_name,
-                            selector,
-                            idx,
-                            exc,
+                            f"确认弹窗按钮可用性检查失败: scope={scope_name} "
+                            f"selector={selector} index={idx} error={exc}"
                         )
 
                     try:
                         await button.click(force=True)
                         logger.debug(
-                            "认领确认按钮通过 %s (scope=%s index=%s text=%s) 点击成功",
-                            selector,
-                            scope_name,
-                            idx,
-                            text,
+                            f"认领确认按钮通过 {selector} (scope={scope_name} "
+                            f"index={idx} text={text}) 点击成功"
                         )
                         return True
                     except Exception as exc:
                         logger.debug(
-                            "点击确认按钮失败: scope=%s selector=%s index=%s text=%s error=%s",
-                            scope_name,
-                            selector,
-                            idx,
-                            text,
-                            exc,
+                            f"点击确认按钮失败: scope={scope_name} selector={selector} "
+                            f"index={idx} text={text} error={exc}"
                         )
 
         try:
@@ -1882,8 +1864,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                                     if await spans_locator.count():
                                         temu_option = spans_locator.first
                                         logger.debug(
-                                            "通过 span.filter(has_text='%s') 获取到 Temu 下拉项",
-                                            dropdown_text,
+                                            f"通过 span.filter(has_text='{dropdown_text}') 获取到 Temu 下拉项"
                                         )
                                         break
                                 for frame in page.frames:
@@ -1892,9 +1873,8 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                                         if await frame_spans.count():
                                             temu_option = frame_spans.first
                                             logger.debug(
-                                                "通过 frame span.filter(has_text='%s') 获取到 Temu 下拉项 (frame=%s)",
-                                                dropdown_text,
-                                                frame.url,
+                                                f"通过 frame span.filter(has_text='{dropdown_text}') 获取到 Temu 下拉项 "
+                                                f"(frame={frame.url})"
                                             )
                                             break
                                 if temu_option is not None:
@@ -1936,9 +1916,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
         if success_count > 0:
             if success_count < repeat:
                 logger.warning(
-                    "认领流程已成功执行 %s/%s 次，仍有部分尝试失败",
-                    success_count,
-                    repeat,
+                    f"认领流程已成功执行 {success_count}/{repeat} 次，仍有部分尝试失败"
                 )
             else:
                 logger.success("简化版认领流程执行完成")
@@ -2000,9 +1978,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                     try:
                         if await candidate.is_visible():
                             logger.debug(
-                                "认领进度弹窗 wrapper 可见: selector=%s index=%s",
-                                selector,
-                                idx,
+                                f"认领进度弹窗 wrapper 可见: selector={selector} index={idx}"
                             )
                             return candidate
                     except Exception:
@@ -2090,10 +2066,8 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
 
                 if close_button is None:
                     logger.debug(
-                        "认领进度弹窗无法定位'关闭'按钮 progress_ready=%s attempt=%d/%d",
-                        progress_ready,
-                        attempt + 1,
-                        max_retries,
+                        f"认领进度弹窗无法定位'关闭'按钮 "
+                        f"progress_ready={progress_ready} attempt={attempt + 1}/{max_retries}"
                     )
                     if attempt < max_retries - 1:
                         continue
@@ -2222,9 +2196,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                     except Exception:
                         acc_name = None
                     logger.debug(
-                        "认领进度弹窗关闭按钮通过 role 定位成功: name=%s aria-label=%s",
-                        role_name,
-                        acc_name,
+                        f"认领进度弹窗关闭按钮通过 role 定位成功: name={role_name} aria-label={acc_name}"
                     )
                     return button
 
@@ -2625,10 +2597,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         await target.wait_for(state="attached", timeout=150)
                         await target.wait_for(state="visible", timeout=150)
                         logger.debug(
-                            "找到下拉菜单项: selector=%s, index=%s, text=%s",
-                            selector,
-                            idx,
-                            await target.inner_text(),
+                            f"找到下拉菜单项: selector={selector}, index={idx}, text={await target.inner_text()}"
                         )
                         return target
                     except Exception:
@@ -2668,8 +2637,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                 candidate = span_locator.filter(has_text=pattern)
                 if await candidate.count():
                     logger.debug(
-                        "通过 get_by_label('认领到') 定位到 Temu 选项: pattern=%s",
-                        pattern.pattern,
+                        f"通过 get_by_label('认领到') 定位到 Temu 选项: pattern={pattern.pattern}"
                     )
                     return candidate.first
         except Exception as exc:

@@ -27,6 +27,7 @@ from .browser_manager import BrowserManager
 from .cookie_manager import CookieManager
 from ..utils.selector_race import TIMEOUTS
 from ..utils.page_load_decorator import wait_dom_loaded
+from ..utils.page_waiter import PageWaiter
 
 
 class LoginController:
@@ -213,6 +214,9 @@ class LoginController:
                 await self.browser_manager.start(headless=headless)
 
             page = self.browser_manager.page
+            if not page:
+                raise RuntimeError("浏览器页面未初始化，无法执行登录")
+            waiter = PageWaiter(page)
 
             # 导航到登录页
             login_config = self.selectors.get("login", {})
@@ -226,20 +230,54 @@ class LoginController:
             password_selector = login_config.get("password_input", "input[type='password']")
             login_btn_selector = login_config.get("login_button", "button:has-text('登录')")
 
-            # 等待登录表单加载
-            await page.wait_for_selector(username_selector, timeout=10000)
-
-            # 输入用户名 (激进优化: 移除固定等待，输入即时生效)
+            # 等待登录表单并安全填充
             logger.debug("输入用户名...")
-            await page.locator(username_selector).fill(username)
+            if not await waiter.safe_fill(
+                page.locator(username_selector),
+                username,
+                timeout_ms=TIMEOUTS.NORMAL,
+                name="login.username",
+            ):
+                logger.error("用户名输入失败")
+                return False
 
-            # 输入密码 (激进优化: 移除固定等待)
             logger.debug("输入密码...")
-            await page.locator(password_selector).fill(password)
+            if not await waiter.safe_fill(
+                page.locator(password_selector),
+                password,
+                timeout_ms=TIMEOUTS.NORMAL,
+                name="login.password",
+            ):
+                logger.error("密码输入失败")
+                return False
 
             # 点击登录按钮
             logger.debug("点击登录按钮...")
-            await page.locator(login_btn_selector).click()
+            login_btn = page.locator(login_btn_selector).first
+            try:
+                await login_btn.wait_for(state="visible", timeout=TIMEOUTS.SLOW)
+            except Exception as exc:
+                logger.warning(f"登录按钮不可见: {exc}")
+            login_clicked = await waiter.safe_click(
+                login_btn,
+                timeout_ms=TIMEOUTS.SLOW,
+                name="login.submit",
+            )
+            if not login_clicked:
+                logger.debug("登录按钮 safe_click 失败，尝试直接 click + Enter 兜底")
+                try:
+                    await login_btn.click(timeout=TIMEOUTS.SLOW)
+                    login_clicked = True
+                except Exception as exc:
+                    logger.debug(f"直接点击失败，尝试回车提交: {exc}")
+                    try:
+                        await page.keyboard.press("Enter")
+                        login_clicked = True
+                    except Exception as exc2:
+                        logger.debug(f"回车提交失败: {exc2}")
+            if not login_clicked:
+                logger.error("登录按钮点击失败")
+                return False
 
             # 等待登录结果（跳转到首页或显示错误）
             logger.info("等待登录结果...")
@@ -339,6 +377,7 @@ class LoginController:
         if not page:
             return
 
+        waiter = PageWaiter(page)
         scopes = self._collect_page_scopes(page)
         quick_close_selectors = [
             "body > div:nth-child(27) > div > div > header > button",
@@ -428,7 +467,7 @@ class LoginController:
                     timeout_ms=TIMEOUTS.FAST,
                     context="浮层/广告",
                 ):
-                    await page.wait_for_timeout(200)
+                    await waiter.wait_for_dom_stable(timeout_ms=TIMEOUTS.FAST)
                     continue
                 return
 
@@ -670,10 +709,8 @@ class LoginController:
                         clicked = True
                         clicked_count += 1
                         logger.info(
-                            "✓ 点击'我已知晓'按钮成功 (第%s次, selector: %s, scope: %s)",
-                            attempt + 1,
-                            selector,
-                            scope_name,
+                            f"✓ 点击'我已知晓'按钮成功 (第{attempt + 1}次, "
+                            f"selector: {selector}, scope: {scope_name})"
                         )
                         break
 
@@ -692,9 +729,8 @@ class LoginController:
                                 clicked = True
                                 clicked_count += 1
                                 logger.info(
-                                    "✓ 点击'我已知晓'按钮成功 (第%s次, role定位, scope: %s)",
-                                    attempt + 1,
-                                    scope_name,
+                                    f"✓ 点击'我已知晓'按钮成功 (第{attempt + 1}次, "
+                                    f"role定位, scope: {scope_name})"
                                 )
                                 break
                         except Exception as e:
@@ -712,9 +748,8 @@ class LoginController:
                                 clicked = True
                                 clicked_count += 1
                                 logger.info(
-                                    "✓ 点击'我已知晓'按钮成功 (第%s次, text定位, scope: %s)",
-                                    attempt + 1,
-                                    scope_name,
+                                    f"✓ 点击'我已知晓'按钮成功 (第{attempt + 1}次, "
+                                    f"text定位, scope: {scope_name})"
                                 )
                                 break
                         except Exception as e:

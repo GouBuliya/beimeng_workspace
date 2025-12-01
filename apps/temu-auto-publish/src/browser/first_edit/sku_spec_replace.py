@@ -38,7 +38,11 @@ class SpecLocatorResult(NamedTuple):
 SPEC_OPTION_INPUT_CANDIDATES: list[tuple[str, str]] = [
     ("placeholder-strict", "input[placeholder='请输入选项名称']"),
     ("placeholder-fuzzy", "input[placeholder*='选项'][type='text']"),
+    ("placeholder-spec-value", "input[placeholder*='规格值'], input[placeholder*='属性值']"),
     ("sale-attribute-inner", ".sale-attribute-list input.jx-input__inner"),
+    ("data-test", "input[data-testid*='spec'], input[data-test*='spec']"),
+    ("role-textbox", "[role='textbox'][aria-label*='选项']"),
+    ("generic-text", ".sale-attribute-list input[type='text']:not([placeholder*='规格名称'])"),
     (
         "aria-fallback",
         (
@@ -50,8 +54,10 @@ SPEC_OPTION_INPUT_CANDIDATES: list[tuple[str, str]] = [
 
 ADD_OPTION_BUTTON_CANDIDATES: list[tuple[str, str]] = [
     ("text-add", "button:has-text('添加选项')"),
+    ("text-add-spec", "button:has-text('添加规格'), button:has-text('新增选项')"),
     ("sale-attribute-button", ".sale-attribute-list button.jx-button"),
     ("button-generic", ".sale-attribute-list button[type='button']"),
+    ("aria-add", "[aria-label*='添加规格'], [aria-label*='添加选项']"),
 ]
 
 DELETE_ICON_RELATIVE_CANDIDATES: list[str] = [
@@ -62,6 +68,9 @@ DELETE_ICON_RELATIVE_CANDIDATES: list[str] = [
     ),
     "css=.. >> .jx-input-group__append .jx-icon",
     "css=.. >> .. >> .jx-input-group__append .jx-icon",
+    "css=.. >> button:has-text('删除')",
+    "css=.. >> .. >> button:has-text('删除')",
+    "css=.. >> button:has-text('移除')",
 ]
 
 SPEC_COLUMN_SELECTOR = ".sale-attribute-form-item"
@@ -207,8 +216,11 @@ async def _locate_first_spec_input(
         sale_attr_scope.locator(".jx-input-group__prepend input"),
         page.get_by_role("textbox", name="规格单位"),
         page.get_by_role("textbox", name="规格名称"),
+        page.get_by_role("textbox", name="规格名"),
         page.locator("input[placeholder*='规格单位']"),
         page.locator("input[aria-label*='规格单位']"),
+        page.locator("input[aria-label*='规格名称']"),
+        page.locator("[data-testid*='spec-name'], [data-test*='spec-name']"),
     ]
     await page.wait_for_load_state("domcontentloaded")
 

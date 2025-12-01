@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import functools
 from typing import Awaitable, Callable, Iterable
 
@@ -26,6 +27,7 @@ from ...core.enhanced_retry import (
     create_step_retry_policy,
     smart_retry as enhanced_smart_retry,
 )
+from ...utils.page_waiter import PageWaiter
 
 
 def extract_page(*args, **kwargs) -> Page | None:
@@ -47,11 +49,13 @@ def _default_pre_retry_action(page: Page | None) -> Callable[[], Awaitable[None]
         if page is None:
             return
         try:
-            await page.wait_for_timeout(80)
-            await page.wait_for_load_state("domcontentloaded", timeout=1000)
+            waiter = PageWaiter(page)
+            await waiter.wait_for_dom_stable(timeout_ms=400)
+            await waiter.wait_for_network_idle(timeout_ms=800)
         except Exception:
             # 恢复动作不应中断主流程
             logger.debug("重试前恢复动作忽略异常", exc_info=True)
+            await asyncio.sleep(0.08)
 
     return _action
 

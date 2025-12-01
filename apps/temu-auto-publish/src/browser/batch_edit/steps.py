@@ -3,8 +3,8 @@
 @OUTLINE:
   - class BatchEditStepsMixin: 提供 step_01 ~ step_18 方法
 @DEPENDENCIES:
-  - 内部: ..utils.batch_edit_helpers.retry_on_failure
-  - 外部: loguru.logger, random, pathlib.Path
+  - 内部: ..utils.batch_edit_helpers.retry_on_failure, ..utils.page_waiter.WaitStrategy
+  - 外部: loguru.logger, playwright.async_api.expect
 """
 
 from __future__ import annotations
@@ -15,9 +15,11 @@ from pathlib import Path
 from typing import Optional
 
 from loguru import logger
+from playwright.async_api import expect
 
 from ...utils.batch_edit_helpers import retry_on_failure
 from ...utils.selector_race import TIMEOUTS
+from ...utils.page_waiter import PageWaiter, WaitStrategy
 from ...utils.page_load_decorator import (
     wait_dom_loaded,
     wait_network_idle,
@@ -26,6 +28,32 @@ from ...utils.page_load_decorator import (
 
 class BatchEditStepsMixin:
     """提供批量编辑 18 个步骤的混入类."""
+
+    def _get_wait_strategy(self) -> WaitStrategy:
+        """获取等待策略，默认退回快速策略."""
+
+        strategy = getattr(self, "wait_strategy", None)
+        if isinstance(strategy, WaitStrategy):
+            return strategy
+        return WaitStrategy(
+            wait_after_action_ms=150,
+            wait_for_stability_timeout_ms=TIMEOUTS.NORMAL,
+            wait_for_network_idle_timeout_ms=TIMEOUTS.SLOW,
+            retry_initial_delay_ms=80,
+            retry_backoff_factor=1.5,
+            retry_max_delay_ms=TIMEOUTS.NORMAL,
+            validation_timeout_ms=TIMEOUTS.NORMAL,
+            dom_stable_checks=2,
+            dom_stable_interval_ms=80,
+        )
+
+    def _build_waiter(self) -> PageWaiter:
+        """基于当前 page 构造等待器."""
+
+        page = getattr(self, "page", None)
+        if page is None:
+            raise RuntimeError("BatchEditStepsMixin 缺少 page 实例")
+        return PageWaiter(page, self._get_wait_strategy())
 
     async def step_01_title(self) -> bool:
         """步骤7.1：标题（不改动）."""
@@ -43,45 +71,32 @@ class BatchEditStepsMixin:
         try:
             logger.info("  填写英语标题（输入空格）...")
 
-            # 等待页面 DOM 加载
-            await wait_dom_loaded(self.page, TIMEOUTS.SLOW, context=" [english title]")
+            waiter = self._build_waiter()
+            await waiter.wait_for_dom_stable(timeout_ms=TIMEOUTS.SLOW)
 
-            # 精准定位：排除disabled/readonly，优先匹配placeholder包含"英"的输入框
-            precise_selectors = [
-                "input[placeholder*='英']:not([disabled]):not([readonly])",
-                "textarea[placeholder*='英']:not([disabled]):not([readonly])",
-                "input[placeholder*='English']:not([disabled]):not([readonly])",
-            ]
+            input_candidates = self.page.locator(
+                "input[placeholder*='英']:not([disabled]):not([readonly]), "
+                "textarea[placeholder*='英']:not([disabled]):not([readonly]), "
+                "input[placeholder*='English']:not([disabled]):not([readonly])"
+            )
 
-            filled = False
-            for selector in precise_selectors:
-                try:
-                    inputs = await self.page.locator(selector).all()
-                    logger.debug(f"  精准选择器找到 {len(inputs)} 个候选")
+            target = None
+            for candidate in await input_candidates.all():
+                if await candidate.is_visible():
+                    target = candidate
+                    break
 
-                    for input_elem in inputs:
-                        if not await input_elem.is_visible():
-                            continue
-
-                        try:
-                            # 快速点击测试（500ms超时）
-                            await input_elem.click(timeout=500)
-                            await input_elem.clear()
-                            await input_elem.fill(" ")
-                            logger.success("  ✓ 已输入空格（精准定位）")
-                            filled = True
-                            break
-                        except:  # noqa: E722
-                            continue
-
-                    if filled:
-                        break
-                except Exception:  # noqa: BLE001
-                    continue
-
-            if not filled:
+            if not target:
                 logger.warning("  ⚠️ 未找到英语标题输入框")
+                return False
 
+            await target.wait_for(state="visible", timeout=TIMEOUTS.SLOW)
+            await expect(target).to_be_enabled(timeout=TIMEOUTS.NORMAL)
+            await target.click(timeout=TIMEOUTS.NORMAL)
+            await target.fill(" ")
+            await waiter.wait_for_dom_stable(timeout_ms=TIMEOUTS.NORMAL)
+
+            logger.success("  ✓ 已输入空格（精准定位）")
             return await self.click_preview_and_save("英语标题")
         except Exception as exc:  # noqa: BLE001
             logger.error(f"  ✗ 操作失败: {exc}")
@@ -104,7 +119,8 @@ class BatchEditStepsMixin:
 
         try:
             logger.info("  检查主货号是否需要填写...")
-            await wait_dom_loaded(self.page, TIMEOUTS.SLOW, context=" [main sku]")
+            waiter = self._build_waiter()
+            await waiter.wait_for_dom_stable(timeout_ms=TIMEOUTS.SLOW)
 
             # 精准定位：排除disabled/readonly
             precise_selectors = [
@@ -118,14 +134,19 @@ class BatchEditStepsMixin:
                     inputs = await self.page.locator(selector).all()
 
                     for input_elem in inputs:
-                        if await input_elem.is_visible():
-                            current_value = await input_elem.input_value()
-                            if current_value:
-                                logger.info(f"  ℹ️ 主货号已有值：{current_value}，保持不变")
-                            else:
-                                logger.info("  ℹ️ 主货号为空，保持默认")
-                            input_found = True
-                            break
+                        if not await input_elem.is_visible():
+                            continue
+
+                        await input_elem.wait_for(state="visible", timeout=TIMEOUTS.NORMAL)
+                        await expect(input_elem).to_be_enabled(timeout=TIMEOUTS.NORMAL)
+
+                        current_value = await input_elem.input_value()
+                        if current_value:
+                            logger.info(f"  ℹ️ 主货号已有值：{current_value}，保持不变")
+                        else:
+                            logger.info("  ℹ️ 主货号为空，保持默认")
+                        input_found = True
+                        break
 
                     if input_found:
                         break
