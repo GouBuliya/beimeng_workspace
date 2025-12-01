@@ -187,8 +187,8 @@ class DingTalkChannel(NotificationChannel):
             Markdown文本
         """
         # 根据级别选择emoji
-        emoji_map = {"info": "ℹ️", "success": "✅", "warning": "⚠️", "error": "❌"}
-        emoji = emoji_map.get(message.level, "ℹ️")
+        emoji_map = {"info": "i️", "success": "✅", "warning": "⚠️", "error": "❌"}
+        emoji = emoji_map.get(message.level, "i️")
 
         # 构建Markdown
         md_lines = [

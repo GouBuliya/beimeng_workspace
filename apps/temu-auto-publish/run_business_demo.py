@@ -153,7 +153,7 @@ async def run_business_flow():
         console.print(f"  • 供货价: ¥{price_result.supply_price}")
         console.print(f"  • 重量: {test_data['weight']}G")
         console.print(
-            f"  • 尺寸: {test_data['dimensions'][0]}×{test_data['dimensions'][1]}×{test_data['dimensions'][2]}cm"
+            f"  • 尺寸: {test_data['dimensions'][0]}x{test_data['dimensions'][1]}x{test_data['dimensions'][2]}cm"
         )
 
         console.print("\n[dim]说明: 首次编辑功能包括填写标题,价格,库存,重量,尺寸等信息[/dim]")
@@ -174,7 +174,7 @@ async def run_business_flow():
             "07. 填写商品属性(手动)",
             "08. 填写商品规格(手动)",
             "09. 填写重量",
-            "10. 填写尺寸(长×宽×高)",
+            "10. 填写尺寸(长x宽x高)",
             "11. 填写包装尺寸",
             "12. 上传包装图片(手动)",
             "13. 上传尺寸标注图(手动)",
@@ -215,7 +215,7 @@ async def run_business_flow():
                 "[yellow]待完善的功能:[/yellow]\n"
                 "• Claude AI标题生成\n"
                 "• 图片验证功能\n"
-                "• 认领机制(5条×4次)\n"
+                "• 认领机制(5条x4次)\n"
                 "• 店铺选择和供货价设置\n"
                 "• 批量发布功能",
                 border_style="green",

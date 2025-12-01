@@ -7,8 +7,8 @@
   - def calculate_batch(): 批量计算价格
 @GOTCHAS:
   - 价格规则来自SOP手册,不要随意修改倍率
-  - 建议售价 = 成本 × 10(用于步骤7.14)
-  - 供货价 = 成本 × 7.5(用于步骤9,实际是:真实供货价×3)
+  - 建议售价 = 成本 x 10(用于步骤7.14)
+  - 供货价 = 成本 x 7.5(用于步骤9,实际是:真实供货价x3)
 @DEPENDENCIES:
   - 外部: pydantic
 @RELATED: processor.py
@@ -23,9 +23,9 @@ class PriceResult(BaseModel):
 
     Attributes:
         cost_price: 成本价
-        suggested_price: 建议售价(成本 × 10,用于SOP步骤7.14)
-        supply_price: 妙手供货价(成本 × 7.5,用于SOP步骤9)
-        real_supply_price: 真实供货价(成本 × 2.5,中间值)
+        suggested_price: 建议售价(成本 x 10,用于SOP步骤7.14)
+        supply_price: 妙手供货价(成本 x 7.5,用于SOP步骤9)
+        real_supply_price: 真实供货价(成本 x 2.5,中间值)
         suggested_multiplier: 建议售价倍率(10.0)
         supply_multiplier: 供货价倍率(7.5)
 
@@ -56,9 +56,9 @@ class PriceResult(BaseModel):
         """计算价格(基于SOP v2.0规则).
 
         SOP规则:
-        - 建议售价 = 成本 × 10(步骤7.14)
-        - 真实供货价 = 成本 × 2.5(最低倍率)
-        - 妙手供货价 = 真实供货价 × 3 = 成本 × 7.5(步骤9)
+        - 建议售价 = 成本 x 10(步骤7.14)
+        - 真实供货价 = 成本 x 2.5(最低倍率)
+        - 妙手供货价 = 真实供货价 x 3 = 成本 x 7.5(步骤9)
 
         Args:
             cost_price: 成本价
@@ -79,9 +79,9 @@ class PriceResult(BaseModel):
         suggested_price = round(cost_price * suggested_multiplier, 2)
 
         # SOP步骤9:供货价
-        # 真实供货价 = 成本 × 2.5
+        # 真实供货价 = 成本 x 2.5
         real_supply_price = round(cost_price * 2.5, 2)
-        # 妙手供货价 = 真实 × 3 = 成本 × 7.5
+        # 妙手供货价 = 真实 x 3 = 成本 x 7.5
         supply_price = round(cost_price * supply_multiplier, 2)
 
         return cls(
@@ -176,7 +176,7 @@ class PriceCalculator:
             "成本价": result.cost_price,
             "建议售价(SOP步骤7.14)": result.suggested_price,
             "建议售价倍率": result.suggested_multiplier,
-            "真实供货价(×2.5)": result.real_supply_price,
+            "真实供货价(x2.5)": result.real_supply_price,
             "妙手供货价(SOP步骤9)": result.supply_price,
             "供货价倍率": result.supply_multiplier,
         }
@@ -188,7 +188,7 @@ class PriceCalculator:
             cost: 成本价
 
         Returns:
-            建议售价(成本 × 10)
+            建议售价(成本 x 10)
 
         Examples:
             >>> calc = PriceCalculator()
@@ -201,14 +201,14 @@ class PriceCalculator:
         """计算妙手供货价(SOP步骤9).
 
         公式:
-        - 真实供货价 = 成本 × 2.5(最低倍率)
-        - 妙手供货价 = 真实供货价 × 3 = 成本 × 7.5
+        - 真实供货价 = 成本 x 2.5(最低倍率)
+        - 妙手供货价 = 真实供货价 x 3 = 成本 x 7.5
 
         Args:
             cost: 成本价
 
         Returns:
-            妙手供货价(成本 × 7.5)
+            妙手供货价(成本 x 7.5)
 
         Examples:
             >>> calc = PriceCalculator()
@@ -221,13 +221,13 @@ class PriceCalculator:
         """计算发布时的供货价(SOP步骤9).
 
         这是步骤9"设置供货价"使用的价格.
-        公式:真实供货价 × 3 = 成本 × 7.5
+        公式:真实供货价 x 3 = 成本 x 7.5
 
         Args:
             cost: 成本价
 
         Returns:
-            供货价(成本 × 7.5)
+            供货价(成本 x 7.5)
 
         Examples:
             >>> calc = PriceCalculator()
@@ -239,13 +239,13 @@ class PriceCalculator:
     def calculate_real_supply_price(self, cost: float) -> float:
         """计算真实供货价(中间价格).
 
-        公式:成本 × 2.5(最低倍率)
+        公式:成本 x 2.5(最低倍率)
 
         Args:
             cost: 成本价
 
         Returns:
-            真实供货价(成本 × 2.5)
+            真实供货价(成本 x 2.5)
 
         Examples:
             >>> calc = PriceCalculator()
@@ -280,8 +280,8 @@ if __name__ == "__main__":
     for r in results:
         print(
             f"成本: ¥{r.cost_price:>6.2f} → "
-            f"建议售价: ¥{r.suggested_price:>7.2f} (×{r.suggested_multiplier}) → "
-            f"供货价: ¥{r.supply_price:>7.2f} (×{r.supply_multiplier})"
+            f"建议售价: ¥{r.suggested_price:>7.2f} (x{r.suggested_multiplier}) → "
+            f"供货价: ¥{r.supply_price:>7.2f} (x{r.supply_multiplier})"
         )
 
     print("\n" + "=" * 60)

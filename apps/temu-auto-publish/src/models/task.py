@@ -59,8 +59,8 @@ class TaskProduct(BaseModel):
         original_name: 原始商品名称
         ai_title: AI 生成的标题
         cost_price: 成本价
-        suggested_price: 建议售价(成本价 × 7.5)
-        supply_price: 供货价(成本价 × 10)
+        suggested_price: 建议售价(成本价 x 7.5)
+        supply_price: 供货价(成本价 x 10)
         category: 类目路径
         search_count: 需要采集的同款数量
         status: 产品状态

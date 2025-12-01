@@ -335,7 +335,7 @@ class ProductionValidator:
     async def run_smoke_test(self) -> bool:
         """运行冒烟测试(可选)."""
         console.print("\n[bold cyan]8. 运行冒烟测试[/bold cyan]")
-        console.print("  [yellow]ℹ[/yellow] 冒烟测试已跳过(需要手动执行)")
+        console.print("  [yellow]i[/yellow] 冒烟测试已跳过(需要手动执行)")
         console.print("  运行命令: python scripts/run_production.py --dry-run <input_file>")
         return True
 

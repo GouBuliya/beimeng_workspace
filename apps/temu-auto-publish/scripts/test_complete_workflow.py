@@ -16,8 +16,8 @@ sys.path.insert(0, str(project_root))
 
 load_dotenv(project_root / ".env")
 
-from src.browser.login_controller import LoginController  # noqa: E402
-from src.workflows.complete_publish_workflow import CompletePublishWorkflow  # noqa: E402
+from src.browser.login_controller import LoginController
+from src.workflows.complete_publish_workflow import CompletePublishWorkflow
 
 
 async def test_complete_workflow():

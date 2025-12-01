@@ -9,7 +9,7 @@ APP_ROOT = Path(__file__).resolve().parents[1] / "apps" / "temu-auto-publish"
 if str(APP_ROOT) not in sys.path:
     sys.path.insert(0, str(APP_ROOT))
 
-from web_panel import env_settings  # noqa: E402
+from web_panel import env_settings
 
 
 def test_resolve_env_file_with_override(tmp_path, monkeypatch):

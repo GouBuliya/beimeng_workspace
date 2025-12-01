@@ -17,7 +17,7 @@ def test_imports():
     print("测试导入...")
 
     try:
-        import pandas as pd
+        import pandas as pd  # noqa: F401
 
         print("✓ pandas")
     except ImportError as e:
@@ -25,7 +25,7 @@ def test_imports():
         return False
 
     try:
-        import openpyxl
+        import openpyxl  # noqa: F401
 
         print("✓ openpyxl")
     except ImportError as e:
@@ -33,7 +33,7 @@ def test_imports():
         return False
 
     try:
-        from pydantic import BaseModel
+        from pydantic import BaseModel  # noqa: F401
 
         print("✓ pydantic")
     except ImportError as e:
@@ -41,7 +41,7 @@ def test_imports():
         return False
 
     try:
-        from loguru import logger
+        from loguru import logger  # noqa: F401
 
         print("✓ loguru")
     except ImportError as e:
@@ -49,7 +49,7 @@ def test_imports():
         return False
 
     try:
-        import typer
+        import typer  # noqa: F401
 
         print("✓ typer")
     except ImportError as e:
@@ -57,7 +57,7 @@ def test_imports():
         return False
 
     try:
-        from rich.console import Console
+        from rich.console import Console  # noqa: F401
 
         print("✓ rich")
     except ImportError as e:
@@ -72,7 +72,7 @@ def test_modules():
     print("\n测试项目模块...")
 
     try:
-        from config.settings import settings
+        from config.settings import settings  # noqa: F401
 
         print("✓ config.settings")
     except ImportError as e:
@@ -80,7 +80,7 @@ def test_modules():
         return False
 
     try:
-        from src.models.task import ProductInput, TaskData
+        from src.models.task import ProductInput, TaskData  # noqa: F401
 
         print("✓ src.models.task")
     except ImportError as e:
@@ -88,7 +88,7 @@ def test_modules():
         return False
 
     try:
-        from src.data_processor.excel_reader import ExcelReader
+        from src.data_processor.excel_reader import ExcelReader  # noqa: F401
 
         print("✓ src.data_processor.excel_reader")
     except ImportError as e:
@@ -96,7 +96,7 @@ def test_modules():
         return False
 
     try:
-        from src.data_processor.price_calculator import PriceCalculator
+        from src.data_processor.price_calculator import PriceCalculator  # noqa: F401
 
         print("✓ src.data_processor.price_calculator")
     except ImportError as e:
@@ -104,7 +104,7 @@ def test_modules():
         return False
 
     try:
-        from src.browser.cookie_manager import CookieManager
+        from src.browser.cookie_manager import CookieManager  # noqa: F401
 
         print("✓ src.browser.cookie_manager")
     except ImportError as e:
@@ -112,7 +112,7 @@ def test_modules():
         return False
 
     try:
-        from src.browser.browser_manager import BrowserManager
+        from src.browser.browser_manager import BrowserManager  # noqa: F401
 
         print("✓ src.browser.browser_manager")
     except ImportError as e:

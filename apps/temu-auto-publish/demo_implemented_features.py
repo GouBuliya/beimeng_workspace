@@ -126,9 +126,9 @@ async def demo_data_processing():
 
     table = Table(show_header=True, header_style="bold magenta")
     table.add_column("成本价", style="cyan", justify="right")
-    table.add_column("建议售价 (×10)", style="green", justify="right")
-    table.add_column("供货价 (×7.5)", style="yellow", justify="right")
-    table.add_column("真实供货价 (×2.5)", style="blue", justify="right")
+    table.add_column("建议售价 (x10)", style="green", justify="right")
+    table.add_column("供货价 (x7.5)", style="yellow", justify="right")
+    table.add_column("真实供货价 (x2.5)", style="blue", justify="right")
 
     results = price_calc.calculate_batch(test_prices)
     for result in results:
@@ -158,8 +158,8 @@ async def demo_data_processing():
 
     table.add_row("重量", f"{weight}G", "5000-9999G")
     table.add_row("重量(kg)", f"{weight_kg}kg", "自动转换")
-    table.add_row("商品尺寸", f"{length}×{width}×{height}cm", "长>宽>高, 50-99cm")
-    table.add_row("包装尺寸", f"{pkg_l}×{pkg_w}×{pkg_h}cm", "每边+1cm")
+    table.add_row("商品尺寸", f"{length}x{width}x{height}cm", "长>宽>高, 50-99cm")
+    table.add_row("包装尺寸", f"{pkg_l}x{pkg_w}x{pkg_h}cm", "每边+1cm")
 
     console.print()
     console.print(table)
@@ -216,7 +216,7 @@ async def demo_batch_edit_preview(page):
         ("07", "填写商品属性", "⚠️  需手动"),
         ("08", "填写商品规格", "⚠️  需手动"),
         ("09", "填写重量", "✅ 已实现"),
-        ("10", "填写尺寸(长×宽×高)", "✅ 已实现"),
+        ("10", "填写尺寸(长x宽x高)", "✅ 已实现"),
         ("11", "填写包装尺寸", "✅ 已实现"),
         ("12", "上传包装图片", "⚠️  需手动"),
         ("13", "上传尺寸标注图", "⚠️  需手动"),

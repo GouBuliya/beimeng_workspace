@@ -4,7 +4,7 @@
   - class CompletePublishWorkflow: 完整发布工作流主类
   - async def execute_full_workflow(): 执行完整流程(从公用采集箱到发布)
   - async def stage1_first_edit(): 阶段1-公用采集箱首次编辑
-  - async def stage2_claim_products(): 阶段2-认领产品(5×4=20)
+  - async def stage2_claim_products(): 阶段2-认领产品(5x4=20)
   - async def stage3_batch_edit(): 阶段3-Temu全托管采集箱批量编辑18步
   - async def stage4_publish(): 阶段4-选择店铺,设置供货价,批量发布
 @GOTCHAS:
@@ -52,7 +52,7 @@ class CompletePublishWorkflow:
     # 流程常量
     FIRST_EDIT_COUNT = 5  # 首次编辑产品数量
     CLAIM_TIMES = 4  # 每个产品认领次数
-    BATCH_EDIT_COUNT = 20  # 批量编辑产品数量(5×4)
+    BATCH_EDIT_COUNT = 20  # 批量编辑产品数量(5x4)
 
     def __init__(self, page: Page):
         """初始化工作流控制器.
@@ -108,7 +108,7 @@ class CompletePublishWorkflow:
 
             logger.success(f"✓ 阶段1完成:已编辑{stage1_result['edited_count']}个产品\n")
 
-            # 阶段2:认领产品(5×4=20)
+            # 阶段2:认领产品(5x4=20)
             logger.info("🔄 阶段2/4:认领产品")
             logger.info("-" * 70)
 
@@ -280,7 +280,7 @@ class CompletePublishWorkflow:
         return result
 
     async def stage2_claim_products(self, edited_products: list[dict[str, Any]]) -> dict[str, Any]:
-        """阶段2:认领产品(5×4=20).
+        """阶段2:认领产品(5x4=20).
 
         对每个产品认领4次,生成20个产品副本.
 
@@ -399,7 +399,7 @@ class CompletePublishWorkflow:
                     await self.page.wait_for_timeout(1500)
 
                     # 选择第一个店铺(实际使用时需要指定具体店铺)
-                    logger.info("  ℹ️ 实际使用时需要选择具体店铺")
+                    logger.info("  i️ 实际使用时需要选择具体店铺")
 
                     # 确认
                     confirm_btn = self.page.locator(

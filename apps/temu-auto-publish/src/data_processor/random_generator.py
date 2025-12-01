@@ -142,7 +142,7 @@ class RandomDataGenerator:
         dimensions.sort(reverse=True)
         length, width, height = dimensions
 
-        logger.debug(f"生成尺寸: {length}×{width}×{height}cm (长>宽>高)")
+        logger.debug(f"生成尺寸: {length}x{width}x{height}cm (长>宽>高)")
         return length, width, height
 
     def generate_packaging_dimensions(self) -> tuple[int, int, int]:
@@ -168,7 +168,7 @@ class RandomDataGenerator:
         dimensions.sort(reverse=True)
         length, width, height = dimensions
 
-        logger.debug(f"生成外包装尺寸: {length}×{width}×{height}cm")
+        logger.debug(f"生成外包装尺寸: {length}x{width}x{height}cm")
         return length, width, height
 
     def generate_batch_data(self, count: int = 20) -> list[dict]:
@@ -262,13 +262,13 @@ if __name__ == "__main__":
     for i in range(5):
         length, width, height = generator.generate_dimensions()
         is_valid = generator.validate_dimensions(length, width, height)
-        print(f"  {i + 1}. {length}×{width}×{height}cm (长>宽>高: {is_valid})")
+        print(f"  {i + 1}. {length}x{width}x{height}cm (长>宽>高: {is_valid})")
 
     # 测试生成外包装尺寸
     print("\n生成外包装尺寸(厘米):")
     for i in range(3):
         length, width, height = generator.generate_packaging_dimensions()
-        print(f"  {i + 1}. {length}×{width}×{height}cm")
+        print(f"  {i + 1}. {length}x{width}x{height}cm")
 
     # 测试批量生成
     print("\n批量生成(20条):")
@@ -276,8 +276,8 @@ if __name__ == "__main__":
     for data in data_list[:3]:  # 只显示前3条
         print(
             f"  {data['index']}. 重量: {data['weight']}G ({data['weight_kg']}KG), "
-            f"尺寸: {data['dimensions']['length']}×"
-            f"{data['dimensions']['width']}×"
+            f"尺寸: {data['dimensions']['length']}x"
+            f"{data['dimensions']['width']}x"
             f"{data['dimensions']['height']}cm"
         )
     print(f"  ... (共{len(data_list)}条)")
@@ -293,6 +293,6 @@ if __name__ == "__main__":
     for length, width, height, expected in test_cases:
         is_valid = generator.validate_dimensions(length, width, height)
         status = "✓" if is_valid == expected else "✗"
-        print(f"  {status} {length}×{width}×{height}cm -> {is_valid} (预期: {expected})")
+        print(f"  {status} {length}x{width}x{height}cm -> {is_valid} (预期: {expected})")
 
     print("\n" + "=" * 60)

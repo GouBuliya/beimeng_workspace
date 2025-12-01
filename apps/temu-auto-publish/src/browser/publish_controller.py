@@ -567,7 +567,7 @@ class PublishController:
         #     )
         #     if multiplier:
         #         await multiplier.fill("3")
-        #         logger.info("倍数输入框已填充 3(供货价 = 成本 × 7.5)")
+        #         logger.info("倍数输入框已填充 3(供货价 = 成本 x 7.5)")
         #     else:
         #         logger.warning("未找到倍数输入框,将跳过倍数填充")
 

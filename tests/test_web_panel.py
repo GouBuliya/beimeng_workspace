@@ -7,8 +7,6 @@
   - test_logs_endpoint: 验证日志接口格式
 """
 
-# ruff: noqa: E402
-
 from __future__ import annotations
 
 import sys

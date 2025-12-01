@@ -12,10 +12,10 @@ APP_ROOT = Path(__file__).resolve().parents[1] / "apps" / "temu-auto-publish"
 if str(APP_ROOT) not in sys.path:
     sys.path.insert(0, str(APP_ROOT))
 
-import web_panel.api as api  # noqa: E402
-from web_panel.api import create_app  # noqa: E402
-from web_panel.models import LogChunk, RunState, RunStatus, WorkflowOptions  # noqa: E402
-from web_panel.service import SelectionFileStore  # noqa: E402
+import web_panel.api as api
+from web_panel.api import create_app
+from web_panel.models import LogChunk, RunState, RunStatus, WorkflowOptions
+from web_panel.service import SelectionFileStore
 
 TEST_ADMIN_PASSWORD = "bm123456789"
 

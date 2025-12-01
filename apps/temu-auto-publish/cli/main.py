@@ -154,13 +154,13 @@ def setup():
 
     # 检查 Playwright
     try:
-        import playwright
+        import playwright  # noqa: F401
 
         console.print("  ✓ Playwright 已安装")
     except ImportError:
         console.print("  ✗ Playwright 未安装")
         console.print("    运行: pip install playwright && playwright install chromium")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     # 2. 创建目录
     console.print("\n[bold]步骤 2/4:[/bold] 创建目录")

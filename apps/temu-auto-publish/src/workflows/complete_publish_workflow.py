@@ -1275,7 +1275,7 @@ class CompletePublishWorkflow:
 
         claim_success = batch_success > 0 and not batch_failures
 
-        # 去重后的阈值:批次总期望 = 每批勾选数 × claim_times
+        # 去重后的阈值:批次总期望 = 每批勾选数 x claim_times
         expected_total = total_expected or (selection_count * self.claim_times)
         unique_threshold = expected_total
         verify_success = await miaoshou_ctrl.verify_claim_success(

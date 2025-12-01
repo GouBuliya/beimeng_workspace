@@ -32,7 +32,7 @@ PAYLOAD_DIR: Final[str] = "payload"
 PAYLOAD_EXE: Final[str] = "TemuWebPanel.exe"
 DESKTOP_SHORTCUT: Final[str] = f"{APP_NAME}.lnk"
 DEFAULT_INSTALL_DIR: Final[Path] = (
-    Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / APP_NAME
+    Path(os.environ.get("PROGRAMFILES", r"C:\Program Files")) / APP_NAME
 )
 FALLBACK_INSTALL_DIR: Final[Path] = Path.home() / "AppData" / "Local" / APP_NAME
 
@@ -83,11 +83,11 @@ def _query_known_folder_desktop() -> Path | None:
     if ctypes is None:
         return None
     try:
-        CSIDL_DESKTOPDIRECTORY = 0x0010
+        csidl_desktopdirectory = 0x0010
         buffer = ctypes.create_unicode_buffer(260)
         result = ctypes.windll.shell32.SHGetFolderPathW(  # type: ignore[attr-defined]
             0,
-            CSIDL_DESKTOPDIRECTORY,
+            csidl_desktopdirectory,
             0,
             0,
             buffer,
@@ -180,12 +180,12 @@ def _hide_directory(path: Path) -> None:
         return
     path = path.resolve()
     try:
-        FILE_ATTRIBUTE_HIDDEN = 0x02
-        FILE_ATTRIBUTE_SYSTEM = 0x04
+        file_attribute_hidden = 0x02
+        file_attribute_system = 0x04
         current_attrs = ctypes.windll.kernel32.GetFileAttributesW(str(path))
         if current_attrs == -1:
             return
-        desired_attrs = current_attrs | FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM
+        desired_attrs = current_attrs | file_attribute_hidden | file_attribute_system
         ctypes.windll.kernel32.SetFileAttributesW(str(path), desired_attrs)
     except Exception:
         return

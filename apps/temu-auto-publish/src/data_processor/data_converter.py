@@ -7,7 +7,7 @@
   - @staticmethod edit_to_claim(): 首次编辑结果 → 认领输入
 @GOTCHAS:
   - 必须保持数据一致性,特别是型号编号
-  - 价格计算使用标准公式(成本价×倍数)
+  - 价格计算使用标准公式(成本价x倍数)
   - 所有转换都需要验证必填字段
 @DEPENDENCIES:
   - 内部: data_processor.selection_table_reader

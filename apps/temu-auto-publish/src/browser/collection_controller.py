@@ -552,7 +552,7 @@ class CollectionController:
 
                     # 即使没有明确的成功提示,如果点击成功也认为采集成功
                     if not success_detected:
-                        logger.info("    ℹ️  未检测到明确的成功提示,假设采集成功")
+                        logger.info("    i️  未检测到明确的成功提示,假设采集成功")
                         success_detected = True
 
                     if success_detected:

@@ -11,7 +11,7 @@
   - 外部: pytest
   - 内部: src.data_processor.price_calculator
 @GOTCHAS:
-  - SOP v2.0规则:建议售价×10,供货价×7.5
+  - SOP v2.0规则:建议售价x10,供货价x7.5
 """
 
 from src.data_processor.price_calculator import PriceCalculator, PriceResult
@@ -21,27 +21,27 @@ def test_price_result_calculate_sop_rules():
     """测试SOP v2.0规则价格计算.
 
     SOP规则:
-    - 建议售价 = 成本 × 10(步骤7.14)
-    - 真实供货价 = 成本 × 2.5
-    - 妙手供货价 = 成本 × 7.5(步骤9)
+    - 建议售价 = 成本 x 10(步骤7.14)
+    - 真实供货价 = 成本 x 2.5
+    - 妙手供货价 = 成本 x 7.5(步骤9)
     """
     result = PriceResult.calculate(150.0)
 
     assert result.cost_price == 150.0
     assert result.suggested_multiplier == 10.0
     assert result.supply_multiplier == 7.5
-    assert result.suggested_price == 1500.0  # 150 × 10
-    assert result.supply_price == 1125.0  # 150 × 7.5
-    assert result.real_supply_price == 375.0  # 150 × 2.5
+    assert result.suggested_price == 1500.0  # 150 x 10
+    assert result.supply_price == 1125.0  # 150 x 7.5
+    assert result.real_supply_price == 375.0  # 150 x 2.5
 
 
 def test_price_result_rounding():
     """测试价格四舍五入."""
     result = PriceResult.calculate(99.99)
 
-    assert result.suggested_price == 999.90  # 99.99 × 10 = 999.90
-    assert result.supply_price == 749.92  # 99.99 × 7.5 = 749.925 → 749.92
-    assert result.real_supply_price == 249.97  # 99.99 × 2.5 = 249.975 → 249.97
+    assert result.suggested_price == 999.90  # 99.99 x 10 = 999.90
+    assert result.supply_price == 749.92  # 99.99 x 7.5 = 749.925 → 749.92
+    assert result.real_supply_price == 249.97  # 99.99 x 2.5 = 249.975 → 249.97
 
 
 def test_price_calculator_batch():
@@ -86,14 +86,14 @@ def test_price_calculator_default_sop_rules():
 def test_real_supply_price():
     """测试真实供货价计算.
 
-    SOP规则:真实供货价 = 成本 × 2.5(最低倍率)
-    妙手供货价 = 真实供货价 × 3 = 成本 × 7.5
+    SOP规则:真实供货价 = 成本 x 2.5(最低倍率)
+    妙手供货价 = 真实供货价 x 3 = 成本 x 7.5
     """
     result = PriceResult.calculate(200.0)
 
-    assert result.real_supply_price == 500.0  # 200 × 2.5
-    assert result.supply_price == 1500.0  # 200 × 7.5
-    # 验证关系:供货价 = 真实供货价 × 3
+    assert result.real_supply_price == 500.0  # 200 x 2.5
+    assert result.supply_price == 1500.0  # 200 x 7.5
+    # 验证关系:供货价 = 真实供货价 x 3
     assert result.supply_price == result.real_supply_price * 3
 
 
@@ -105,6 +105,6 @@ def test_price_breakdown():
     assert breakdown["成本价"] == 150.0
     assert breakdown["建议售价(SOP步骤7.14)"] == 1500.0
     assert breakdown["建议售价倍率"] == 10.0
-    assert breakdown["真实供货价(×2.5)"] == 375.0
+    assert breakdown["真实供货价(x2.5)"] == 375.0
     assert breakdown["妙手供货价(SOP步骤9)"] == 1125.0
     assert breakdown["供货价倍率"] == 7.5

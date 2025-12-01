@@ -58,7 +58,7 @@ class BatchEditStepsMixin:
         if not await self.click_step("标题", "7.1"):
             return False
 
-        logger.info("  ℹ️ 标题不改动,直接预览+保存")
+        logger.info("  i️ 标题不改动,直接预览+保存")
         return await self.click_preview_and_save("标题")
 
     async def step_02_english_title(self) -> bool:
@@ -105,8 +105,8 @@ class BatchEditStepsMixin:
         if not await self.click_step("类目属性", "7.3"):
             return False
 
-        logger.info("  ℹ️ 类目属性需要参考原商品链接")
-        logger.info("  ℹ️ 当前跳过,实际使用时需要填写")
+        logger.info("  i️ 类目属性需要参考原商品链接")
+        logger.info("  i️ 当前跳过,实际使用时需要填写")
 
         return await self.click_preview_and_save("类目属性")
 
@@ -140,9 +140,9 @@ class BatchEditStepsMixin:
 
                         current_value = await input_elem.input_value()
                         if current_value:
-                            logger.info(f"  ℹ️ 主货号已有值:{current_value},保持不变")
+                            logger.info(f"  i️ 主货号已有值:{current_value},保持不变")
                         else:
-                            logger.info("  ℹ️ 主货号为空,保持默认")
+                            logger.info("  i️ 主货号为空,保持默认")
                         input_found = True
                         break
 
@@ -448,7 +448,7 @@ class BatchEditStepsMixin:
         if not await self.click_step("定制品", "7.7"):
             return False
 
-        logger.info("  ℹ️ 定制品不改动,直接预览+保存")
+        logger.info("  i️ 定制品不改动,直接预览+保存")
         return await self.click_preview_and_save("定制品")
 
     async def step_08_sensitive_attrs(self) -> bool:
@@ -456,7 +456,7 @@ class BatchEditStepsMixin:
         if not await self.click_step("敏感属性", "7.8"):
             return False
 
-        logger.info("  ℹ️ 敏感属性不改动,直接预览+保存")
+        logger.info("  i️ 敏感属性不改动,直接预览+保存")
         return await self.click_preview_and_save("敏感属性")
 
     async def step_09_weight(
@@ -536,7 +536,7 @@ class BatchEditStepsMixin:
                         length = dimensions["length"]
                         width = dimensions["width"]
                         height = dimensions["height"]
-                        logger.info(f"  从Excel读取到尺寸: {length} × {width} × {height} cm")
+                        logger.info(f"  从Excel读取到尺寸: {length} x {width} x {height} cm")
                 except Exception as err:
                     logger.debug(f"  从Excel读取尺寸失败: {err}")
 
@@ -547,7 +547,7 @@ class BatchEditStepsMixin:
                 length = dims["length"]
                 width = dims["width"]
                 height = dims["height"]
-                logger.info(f"  使用随机尺寸: {length} × {width} × {height} cm")
+                logger.info(f"  使用随机尺寸: {length} x {width} x {height} cm")
 
             from src.data_processor.product_data_reader import ProductDataReader
 
@@ -557,7 +557,7 @@ class BatchEditStepsMixin:
                 height,
             )
 
-            logger.info(f"  填写尺寸:{length} × {width} × {height} cm...")
+            logger.info(f"  填写尺寸:{length} x {width} x {height} cm...")
 
             length_selectors = ["input[placeholder*='长']:not([disabled]):not([readonly])"]
             width_selectors = ["input[placeholder*='宽']:not([disabled]):not([readonly])"]
@@ -713,7 +713,7 @@ class BatchEditStepsMixin:
         if not await self.click_step("尺码表", "7.13"):
             raise RuntimeError("未能定位到『尺码表』步骤")
 
-        logger.info("  ℹ️ 尺码表不用修改")
+        logger.info("  i️ 尺码表不用修改")
         if await self.click_preview_and_save("尺码表"):
             return True
         raise RuntimeError("尺码表预览/保存失败")
@@ -723,7 +723,7 @@ class BatchEditStepsMixin:
         cost_price: float | None = None,
         product_name: str | None = None,
     ) -> bool:
-        """步骤7.14:建议售价(成本价×10)."""
+        """步骤7.14:建议售价(成本价x10)."""
         if not await self.click_step("建议售价", "7.14"):
             return False
 
@@ -741,7 +741,7 @@ class BatchEditStepsMixin:
 
             if cost_price:
                 suggested_price = cost_price * 10
-                logger.info(f"  填写建议售价:¥{suggested_price} (成本价 ¥{cost_price} × 10)...")
+                logger.info(f"  填写建议售价:¥{suggested_price} (成本价 ¥{cost_price} x 10)...")
 
                 precise_selectors = [
                     "input[placeholder*='价格']:not([disabled]):not([readonly])[type='number']",
@@ -759,7 +759,7 @@ class BatchEditStepsMixin:
                     except Exception:
                         continue
             else:
-                logger.info("  ℹ️ 无成本价数据,跳过填写(SOP要求:不做要求随便填)")
+                logger.info("  i️ 无成本价数据,跳过填写(SOP要求:不做要求随便填)")
 
             return await self.click_preview_and_save("建议售价")
 
@@ -772,7 +772,7 @@ class BatchEditStepsMixin:
         if not await self.click_step("包装清单", "7.15"):
             return False
 
-        logger.info("  ℹ️ 包装清单不改动,直接预览+保存")
+        logger.info("  i️ 包装清单不改动,直接预览+保存")
         return await self.click_preview_and_save("包装清单")
 
     async def step_16_carousel_images(self) -> bool:
@@ -780,7 +780,7 @@ class BatchEditStepsMixin:
         if not await self.click_step("轮播图", "7.16"):
             return False
 
-        logger.info("  ℹ️ 轮播图暂时不修改")
+        logger.info("  i️ 轮播图暂时不修改")
         return await self.click_preview_and_save("轮播图")
 
     async def step_17_color_images(self) -> bool:
@@ -788,7 +788,7 @@ class BatchEditStepsMixin:
         if not await self.click_step("颜色图", "7.17"):
             return False
 
-        logger.info("  ℹ️ 颜色图不需要修改")
+        logger.info("  i️ 颜色图不需要修改")
         return await self.click_preview_and_save("颜色图")
 
     async def step_18_manual(self, manual_file_path: str | None = None) -> bool:
@@ -987,7 +987,7 @@ class BatchEditStepsMixin:
                             raise last_error
                         raise RuntimeError("说明书上传重试仍未成功")
             else:
-                logger.info("  ℹ️ 未提供说明书文件,跳过上传")
+                logger.info("  i️ 未提供说明书文件,跳过上传")
 
             return await self.click_preview_and_save("产品说明书")
 

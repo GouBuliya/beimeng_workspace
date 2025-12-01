@@ -195,8 +195,8 @@ class CollectionToEditWorkflow:
                 logger.info("=" * 100)
                 logger.info("⏭️  [简化模式]跳过阶段1-2: Temu采集")
                 logger.info("=" * 100)
-                logger.info("ℹ️  假设商品已通过妙手插件手动采集到采集箱")
-                logger.info("ℹ️  将直接从妙手采集箱读取并编辑商品")
+                logger.info("i️  假设商品已通过妙手插件手动采集到采集箱")
+                logger.info("i️  将直接从妙手采集箱读取并编辑商品")
                 logger.info("=" * 100 + "\n")
 
                 result["stages"]["stage1"] = {"skipped": True, "reason": "简化模式"}

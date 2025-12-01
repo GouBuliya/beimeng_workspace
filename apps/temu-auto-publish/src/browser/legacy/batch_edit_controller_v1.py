@@ -671,7 +671,7 @@ class BatchEditController:
 
             # 生成随机尺寸
             length, width, height = self.random_generator.generate_dimensions()
-            logger.info(f"  生成尺寸: {length}×{width}×{height}cm")
+            logger.info(f"  生成尺寸: {length}x{width}x{height}cm")
 
             # 查找输入框
             length_selector = step_config.get("length_input")
@@ -692,7 +692,7 @@ class BatchEditController:
                 logger.error("填写尺寸失败")
                 return False
 
-            logger.success(f"✓ 尺寸已设置: {length}×{width}×{height}cm")
+            logger.success(f"✓ 尺寸已设置: {length}x{width}x{height}cm")
 
             # 预览和保存
             await self._preview_and_save(page)
@@ -749,9 +749,9 @@ class BatchEditController:
             return False
 
     async def step_14_suggested_price(self, page: Page, products_data: list[dict]) -> bool:
-        """步骤14:建议售价(成本×10,SOP步骤7.14).
+        """步骤14:建议售价(成本x10,SOP步骤7.14).
 
-        SOP规则:建议售价 = 成本 × 10
+        SOP规则:建议售价 = 成本 x 10
 
         Args:
             page: 页面对象
@@ -760,7 +760,7 @@ class BatchEditController:
         Returns:
             是否设置成功
         """
-        logger.info("步骤7.14:建议售价(成本×10)")
+        logger.info("步骤7.14:建议售价(成本x10)")
 
         try:
             step_config = self.selectors.get("batch_edit", {}).get("step_14_suggested_price", {})
@@ -774,7 +774,7 @@ class BatchEditController:
             price_result = self.price_calculator.calculate(cost)
             suggested_price = price_result.suggested_price
 
-            logger.info(f"  建议售价: ¥{suggested_price} (成本¥{cost}×10)")
+            logger.info(f"  建议售价: ¥{suggested_price} (成本¥{cost}x10)")
 
             # 查找建议售价输入框
             input_selector = step_config.get("input")
@@ -964,7 +964,7 @@ if __name__ == "__main__":
     print(" 11. SKU")
     print(" 12. SKU类目")
     print(" 13. 跳过")
-    print(" 14. 建议售价(成本×10)")
+    print(" 14. 建议售价(成本x10)")
     print(" 15-17. 跳过")
     print(" 18. 手动上传")
     print()

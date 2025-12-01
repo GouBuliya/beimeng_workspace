@@ -10,7 +10,7 @@ APP_ROOT = Path(__file__).resolve().parents[1] / "apps" / "temu-auto-publish"
 if str(APP_ROOT) not in sys.path:
     sys.path.insert(0, str(APP_ROOT))
 
-import web_panel.cli as cli  # noqa: E402
+import web_panel.cli as cli
 
 
 def test_install_success_and_failures(monkeypatch):

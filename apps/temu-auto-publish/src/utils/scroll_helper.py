@@ -108,7 +108,7 @@ async def scroll_to_product_position(
     Examples:
         >>> # 滚动到第 6 个商品(索引 5)
         >>> await scroll_to_product_position(page, target_index=5)
-        >>> # 滚动距离 = 5 × 125 = 625px
+        >>> # 滚动距离 = 5 x 125 = 625px
     """
     if target_index < 0:
         logger.warning(f"无效的目标索引: {target_index}")

@@ -15,9 +15,9 @@ APP_ROOT = Path(__file__).resolve().parents[1] / "apps" / "temu-auto-publish"
 if str(APP_ROOT) not in sys.path:
     sys.path.insert(0, str(APP_ROOT))
 
-import web_panel.service as service  # noqa: E402
-from web_panel.models import RunState, WorkflowOptions  # noqa: E402
-from web_panel.service import (  # noqa: E402
+import web_panel.service as service
+from web_panel.models import RunState, WorkflowOptions
+from web_panel.service import (
     SelectionFileStore,
     SelectionTableEmptyError,
     SelectionTableFormatError,

@@ -1135,7 +1135,7 @@ async def _click_dialog_close_icon(page: Page, dialog: Locator) -> bool:
         dialog.locator("[aria-label='Close']"),
         dialog.locator(".el-dialog__headerbtn"),
         dialog.locator(".jx-dialog__headerbtn"),
-        dialog.locator("button:has-text('×')"),
+        dialog.locator("button:has-text('x')"),
         dialog.locator("button:has-text('关闭')"),
     ]
 

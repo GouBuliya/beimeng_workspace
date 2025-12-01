@@ -40,7 +40,7 @@ class FiveToTwentyWorkflow:
     2. 每条链接认领4次
     3. 验证是否生成20条产品
 
-    SOP规定:5条 × 4次认领 = 20条产品
+    SOP规定:5条 x 4次认领 = 20条产品
 
     Attributes:
         miaoshou_ctrl: 妙手采集箱控制器
@@ -271,10 +271,10 @@ class FiveToTwentyWorkflow:
             length = random.randint(80, 99)
             width = random.randint(60, length - 10)
             height = random.randint(50, width - 10)
-            logger.debug(f"    尺寸: 长{length}cm × 宽{width}cm × 高{height}cm")
+            logger.debug(f"    尺寸: 长{length}cm x 宽{width}cm x 高{height}cm")
             try:
                 if await self.first_edit_ctrl.set_sku_dimensions(page, length, width, height):
-                    logger.success(f"✓ 尺寸已设置: {length}×{width}×{height}cm")
+                    logger.success(f"✓ 尺寸已设置: {length}x{width}x{height}cm")
                 else:
                     logger.warning("⚠️  尺寸设置失败(可能需要在实际环境调试选择器)")
             except Exception as e:
@@ -461,7 +461,7 @@ class FiveToTwentyWorkflow:
             logger.info("=" * 60)
 
             expected_count = claimed_count * claim_times
-            logger.info(f"期望产品数量: {claimed_count} × {claim_times} = {expected_count}")
+            logger.info(f"期望产品数量: {claimed_count} x {claim_times} = {expected_count}")
 
             if await self.miaoshou_ctrl.verify_claim_success(page, expected_count):
                 result["success"] = True

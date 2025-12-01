@@ -145,7 +145,7 @@ class HealthChecker:
 
                 # 检查playwright是否安装
                 try:
-                    from playwright.async_api import async_playwright
+                    from playwright.async_api import async_playwright  # noqa: F401
 
                     status = HealthStatus.OK
                     message = "Playwright已安装"
