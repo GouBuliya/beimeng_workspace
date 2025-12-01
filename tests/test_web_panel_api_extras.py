@@ -298,7 +298,8 @@ async def test_run_conflict_when_manager_busy(app_factory):
 
 @pytest.mark.asyncio
 async def test_download_sample_success(app_factory, tmp_path, monkeypatch):
-    sample = tmp_path / "selection.xlsx"
+    # 创建 CSV 文件以匹配 api.py 中的 media_type="text/csv"
+    sample = tmp_path / "selection.csv"
     sample.write_text("demo")
     monkeypatch.setattr(api, "DEFAULT_SELECTION", sample)
     manager, transport = app_factory()
@@ -306,6 +307,5 @@ async def test_download_sample_success(app_factory, tmp_path, monkeypatch):
         await login(client)
         resp = await client.get("/downloads/sample-selection")
         assert resp.status_code == 200
-        assert resp.headers["content-type"].startswith(
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
+        # 验证返回的是 CSV 格式（匹配 api.py 中的定义）
+        assert resp.headers["content-type"].startswith("text/csv")
