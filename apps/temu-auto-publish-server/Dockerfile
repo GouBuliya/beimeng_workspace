@@ -1,7 +1,7 @@
 # Temu Auto Publish Auth Server - Dockerfile
 # 多阶段构建，优化镜像大小
 
-FROM docker.m.daocloud.io/library/python:3.12-slim as builder
+FROM docker.m.daocloud.io/library/python:3.14-slim as builder
 
 WORKDIR /build
 
@@ -28,7 +28,7 @@ RUN pip config set global.index-url https://mirrors.aliyun.com/pypi/simple/ && \
     pip install --no-cache-dir -r requirements.txt
 
 # 生产镜像
-FROM docker.m.daocloud.io/library/python:3.12-slim as production
+FROM docker.m.daocloud.io/library/python:3.14-slim as production
 
 WORKDIR /app
 
