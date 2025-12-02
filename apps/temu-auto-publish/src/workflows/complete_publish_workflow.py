@@ -1321,33 +1321,11 @@ class CompletePublishWorkflow:
                             original_title = await first_edit_ctrl.get_original_title(page)
                             base_title = original_title or selection.product_name
 
-                            # [关键验证] 检查对话框标题是否与预期产品匹配
-                            logger.info(
+                            # [诊断日志] 记录对话框标题（仅用于调试，不做验证）
+                            logger.debug(
                                 "[首次编辑诊断] 对话框已打开, 实际标题='{}'",
                                 original_title[:50] if original_title else "(空)",
                             )
-                            expected_keywords = [
-                                selection.product_name[:10] if selection.product_name else "",
-                                selection.model_number or "",
-                            ]
-                            title_matched = any(
-                                kw and kw in (original_title or "")
-                                for kw in expected_keywords
-                                if kw
-                            )
-                            if not title_matched and original_title:
-                                logger.error(
-                                    "[对话框验证] 产品不匹配！期望: {} ({}), 实际对话框: {}",
-                                    selection.product_name,
-                                    selection.model_number,
-                                    original_title,
-                                )
-                                # 关闭错误对话框，触发重试
-                                await first_edit_ctrl.close_dialog(page)
-                                raise RuntimeError(
-                                    f"对话框产品不匹配: 期望 {selection.model_number}, "
-                                    f"实际 {original_title[:30]}"
-                                )
 
                             payload_dict = self._build_first_edit_payload(selection, base_title)
                             sku_image_urls = list(payload_dict.get("sku_image_urls", []) or [])
