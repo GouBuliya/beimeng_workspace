@@ -70,11 +70,11 @@ def build(
     """运行 PyInstaller 生成 exe."""
 
     if not ENTRY_FILE.exists():
-        typer.echo(f"入口脚本不存在: {ENTRY_FILE}", err=True)
+        typer.echo(f"Entry file not found: {ENTRY_FILE}", err=True)
         raise typer.Exit(1)
-    typer.echo(f"开始构建 {name} (onefile={onefile}, clean={clean})")
+    typer.echo(f"Building {name} (onefile={onefile}, clean={clean})")
     pyinstaller_run(_build_args(name=name, clean=clean, onefile=onefile))
-    typer.echo("构建完成, 产物位于 dist/ 目录")
+    typer.echo("Build completed, output in dist/ directory")
 
 
 if __name__ == "__main__":
