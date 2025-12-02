@@ -1,3 +1,10 @@
+## [0.2.2](https://github.com/GouBuliya/beimeng_workspace/compare/v0.2.1...v0.2.2) (2025-12-02)
+
+
+### Bug Fixes
+
+* update release workflow to use build_windows_exe.py for Windows builds ([5841808](https://github.com/GouBuliya/beimeng_workspace/commit/5841808e3f8318ee38c250b4656aeab5147cacb1))
+
 ## [0.2.1](https://github.com/GouBuliya/beimeng_workspace/compare/v0.2.0...v0.2.1) (2025-12-02)
 
 
