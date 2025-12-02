@@ -475,9 +475,7 @@ class TestDetectCurrentState:
         """测试异常返回 UNKNOWN"""
         mock_page = MagicMock()
         # 设置 url 属性抛出异常
-        type(mock_page).url = property(
-            lambda self: (_ for _ in ()).throw(Exception("error"))
-        )
+        type(mock_page).url = property(lambda self: (_ for _ in ()).throw(Exception("error")))
 
         result = await detector.detect_current_state(mock_page)
 
@@ -682,9 +680,7 @@ class TestEnsureState:
         mock_page.locator.return_value = mock_locator
         mock_page.content = AsyncMock(return_value="<html></html>")
 
-        result = await detector.ensure_state(
-            mock_page, PageState.HOME_PAGE, auto_recover=False
-        )
+        result = await detector.ensure_state(mock_page, PageState.HOME_PAGE, auto_recover=False)
 
         assert result is False
 

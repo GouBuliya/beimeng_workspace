@@ -373,21 +373,21 @@ class TestBrowserManagerLoginRedirect:
         )
         # URL 编码的 redirect 参数
         assert (
-            manager._is_login_redirect("https://erp.91miaoshou.com/?redirect%3D%2Fwelcome")
-            is True
+            manager._is_login_redirect("https://erp.91miaoshou.com/?redirect%3D%2Fwelcome") is True
         )
 
     def test_is_login_redirect_normal_urls(self):
         """测试正常后台页面 URL 不被误判"""
         manager = BrowserManager()
         assert manager._is_login_redirect("https://erp.91miaoshou.com/welcome") is False
-        assert manager._is_login_redirect("https://erp.91miaoshou.com/common_collect_box/items") is False
+        assert (
+            manager._is_login_redirect("https://erp.91miaoshou.com/common_collect_box/items")
+            is False
+        )
         assert manager._is_login_redirect("https://example.com/dashboard") is False
 
     def test_is_login_redirect_with_redirect_in_path(self):
         """测试 URL 路径中包含 redirect 但不是登录重定向的情况"""
         manager = BrowserManager()
         # 路径不是根路径，不应该被判定为登录重定向
-        assert (
-            manager._is_login_redirect("https://example.com/api/redirect?target=home") is False
-        )
+        assert manager._is_login_redirect("https://example.com/api/redirect?target=home") is False

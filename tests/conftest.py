@@ -41,9 +41,7 @@ def pytest_configure(config: pytest.Config) -> None:
     )
 
 
-def pytest_collection_modifyitems(
-    config: pytest.Config, items: list[pytest.Item]
-) -> None:
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
     """根据命令行选项跳过测试.
 
     如果没有指定 --run-metadata-check,则跳过所有 metadata_check 标记的测试。

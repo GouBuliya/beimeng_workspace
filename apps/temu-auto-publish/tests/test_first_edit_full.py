@@ -426,12 +426,8 @@ class TestFirstEditWorkflow:
             patch.object(workflow_mixin, "edit_title", return_value=True),
             patch.object(workflow_mixin, "set_sku_price", return_value=True),
             patch.object(workflow_mixin, "set_sku_stock", return_value=True),
-            patch.object(
-                workflow_mixin, "set_package_weight_in_logistics", return_value=True
-            ),
-            patch.object(
-                workflow_mixin, "set_package_dimensions_in_logistics", return_value=True
-            ),
+            patch.object(workflow_mixin, "set_package_weight_in_logistics", return_value=True),
+            patch.object(workflow_mixin, "set_package_dimensions_in_logistics", return_value=True),
             patch.object(workflow_mixin, "save_changes", return_value=True),
             patch.object(workflow_mixin, "close_dialog", return_value=True),
         ):
@@ -499,20 +495,14 @@ class TestFirstEditWorkflow:
             assert result is False
 
     @pytest.mark.asyncio
-    async def test_complete_first_edit_weight_fails_continues(
-        self, workflow_mixin, mock_page
-    ):
+    async def test_complete_first_edit_weight_fails_continues(self, workflow_mixin, mock_page):
         """测试重量设置失败但继续执行"""
         with (
             patch.object(workflow_mixin, "edit_title", return_value=True),
             patch.object(workflow_mixin, "set_sku_price", return_value=True),
             patch.object(workflow_mixin, "set_sku_stock", return_value=True),
-            patch.object(
-                workflow_mixin, "set_package_weight_in_logistics", return_value=False
-            ),
-            patch.object(
-                workflow_mixin, "set_package_dimensions_in_logistics", return_value=True
-            ),
+            patch.object(workflow_mixin, "set_package_weight_in_logistics", return_value=False),
+            patch.object(workflow_mixin, "set_package_dimensions_in_logistics", return_value=True),
             patch.object(workflow_mixin, "save_changes", return_value=True),
             patch.object(workflow_mixin, "close_dialog", return_value=True),
         ):
@@ -529,20 +519,14 @@ class TestFirstEditWorkflow:
             assert result is True
 
     @pytest.mark.asyncio
-    async def test_complete_first_edit_dimensions_fails_continues(
-        self, workflow_mixin, mock_page
-    ):
+    async def test_complete_first_edit_dimensions_fails_continues(self, workflow_mixin, mock_page):
         """测试尺寸设置失败但继续执行"""
         with (
             patch.object(workflow_mixin, "edit_title", return_value=True),
             patch.object(workflow_mixin, "set_sku_price", return_value=True),
             patch.object(workflow_mixin, "set_sku_stock", return_value=True),
-            patch.object(
-                workflow_mixin, "set_package_weight_in_logistics", return_value=True
-            ),
-            patch.object(
-                workflow_mixin, "set_package_dimensions_in_logistics", return_value=False
-            ),
+            patch.object(workflow_mixin, "set_package_weight_in_logistics", return_value=True),
+            patch.object(workflow_mixin, "set_package_dimensions_in_logistics", return_value=False),
             patch.object(workflow_mixin, "save_changes", return_value=True),
             patch.object(workflow_mixin, "close_dialog", return_value=True),
         ):
@@ -565,12 +549,8 @@ class TestFirstEditWorkflow:
             patch.object(workflow_mixin, "edit_title", return_value=True),
             patch.object(workflow_mixin, "set_sku_price", return_value=True),
             patch.object(workflow_mixin, "set_sku_stock", return_value=True),
-            patch.object(
-                workflow_mixin, "set_package_weight_in_logistics", return_value=True
-            ),
-            patch.object(
-                workflow_mixin, "set_package_dimensions_in_logistics", return_value=True
-            ),
+            patch.object(workflow_mixin, "set_package_weight_in_logistics", return_value=True),
+            patch.object(workflow_mixin, "set_package_dimensions_in_logistics", return_value=True),
             patch.object(workflow_mixin, "save_changes", return_value=False),
         ):
             result = await workflow_mixin.complete_first_edit(
@@ -585,20 +565,14 @@ class TestFirstEditWorkflow:
             assert result is False
 
     @pytest.mark.asyncio
-    async def test_complete_first_edit_close_fails_continues(
-        self, workflow_mixin, mock_page
-    ):
+    async def test_complete_first_edit_close_fails_continues(self, workflow_mixin, mock_page):
         """测试关闭弹窗失败但继续执行"""
         with (
             patch.object(workflow_mixin, "edit_title", return_value=True),
             patch.object(workflow_mixin, "set_sku_price", return_value=True),
             patch.object(workflow_mixin, "set_sku_stock", return_value=True),
-            patch.object(
-                workflow_mixin, "set_package_weight_in_logistics", return_value=True
-            ),
-            patch.object(
-                workflow_mixin, "set_package_dimensions_in_logistics", return_value=True
-            ),
+            patch.object(workflow_mixin, "set_package_weight_in_logistics", return_value=True),
+            patch.object(workflow_mixin, "set_package_dimensions_in_logistics", return_value=True),
             patch.object(workflow_mixin, "save_changes", return_value=True),
             patch.object(workflow_mixin, "close_dialog", return_value=False),
         ):
@@ -615,13 +589,9 @@ class TestFirstEditWorkflow:
             assert result is True
 
     @pytest.mark.asyncio
-    async def test_complete_first_edit_exception_handling(
-        self, workflow_mixin, mock_page
-    ):
+    async def test_complete_first_edit_exception_handling(self, workflow_mixin, mock_page):
         """测试异常处理"""
-        with patch.object(
-            workflow_mixin, "edit_title", side_effect=Exception("Test error")
-        ):
+        with patch.object(workflow_mixin, "edit_title", side_effect=Exception("Test error")):
             result = await workflow_mixin.complete_first_edit(
                 mock_page,
                 title="测试标题",
@@ -634,17 +604,13 @@ class TestFirstEditWorkflow:
             assert result is False
 
     @pytest.mark.asyncio
-    async def test_complete_first_edit_dimensions_value_error(
-        self, workflow_mixin, mock_page
-    ):
+    async def test_complete_first_edit_dimensions_value_error(self, workflow_mixin, mock_page):
         """测试尺寸验证错误"""
         with (
             patch.object(workflow_mixin, "edit_title", return_value=True),
             patch.object(workflow_mixin, "set_sku_price", return_value=True),
             patch.object(workflow_mixin, "set_sku_stock", return_value=True),
-            patch.object(
-                workflow_mixin, "set_package_weight_in_logistics", return_value=True
-            ),
+            patch.object(workflow_mixin, "set_package_weight_in_logistics", return_value=True),
             patch.object(
                 workflow_mixin,
                 "set_package_dimensions_in_logistics",

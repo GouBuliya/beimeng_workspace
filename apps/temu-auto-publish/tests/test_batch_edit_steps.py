@@ -457,9 +457,7 @@ class TestBatchEditStepsPackaging:
     @pytest.mark.asyncio
     async def test_step_05_packaging_with_url(self, mixin_with_page):
         """测试步骤5：带图片 URL"""
-        result = await mixin_with_page.step_05_packaging(
-            image_url="https://example.com/image.jpg"
-        )
+        result = await mixin_with_page.step_05_packaging(image_url="https://example.com/image.jpg")
 
         assert result is True
 
@@ -476,9 +474,7 @@ class TestBatchEditStepsPackaging:
     @pytest.mark.asyncio
     async def test_step_05_packaging_with_nonexistent_file(self, mixin_with_page):
         """测试步骤5：本地文件不存在"""
-        result = await mixin_with_page.step_05_packaging(
-            image_url="/nonexistent/path/image.jpg"
-        )
+        result = await mixin_with_page.step_05_packaging(image_url="/nonexistent/path/image.jpg")
 
         # 文件不存在时仍继续执行
         assert result is True
@@ -594,9 +590,7 @@ class TestBatchEditStepsManual:
     @pytest.mark.asyncio
     async def test_step_18_manual_file_not_exists(self, mixin_with_page):
         """测试步骤18：文件不存在"""
-        result = await mixin_with_page.step_18_manual(
-            manual_file_path="/nonexistent/file.pdf"
-        )
+        result = await mixin_with_page.step_18_manual(manual_file_path="/nonexistent/file.pdf")
 
         # 文件不存在时仍返回成功（跳过上传）
         assert result is True

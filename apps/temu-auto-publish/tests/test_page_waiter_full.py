@@ -108,9 +108,7 @@ class TestPostActionWait:
         waiter.strategy = WaitStrategy(wait_after_action_ms=100)
 
         with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
-            await waiter.post_action_wait(
-                wait_for_network_idle=False, wait_for_dom_stable=False
-            )
+            await waiter.post_action_wait(wait_for_network_idle=False, wait_for_dom_stable=False)
 
             mock_sleep.assert_called_once_with(0.1)  # 100ms
 
@@ -139,9 +137,7 @@ class TestWaitForNetworkIdle:
     async def test_network_idle_timeout(self):
         """测试等待超时"""
         mock_page = AsyncMock()
-        mock_page.wait_for_load_state = AsyncMock(
-            side_effect=PlaywrightTimeoutError("Timeout")
-        )
+        mock_page.wait_for_load_state = AsyncMock(side_effect=PlaywrightTimeoutError("Timeout"))
 
         waiter = PageWaiter(mock_page)
 
@@ -721,9 +717,7 @@ class TestPageWaiterEdgeCases:
         mock_locator.first = MagicMock()
         mock_locator.first.wait_for = AsyncMock()
         mock_locator.first.is_enabled = AsyncMock(return_value=True)
-        mock_locator.first.scroll_into_view_if_needed = AsyncMock(
-            side_effect=Exception("滚动失败")
-        )
+        mock_locator.first.scroll_into_view_if_needed = AsyncMock(side_effect=Exception("滚动失败"))
         mock_locator.first.click = AsyncMock()
 
         waiter = PageWaiter(mock_page)

@@ -256,9 +256,7 @@ class TestWaitFunctions:
         mock_toast = MagicMock()
         mock_toast.wait_for = AsyncMock()
         mock_page.locator.return_value = mock_toast
-        with patch(
-            "src.browser.batch_edit_codegen.smart_wait", AsyncMock()
-        ):
+        with patch("src.browser.batch_edit_codegen.smart_wait", AsyncMock()):
             await _wait_for_save_toast(mock_page)
 
     @pytest.mark.asyncio
@@ -267,9 +265,7 @@ class TestWaitFunctions:
         mock_toast = MagicMock()
         mock_toast.wait_for = AsyncMock(side_effect=TimeoutError("timeout"))
         mock_page.locator.return_value = mock_toast
-        with patch(
-            "src.browser.batch_edit_codegen.smart_wait", AsyncMock()
-        ):
+        with patch("src.browser.batch_edit_codegen.smart_wait", AsyncMock()):
             # 不应抛出异常
             await _wait_for_save_toast(mock_page)
 
@@ -287,9 +283,7 @@ class TestWaitFunctions:
         mock_dialog = MagicMock()
         mock_dialog.wait_for = AsyncMock()
         mock_page.get_by_role.return_value = mock_dialog
-        with patch(
-            "src.browser.batch_edit_codegen.smart_wait", AsyncMock()
-        ):
+        with patch("src.browser.batch_edit_codegen.smart_wait", AsyncMock()):
             await _wait_for_dialog_open(mock_page)
 
     @pytest.mark.asyncio
@@ -298,9 +292,7 @@ class TestWaitFunctions:
         mock_dialog = MagicMock()
         mock_dialog.wait_for = AsyncMock(side_effect=TimeoutError("timeout"))
         mock_page.get_by_role.return_value = mock_dialog
-        with patch(
-            "src.browser.batch_edit_codegen.smart_wait", AsyncMock()
-        ):
+        with patch("src.browser.batch_edit_codegen.smart_wait", AsyncMock()):
             # 不应抛出异常
             await _wait_for_dialog_open(mock_page)
 
@@ -316,11 +308,12 @@ class TestCloseEditDialog:
         """测试使用弹性选择器关闭"""
         mock_close = MagicMock()
         mock_close.click = AsyncMock()
-        with patch(
-            "src.browser.batch_edit_codegen._resilient_locator.locate",
-            AsyncMock(return_value=mock_close),
-        ), patch(
-            "src.browser.batch_edit_codegen.smart_wait", AsyncMock()
+        with (
+            patch(
+                "src.browser.batch_edit_codegen._resilient_locator.locate",
+                AsyncMock(return_value=mock_close),
+            ),
+            patch("src.browser.batch_edit_codegen.smart_wait", AsyncMock()),
         ):
             await _close_edit_dialog(mock_page)
             mock_close.click.assert_called_once()
@@ -331,11 +324,12 @@ class TestCloseEditDialog:
         mock_btn = MagicMock()
         mock_btn.click = AsyncMock()
         mock_page.get_by_role.return_value = mock_btn
-        with patch(
-            "src.browser.batch_edit_codegen._resilient_locator.locate",
-            AsyncMock(return_value=None),
-        ), patch(
-            "src.browser.batch_edit_codegen.smart_wait", AsyncMock()
+        with (
+            patch(
+                "src.browser.batch_edit_codegen._resilient_locator.locate",
+                AsyncMock(return_value=None),
+            ),
+            patch("src.browser.batch_edit_codegen.smart_wait", AsyncMock()),
         ):
             await _close_edit_dialog(mock_page)
 
@@ -348,11 +342,12 @@ class TestCloseEditDialog:
         mock_icon = MagicMock()
         mock_icon.click = AsyncMock()
         mock_page.locator.return_value = mock_icon
-        with patch(
-            "src.browser.batch_edit_codegen._resilient_locator.locate",
-            AsyncMock(return_value=None),
-        ), patch(
-            "src.browser.batch_edit_codegen.smart_wait", AsyncMock()
+        with (
+            patch(
+                "src.browser.batch_edit_codegen._resilient_locator.locate",
+                AsyncMock(return_value=None),
+            ),
+            patch("src.browser.batch_edit_codegen.smart_wait", AsyncMock()),
         ):
             await _close_edit_dialog(mock_page)
 
@@ -440,14 +435,10 @@ class TestStepFunctions:
         mock_locator.click = AsyncMock()
         mock_locator.fill = AsyncMock()
         mock_page.get_by_text.return_value = mock_locator
-        mock_page.locator.return_value.filter.return_value.get_by_role.return_value = (
-            mock_locator
-        )
+        mock_page.locator.return_value.filter.return_value.get_by_role.return_value = mock_locator
         mock_page.get_by_role.return_value = mock_locator
 
-        with patch(
-            "src.browser.batch_edit_codegen._close_edit_dialog", AsyncMock()
-        ):
+        with patch("src.browser.batch_edit_codegen._close_edit_dialog", AsyncMock()):
             await _step_02_english_title(mock_page)
 
     @pytest.mark.asyncio
@@ -459,17 +450,13 @@ class TestStepFunctions:
         mock_page.get_by_role.return_value = mock_locator
 
         payload = {"category_path": ["收纳用品"], "category_attrs": {}}
-        with patch(
-            "src.browser.batch_edit_codegen._close_edit_dialog", AsyncMock()
-        ):
+        with patch("src.browser.batch_edit_codegen._close_edit_dialog", AsyncMock()):
             await _step_03_category_attrs(mock_page, payload)
 
     @pytest.mark.asyncio
     async def test_step_04_main_sku(self, mock_page):
         """测试步骤4: 主货号 - 使用 patch 避免复杂 mock"""
-        with patch(
-            "src.browser.batch_edit_codegen._close_edit_dialog", AsyncMock()
-        ):
+        with patch("src.browser.batch_edit_codegen._close_edit_dialog", AsyncMock()):
             # 验证函数存在且可调用
             assert callable(_step_04_main_sku)
 
@@ -481,9 +468,7 @@ class TestStepFunctions:
         mock_page.get_by_text.return_value = mock_locator
         mock_page.get_by_role.return_value = mock_locator
 
-        with patch(
-            "src.browser.batch_edit_codegen._close_edit_dialog", AsyncMock()
-        ):
+        with patch("src.browser.batch_edit_codegen._close_edit_dialog", AsyncMock()):
             await _step_07_customized(mock_page)
 
     @pytest.mark.asyncio
@@ -494,9 +479,7 @@ class TestStepFunctions:
         mock_page.get_by_text.return_value = mock_locator
         mock_page.get_by_role.return_value = mock_locator
 
-        with patch(
-            "src.browser.batch_edit_codegen._close_edit_dialog", AsyncMock()
-        ):
+        with patch("src.browser.batch_edit_codegen._close_edit_dialog", AsyncMock()):
             await _step_08_sensitive(mock_page)
 
     @pytest.mark.asyncio
@@ -514,15 +497,11 @@ class TestStepFunctions:
         mock_locator.fill = AsyncMock()
         mock_dialog = MagicMock()
         mock_dialog.get_by_text.return_value = mock_locator
-        mock_dialog.locator.return_value.filter.return_value.get_by_role.return_value = (
-            mock_locator
-        )
+        mock_dialog.locator.return_value.filter.return_value.get_by_role.return_value = mock_locator
         mock_dialog.get_by_role.return_value = mock_locator
         mock_page.get_by_role.return_value = mock_dialog
 
-        with patch(
-            "src.browser.batch_edit_codegen._close_edit_dialog", AsyncMock()
-        ):
+        with patch("src.browser.batch_edit_codegen._close_edit_dialog", AsyncMock()):
             await _step_10_dimensions(mock_page)
 
     @pytest.mark.asyncio
@@ -548,9 +527,7 @@ class TestStepFunctions:
         mock_page.get_by_text.return_value = mock_locator
         mock_page.get_by_role.return_value = mock_locator
 
-        with patch(
-            "src.browser.batch_edit_codegen._close_edit_dialog", AsyncMock()
-        ):
+        with patch("src.browser.batch_edit_codegen._close_edit_dialog", AsyncMock()):
             await _step_15_packing_list(mock_page)
 
     @pytest.mark.asyncio
@@ -684,20 +661,14 @@ class TestRunBatchEdit:
         patches = _create_step_patches()
         patches["_apply_user_filter"] = AsyncMock(return_value=True)
         with patch.multiple("src.browser.batch_edit_codegen", **patches):
-            result = await run_batch_edit(
-                mock_page, sample_payload, filter_owner="张三"
-            )
+            result = await run_batch_edit(mock_page, sample_payload, filter_owner="张三")
             assert result["success"] is True
 
     @pytest.mark.asyncio
-    async def test_run_batch_edit_step_failure_non_critical(
-        self, mock_page, sample_payload
-    ):
+    async def test_run_batch_edit_step_failure_non_critical(self, mock_page, sample_payload):
         """测试非关键步骤失败继续执行"""
         patches = _create_step_patches()
-        patches["_step_13_size_chart"] = AsyncMock(
-            side_effect=Exception("non-critical error")
-        )
+        patches["_step_13_size_chart"] = AsyncMock(side_effect=Exception("non-critical error"))
         with patch.multiple("src.browser.batch_edit_codegen", **patches):
             result = await run_batch_edit(mock_page, sample_payload)
             # 非关键步骤(13)失败但继续执行
@@ -705,23 +676,17 @@ class TestRunBatchEdit:
             assert len(result["step_errors"]) > 0
 
     @pytest.mark.asyncio
-    async def test_run_batch_edit_critical_step_failure(
-        self, mock_page, sample_payload
-    ):
+    async def test_run_batch_edit_critical_step_failure(self, mock_page, sample_payload):
         """测试关键步骤失败停止执行"""
         patches = _create_step_patches()
-        patches["_step_01_title"] = AsyncMock(
-            side_effect=Exception("critical error")
-        )
+        patches["_step_01_title"] = AsyncMock(side_effect=Exception("critical error"))
         with patch.multiple("src.browser.batch_edit_codegen", **patches):
             result = await run_batch_edit(mock_page, sample_payload)
             assert result["success"] is False
             assert result["error"] is not None
 
     @pytest.mark.asyncio
-    async def test_run_batch_edit_navigate_when_wrong_url(
-        self, mock_page, sample_payload
-    ):
+    async def test_run_batch_edit_navigate_when_wrong_url(self, mock_page, sample_payload):
         """测试 URL 错误时自动导航"""
         mock_page.url = "https://other-site.com"
         patches = _create_step_patches()

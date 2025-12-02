@@ -51,9 +51,7 @@ class TestCaptureDebugArtifacts:
     @pytest.mark.asyncio
     async def test_saves_screenshot_and_html(self, mock_page, tmp_path):
         """测试保存截图和 HTML"""
-        result = await capture_debug_artifacts(
-            mock_page, step="test_step", output_dir=tmp_path
-        )
+        result = await capture_debug_artifacts(mock_page, step="test_step", output_dir=tmp_path)
 
         assert "screenshot" in result
         assert "html" in result
@@ -63,9 +61,7 @@ class TestCaptureDebugArtifacts:
     @pytest.mark.asyncio
     async def test_filename_contains_step_and_timestamp(self, mock_page, tmp_path):
         """测试文件名包含步骤名和时间戳"""
-        result = await capture_debug_artifacts(
-            mock_page, step="my_step", output_dir=tmp_path
-        )
+        result = await capture_debug_artifacts(mock_page, step="my_step", output_dir=tmp_path)
 
         assert "my_step" in result["screenshot"]
         assert "my_step" in result["html"]
@@ -88,9 +84,7 @@ class TestCaptureDebugArtifacts:
         expected_html = "<html><body>Test Content</body></html>"
         mock_page.content = AsyncMock(return_value=expected_html)
 
-        result = await capture_debug_artifacts(
-            mock_page, step="test", output_dir=tmp_path
-        )
+        result = await capture_debug_artifacts(mock_page, step="test", output_dir=tmp_path)
 
         html_path = Path(result["html"])
         assert html_path.exists()
@@ -214,6 +208,7 @@ class TestRunWithOptionalSyncer:
 
     def test_runs_async_function(self):
         """测试运行异步函数"""
+
         async def async_add(a, b):
             return a + b
 
@@ -223,6 +218,7 @@ class TestRunWithOptionalSyncer:
 
     def test_passes_kwargs(self):
         """测试传递关键字参数"""
+
         async def async_func(*, name, value):
             return f"{name}={value}"
 
@@ -232,6 +228,7 @@ class TestRunWithOptionalSyncer:
 
     def test_handles_exception(self):
         """测试处理异步函数异常"""
+
         async def async_raise():
             raise ValueError("test error")
 
@@ -240,6 +237,7 @@ class TestRunWithOptionalSyncer:
 
     def test_returns_correct_type(self):
         """测试返回正确的类型"""
+
         async def async_list():
             return [1, 2, 3]
 
@@ -262,9 +260,7 @@ class TestDebugToolsEdgeCases:
         mock_page.screenshot = AsyncMock()
         mock_page.content = AsyncMock(return_value="<html></html>")
 
-        result = await capture_debug_artifacts(
-            mock_page, step="测试步骤", output_dir=tmp_path
-        )
+        result = await capture_debug_artifacts(mock_page, step="测试步骤", output_dir=tmp_path)
 
         assert "测试步骤" in result["screenshot"]
 

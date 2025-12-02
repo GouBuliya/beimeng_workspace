@@ -199,7 +199,9 @@ class WatchdogConfig(BaseSettings):
     """
 
     enabled: bool = Field(default=True, description="是否启用看门狗")
-    heartbeat_interval_sec: int = Field(default=10, ge=5, description="心跳检查间隔(秒),默认10s快速检测崩溃")
+    heartbeat_interval_sec: int = Field(
+        default=10, ge=5, description="心跳检查间隔(秒),默认10s快速检测崩溃"
+    )
     health_check_timeout_sec: int = Field(default=10, ge=5, description="健康检查超时(秒)")
     max_recovery_attempts: int = Field(default=3, ge=1, description="单级别最大恢复尝试次数")
     recovery_cooldown_sec: int = Field(default=60, ge=30, description="恢复冷却时间(秒)")

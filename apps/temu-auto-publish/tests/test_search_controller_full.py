@@ -297,9 +297,7 @@ class TestWaitForResults:
     @pytest.mark.asyncio
     async def test_wait_for_results_timeout(self, mock_browser_manager):
         """测试等待超时"""
-        mock_browser_manager.page.wait_for_selector = AsyncMock(
-            side_effect=Exception("Timeout")
-        )
+        mock_browser_manager.page.wait_for_selector = AsyncMock(side_effect=Exception("Timeout"))
         controller = SearchController(mock_browser_manager)
 
         with patch("src.browser.search_controller.PageWaiter") as MockPageWaiter:

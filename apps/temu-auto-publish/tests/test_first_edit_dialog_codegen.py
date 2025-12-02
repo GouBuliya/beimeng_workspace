@@ -98,9 +98,7 @@ class TestResolvePage:
         mock_page = MagicMock()
         mock_page.__class__.__name__ = "Page"
 
-        with patch(
-            "src.browser.first_edit_dialog_codegen.Page", return_value=mock_page
-        ):
+        with patch("src.browser.first_edit_dialog_codegen.Page", return_value=mock_page):
             # 模拟 isinstance 检查
             with patch(
                 "src.browser.first_edit_dialog_codegen.isinstance",
@@ -248,9 +246,7 @@ class TestFallbackVideoUrl:
 
     def test_no_base_url(self):
         """测试无 BASE_URL"""
-        with patch(
-            "src.browser.first_edit_dialog_codegen.DEFAULT_VIDEO_BASE_URL", ""
-        ):
+        with patch("src.browser.first_edit_dialog_codegen.DEFAULT_VIDEO_BASE_URL", ""):
             result = _fallback_video_url_from_payload({"model_number": "TEST"})
             assert result is None
 
@@ -653,9 +649,7 @@ class TestCollectInputCandidates:
         mock_locator.count = AsyncMock(return_value=1)
         mock_locator.nth = MagicMock(return_value=mock_locator)
         mock_locator.evaluate = AsyncMock(return_value=True)  # 在排除区域内
-        result = await _collect_input_candidates(
-            mock_locator, exclude_selector=".excluded"
-        )
+        result = await _collect_input_candidates(mock_locator, exclude_selector=".excluded")
         assert len(result) == 0
 
     @pytest.mark.asyncio
@@ -675,9 +669,7 @@ class TestAssignValuesByKeywords:
     @pytest.mark.asyncio
     async def test_assign_single_value(self, mock_locator):
         """测试分配单个值"""
-        candidates = [
-            {"locator": mock_locator, "label": "price input", "used": False}
-        ]
+        candidates = [{"locator": mock_locator, "label": "price input", "used": False}]
         field_values = {"price": 99.99}
         await _assign_values_by_keywords(candidates, field_values)
         assert candidates[0]["used"] is True
@@ -704,9 +696,7 @@ class TestAssignValuesByKeywords:
     @pytest.mark.asyncio
     async def test_no_matching_candidates(self, mock_locator):
         """测试无匹配候选"""
-        candidates = [
-            {"locator": mock_locator, "label": "name", "used": False}
-        ]
+        candidates = [{"locator": mock_locator, "label": "name", "used": False}]
         field_values = {"price": 100}
         await _assign_values_by_keywords(candidates, field_values)
         assert candidates[0]["used"] is False
@@ -730,9 +720,7 @@ class TestDumpDialogSnapshot:
     @pytest.mark.asyncio
     async def test_dump_error_handled(self, mock_page):
         """测试错误处理"""
-        mock_page.get_by_role.return_value.inner_html = AsyncMock(
-            side_effect=Exception("error")
-        )
+        mock_page.get_by_role.return_value.inner_html = AsyncMock(side_effect=Exception("error"))
         # 不应抛出异常
         await _dump_dialog_snapshot(mock_page, "test.html")
 
@@ -871,9 +859,7 @@ class TestHandleExistingVideoPrompt:
     @pytest.mark.asyncio
     async def test_no_prompt(self, mock_page):
         """测试无提示弹窗"""
-        mock_page.get_by_role.return_value.filter.return_value.count = AsyncMock(
-            return_value=0
-        )
+        mock_page.get_by_role.return_value.filter.return_value.count = AsyncMock(return_value=0)
         result = await _handle_existing_video_prompt(mock_page)
         assert result is False
 
@@ -1057,9 +1043,7 @@ class TestFillFirstEditDialogCodegen:
     @pytest.mark.asyncio
     async def test_dialog_not_found(self, mock_page, sample_payload):
         """测试弹窗未找到"""
-        mock_page.wait_for_selector = AsyncMock(
-            side_effect=TimeoutError("timeout")
-        )
+        mock_page.wait_for_selector = AsyncMock(side_effect=TimeoutError("timeout"))
         result = await fill_first_edit_dialog_codegen(mock_page, sample_payload)
         assert result is False
 
@@ -1105,22 +1089,25 @@ class TestFillFirstEditDialogCodegen:
         mock_page.locator.return_value = mock_toast
 
         # Mock _fill_title and other functions
-        with patch(
-            "src.browser.first_edit_dialog_codegen._fill_title",
-            AsyncMock(return_value=True),
-        ), patch(
-            "src.browser.first_edit_dialog_codegen._fill_basic_specs",
-            AsyncMock(return_value=True),
-        ), patch(
-            "src.browser.first_edit_dialog_codegen._fill_supplier_link",
-            AsyncMock(return_value=True),
-        ), patch(
-            "src.browser.first_edit_dialog_codegen._click_save",
-            AsyncMock(return_value=True),
+        with (
+            patch(
+                "src.browser.first_edit_dialog_codegen._fill_title",
+                AsyncMock(return_value=True),
+            ),
+            patch(
+                "src.browser.first_edit_dialog_codegen._fill_basic_specs",
+                AsyncMock(return_value=True),
+            ),
+            patch(
+                "src.browser.first_edit_dialog_codegen._fill_supplier_link",
+                AsyncMock(return_value=True),
+            ),
+            patch(
+                "src.browser.first_edit_dialog_codegen._click_save",
+                AsyncMock(return_value=True),
+            ),
         ):
-            result = await fill_first_edit_dialog_codegen(
-                mock_page, sample_payload
-            )
+            result = await fill_first_edit_dialog_codegen(mock_page, sample_payload)
             assert result is True
 
     @pytest.mark.asyncio
@@ -1130,9 +1117,7 @@ class TestFillFirstEditDialogCodegen:
             "src.browser.first_edit_dialog_codegen._fill_title",
             AsyncMock(return_value=False),
         ):
-            result = await fill_first_edit_dialog_codegen(
-                mock_page, sample_payload
-            )
+            result = await fill_first_edit_dialog_codegen(mock_page, sample_payload)
             assert result is False
 
 
@@ -1162,9 +1147,7 @@ class TestEdgeCases:
 
     def test_field_keywords_case_insensitive(self):
         """测试字段关键字大小写不敏感"""
-        candidates = [
-            {"locator": "loc1", "label": "PRICE INPUT", "used": False}
-        ]
+        candidates = [{"locator": "loc1", "label": "PRICE INPUT", "used": False}]
         result = _match_candidate(candidates, ["price"])
         # 因为 label 是大写，但 keywords 是小写
         # 函数应该处理大小写
@@ -1184,21 +1167,27 @@ class TestEdgeCases:
             "width_cm": 20,
             "height_cm": 15,
         }
-        with patch(
-            "src.browser.first_edit_dialog_codegen.fill_first_spec_unit",
-            AsyncMock(return_value=True),
-        ), patch(
-            "src.browser.first_edit_dialog_codegen._fill_title",
-            AsyncMock(return_value=True),
-        ), patch(
-            "src.browser.first_edit_dialog_codegen._fill_basic_specs",
-            AsyncMock(return_value=True),
-        ), patch(
-            "src.browser.first_edit_dialog_codegen._fill_supplier_link",
-            AsyncMock(return_value=True),
-        ), patch(
-            "src.browser.first_edit_dialog_codegen._click_save",
-            AsyncMock(return_value=True),
+        with (
+            patch(
+                "src.browser.first_edit_dialog_codegen.fill_first_spec_unit",
+                AsyncMock(return_value=True),
+            ),
+            patch(
+                "src.browser.first_edit_dialog_codegen._fill_title",
+                AsyncMock(return_value=True),
+            ),
+            patch(
+                "src.browser.first_edit_dialog_codegen._fill_basic_specs",
+                AsyncMock(return_value=True),
+            ),
+            patch(
+                "src.browser.first_edit_dialog_codegen._fill_supplier_link",
+                AsyncMock(return_value=True),
+            ),
+            patch(
+                "src.browser.first_edit_dialog_codegen._click_save",
+                AsyncMock(return_value=True),
+            ),
         ):
             result = await fill_first_edit_dialog_codegen(mock_page, payload)
             assert result is True
@@ -1217,21 +1206,27 @@ class TestEdgeCases:
             "width_cm": 20,
             "height_cm": 15,
         }
-        with patch(
-            "src.browser.first_edit_dialog_codegen.replace_sku_spec_options",
-            AsyncMock(return_value=True),
-        ), patch(
-            "src.browser.first_edit_dialog_codegen._fill_title",
-            AsyncMock(return_value=True),
-        ), patch(
-            "src.browser.first_edit_dialog_codegen._fill_basic_specs",
-            AsyncMock(return_value=True),
-        ), patch(
-            "src.browser.first_edit_dialog_codegen._fill_supplier_link",
-            AsyncMock(return_value=True),
-        ), patch(
-            "src.browser.first_edit_dialog_codegen._click_save",
-            AsyncMock(return_value=True),
+        with (
+            patch(
+                "src.browser.first_edit_dialog_codegen.replace_sku_spec_options",
+                AsyncMock(return_value=True),
+            ),
+            patch(
+                "src.browser.first_edit_dialog_codegen._fill_title",
+                AsyncMock(return_value=True),
+            ),
+            patch(
+                "src.browser.first_edit_dialog_codegen._fill_basic_specs",
+                AsyncMock(return_value=True),
+            ),
+            patch(
+                "src.browser.first_edit_dialog_codegen._fill_supplier_link",
+                AsyncMock(return_value=True),
+            ),
+            patch(
+                "src.browser.first_edit_dialog_codegen._click_save",
+                AsyncMock(return_value=True),
+            ),
         ):
             result = await fill_first_edit_dialog_codegen(mock_page, payload)
             assert result is True

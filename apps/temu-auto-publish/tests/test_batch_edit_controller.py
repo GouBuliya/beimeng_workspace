@@ -357,9 +357,7 @@ class TestBatchEditControllerInit:
         """测试默认初始化"""
         from src.browser.batch_edit.controller import BatchEditController
 
-        with patch.object(
-            BatchEditController, "_load_selectors", return_value={"batch_edit": {}}
-        ):
+        with patch.object(BatchEditController, "_load_selectors", return_value={"batch_edit": {}}):
             controller = BatchEditController(selector_path=temp_selector_file)
 
             assert controller.BATCH_SIZE == 20
@@ -370,9 +368,7 @@ class TestBatchEditControllerInit:
         """测试带选项初始化"""
         from src.browser.batch_edit.controller import BatchEditController
 
-        with patch.object(
-            BatchEditController, "_load_selectors", return_value={"batch_edit": {}}
-        ):
+        with patch.object(BatchEditController, "_load_selectors", return_value={"batch_edit": {}}):
             controller = BatchEditController(
                 selector_path=temp_selector_file,
                 outer_package_image="/path/to/image.jpg",
@@ -388,9 +384,7 @@ class TestBatchEditControllerInit:
         """测试默认等待策略构建"""
         from src.browser.batch_edit.controller import BatchEditController
 
-        with patch.object(
-            BatchEditController, "_load_selectors", return_value={"batch_edit": {}}
-        ):
+        with patch.object(BatchEditController, "_load_selectors", return_value={"batch_edit": {}}):
             controller = BatchEditController(selector_path=temp_selector_file)
             strategy = controller._build_wait_strategy(None)
 
@@ -402,9 +396,7 @@ class TestBatchEditControllerInit:
         """测试自定义等待策略构建"""
         from src.browser.batch_edit.controller import BatchEditController
 
-        with patch.object(
-            BatchEditController, "_load_selectors", return_value={"batch_edit": {}}
-        ):
+        with patch.object(BatchEditController, "_load_selectors", return_value={"batch_edit": {}}):
             controller = BatchEditController(selector_path=temp_selector_file)
             config = {
                 "wait_after_action_ms": 200,
@@ -714,9 +706,7 @@ class TestBatchEditControllerFlow:
         """测试异常处理"""
         products_data = [{"cost": 150.0} for _ in range(20)]
 
-        with patch.object(
-            controller, "select_all_products", side_effect=Exception("Test error")
-        ):
+        with patch.object(controller, "select_all_products", side_effect=Exception("Test error")):
             result = await controller.batch_edit(mock_page, products_data)
 
             assert result is False
@@ -741,9 +731,7 @@ class TestBatchEditControllerPerfTracking:
         mock_tracker = MagicMock()
         mock_tracker.operation = MagicMock()
 
-        return BatchEditController(
-            selector_path=str(selector_file), perf_tracker=mock_tracker
-        )
+        return BatchEditController(selector_path=str(selector_file), perf_tracker=mock_tracker)
 
     @pytest.mark.asyncio
     async def test_track_operation_with_tracker(self, controller_with_tracker):
@@ -751,9 +739,7 @@ class TestBatchEditControllerPerfTracking:
         ctx_manager = await controller_with_tracker._track_operation("test_op")
 
         # 应该返回追踪器的上下文管理器
-        controller_with_tracker._perf_tracker.operation.assert_called_once_with(
-            "test_op"
-        )
+        controller_with_tracker._perf_tracker.operation.assert_called_once_with("test_op")
 
     @pytest.mark.asyncio
     async def test_track_operation_without_tracker(self, tmp_path):

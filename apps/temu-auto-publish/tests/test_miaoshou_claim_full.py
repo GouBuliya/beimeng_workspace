@@ -56,9 +56,7 @@ class TestResolveTargetIndexes:
 
     def test_with_count_only(self):
         """测试仅提供 count"""
-        result = MiaoshouClaimMixin._resolve_target_indexes(
-            count=5, indexes=None, available=10
-        )
+        result = MiaoshouClaimMixin._resolve_target_indexes(count=5, indexes=None, available=10)
         assert result == [0, 1, 2, 3, 4]
 
     def test_with_specific_indexes(self):
@@ -105,9 +103,7 @@ class TestResolveTargetIndexes:
 
     def test_count_exceeds_available(self):
         """测试 count 超过可用数量"""
-        result = MiaoshouClaimMixin._resolve_target_indexes(
-            count=10, indexes=None, available=5
-        )
+        result = MiaoshouClaimMixin._resolve_target_indexes(count=10, indexes=None, available=5)
         assert result == [0, 1, 2, 3, 4]
 
     def test_handles_none_in_indexes(self):
@@ -304,9 +300,7 @@ class TestSelectProductsForClaim:
         """测试指定索引选择"""
         mock_mixin._select_checkboxes_by_js = AsyncMock(return_value=3)
 
-        result = await mock_mixin.select_products_for_claim(
-            mock_page, count=5, indexes=[0, 2, 4]
-        )
+        result = await mock_mixin.select_products_for_claim(mock_page, count=5, indexes=[0, 2, 4])
 
         assert result is True
 
@@ -336,7 +330,9 @@ class TestSelectProductsForClaim:
         mock_mixin._select_checkboxes_by_js = AsyncMock(return_value=2)
 
         result = await mock_mixin.select_products_for_claim(
-            mock_page, count=5, indexes=[0, 1, 25, 26]  # 索引 25, 26 在第二页
+            mock_page,
+            count=5,
+            indexes=[0, 1, 25, 26],  # 索引 25, 26 在第二页
         )
 
         # 应该触发翻页
@@ -419,9 +415,7 @@ class TestJsMethods:
     @pytest.mark.asyncio
     async def test_click_claim_button_in_row_by_js(self, mock_mixin, mock_page):
         """测试 JS 点击认领按钮"""
-        mock_page.evaluate = AsyncMock(
-            return_value={"success": True, "matchedY": 128}
-        )
+        mock_page.evaluate = AsyncMock(return_value={"success": True, "matchedY": 128})
 
         result = await mock_mixin._click_claim_button_in_row_by_js(
             mock_page, 0, target="claim_button"
@@ -494,24 +488,18 @@ class TestMiaoshouClaimEdgeCases:
 
     def test_resolve_target_indexes_empty_indexes(self):
         """测试空索引列表（空列表被视为 falsy，回退到 count 模式）"""
-        result = MiaoshouClaimMixin._resolve_target_indexes(
-            count=5, indexes=[], available=10
-        )
+        result = MiaoshouClaimMixin._resolve_target_indexes(count=5, indexes=[], available=10)
         # 空列表被视为 falsy，所以回退到使用 count
         assert result == [0, 1, 2, 3, 4]
 
     def test_resolve_target_indexes_zero_count(self):
         """测试 count 为 0"""
-        result = MiaoshouClaimMixin._resolve_target_indexes(
-            count=0, indexes=None, available=10
-        )
+        result = MiaoshouClaimMixin._resolve_target_indexes(count=0, indexes=None, available=10)
         assert result == []
 
     def test_resolve_target_indexes_zero_available(self):
         """测试 available 为 0"""
-        result = MiaoshouClaimMixin._resolve_target_indexes(
-            count=5, indexes=None, available=0
-        )
+        result = MiaoshouClaimMixin._resolve_target_indexes(count=5, indexes=None, available=0)
         assert result == []
 
     def test_page_grouping_calculation(self):

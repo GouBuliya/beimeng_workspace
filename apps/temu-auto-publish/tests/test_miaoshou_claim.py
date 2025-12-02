@@ -180,9 +180,7 @@ class TestResolveSelectors:
         """测试解析多个键"""
         config = {"primary": ".primary", "secondary": ".secondary"}
 
-        result = base._resolve_selectors(
-            config, ["primary", "secondary"], [".default"]
-        )
+        result = base._resolve_selectors(config, ["primary", "secondary"], [".default"])
 
         assert ".primary" in result
         assert ".secondary" in result
@@ -231,9 +229,7 @@ class TestResolveSelectors:
         """测试默认值去重"""
         config = {}
 
-        result = base._resolve_selectors(
-            config, ["missing"], [".default", ".default", ".other"]
-        )
+        result = base._resolve_selectors(config, ["missing"], [".default", ".default", ".other"])
 
         assert result == [".default", ".other"]
 
@@ -241,9 +237,7 @@ class TestResolveSelectors:
         """测试默认值去除空格"""
         config = {}
 
-        result = base._resolve_selectors(
-            config, ["missing"], ["  .default  ", "  .other  "]
-        )
+        result = base._resolve_selectors(config, ["missing"], ["  .default  ", "  .other  "])
 
         assert result == [".default", ".other"]
 
@@ -364,9 +358,7 @@ class TestMiaoshouClaimMixin:
         from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
         mock_locator = mock_page.locator.return_value
-        mock_locator.first.wait_for = AsyncMock(
-            side_effect=PlaywrightTimeoutError("Timeout")
-        )
+        mock_locator.first.wait_for = AsyncMock(side_effect=PlaywrightTimeoutError("Timeout"))
 
         result = await controller._wait_for_rows(mock_page, timeout=100)
 

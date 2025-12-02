@@ -4,6 +4,15 @@ on:
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      skip_docker:
+        description: '跳过 Docker 构建'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  BUILD_SCRIPT: apps/temu-auto-publish/scripts/build_app.py
 
 jobs:
   build-multiplatform:
@@ -11,26 +20,21 @@ jobs:
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: Windows
             runner: windows-latest
             artifact-name: TemuWebPanel-windows-x64
-            build-cmd: uv run python apps/temu-auto-publish/build_windows_exe.py build
-            artifact-path: apps/temu-auto-publish/dist/TemuWebPanel.exe
-            shell: pwsh
-          - os: Linux
-            runner: ubuntu-latest
-            artifact-name: TemuWebPanel-linux-x64
-            build-cmd: uv run pyinstaller apps/temu-auto-publish/TemuWebPanel.spec
-            artifact-path: apps/temu-auto-publish/dist/TemuWebPanel
-            shell: bash
-          - os: macOS
+            artifact-path: apps/temu-auto-publish/dist/TemuWebPanel-windows-x64.exe
+          - os: macOS-ARM
             runner: macos-latest
             artifact-name: TemuWebPanel-macos-arm64
-            build-cmd: uv run pyinstaller apps/temu-auto-publish/TemuWebPanel.spec
-            artifact-path: apps/temu-auto-publish/dist/TemuWebPanel
-            shell: bash
+            artifact-path: apps/temu-auto-publish/dist/TemuWebPanel-macos-arm64
+          - os: macOS-Intel
+            runner: macos-13
+            artifact-name: TemuWebPanel-macos-x64
+            artifact-path: apps/temu-auto-publish/dist/TemuWebPanel-macos-x64
 
     steps:
       - name: Checkout
@@ -42,14 +46,14 @@ jobs:
           python-version: "3.12"
 
       - name: Install uv (Windows)
-        if: matrix.os == 'Windows'
+        if: runner.os == 'Windows'
         shell: pwsh
         run: |
           irm https://astral.sh/uv/install.ps1 | iex
           "$HOME\.cargo\bin" >> $env:GITHUB_PATH
 
       - name: Install uv (Unix)
-        if: matrix.os != 'Windows'
+        if: runner.os != 'Windows'
         run: |
           curl -LsSf https://astral.sh/uv/install.sh | sh
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
@@ -59,48 +63,35 @@ jobs:
         with:
           path: |
             ~/.cache/uv
-            ~\AppData\Local\uv
-          key: uv-${{ matrix.os }}-${{ hashFiles('uv.lock') }}
+            ~/AppData/Local/uv
+          key: uv-release-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+          restore-keys: |
+            uv-release-${{ runner.os }}-
 
-      - name: Sync dependencies (Windows)
-        if: matrix.os == 'Windows'
-        shell: pwsh
+      - name: Sync dependencies
         run: uv sync --extra dev --extra temu
 
-      - name: Sync dependencies (Unix)
-        if: matrix.os != 'Windows'
-        shell: bash
-        run: uv sync --extra dev --extra temu
-
-      - name: Install Playwright browsers (Windows)
-        if: matrix.os == 'Windows'
-        shell: pwsh
+      - name: Install Playwright browsers
         run: uv run playwright install chromium
 
-      - name: Install Playwright browsers (Unix)
-        if: matrix.os != 'Windows'
-        shell: bash
-        run: uv run playwright install chromium
+      - name: Build executable
+        run: uv run python ${{ env.BUILD_SCRIPT }} build --with-suffix
 
-      - name: Build executable (Windows)
-        if: matrix.os == 'Windows'
-        shell: pwsh
-        run: ${{ matrix.build-cmd }}
-
-      - name: Build executable (Unix)
-        if: matrix.os != 'Windows'
+      - name: List build outputs
         shell: bash
-        run: ${{ matrix.build-cmd }}
+        run: ls -la apps/temu-auto-publish/dist/ || echo "No dist directory"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact-name }}
           path: ${{ matrix.artifact-path }}
+          if-no-files-found: error
 
   publish-docker:
     name: Publish Docker Images
     runs-on: ubuntu-latest
+    if: ${{ !inputs.skip_docker }}
     permissions:
       contents: read
       packages: write
@@ -148,16 +139,39 @@ jobs:
   attach-release:
     name: Attach Assets to Release
     runs-on: ubuntu-latest
-    needs: [build-multiplatform, publish-docker]
+    needs: [build-multiplatform]
+    if: github.event_name == 'release'
+    permissions:
+      contents: write
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: dist
 
+      - name: List downloaded artifacts
+        run: find dist -type f | head -20
+
+      - name: Compress artifacts for release
+        run: |
+          cd dist
+          for dir in */; do
+            name="${dir%/}"
+            if [ -d "$dir" ]; then
+              # 找到目录中的可执行文件
+              find "$dir" -type f | while read file; do
+                # 保持原文件名，移动到 dist 根目录
+                mv "$file" "./${name}$(basename "$file" | grep -o '\.[^.]*$' || echo '')" 2>/dev/null || \
+                mv "$file" "./${name}" 2>/dev/null || true
+              done
+              rm -rf "$dir"
+            fi
+          done
+          ls -la
+
       - name: Publish to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/**/*
+          files: dist/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

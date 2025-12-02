@@ -602,9 +602,7 @@ class TestEdgeCases:
 
     def test_append_title_suffix_unicode(self):
         """测试 Unicode 标题处理"""
-        result = CompletePublishWorkflow._append_title_suffix(
-            "日本进口商品🎁", "JP-001"
-        )
+        result = CompletePublishWorkflow._append_title_suffix("日本进口商品🎁", "JP-001")
 
         assert result == "日本进口商品🎁 JP-001"
 

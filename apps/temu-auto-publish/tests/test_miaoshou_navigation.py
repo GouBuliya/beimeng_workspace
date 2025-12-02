@@ -225,9 +225,7 @@ class TestWaitMethods:
     @pytest.mark.asyncio
     async def test_wait_for_idle(self, mixin, mock_page):
         """测试等待空闲"""
-        with patch(
-            "src.browser.miaoshou.navigation.wait_network_idle", AsyncMock()
-        ):
+        with patch("src.browser.miaoshou.navigation.wait_network_idle", AsyncMock()):
             await mixin._wait_for_idle(mock_page)
 
 
@@ -241,9 +239,10 @@ class TestNavigateToCollectionBox:
     async def test_navigate_direct_success(self, mixin, mock_page):
         """测试直接导航成功"""
         mock_page.url = "https://erp.91miaoshou.com/common_collect_box/items"
-        with patch(
-            "src.browser.miaoshou.navigation.wait_dom_loaded", AsyncMock()
-        ), patch.object(mixin, "_ensure_popups_closed", AsyncMock()):
+        with (
+            patch("src.browser.miaoshou.navigation.wait_dom_loaded", AsyncMock()),
+            patch.object(mixin, "_ensure_popups_closed", AsyncMock()),
+        ):
             result = await mixin.navigate_to_collection_box(mock_page)
             assert result is True
 
@@ -251,9 +250,10 @@ class TestNavigateToCollectionBox:
     async def test_navigate_with_sidebar(self, mixin, mock_page):
         """测试通过侧边栏导航"""
         mock_page.url = "https://erp.91miaoshou.com/common_collect_box/items"
-        with patch(
-            "src.browser.miaoshou.navigation.wait_dom_loaded", AsyncMock()
-        ), patch.object(mixin, "_ensure_popups_closed", AsyncMock()):
+        with (
+            patch("src.browser.miaoshou.navigation.wait_dom_loaded", AsyncMock()),
+            patch.object(mixin, "_ensure_popups_closed", AsyncMock()),
+        ):
             result = await mixin.navigate_to_collection_box(mock_page, use_sidebar=True)
             assert result is True
 
@@ -261,26 +261,22 @@ class TestNavigateToCollectionBox:
     async def test_navigate_wrong_url_retry(self, mixin, mock_page):
         """测试 URL 错误时重试"""
         mock_page.url = "https://other-site.com"
-        with patch(
-            "src.browser.miaoshou.navigation.wait_dom_loaded", AsyncMock()
-        ), patch.object(mixin, "_ensure_popups_closed", AsyncMock()):
+        with (
+            patch("src.browser.miaoshou.navigation.wait_dom_loaded", AsyncMock()),
+            patch.object(mixin, "_ensure_popups_closed", AsyncMock()),
+        ):
             # 模拟递归调用返回 False
-            with patch.object(
-                mixin, "navigate_to_collection_box", AsyncMock(return_value=False)
-            ):
-                result = await MiaoshouNavigationMixin.navigate_to_collection_box(
-                    mixin, mock_page
-                )
+            with patch.object(mixin, "navigate_to_collection_box", AsyncMock(return_value=False)):
+                result = await MiaoshouNavigationMixin.navigate_to_collection_box(mixin, mock_page)
                 # 由于 mock 返回 False，结果应该是 False
 
     @pytest.mark.asyncio
     async def test_navigate_exception(self, mixin, mock_page):
         """测试导航异常"""
         mock_page.goto = AsyncMock(side_effect=Exception("network error"))
-        with patch(
-            "src.browser.miaoshou.navigation.wait_dom_loaded", AsyncMock()
-        ), patch.object(
-            mixin, "navigate_to_collection_box", AsyncMock(return_value=False)
+        with (
+            patch("src.browser.miaoshou.navigation.wait_dom_loaded", AsyncMock()),
+            patch.object(mixin, "navigate_to_collection_box", AsyncMock(return_value=False)),
         ):
             # 直接测试异常处理路径
             result = await mixin.navigate_to_collection_box(mock_page)
@@ -322,9 +318,12 @@ class TestFilterAndSearch:
         mock_locator.count = AsyncMock(return_value=0)
         mock_page.locator.return_value = mock_locator
 
-        with patch.object(mixin, "_wait_for_table_refresh", AsyncMock()), patch(
-            "src.browser.miaoshou.navigation.fallback_apply_user_filter",
-            AsyncMock(return_value=True),
+        with (
+            patch.object(mixin, "_wait_for_table_refresh", AsyncMock()),
+            patch(
+                "src.browser.miaoshou.navigation.fallback_apply_user_filter",
+                AsyncMock(return_value=True),
+            ),
         ):
             result = await mixin.filter_and_search(mock_page, staff_name="张三")
             assert result is True
@@ -368,9 +367,10 @@ class TestClosePopups:
     @pytest.mark.asyncio
     async def test_ensure_popups_closed(self, mixin, mock_page):
         """测试确保弹窗关闭"""
-        with patch.object(
-            mixin, "close_popup_if_exists", AsyncMock(return_value=False)
-        ), patch.object(mixin, "_wait_for_message_box_dismissal", AsyncMock()):
+        with (
+            patch.object(mixin, "close_popup_if_exists", AsyncMock(return_value=False)),
+            patch.object(mixin, "_wait_for_message_box_dismissal", AsyncMock()),
+        ):
             await mixin._ensure_popups_closed(mock_page)
 
 
@@ -447,9 +447,7 @@ class TestProductOperations:
         mock_page.locator.return_value = mock_locator
 
         with patch.object(mixin, "_wait_for_table_refresh", AsyncMock()):
-            result = await mixin.search_products(
-                mock_page, price_min=10.0, price_max=100.0
-            )
+            result = await mixin.search_products(mock_page, price_min=10.0, price_max=100.0)
             assert result is True
 
     @pytest.mark.asyncio
@@ -479,9 +477,7 @@ class TestProductOperations:
     @pytest.mark.asyncio
     async def test_click_edit_first_product(self, mixin, mock_page):
         """测试点击第一个产品编辑"""
-        with patch.object(
-            mixin, "click_edit_product_by_index", AsyncMock(return_value=True)
-        ):
+        with patch.object(mixin, "click_edit_product_by_index", AsyncMock(return_value=True)):
             result = await mixin.click_edit_first_product(mock_page)
             assert result is True
 
@@ -554,9 +550,7 @@ class TestClickEditButtonInRow:
         mock_btn.click = AsyncMock()
         mock_row.locator.return_value.first = mock_btn
 
-        with patch(
-            "src.browser.miaoshou.navigation.wait_dom_loaded", AsyncMock()
-        ):
+        with patch("src.browser.miaoshou.navigation.wait_dom_loaded", AsyncMock()):
             result = await mixin._click_edit_button_in_row(
                 mock_page, mock_row, ("button:has-text('编辑')",), 0
             )
@@ -571,9 +565,7 @@ class TestClickEditButtonInRow:
         mock_btn.count = AsyncMock(return_value=0)
         mock_row.locator.return_value.first = mock_btn
 
-        with patch(
-            "src.browser.miaoshou.navigation.wait_dom_loaded", AsyncMock()
-        ):
+        with patch("src.browser.miaoshou.navigation.wait_dom_loaded", AsyncMock()):
             result = await mixin._click_edit_button_in_row(
                 mock_page, mock_row, ("button:has-text('编辑')",), 0
             )

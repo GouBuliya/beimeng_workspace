@@ -112,6 +112,10 @@ ignore = [
     "E501",   # line too long (handled by formatter)
     "B008",   # 允许在参数默认值中调用函数 (Typer 需要)
     "N999",   # 允许非标准模块名 (airtest 等)
+    # 中文项目中使用全角标点是正常的，忽略以下规则：
+    "RUF001", # 字符串中的全角字符（如中文逗号、句号）
+    "RUF002", # 文档字符串中的全角字符
+    "RUF003", # 注释中的全角字符
 ]
 
 [tool.ruff.lint.per-file-ignores]
