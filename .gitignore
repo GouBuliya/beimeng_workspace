@@ -106,4 +106,8 @@ apps/temu-auto-publish/data/metrics/*
 apps/temu-auto-publish/data/output/*
 apps/temu-auto-publish/data/video/*
 apps/temu-auto-publish/data/workflow_states/*
+apps/data/output/processed/*
+apps/temu-auto-publish/data/debug/html/size_chart_exception.html
+apps/temu-auto-publish/data/debug/html/video_upload_exception.html
 
+# apps/temu-auto-publish

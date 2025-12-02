@@ -102,7 +102,8 @@
   },
   "login": {
     "url": "https://seller.temu.com/login",
-    "cookie_max_age_hours": 24
+    "cookie_max_age_hours": 24,
+    "use_cookie_login": false
   },
   "search": {
     "wait_after_search": 300,
