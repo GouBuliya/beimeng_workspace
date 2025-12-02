@@ -35,7 +35,12 @@ from urllib.parse import urlparse
 from loguru import logger
 from playwright.async_api import Locator, Page
 
+from ..utils.page_waiter import PageWaiter
 from ..utils.selector_race import TIMEOUTS, try_selectors_race
+
+# 资源加载等待配置
+RESOURCE_LOAD_TIMEOUT_MS = 5000  # 资源加载超时时间
+RESOURCE_LOAD_CHECK_INTERVAL_MS = 100  # 资源加载检测间隔
 
 
 def _elapsed_ms(start: float) -> int:
@@ -140,11 +145,17 @@ class ImageManager:
             logger.error(f"选择器配置JSON格式错误: {e}")
             raise
 
-    async def navigate_to_images_tab(self, page: Page) -> bool:
-        """导航到产品图片Tab.
+    async def navigate_to_images_tab(self, page: Page, max_retries: int = 3) -> bool:
+        """导航到产品图片Tab（带重试）.
+
+        重试策略:
+        - 最大重试 max_retries 次
+        - 指数退避: 300ms -> 600ms -> 1200ms
+        - 每次重试前等待页面稳定
 
         Args:
             page: Playwright页面对象
+            max_retries: 最大重试次数（默认3次）
 
         Returns:
             是否成功导航
@@ -153,25 +164,43 @@ class ImageManager:
             >>> await manager.navigate_to_images_tab(page)
             True
         """
-        logger.info("导航到「产品图片」Tab...")
+        for attempt in range(1, max_retries + 1):
+            try:
+                logger.info(f"导航到「产品图片」Tab (尝试 {attempt}/{max_retries})...")
 
-        pane = await self._locate_product_images_pane(page)
-        if pane is None:
-            logger.error("导航到产品图片Tab失败: 未找到滚动面板")
-            return False
+                pane = await self._locate_product_images_pane(page)
+                if pane is None:
+                    if attempt < max_retries:
+                        delay = 300 * attempt
+                        logger.warning(f"未找到滚动面板，{delay}ms 后重试...")
+                        await page.wait_for_timeout(delay)
+                        continue
+                    else:
+                        logger.error("导航到产品图片Tab失败: 未找到滚动面板")
+                        return False
 
-        label = pane.locator(".scroll-menu-pane__label").first
-        try:
-            with suppress(Exception):
-                await label.scroll_into_view_if_needed()
-            await label.wait_for(state="visible", timeout=TIMEOUTS.NORMAL)
-            await label.click()
-            # await page.wait_for_timeout(300)  # 已注释:不必要的等待
-            logger.success("✓ 已切换到产品图片Tab")
-            return True
-        except Exception as exc:
-            logger.error(f"导航到产品图片Tab失败: {exc}")
-            return False
+                label = pane.locator(".scroll-menu-pane__label").first
+                with suppress(Exception):
+                    await label.scroll_into_view_if_needed()
+                await label.wait_for(state="visible", timeout=TIMEOUTS.NORMAL)
+                await label.click()
+
+                # 等待 Tab 内容加载
+                await page.wait_for_timeout(200)
+
+                logger.success("✓ 已切换到产品图片Tab")
+                return True
+
+            except Exception as exc:
+                if attempt < max_retries:
+                    delay = 300 * attempt
+                    logger.warning(f"Tab切换异常: {exc}，{delay}ms 后重试...")
+                    await page.wait_for_timeout(delay)
+                else:
+                    logger.error(f"导航到产品图片Tab失败: {exc}")
+                    return False
+
+        return False
 
     async def get_images_info(self, page: Page) -> dict[str, list[dict]]:
         """获取当前所有图片信息.
@@ -396,7 +425,12 @@ class ImageManager:
         page: Page,
         image_urls: Sequence[str],
     ) -> bool:
-        """删除现有 SKU 图片,并通过 URL 列表重新上传.
+        """删除现有 SKU 图片,并通过 URL 列表重新上传（增强版）.
+
+        增强点:
+        - SKU 区域定位带重试（最多 3 次）
+        - 每张图片上传带重试（最多 3 次尝试）
+        - 详细的日志记录
 
         Args:
             page: Playwright 页面对象
@@ -419,12 +453,59 @@ class ImageManager:
         if not deletion_success:
             logger.warning("未能清空现有 SKU 图片, 仍尝试上传新图片")
 
-        sku_section = page.get_by_label("SKU图片:", exact=False)
-        try:
-            await sku_section.wait_for(state="visible", timeout=TIMEOUTS.SLOW)
-        except Exception:
-            logger.error("SKU 图片同步失败: 无法定位『SKU图片』区域")
+        # [增强] SKU 区域定位带重试
+        max_sku_section_retries = 3
+        sku_section = None
+
+        for attempt in range(1, max_sku_section_retries + 1):
+            sku_section = page.get_by_label("SKU图片:", exact=False)
+            try:
+                await sku_section.wait_for(state="visible", timeout=TIMEOUTS.SLOW)
+                logger.debug(f"SKU 区域定位成功 (尝试 {attempt})")
+                break
+            except Exception:
+                if attempt < max_sku_section_retries:
+                    delay = 300 * attempt
+                    logger.warning(f"SKU 区域定位失败，{delay}ms 后第 {attempt + 1} 次重试...")
+                    await page.wait_for_timeout(delay)
+                    # 尝试重新切换到产品图片 Tab
+                    await self.navigate_to_images_tab(page, max_retries=1)
+                else:
+                    logger.error("SKU 图片同步失败: 无法定位『SKU图片』区域")
+                    return False
+
+        if sku_section is None:
+            logger.error("SKU 图片同步失败: SKU区域定位异常")
             return False
+
+        # [核心修复] 虚拟表格处理：只渲染可视区域的行
+        # 需要先滚动表格以确保所有行都被渲染
+        sku_table = sku_section.locator(".pro-virtual-table, [class*='virtual-table']").first
+        if not await sku_table.count():
+            sku_table = sku_section  # 回退到整个 section
+
+        # 首先滚动到表格底部再回到顶部，触发所有行的渲染
+        try:
+            await sku_table.evaluate(
+                """(el) => {
+                    const scrollable = el.querySelector('.pro-virtual-table__body') || el;
+                    if (scrollable) {
+                        scrollable.scrollTop = scrollable.scrollHeight;
+                    }
+                }"""
+            )
+            await page.wait_for_timeout(200)
+            await sku_table.evaluate(
+                """(el) => {
+                    const scrollable = el.querySelector('.pro-virtual-table__body') || el;
+                    if (scrollable) {
+                        scrollable.scrollTop = 0;
+                    }
+                }"""
+            )
+            await page.wait_for_timeout(200)
+        except Exception as exc:
+            logger.debug(f"虚拟表格滚动预处理失败: {exc}")
 
         sku_rows = sku_section.locator(".pro-virtual-table__row")
         row_count = await sku_rows.count()
@@ -437,6 +518,8 @@ class ImageManager:
             logger.warning("SKU 图片同步被跳过: 清理后未获得有效 URL")
             return False
 
+        logger.info(f"检测到 {row_count} 个 SKU 行，待上传 {target_count} 张图片")
+
         if target_count > row_count:
             logger.warning(
                 f"SKU 图片 URL 数量({target_count}) 超过 SKU 行数({row_count}), 仅处理前 {row_count} 行"
@@ -444,19 +527,67 @@ class ImageManager:
             target_count = row_count
 
         # SKU 图片上传必须串行执行(UI 弹窗交互不支持并发)
+        # [增强] 使用带重试的上传方法 + 虚拟表格滚动支持
         uploads = 0
         for index in range(target_count):
             url = sanitized_urls[index]
+
+            # [关键] 虚拟表格：每次迭代前重新查询行并滚动到可视区域
+            sku_rows = sku_section.locator(".pro-virtual-table__row")
+            current_row_count = await sku_rows.count()
+
+            # 如果当前索引超出已渲染行数，需要滚动表格
+            if index >= current_row_count:
+                logger.debug(f"SKU行{index + 1} 未渲染，尝试滚动表格...")
+                try:
+                    # 滚动到表格底部区域以触发更多行的渲染
+                    await sku_table.evaluate(
+                        f"""(el) => {{
+                            const scrollable = el.querySelector('.pro-virtual-table__body') || el;
+                            if (scrollable) {{
+                                // 按比例滚动
+                                const ratio = {index} / {target_count};
+                                scrollable.scrollTop = scrollable.scrollHeight * ratio;
+                            }}
+                        }}"""
+                    )
+                    await page.wait_for_timeout(300)
+                    # 重新查询行
+                    sku_rows = sku_section.locator(".pro-virtual-table__row")
+                    current_row_count = await sku_rows.count()
+                except Exception as exc:
+                    logger.warning(f"滚动虚拟表格失败: {exc}")
+
+            # 再次检查行是否存在
+            if index >= current_row_count:
+                logger.warning(
+                    f"SKU行{index + 1} 仍未渲染，跳过该行 (当前只有 {current_row_count} 行)"
+                )
+                continue
+
             row = sku_rows.nth(index)
+
+            # 滚动到该行以确保可见
+            try:
+                await row.scroll_into_view_if_needed()
+                await page.wait_for_timeout(100)
+            except Exception:
+                pass
+
             row_hint = f"SKU行{index + 1}"
             logger.info("上传 SKU 图片 [{}/{}]: {}", index + 1, target_count, url[:80])
-            if await self._upload_single_sku_image(page, url, row=row, slot_hint=row_hint):
+            if await self._upload_single_sku_image_with_retry(
+                page, url, row=row, slot_hint=row_hint, max_retries=2
+            ):
                 uploads += 1
             else:
-                logger.warning("SKU 图片上传失败: {} ({})", url, row_hint)
+                logger.warning("SKU 图片上传失败（已重试）: {} ({})", url, row_hint)
 
         expected_total = target_count
         inventory_ok = await self._wait_for_total_sku_images(sku_section, expected_total)
+
+        # [新增] 等待所有上传的资源加载完成
+        await self._wait_for_upload_resources_loaded(page, scope=sku_section)
 
         all_success = uploads == target_count and inventory_ok
         if all_success:
@@ -511,8 +642,8 @@ class ImageManager:
 
             logger.warning("上传图片功能需要Codegen验证选择器 - 需要实际录制「使用网络图片」操作")
 
-            # 等待上传完成
-            # await page.wait_for_timeout(500)  # 已注释:不必要的等待
+            # [新增] 等待上传资源加载完成
+            await self._wait_for_upload_resources_loaded(page)
 
             logger.success(f"✓ 图片上传成功: {image_type}")
             return True
@@ -577,8 +708,10 @@ class ImageManager:
 
             logger.warning("上传视频功能需要Codegen验证选择器 - 需要实际录制视频上传操作")
 
-            # 视频上传和处理需要更长时间
-            # await page.wait_for_timeout(1000)  # 已注释:不必要的等待
+            # [新增] 等待上传资源加载完成（视频加载时间更长）
+            await self._wait_for_upload_resources_loaded(
+                page, timeout_ms=RESOURCE_LOAD_TIMEOUT_MS * 2
+            )
 
             logger.success("✓ 视频上传成功")
             return True
@@ -944,6 +1077,275 @@ class ImageManager:
         with suppress(Exception):
             await locator.first.wait_for(state="hidden", timeout=timeout)
 
+    async def _wait_for_upload_resources_loaded(
+        self,
+        page: Page,
+        scope: Locator | None = None,
+        timeout_ms: int = RESOURCE_LOAD_TIMEOUT_MS,
+    ) -> bool:
+        """等待上传的图片/视频资源加载完成.
+
+        通过检测指定范围内的图片元素是否完成加载来判断。
+        同时等待网络空闲和 DOM 稳定。
+
+        Args:
+            page: Playwright 页面对象
+            scope: 检测范围定位器，None 表示全页面
+            timeout_ms: 超时时间(毫秒)
+
+        Returns:
+            bool: True 表示加载完成，False 表示超时
+        """
+        start = time.perf_counter()
+        logger.debug("等待上传资源加载完成...")
+        waiter = PageWaiter(page)
+
+        try:
+            # 1. 首先等待网络空闲
+            await waiter.wait_for_network_idle(timeout_ms=min(2000, timeout_ms // 2))
+
+            # 2. 等待 DOM 稳定
+            await waiter.wait_for_dom_stable(timeout_ms=min(1000, timeout_ms // 3))
+
+            # 3. 检测范围内的图片是否加载完成
+            target = scope if scope is not None else page
+            images = target.locator("img")
+            img_count = await images.count()
+
+            if img_count == 0:
+                logger.debug(f"未发现图片元素，等待完成 (耗时 {_elapsed_ms(start)}ms)")
+                return True
+
+            # 等待图片加载完成
+            deadline = asyncio.get_running_loop().time() + timeout_ms / 1000
+            while asyncio.get_running_loop().time() < deadline:
+                all_loaded = True
+                for i in range(min(img_count, 10)):  # 最多检查前10张图片
+                    img = images.nth(i)
+                    try:
+                        is_loaded = await img.evaluate(
+                            """
+                            (img) => {
+                                // 检查 naturalWidth/naturalHeight 判断是否已加载
+                                if (img.complete && img.naturalWidth > 0) {
+                                    return true;
+                                }
+                                // 检查 src 是否为有效 URL
+                                const src = img.src || img.getAttribute('src') || '';
+                                if (!src || src.startsWith('data:') || src.includes('placeholder')) {
+                                    return true;  // 占位图视为已加载
+                                }
+                                return false;
+                            }
+                            """
+                        )
+                        if not is_loaded:
+                            all_loaded = False
+                            break
+                    except Exception:
+                        continue
+
+                if all_loaded:
+                    logger.debug(f"✓ 上传资源加载完成 (耗时 {_elapsed_ms(start)}ms)")
+                    return True
+
+                await asyncio.sleep(RESOURCE_LOAD_CHECK_INTERVAL_MS / 1000)
+
+            logger.debug(f"上传资源加载超时，继续后续流程 (耗时 {_elapsed_ms(start)}ms)")
+            return False
+
+        except Exception as exc:
+            logger.debug(f"等待资源加载异常: {exc}")
+            return False
+
+    async def _verify_sku_image_upload_success(
+        self,
+        page: Page,
+        row: Locator,
+        previous_image_count: int,
+        slot_hint: str,
+        timeout: int = TIMEOUTS.SLOW * 3,
+    ) -> tuple[bool, str]:
+        """验证 SKU 图片上传是否成功.
+
+        验证策略（按优先级）:
+        1. 等待网络图片弹窗关闭
+        2. 检测是否出现错误 toast
+        3. 验证图片数量是否增加
+
+        Args:
+            page: Playwright 页面对象
+            row: SKU 行定位器
+            previous_image_count: 上传前的图片数量
+            slot_hint: 用于日志的位置提示
+            timeout: 验证超时时间(毫秒)
+
+        Returns:
+            (是否成功, 失败原因描述)
+        """
+        start = time.perf_counter()
+
+        # 1. 等待弹窗关闭
+        dialog_selectors = ".jx-dialog, .el-dialog, [role='dialog']"
+        dialog = page.locator(dialog_selectors)
+        try:
+            await dialog.first.wait_for(state="hidden", timeout=TIMEOUTS.NORMAL)
+            logger.debug(f"{slot_hint} 弹窗已关闭 (耗时 {_elapsed_ms(start)}ms)")
+        except Exception:
+            pass  # 弹窗可能本就不存在
+
+        # 2. 检测错误 toast
+        error_patterns = ["上传失败", "图片链接无效", "网络错误", "格式不支持", "链接错误"]
+        error_toast = page.locator(".jx-toast, .el-message--error, .jx-message--error, .jx-message")
+        try:
+            if await error_toast.count() > 0:
+                toast_text = await error_toast.first.text_content()
+                for pattern in error_patterns:
+                    if pattern in (toast_text or ""):
+                        logger.warning(f"{slot_hint} 检测到上传错误: {toast_text}")
+                        return False, f"错误提示: {toast_text}"
+        except Exception:
+            pass
+
+        # 3. 验证图片数量是否增加（轮询等待）
+        images_locator = row.locator(
+            ".picture-draggable-list .image-item img, .picture-draggable-list img"
+        )
+
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + (timeout / 1000)
+        poll_interval = 0.1  # 初始 100ms
+
+        while loop.time() < deadline:
+            try:
+                current_count = await images_locator.count()
+                if current_count > previous_image_count:
+                    logger.debug(
+                        f"{slot_hint} 图片数量验证通过: {previous_image_count} -> {current_count} "
+                        f"(耗时 {_elapsed_ms(start)}ms)"
+                    )
+                    return True, ""
+            except Exception as e:
+                logger.debug(f"{slot_hint} 图片数量检测异常: {e}")
+
+            await asyncio.sleep(poll_interval)
+            poll_interval = min(poll_interval * 1.5, 0.3)  # 指数退避，最大 300ms
+
+        return False, f"图片数量未增加 (等待 {timeout}ms)"
+
+    async def _ensure_dialog_closed(
+        self,
+        page: Page,
+        timeout: int = TIMEOUTS.NORMAL,
+    ) -> bool:
+        """确保弹窗已关闭，必要时强制关闭.
+
+        策略:
+        1. 等待弹窗自然消失
+        2. 如果超时，尝试点击取消按钮
+        3. 如果仍存在，尝试按 Escape
+
+        Args:
+            page: Playwright 页面对象
+            timeout: 等待超时时间(毫秒)
+
+        Returns:
+            bool: 弹窗是否已关闭
+        """
+        dialog_selector = ".jx-dialog, .el-dialog, [role='dialog']"
+        dialog = page.locator(dialog_selector)
+
+        # 1. 检查是否有弹窗
+        try:
+            if await dialog.count() == 0:
+                return True
+        except Exception:
+            return True
+
+        # 2. 等待自然消失
+        try:
+            await dialog.first.wait_for(state="hidden", timeout=timeout // 2)
+            return True
+        except Exception:
+            pass
+
+        # 3. 尝试点击取消按钮
+        try:
+            cancel_btn = page.get_by_role("button", name=re.compile("取消|关闭|Cancel"))
+            if await cancel_btn.count():
+                await cancel_btn.first.click()
+                await page.wait_for_timeout(200)
+                if await dialog.count() == 0:
+                    logger.debug("已通过取消按钮关闭弹窗")
+                    return True
+        except Exception:
+            pass
+
+        # 4. 尝试 Escape 键
+        try:
+            await page.keyboard.press("Escape")
+            await page.wait_for_timeout(200)
+            if await dialog.count() == 0:
+                logger.debug("已通过 Escape 关闭弹窗")
+                return True
+        except Exception:
+            pass
+
+        logger.warning("弹窗未能成功关闭")
+        return False
+
+    async def _upload_single_sku_image_with_retry(
+        self,
+        page: Page,
+        image_url: str,
+        *,
+        row: Locator | None = None,
+        slot_hint: str | None = None,
+        max_retries: int = 2,
+    ) -> bool:
+        """带重试的单张 SKU 图片上传.
+
+        重试策略:
+        - 最大重试 max_retries 次（总共 max_retries + 1 次尝试）
+        - 重试前清理弹窗状态
+        - 指数退避: 500ms -> 1000ms
+
+        Args:
+            page: Playwright 页面对象
+            image_url: 图片 URL
+            row: SKU 行定位器
+            slot_hint: 用于日志的位置提示
+            max_retries: 最大重试次数
+
+        Returns:
+            bool: 上传是否成功
+        """
+        slot_hint = slot_hint or "SKU图片"
+
+        for attempt in range(1, max_retries + 2):
+            if attempt > 1:
+                logger.info(f"{slot_hint} 重试上传 (尝试 {attempt}/{max_retries + 1})")
+
+            success = await self._upload_single_sku_image(
+                page, image_url, row=row, slot_hint=slot_hint
+            )
+
+            if success:
+                if attempt > 1:
+                    logger.success(f"{slot_hint} 重试上传成功")
+                return True
+
+            if attempt <= max_retries:
+                delay = 500 * attempt
+                logger.warning(f"{slot_hint} 上传失败，{delay}ms 后重试...")
+
+                # 清理弹窗状态
+                await self._ensure_dialog_closed(page)
+                await page.wait_for_timeout(delay)
+
+        logger.error(f"{slot_hint} 所有上传尝试均失败 ({max_retries + 1} 次)")
+        return False
+
     async def _upload_single_sku_image(
         self,
         page: Page,
@@ -952,7 +1354,21 @@ class ImageManager:
         row: Locator | None = None,
         slot_hint: str | None = None,
     ) -> bool:
-        """使用网络图片入口上传单张 SKU 图."""
+        """使用网络图片入口上传单张 SKU 图（带验证）.
+
+        增强版本：添加了上传成功验证和弹窗清理机制。
+
+        Args:
+            page: Playwright 页面对象
+            image_url: 图片 URL
+            row: SKU 行定位器
+            slot_hint: 用于日志的位置提示
+
+        Returns:
+            bool: 上传是否成功（经过验证）
+        """
+        slot_hint = slot_hint or "SKU图片"
+        start = time.perf_counter()
 
         # URL编码处理(处理中文路径)
         from urllib.parse import quote, urlparse, urlunparse
@@ -970,63 +1386,130 @@ class ImageManager:
                     parsed.fragment,
                 )
             )
-            logger.debug(f"SKU图片URL编码: {image_url} -> {encoded_url}")
+            logger.debug(f"{slot_hint} URL编码完成")
             image_url = encoded_url
         except Exception as e:
-            logger.warning(f"SKU图片URL编码失败,使用原始URL: {e}")
+            logger.warning(f"{slot_hint} URL编码失败,使用原始URL: {e}")
 
-        picture_scope = (row or page).locator(".picture-draggable-list").first
-        if not await picture_scope.count():
-            picture_scope = page.locator(".picture-draggable-list").first
+        # [核心修复] 必须严格在 row 内部查找，不能回退到 page 级别（否则会选中产品图片区域）
+        if row is None:
+            logger.error(f"{slot_hint} 未提供 row 参数，无法定位 SKU 图片区域")
+            return False
 
-        if not await picture_scope.count():
-            logger.error("未找到 SKU 图片上传区域 ({})", slot_hint or "全局")
+        # 优先在 row 内查找 picture-draggable-list
+        picture_scope = row.locator(".picture-draggable-list").first
+        scope_found = await picture_scope.count() > 0
+
+        # [新增] 记录上传前的图片数量
+        previous_count = 0
+        if scope_found:
+            try:
+                images_before = picture_scope.locator(".image-item img, img")
+                previous_count = await images_before.count()
+                logger.debug(f"{slot_hint} 当前图片数量: {previous_count}")
+            except Exception:
+                pass
+
+        # 步骤 1: 点击添加按钮（多种定位方式）
+        add_slot = None
+        add_slot_selectors = [
+            # 在 picture_scope 内查找（如果找到了 picture-draggable-list）
+            picture_scope.locator(".add-image-box .add-image-box-content").first
+            if scope_found
+            else None,
+            picture_scope.locator(".add-image-box").first if scope_found else None,
+            # 直接在 row 内查找
+            row.locator(".add-image-box .add-image-box-content").first,
+            row.locator(".add-image-box").first,
+            row.locator("[class*='add-image']").first,
+            row.get_by_text("添加新图片", exact=False).first,
+        ]
+
+        for selector in add_slot_selectors:
+            if selector is None:
+                continue
+            try:
+                if await selector.count():
+                    await selector.wait_for(state="visible", timeout=TIMEOUTS.FAST)
+                    add_slot = selector
+                    break
+            except Exception:
+                continue
+
+        if add_slot is None:
+            logger.error(f"{slot_hint} 未找到『添加新图片』按钮 (耗时 {_elapsed_ms(start)}ms)")
             return False
 
         try:
-            add_slot = picture_scope.locator(".add-image-box .add-image-box-content").first
-            await add_slot.wait_for(state="visible", timeout=TIMEOUTS.NORMAL)
             await add_slot.click()
+            logger.debug(f"{slot_hint} 已点击添加按钮 (耗时 {_elapsed_ms(start)}ms)")
         except Exception as exc:
-            logger.error("点击『添加新图片』失败: {}", exc)
+            logger.error(f"{slot_hint} 点击『添加新图片』失败: {exc}")
             return False
 
+        # 步骤 2: 点击"使用网络图片"
         try:
             network_btn = page.get_by_text("使用网络图片", exact=False).first
             await network_btn.wait_for(state="visible", timeout=TIMEOUTS.NORMAL)
             await network_btn.click()
+            logger.debug(f"{slot_hint} 已点击网络图片入口 (耗时 {_elapsed_ms(start)}ms)")
         except Exception as exc:
-            logger.error("未找到『使用网络图片』入口: {}", exc)
+            logger.error(f"{slot_hint} 未找到『使用网络图片』入口: {exc}")
             return False
 
+        # 步骤 3: 填写 URL
         try:
             textbox = page.get_by_role(
                 "textbox", name=re.compile("请输入图片链接"), exact=False
             ).first
             await textbox.wait_for(state="visible", timeout=TIMEOUTS.NORMAL)
             await textbox.fill(image_url)
+            logger.debug(f"{slot_hint} 已填写URL (耗时 {_elapsed_ms(start)}ms)")
         except Exception as exc:
-            logger.error("填写图片链接失败: {}", exc)
+            logger.error(f"{slot_hint} 填写图片链接失败: {exc}")
+            # [新增] 清理弹窗
+            await self._ensure_dialog_closed(page)
             return False
 
-        # 勾选"同时保存图片到妙手图片空间"
+        # 步骤 4: 勾选保存到图片空间（可选）
         try:
             save_to_space_checkbox = page.get_by_text("同时保存图片到妙手图片空间", exact=False)
             if await save_to_space_checkbox.count():
                 await save_to_space_checkbox.click()
-                logger.debug("已勾选『同时保存图片到妙手图片空间』")
-        except Exception as exc:
-            logger.debug("勾选保存到图片空间失败(可能已勾选): {}", exc)
+                logger.debug(f"{slot_hint} 已勾选保存到图片空间")
+        except Exception:
+            pass
 
+        # 步骤 5: 点击确定
         try:
             confirm_btn = page.get_by_role("button", name="确定").first
             await confirm_btn.wait_for(state="visible", timeout=TIMEOUTS.NORMAL)
             await confirm_btn.click()
-            # 点击确定后直接返回成功,不再检测图片数量变化(检测不可靠)
-            logger.debug("{} 上传请求已提交", slot_hint or "SKU图片")
-            return True
+            logger.debug(f"{slot_hint} 已点击确定按钮 (耗时 {_elapsed_ms(start)}ms)")
         except Exception as exc:
-            logger.error("确认上传网络图片失败: {}", exc)
+            logger.error(f"{slot_hint} 点击确定失败: {exc}")
+            # [新增] 清理弹窗
+            await self._ensure_dialog_closed(page)
+            return False
+
+        # [新增] 步骤 6: 验证上传成功
+        verify_row = row or picture_scope
+        success, failure_reason = await self._verify_sku_image_upload_success(
+            page,
+            verify_row,
+            previous_count,
+            slot_hint,
+        )
+
+        if success:
+            # [新增] 步骤 7: 等待资源加载完成
+            await self._wait_for_upload_resources_loaded(page, scope=verify_row)
+            logger.info(f"{slot_hint} 上传验证通过 (总耗时 {_elapsed_ms(start)}ms)")
+            return True
+        else:
+            logger.warning(
+                f"{slot_hint} 上传验证失败: {failure_reason} (总耗时 {_elapsed_ms(start)}ms)"
+            )
             return False
 
     async def _click_first_available(

@@ -1284,6 +1284,22 @@ class CompletePublishWorkflow:
                                 payload_dict.get("product_video_url") or ""
                             ).strip()
 
+                            # [诊断日志] 记录 SKU 图片数据状态
+                            if sku_image_urls:
+                                logger.info(
+                                    "[SKU诊断] 产品 {} 有 {} 张 SKU 图片待上传",
+                                    selection.model_number,
+                                    len(sku_image_urls),
+                                )
+                            else:
+                                logger.warning(
+                                    "[SKU诊断] 产品 {} 无 SKU 图片数据 "
+                                    "(image_files={}, sku_image_urls={})",
+                                    selection.model_number,
+                                    getattr(selection, "image_files", None),
+                                    getattr(selection, "sku_image_urls", None),
+                                )
+
                             hook_fn = self._build_first_edit_hook(
                                 first_edit_ctrl=first_edit_ctrl,
                                 sku_image_urls=sku_image_urls,

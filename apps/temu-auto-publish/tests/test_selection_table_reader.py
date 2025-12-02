@@ -353,6 +353,32 @@ class TestSelectionTableReaderJsonParsing:
 
         assert products[0].image_files == ["img1.jpg", "img2.jpg"]
 
+    def test_parse_chinese_comma_json(self, reader, tmp_path):
+        """测试中文逗号的JSON数组解析"""
+        filepath = tmp_path / "chinese_comma.xlsx"
+        # 模拟用户错误使用中文逗号的情况
+        df = pd.DataFrame(
+            {
+                "产品名称": ["测试产品"],
+                "标题后缀": ["A0001"],
+                "实拍图数组": ['["https://example.com/img1.png"，"https://example.com/img2.png"]'],
+            }
+        )
+        df.to_excel(filepath, index=False)
+
+        products = reader.read_excel(str(filepath))
+
+        assert len(products) == 1
+        assert products[0].image_files == [
+            "https://example.com/img1.png",
+            "https://example.com/img2.png",
+        ]
+        # SKU 图片 URL 也应该正确生成
+        assert products[0].sku_image_urls == [
+            "https://example.com/img1.png",
+            "https://example.com/img2.png",
+        ]
+
 
 class TestSelectionTableReaderEdgeCases:
     """测试边界情况"""
