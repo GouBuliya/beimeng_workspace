@@ -1,3 +1,10 @@
+## [0.2.1](https://github.com/GouBuliya/beimeng_workspace/compare/v0.2.0...v0.2.1) (2025-12-02)
+
+
+### Bug Fixes
+
+* add conventional-changelog-conventionalcommits dependency for semantic-release ([68a57ef](https://github.com/GouBuliya/beimeng_workspace/commit/68a57efae5a829d8c6bf7d5cb2bdbc489a9ae606))
+
 # Changelog
 
 All notable changes to this project will be documented in this file.
