@@ -1628,36 +1628,32 @@ class CompletePublishWorkflow:
         total_available = page_counts.get("all", 0)
         logger.info(f"采集箱商品数量: 全部={total_available}, 未认领={page_counts.get('unclaimed', 0)}")
 
-        # 使用 edited_products 中记录的实际索引（首次编辑时记录的真实页面位置）
-        # 而不是根据 execution_round 重新计算，避免页面商品顺序变化导致的偏移问题
-        target_indexes = [prod.index for prod in working_products]
+        # 采集箱中的索引需要根据 execution_round 计算偏移
+        # 因为页面上显示的是所有商品（包括前面轮次已认领的），需要从正确的位置开始
+        start_offset = (self.execution_round - 1) * self.collect_count
 
-        # 过滤掉超出页面范围的索引
-        valid_indexes = [idx for idx in target_indexes if idx < total_available]
-        if len(valid_indexes) < len(target_indexes):
-            skipped_count = len(target_indexes) - len(valid_indexes)
-            skipped_indexes = [idx for idx in target_indexes if idx >= total_available]
-            logger.warning(
-                f"有 {skipped_count} 个索引超出页面范围 (total={total_available}): {skipped_indexes}"
-            )
-        target_indexes = valid_indexes
-
-        if not target_indexes:
+        # 检查起始偏移是否超出页面实际商品数量
+        if start_offset >= total_available:
             logger.info(
-                f"执行轮次 {self.execution_round} 无有效索引可认领，跳过认领阶段"
+                f"执行轮次 {self.execution_round} 起始偏移 {start_offset} >= 页面商品数 {total_available}，跳过认领阶段"
             )
             return StageOutcome(
                 name="stage2_claim",
                 success=True,
-                message="NO_VALID_INDEXES",
+                message="OFFSET_EXCEEDS_AVAILABLE",
                 details={
                     "execution_round": self.execution_round,
+                    "start_offset": start_offset,
                     "total_available": total_available,
                     "skipped": True,
                 },
             )
 
-        selection_count = len(target_indexes)
+        # 调整 selection_count，确保不超出页面实际商品范围
+        max_selectable = total_available - start_offset
+        selection_count = min(selection_count, max_selectable)
+
+        target_indexes = list(range(start_offset, start_offset + selection_count))
 
         logger.info(
             "认领阶段: 目标索引 %s (筛选后的商品列表,共 %s 条), 每商品点击 %s 次",
