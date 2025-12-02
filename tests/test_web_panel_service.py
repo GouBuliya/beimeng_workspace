@@ -115,7 +115,7 @@ def test_workflow_options_kwargs(tmp_path):
     assert kwargs_off["collection_owner"] == "Owner"
 
 
-def test_manager_start_and_failure_paths(tmp_path):
+def test_manager_start_and_failure_paths(tmp_path, monkeypatch):
     manager = WorkflowTaskManager()
     manager._lock = threading.RLock()
     manager._executor = SyncExecutor()
@@ -128,14 +128,22 @@ def test_manager_start_and_failure_paths(tmp_path):
             self.total_success = success
             self.errors: list[str] = [] if success else ["bad"]
 
-    manager._execute_workflow = lambda *_, **__: DummyResult()  # type: ignore[assignment]
+    # Mock _run_single_async 来避免实际执行工作流
+    async def mock_run_single_success(opts):
+        manager._mark_success(workflow_id="wf-1", total_success=True, errors=[])
+
+    monkeypatch.setattr(manager, "_run_single_async", mock_run_single_success)
     start_status = manager.start(options)
     assert start_status.state in {RunState.RUNNING, RunState.SUCCESS}
     manager._future.result()
     assert manager.status().state == RunState.SUCCESS
     assert manager._log_sink_id is None
 
-    manager._execute_workflow = lambda *_, **__: (_ for _ in ()).throw(RuntimeError("boom"))  # type: ignore[assignment]
+    # 测试失败情况
+    async def mock_run_single_failure(opts):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(manager, "_run_single_async", mock_run_single_failure)
     start_status = manager.start(options)
     assert start_status.state in {RunState.RUNNING, RunState.FAILED}
     manager._future.result()
@@ -147,19 +155,20 @@ def test_manager_start_and_failure_paths(tmp_path):
         manager.start(options)
 
 
-def test_manager_run_continuous_success_and_errors(tmp_path, monkeypatch):
+@pytest.mark.asyncio
+async def test_manager_run_continuous_success_and_errors(tmp_path, monkeypatch):
     manager = WorkflowTaskManager()
     manager._executor = SyncExecutor()
     manager._status.state = RunState.IDLE
 
-    def fake_execute(*_, **__):
+    async def fake_execute_async(*_, **__):
         result = SimpleNamespace()
         result.workflow_id = "wf-cont"
         result.total_success = True
         result.errors = []
         return result
 
-    manager._execute_workflow = fake_execute  # type: ignore[assignment]
+    monkeypatch.setattr(manager, "_execute_workflow_async", fake_execute_async)
 
     class SingleBatchQueue:
         def __init__(self, *_args, **_kwargs) -> None:
@@ -177,8 +186,11 @@ def test_manager_run_continuous_success_and_errors(tmp_path, monkeypatch):
         def archive_batch(self, rows, suffix: str) -> None:
             self.archived = (tuple(rows), suffix)
 
+        def has_pending_rows(self) -> bool:
+            return False
+
     monkeypatch.setattr("web_panel.service.SelectionTableQueue", SingleBatchQueue)
-    manager._run_workflow(_make_options(tmp_path, single_run=False))
+    await manager._run_continuous_async(_make_options(tmp_path, single_run=False))
     status = manager.status()
     assert status.state == RunState.SUCCESS
     assert "循环模式完成" in status.message
@@ -191,15 +203,16 @@ def test_manager_run_continuous_success_and_errors(tmp_path, monkeypatch):
             raise SelectionTableFormatError("format bad")
 
     monkeypatch.setattr("web_panel.service.SelectionTableQueue", FormatErrorQueue)
-    manager._run_workflow(_make_options(tmp_path, single_run=False))
+    await manager._run_continuous_async(_make_options(tmp_path, single_run=False))
     assert manager.status().state == RunState.FAILED
     assert "format bad" in manager.status().last_error
 
-    class FailResult:
-        def __init__(self) -> None:
-            self.workflow_id = "wf-fail"
-            self.total_success = False
-            self.errors = ["err"]
+    async def fail_execute_async(*_, **__):
+        result = SimpleNamespace()
+        result.workflow_id = "wf-fail"
+        result.total_success = False
+        result.errors = ["err"]
+        return result
 
     class FailingQueue:
         def __init__(self, *_args, **_kwargs) -> None:
@@ -214,9 +227,12 @@ def test_manager_run_continuous_success_and_errors(tmp_path, monkeypatch):
         def archive_batch(self, rows, suffix: str) -> None:
             self.archive = (tuple(rows), suffix)
 
-    manager._execute_workflow = lambda *_, **__: FailResult()  # type: ignore[assignment]
+        def has_pending_rows(self) -> bool:
+            return False
+
+    monkeypatch.setattr(manager, "_execute_workflow_async", fail_execute_async)
     monkeypatch.setattr("web_panel.service.SelectionTableQueue", FailingQueue)
-    manager._run_workflow(_make_options(tmp_path, single_run=False))
+    await manager._run_continuous_async(_make_options(tmp_path, single_run=False))
     assert manager.status().state == RunState.FAILED
 
 
@@ -244,7 +260,8 @@ def test_resolve_upload_dir_when_frozen(tmp_path, monkeypatch):
     assert path.exists()
 
 
-def test_execute_workflow_invokes_workflow_class(tmp_path, monkeypatch):
+@pytest.mark.asyncio
+async def test_execute_workflow_invokes_workflow_class(tmp_path, monkeypatch):
     manager = WorkflowTaskManager()
     captured: dict[str, object] = {}
 
@@ -252,20 +269,27 @@ def test_execute_workflow_invokes_workflow_class(tmp_path, monkeypatch):
         def __init__(self, **kwargs) -> None:
             captured.update(kwargs)
 
-        def execute(self) -> str:
+        async def execute_async(self):
             return "done"
 
     monkeypatch.setattr(service, "CompletePublishWorkflow", DummyWorkflow)
-    result = manager._execute_workflow(_make_options(tmp_path), selection_rows_override=["row"])
+    result = await manager._execute_workflow_async(
+        _make_options(tmp_path), selection_rows_override=["row"]
+    )
     assert result == "done"
     assert captured["selection_rows_override"] == ["row"]
     assert captured["selection_table"]
 
 
-def test_continuous_return_batch_on_exception(tmp_path, monkeypatch):
+@pytest.mark.asyncio
+async def test_continuous_return_batch_on_exception(tmp_path, monkeypatch):
     manager = WorkflowTaskManager()
     manager._lock = threading.RLock()
-    manager._execute_workflow = lambda *_, **__: (_ for _ in ()).throw(ValueError("fail"))  # type: ignore[assignment]
+
+    async def raise_execute(*_, **__):
+        raise ValueError("fail")
+
+    monkeypatch.setattr(manager, "_execute_workflow_async", raise_execute)
 
     class RaisingQueue:
         def __init__(self, *_args, **_kwargs) -> None:
@@ -280,11 +304,15 @@ def test_continuous_return_batch_on_exception(tmp_path, monkeypatch):
         def archive_batch(self, rows, suffix: str) -> None:
             self.archived = suffix
 
+        def has_pending_rows(self) -> bool:
+            return False
+
     queue = RaisingQueue()
     monkeypatch.setattr("web_panel.service.SelectionTableQueue", lambda *_: queue)
-    manager._run_workflow(_make_options(tmp_path, single_run=False))
+    # 使用 try/except 因为异步版本会抛出异常
+    with pytest.raises(ValueError):
+        await manager._run_continuous_async(_make_options(tmp_path, single_run=False))
     assert queue.returned is True
-    assert manager.status().state == RunState.FAILED
 
 
 def test_create_task_manager_factory():

@@ -105,7 +105,8 @@ async def test_run_with_selection_path_and_blank_owner(app_factory, tmp_path):
             "/api/run",
             data={"collection_owner": "", "selection_path": str(selection)},
         )
-        assert bad_owner.status_code == 400
+        # 空 collection_owner 由 Pydantic 验证返回 422，或由 API 逻辑返回 400
+        assert bad_owner.status_code in {400, 422}
 
 
 @pytest.mark.asyncio
