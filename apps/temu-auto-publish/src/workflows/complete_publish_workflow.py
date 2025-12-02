@@ -30,6 +30,7 @@ from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
+from ..core.retry_handler import SessionExpiredError
 from ..core.workflow_timeout import (
     TimeoutConfig,
     WorkflowTimeoutError,
@@ -854,12 +855,47 @@ class CompletePublishWorkflow:
                     )
                     stages.append(stage1)
                 else:
-                    stage1, edited_products = await self._stage_first_edit(
-                        page,
-                        miaoshou_ctrl,
-                        first_edit_ctrl,
-                        selection_rows,
-                    )
+                    try:
+                        stage1, edited_products = await self._stage_first_edit(
+                            page,
+                            miaoshou_ctrl,
+                            first_edit_ctrl,
+                            selection_rows,
+                        )
+                    except SessionExpiredError as e:
+                        # Session expired, attempt re-login
+                        logger.warning("Session expired detected, attempting re-login: {}", e)
+                        login_success = await login_ctrl.login(
+                            username=username,
+                            password=password,
+                            force=True,  # Force re-login
+                            headless=self.headless,
+                            keep_browser_open=True,
+                        )
+                        if not login_success:
+                            stage1 = StageOutcome(
+                                name="stage1_first_edit",
+                                success=False,
+                                message="Re-login failed after session expired",
+                                details={"session_expired": True},
+                            )
+                            stages.append(stage1)
+                            errors.append(stage1.message)
+                            self._perf_tracker.end_workflow(success=False, error=stage1.message)
+                            return WorkflowExecutionResult(workflow_id, False, stages, errors)
+
+                        # Re-login successful, dismiss popups
+                        await login_ctrl.dismiss_login_overlays()
+
+                        # Retry first edit stage
+                        logger.info("Re-login successful, retrying first edit stage")
+                        stage1, edited_products = await self._stage_first_edit(
+                            page,
+                            miaoshou_ctrl,
+                            first_edit_ctrl,
+                            selection_rows,
+                        )
+
                     stages.append(stage1)
                     stage1_errors = (
                         stage1.details.get("errors") if isinstance(stage1.details, dict) else None

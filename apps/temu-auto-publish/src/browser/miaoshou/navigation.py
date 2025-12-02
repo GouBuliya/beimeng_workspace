@@ -9,10 +9,12 @@ from __future__ import annotations
 import re
 from contextlib import suppress
 from typing import Any, ClassVar
+from urllib.parse import urlparse
 
 from loguru import logger
 from playwright.async_api import Frame, Page
 
+from ...core.retry_handler import SessionExpiredError
 from ...utils.page_load_decorator import (
     wait_dom_loaded,
     wait_network_idle,
@@ -93,6 +95,11 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
             # 激进优化: 5s -> 2s
             await wait_dom_loaded(page, 2_000, context=" [navigation complete]")
 
+            # Check if redirected to login page (session expired)
+            if self._is_login_redirect(page.url):
+                logger.error("Session expired: redirected to login page. URL: {}", page.url)
+                raise SessionExpiredError(f"Session expired, redirected to login: {page.url}")
+
             if "common_collect_box/items" in page.url:
                 logger.success("Navigation to shared collection box succeeded")
                 logger.debug("Waiting for page to settle...")
@@ -120,9 +127,42 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
 
             logger.error("Navigation failed: unexpected URL {}", page.url)
             return False
+        except SessionExpiredError:
+            # Session expired exception needs to propagate up, don't catch here
+            raise
         except Exception as exc:
             logger.error(f"Failed to navigate to collection box: {exc}")
             return False
+
+    def _is_login_redirect(self, url: str) -> bool:
+        """Check if URL indicates a redirect to login page.
+
+        Detects multiple login redirect scenarios:
+        1. URL contains 'login' keyword
+        2. URL contains 'sub_account/users'
+        3. URL contains ?redirect= parameter (session expired redirect)
+
+        Args:
+            url: Current page URL
+
+        Returns:
+            True if this is a login page redirect
+        """
+        url_lower = url.lower()
+
+        # Scenario 1: Explicit login page URL
+        if "login" in url_lower or "sub_account/users" in url_lower:
+            return True
+
+        # Scenario 2: Session expired redirect - URL contains ?redirect= param
+        # e.g.: https://erp.91miaoshou.com/?redirect=%2Fcommon_collect_box%2Fitems
+        if "redirect=" in url_lower or "redirect%3d" in url_lower:
+            parsed = urlparse(url)
+            # Path is empty or root, and has redirect parameter
+            if parsed.path in ("", "/") or "sub_account" in parsed.path:
+                return True
+
+        return False
 
     async def filter_and_search(self, page: Page, staff_name: str | None = None) -> bool:
         """Filter by staff member and trigger a search.

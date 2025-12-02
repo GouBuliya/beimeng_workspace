@@ -5,6 +5,7 @@
   - class NetworkError: 网络错误
   - class ElementNotFoundError: 元素未找到错误
   - class TimeoutError: 超时错误
+  - class SessionExpiredError: 会话过期错误(需要重新登录)
   - class NonRetryableError: 不可重试错误基类
   - class RetryConfig: 重试配置
   - class RetryHandler: 重试处理器
@@ -69,6 +70,18 @@ class ValidationError(NonRetryableError):
 
 class ConfigurationError(NonRetryableError):
     """配置错误(不可重试)."""
+
+    pass
+
+
+class SessionExpiredError(RetryableError):
+    """会话过期错误(可重试,需要重新登录).
+
+    当检测到以下情况时抛出此异常:
+    1. 导航时被重定向到登录页(URL 包含 ?redirect= 参数)
+    2. API 返回 401 错误
+    3. 页面显示登录表单
+    """
 
     pass
 
