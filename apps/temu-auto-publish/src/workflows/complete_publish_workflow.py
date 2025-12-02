@@ -1599,7 +1599,15 @@ class CompletePublishWorkflow:
                 logger.warning("Unable to resolve collection owner for claim stage: {}", exc)
                 filter_owner = None
 
-        await miaoshou_ctrl.refresh_collection_box(page, filter_owner=filter_owner)
+        # 使用和首次编辑相同的导航和筛选方式，确保看到相同的商品列表
+        navigation_success = await miaoshou_ctrl.navigate_and_filter_collection_box(
+            page,
+            filter_by_user=filter_owner,
+            switch_to_tab="all",
+        )
+        if not navigation_success:
+            logger.warning("认领阶段导航/筛选失败，尝试备用方式")
+            await miaoshou_ctrl.refresh_collection_box(page, filter_owner=filter_owner)
 
         # 筛选后额外等待页面数据加载完成
         await page.wait_for_timeout(1500)
