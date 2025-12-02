@@ -12,11 +12,9 @@
       - _stage_batch_edit(): 阶段 3 批量编辑 18 步
       - _stage_publish(): 阶段 4 选择店铺/供货价/发布
       - 若干辅助方法: 数据准备,标题生成,凭证/店铺解析
-  - async def execute_complete_workflow(): 遗留兼容入口, 代理到 v1 工作流
 @DEPENDENCIES:
   - 内部: browser.*, data_processor.*
   - 外部: playwright (runtime), loguru
-@RELATED: legacy 目录中的历史工作流实现
 """
 
 from __future__ import annotations
@@ -72,9 +70,6 @@ from ..core.session_keeper import SessionKeeper, SessionKeeperConfig
 from ..data_processor.price_calculator import PriceCalculator, PriceResult
 from ..data_processor.product_data_reader import ProductDataReader
 from ..data_processor.selection_table_reader import ProductSelectionRow, SelectionTableReader
-from .legacy.complete_publish_workflow_v1 import (
-    execute_complete_workflow as legacy_execute_complete_workflow,
-)
 
 FIRST_EDIT_STAGE_TIMEOUT_MS = 5_000
 
@@ -2219,39 +2214,9 @@ class CompletePublishWorkflow:
         return "自动化店铺"
 
 
-async def execute_complete_workflow(
-    page: Page,
-    products_data: Sequence[dict[str, Any]],
-    shop_name: str | None = None,
-    enable_batch_edit: bool = True,
-    enable_publish: bool = True,
-) -> dict[str, Any]:
-    """兼容旧接口的便捷函数, 代理到遗留工作流实现.
-
-    Args:
-        page: Playwright Page 对象(已登录并定位到采集箱).
-        products_data: 产品数据列表(至少 5 个产品字典).
-        shop_name: 发布店铺名称, 可选.
-        enable_batch_edit: 是否执行批量编辑阶段.
-        enable_publish: 是否执行发布阶段.
-
-    Returns:
-        遗留工作流返回的执行结果字典.
-    """
-
-    return await legacy_execute_complete_workflow(
-        page=page,
-        products_data=list(products_data),
-        shop_name=shop_name,
-        enable_batch_edit=enable_batch_edit,
-        enable_publish=enable_publish,
-    )
-
-
 __all__ = [
     "CompletePublishWorkflow",
     "EditedProduct",
     "StageOutcome",
     "WorkflowExecutionResult",
-    "execute_complete_workflow",
 ]

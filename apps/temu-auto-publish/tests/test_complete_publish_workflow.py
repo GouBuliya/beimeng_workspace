@@ -936,10 +936,3 @@ class TestModuleExports:
         assert "EditedProduct" in complete_publish_workflow.__all__
         assert "StageOutcome" in complete_publish_workflow.__all__
         assert "WorkflowExecutionResult" in complete_publish_workflow.__all__
-        assert "execute_complete_workflow" in complete_publish_workflow.__all__
-
-    def test_execute_complete_workflow_function(self) -> None:
-        """测试兼容函数存在."""
-        from src.workflows.complete_publish_workflow import execute_complete_workflow
-
-        assert callable(execute_complete_workflow)
