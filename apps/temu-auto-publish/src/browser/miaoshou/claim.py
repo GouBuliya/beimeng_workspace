@@ -365,10 +365,17 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                 const isPageMode = recycleScroller && recycleScroller.classList.contains('page-mode');
 
                 // 获取所有可见行
+                // 关键修复: 只选择包含复选框的行,因为 pro-virtual-table
+                // 可能有两个独立的虚拟滚动容器(固定列和主内容区)
                 const getVisibleRows = () => {
                     const rows = document.querySelectorAll('.vue-recycle-scroller__item-view');
                     const visibleRows = [];
                     rows.forEach(row => {
+                        // 只选择包含复选框的行
+                        const hasCheckbox = row.querySelector('.is-selection-column') !== null ||
+                                          row.querySelector('.jx-checkbox') !== null;
+                        if (!hasCheckbox) return;
+
                         const style = row.getAttribute('style') || '';
                         const match = style.match(/translateY\\((-?\\d+(?:\\.\\d+)?)\\s*(?:px)?\\s*\\)/);
                         if (match) {
@@ -623,10 +630,16 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                 if (!scroller) return false;
 
                 // 获取可见行
+                // 关键修复: 只选择包含复选框的行
                 const getVisibleRows = () => {
                     const rows = document.querySelectorAll('.vue-recycle-scroller__item-view');
                     const visibleRows = [];
                     rows.forEach(row => {
+                        // 只选择包含复选框的行
+                        const hasCheckbox = row.querySelector('.is-selection-column') !== null ||
+                                          row.querySelector('.jx-checkbox') !== null;
+                        if (!hasCheckbox) return;
+
                         const style = row.getAttribute('style') || '';
                         const match = style.match(/translateY\\((-?\\d+(?:\\.\\d+)?)\\s*(?:px)?\\s*\\)/);
                         if (match) {
@@ -740,10 +753,21 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                 const isPageMode = recycleScroller && recycleScroller.classList.contains('page-mode');
 
                 // 获取所有可见行的辅助函数
-                const getVisibleRows = () => {
+                // 关键修复: 当 target='checkbox' 时,只选择包含复选框的行
+                // 因为 pro-virtual-table 有两个独立的虚拟滚动容器:
+                // 1. 固定左侧列容器 - 包含复选框
+                // 2. 主内容区容器 - 包含商品信息(无复选框)
+                // 如果不过滤,可能选中主内容区的行而导致点击错误的复选框
+                const getVisibleRows = (requireCheckbox = false) => {
                     const rows = document.querySelectorAll('.vue-recycle-scroller__item-view');
                     const visibleRows = [];
                     rows.forEach(row => {
+                        // 如果需要复选框,只选择包含复选框的行
+                        if (requireCheckbox) {
+                            const hasCheckbox = row.querySelector('.is-selection-column') !== null ||
+                                              row.querySelector('.jx-checkbox') !== null;
+                            if (!hasCheckbox) return;
+                        }
                         const style = row.getAttribute('style') || '';
                         const match = style.match(/translateY\\((-?\\d+(?:\\.\\d+)?)\\s*(?:px)?\\s*\\)/);
                         if (match) {
@@ -832,7 +856,8 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                 }
 
                 // 重新获取可见行(滚动后)
-                const visibleRows = getVisibleRows();
+                // 当 target='checkbox' 时,只获取包含复选框的行
+                const visibleRows = getVisibleRows(target === 'checkbox');
 
                 // ========== 新方法：从可见行的 translateY 推断索引 ==========
                 // 核心：每行的 translateY 值直接对应其全局索引
@@ -915,7 +940,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         const scrollAfterFinal = scrollAfter;
 
                         // 重新获取可见行
-                        const newVisibleRows = getVisibleRows();
+                        const newVisibleRows = getVisibleRows(target === 'checkbox');
                         const newVisibleYs = newVisibleRows.map(r => r.y);
 
                         // 重新计算偏移量和索引函数
@@ -966,7 +991,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                                 await new Promise(r => setTimeout(r, 300));
 
                                 // 重新获取可见行
-                                const boundaryRows = getVisibleRows();
+                                const boundaryRows = getVisibleRows(target === 'checkbox');
                                 const boundaryMinY = boundaryRows.length > 0 ? Math.min(...boundaryRows.map(r => r.y)) : 0;
                                 const boundaryYOffset = boundaryMinY % ROW_HEIGHT;
                                 const calcBoundaryGlobalIndex = (y) => Math.round((y - boundaryYOffset) / ROW_HEIGHT);
