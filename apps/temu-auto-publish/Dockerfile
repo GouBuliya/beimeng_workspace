@@ -10,7 +10,7 @@
 # ==============================================================================
 # 阶段1: 构建依赖
 # ==============================================================================
-FROM mcr.microsoft.com/playwright/python:v1.49.0-noble AS builder
+FROM mcr.microsoft.com/playwright/python:v1.55.0-noble AS builder
 
 WORKDIR /build
 
@@ -33,7 +33,7 @@ RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
 # ==============================================================================
 # 阶段2: 生产镜像
 # ==============================================================================
-FROM mcr.microsoft.com/playwright/python:v1.49.0-noble AS production
+FROM mcr.microsoft.com/playwright/python:v1.55.0-noble AS production
 
 # 设置工作目录
 WORKDIR /app
