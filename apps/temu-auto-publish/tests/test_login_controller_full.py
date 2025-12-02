@@ -303,6 +303,30 @@ class TestLoginControllerCheckLoginStatus:
         assert result is False
 
     @pytest.mark.asyncio
+    async def test_check_login_status_on_redirect_url(self, controller):
+        """测试会话过期重定向 URL 时返回 False (Issue #3)"""
+        mock_page = AsyncMock()
+        # 这是 Issue #3 中提到的典型会话过期重定向 URL
+        mock_page.url = "https://erp.91miaoshou.com/?redirect=%2Fcommon_collect_box%2Fitems"
+        controller.browser_manager.page = mock_page
+
+        result = await controller._check_login_status()
+
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_check_login_status_on_redirect_url_encoded(self, controller):
+        """测试 URL 编码的重定向参数时返回 False"""
+        mock_page = AsyncMock()
+        # URL 编码的 redirect 参数
+        mock_page.url = "https://erp.91miaoshou.com/?redirect%3D%2Fwelcome"
+        controller.browser_manager.page = mock_page
+
+        result = await controller._check_login_status()
+
+        assert result is False
+
+    @pytest.mark.asyncio
     async def test_check_login_status_on_welcome_page(self, controller):
         """测试在欢迎页面时返回 True"""
         mock_page = AsyncMock()
@@ -330,9 +354,19 @@ class TestLoginControllerCheckLoginStatus:
         mock_page = AsyncMock()
         mock_page.url = "https://example.com/other"
 
-        mock_locator = AsyncMock()
-        mock_locator.count = AsyncMock(return_value=1)
-        mock_page.locator = MagicMock(return_value=mock_locator)
+        # 根据不同的选择器返回不同的结果
+        # 登录表单选择器返回 0，产品菜单选择器返回 1
+        def create_locator(selector):
+            mock_locator = AsyncMock()
+            if "mobile" in selector or "username" in selector or "手机" in selector:
+                # 登录表单选择器 - 返回 0（不存在）
+                mock_locator.count = AsyncMock(return_value=0)
+            else:
+                # 产品菜单选择器 - 返回 1（存在）
+                mock_locator.count = AsyncMock(return_value=1)
+            return mock_locator
+
+        mock_page.locator = MagicMock(side_effect=create_locator)
 
         controller.browser_manager.page = mock_page
 

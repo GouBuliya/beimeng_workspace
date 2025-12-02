@@ -777,6 +777,12 @@ class LoginController:
     async def _check_login_status(self) -> bool:
         """检查是否已登录妙手ERP.
 
+        检测多种场景：
+        1. URL 关键字检测（login, sub_account/users）
+        2. 会话过期重定向检测（?redirect= 参数）
+        3. 后台页面 URL 检测（welcome, common_collect_box）
+        4. 页面元素检测（产品菜单、登录表单）
+
         Returns:
             True 如果已登录
         """
@@ -785,16 +791,47 @@ class LoginController:
         try:
             # 检查页面URL
             url = page.url
-            if "sub_account/users" in url or "login" in url.lower():
+            url_lower = url.lower()
+
+            # 场景1: 明确的登录页 URL
+            if "sub_account/users" in url or "login" in url_lower:
                 logger.debug("✗ 仍在登录页面")
                 return False
 
-            # 检查是否在欢迎页面或其他后台页面
+            # 场景2: 会话过期重定向 - URL 包含 ?redirect= 参数
+            # 例如: https://erp.91miaoshou.com/?redirect=%2Fcommon_collect_box%2Fitems
+            if "redirect=" in url_lower or "redirect%3d" in url_lower:
+                from urllib.parse import urlparse
+
+                parsed = urlparse(url)
+                # 路径为空或为根路径，且有 redirect 参数，说明被重定向到登录页
+                if parsed.path in ("", "/") or "sub_account" in parsed.path:
+                    logger.debug(f"✗ 检测到会话过期重定向到登录页: {url}")
+                    return False
+
+            # 场景3: 检查是否在后台页面
             if "welcome" in url or "common_collect_box" in url:
                 logger.debug("✓ 已在后台页面")
                 return True
 
-            # 检查是否有产品菜单元素(首页特有)
+            # 场景4: 检查是否有登录表单（会话过期但 URL 未变化的情况）
+            try:
+                login_form_count = await page.locator(
+                    "input[name='mobile'], input[name='username'], "
+                    "input[placeholder*='手机'], input[placeholder*='账号']"
+                ).count()
+                if login_form_count > 0:
+                    # 检查是否同时有登录按钮
+                    login_btn_count = await page.locator(
+                        "button:has-text('登录'), button:has-text('立即登录')"
+                    ).count()
+                    if login_btn_count > 0:
+                        logger.debug("✗ 检测到登录表单，会话可能已过期")
+                        return False
+            except Exception as e:
+                logger.debug(f"检查登录表单时出错: {e}")
+
+            # 场景5: 检查是否有产品菜单元素(首页特有)
             homepage_config = self.selectors.get("homepage", {})
             product_menu_selector = homepage_config.get("product_menu", "text='产品'")
 

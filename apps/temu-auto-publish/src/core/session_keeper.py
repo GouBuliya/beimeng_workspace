@@ -278,6 +278,12 @@ class SessionKeeper:
     async def _validate_session(self) -> bool:
         """验证会话有效性.
 
+        检测多种会话过期场景：
+        1. URL 重定向到登录页（包含 login 关键字）
+        2. URL 包含 ?redirect= 参数（会话过期重定向）
+        3. API 返回 401 错误码
+        4. 页面包含登录表单
+
         Returns:
             会话是否有效
         """
@@ -286,19 +292,45 @@ class SessionKeeper:
             if not page:
                 return False
 
-            # 检查页面内容是否包含登录成功的标识
-            # 这里可以根据实际 API 响应进行定制
-            content = await page.content()
+            url = page.url.lower()
 
-            # 检查是否被重定向到登录页
-            if "login" in page.url.lower() and "api" not in page.url.lower():
+            # 场景1: 检查是否被重定向到登录页
+            if "login" in url and "api" not in url:
                 logger.warning("[SessionKeeper] 检测到会话已过期（重定向到登录页）")
                 return False
 
-            # 检查响应内容是否包含错误标识
+            # 场景2: 检查 URL 是否包含 ?redirect= 参数（会话过期重定向）
+            # 例如: https://erp.91miaoshou.com/?redirect=%2Fcommon_collect_box%2Fitems
+            if "redirect=" in url or "redirect%3d" in url:
+                from urllib.parse import urlparse
+
+                parsed = urlparse(url)
+                # 路径为空或为根路径，且有 redirect 参数，说明被重定向到登录页
+                if parsed.path in ("", "/") or "sub_account" in parsed.path:
+                    logger.warning(f"[SessionKeeper] 检测到会话已过期（redirect参数重定向）: {url}")
+                    return False
+
+            # 场景3: 检查响应内容是否包含错误标识
+            content = await page.content()
             if '"code":401' in content or '"code": 401' in content:
                 logger.warning("[SessionKeeper] 检测到会话已过期（401 响应）")
                 return False
+
+            # 场景4: 检查页面是否包含登录表单（会话过期但 URL 未变化的情况）
+            try:
+                login_form_count = await page.locator(
+                    "input[name='mobile'], input[name='username'], "
+                    "input[placeholder*='手机'], input[placeholder*='账号']"
+                ).count()
+                if login_form_count > 0:
+                    login_btn_count = await page.locator(
+                        "button:has-text('登录'), button:has-text('立即登录')"
+                    ).count()
+                    if login_btn_count > 0:
+                        logger.warning("[SessionKeeper] 检测到会话已过期（页面显示登录表单）")
+                        return False
+            except Exception:
+                pass  # 元素检测失败不影响整体判断
 
             return True
 

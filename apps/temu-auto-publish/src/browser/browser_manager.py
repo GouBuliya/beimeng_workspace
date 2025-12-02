@@ -356,18 +356,69 @@ class BrowserManager:
         except Exception as exc:
             logger.warning(f"注入额外反检测脚本失败: {exc}")
 
-    async def goto(self, url: str, wait_until: str = "networkidle") -> None:
+    async def goto(
+        self,
+        url: str,
+        wait_until: str = "networkidle",
+        check_login_redirect: bool = True,
+    ) -> bool:
         """导航到URL.
 
         Args:
             url: 目标URL
             wait_until: 等待条件 (load|domcontentloaded|networkidle|commit)
+            check_login_redirect: 是否检查登录重定向（默认 True）
+
+        Returns:
+            True 如果导航成功且未被重定向到登录页，False 如果被重定向到登录页
+
+        Raises:
+            RuntimeError: 浏览器未启动时抛出
         """
         if not self.page:
             raise RuntimeError("浏览器未启动")
 
         logger.info(f"导航到: {url}")
         await self.page.goto(url, wait_until=wait_until)
+
+        # 检查是否被重定向到登录页（会话过期检测）
+        if check_login_redirect and self._is_login_redirect(self.page.url):
+            logger.warning(f"⚠️ 检测到会话过期，已被重定向到登录页: {self.page.url}")
+            return False
+
+        return True
+
+    def _is_login_redirect(self, url: str) -> bool:
+        """检查 URL 是否表示被重定向到登录页.
+
+        检测多种登录重定向场景：
+        1. URL 包含 login 关键字
+        2. URL 包含 sub_account/users
+        3. URL 包含 ?redirect= 参数（会话过期重定向）
+
+        Args:
+            url: 当前页面 URL
+
+        Returns:
+            True 如果是登录页重定向
+        """
+        url_lower = url.lower()
+
+        # 场景1: 明确的登录页 URL
+        if "login" in url_lower or "sub_account/users" in url_lower:
+            return True
+
+        # 场景2: 会话过期重定向 - URL 包含 ?redirect= 参数
+        # 例如: https://erp.91miaoshou.com/?redirect=%2Fcommon_collect_box%2Fitems
+        if "redirect=" in url_lower or "redirect%3d" in url_lower:
+            from urllib.parse import urlparse
+
+            parsed = urlparse(url)
+            # 路径为空或为根路径，且有 redirect 参数
+            if parsed.path in ("", "/") or "sub_account" in parsed.path:
+                return True
+
+        return False
 
     def _build_wait_strategy(self, config: dict[str, Any] | None = None) -> WaitStrategy:
         """根据配置构建等待策略."""

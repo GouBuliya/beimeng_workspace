@@ -100,6 +100,12 @@ class StateDetector:
     async def is_login_page(self, page: Page) -> bool:
         """检查是否在登录页.
 
+        检测多种登录页场景：
+        1. URL 包含 login 或 sub_account/users
+        2. URL 包含 ?redirect= 参数（会话过期重定向）
+        3. 页面存在登录按钮
+        4. URL 是站点根路径且带有 redirect 参数
+
         Args:
             page: Playwright页面对象
 
@@ -107,16 +113,43 @@ class StateDetector:
             是否在登录页
         """
         try:
-            url = page.url
+            url = page.url.lower()
+
+            # 场景1: 明确的登录页 URL
             if "login" in url or "sub_account/users" in url:
+                logger.debug(f"检测到登录页(URL关键字): {url}")
                 return True
 
-            # 检查是否有登录表单
+            # 场景2: 会话过期重定向 - URL 包含 ?redirect= 参数
+            # 例如: https://erp.91miaoshou.com/?redirect=%2Fcommon_collect_box%2Fitems
+            if "redirect=" in url or "redirect%3d" in url:
+                # 确保是在站点根路径或登录相关路径
+                from urllib.parse import urlparse
+
+                parsed = urlparse(url)
+                # 路径为空或为根路径，且有 redirect 参数
+                if parsed.path in ("", "/") or "sub_account" in parsed.path:
+                    logger.debug(f"检测到登录页(redirect参数): {url}")
+                    return True
+
+            # 场景3: 检查是否有登录表单
             login_btn_count = await page.locator(
                 "button:has-text('登录'), button:has-text('立即登录')"
             ).count()
-            return login_btn_count > 0
-        except Exception:
+            if login_btn_count > 0:
+                # 额外检查：排除已登录页面上可能存在的"登录"文本
+                # 检查是否存在登录输入框
+                login_input_count = await page.locator(
+                    "input[name='mobile'], input[name='username'], "
+                    "input[placeholder*='手机'], input[placeholder*='账号']"
+                ).count()
+                if login_input_count > 0:
+                    logger.debug(f"检测到登录页(登录表单): {url}")
+                    return True
+
+            return False
+        except Exception as e:
+            logger.debug(f"检查登录页状态时出错: {e}")
             return False
 
     async def is_home_page(self, page: Page) -> bool:
