@@ -560,14 +560,26 @@ async def _upload_size_chart_via_url(page: Page, image_url: str) -> bool:
         await size_group.scroll_into_view_if_needed()
 
         # [核心修复] 优先点击"添加新图片"按钮，这才是正确的触发方式
-        # 参考 image_manager.py 的 SKU 图片上传模式
+        # 参考用户反馈的正确元素: .product-picture-item-add
         add_btn_clicked = False
         add_image_selectors = [
-            # 优先使用最精确的选择器（与 SKU 图片上传一致）
+            # [最优先] 用户反馈的正确选择器
+            size_group.locator(".product-picture-item-add"),
+            page.locator(".product-picture-item-add").filter(
+                has=page.locator("[class*='jx-icon']")
+            ),
+            # 带 jx-tooltip 的添加按钮
+            size_group.locator(".jx-tooltip__trigger").filter(
+                has=page.locator("[class*='jx-icon']")
+            ),
+            # 旧版选择器作为备用
             size_group.locator(".add-image-box .add-image-box-content"),
             size_group.locator(".add-image-box"),
             size_group.locator("[class*='add-image']"),
             # 尝试全局范围查找（尺寸图区域可能嵌套）
+            page.locator(".scroll-menu-pane")
+            .filter(has_text=re.compile("尺寸图"))
+            .locator(".product-picture-item-add"),
             page.locator(".scroll-menu-pane")
             .filter(has_text=re.compile("尺寸图"))
             .locator(".add-image-box"),
