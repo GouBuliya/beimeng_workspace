@@ -1256,6 +1256,14 @@ class CompletePublishWorkflow:
                 # 为每个商品的编辑添加 Operation 级别追踪
                 op_name = f"edit_product_{absolute_index + 1}"
                 async with self._perf_tracker.operation(op_name, product_index=absolute_index + 1):
+                    # [首次编辑诊断] 记录准备编辑的商品信息
+                    logger.info(
+                        "[首次编辑诊断] 准备编辑商品: 绝对索引={}, 页内索引={}, 产品名={}, 型号={}",
+                        absolute_index,
+                        page_relative_index,
+                        selection.product_name[:20] if selection.product_name else "?",
+                        selection.model_number,
+                    )
                     logger.info(
                         f"编辑商品 {absolute_index + 1} "
                         f"(批次内第 {index + 1}/{len(working_selections)} 个,"
@@ -1275,6 +1283,35 @@ class CompletePublishWorkflow:
 
                             original_title = await first_edit_ctrl.get_original_title(page)
                             base_title = original_title or selection.product_name
+
+                            # [关键验证] 检查对话框标题是否与预期产品匹配
+                            logger.info(
+                                "[首次编辑诊断] 对话框已打开, 实际标题='{}'",
+                                original_title[:50] if original_title else "(空)",
+                            )
+                            expected_keywords = [
+                                selection.product_name[:10] if selection.product_name else "",
+                                selection.model_number or "",
+                            ]
+                            title_matched = any(
+                                kw and kw in (original_title or "")
+                                for kw in expected_keywords
+                                if kw
+                            )
+                            if not title_matched and original_title:
+                                logger.error(
+                                    "[对话框验证] 产品不匹配！期望: {} ({}), 实际对话框: {}",
+                                    selection.product_name,
+                                    selection.model_number,
+                                    original_title,
+                                )
+                                # 关闭错误对话框，触发重试
+                                await first_edit_ctrl.close_dialog(page)
+                                raise RuntimeError(
+                                    f"对话框产品不匹配: 期望 {selection.model_number}, "
+                                    f"实际 {original_title[:30]}"
+                                )
+
                             payload_dict = self._build_first_edit_payload(selection, base_title)
                             sku_image_urls = list(payload_dict.get("sku_image_urls", []) or [])
                             size_chart_url = (
@@ -1650,9 +1687,7 @@ class CompletePublishWorkflow:
 
         # 如果当前批次没有可用商品，直接跳过认领阶段
         if len(working_products) == 0:
-            logger.info(
-                f"执行轮次 {self.execution_round} 无可用商品，跳过认领阶段"
-            )
+            logger.info(f"执行轮次 {self.execution_round} 无可用商品，跳过认领阶段")
             return StageOutcome(
                 name="stage2_claim",
                 success=True,
@@ -1666,7 +1701,9 @@ class CompletePublishWorkflow:
         # 获取页面上实际的商品数量，用于边界检查
         page_counts = await miaoshou_ctrl.get_product_count(page)
         total_available = page_counts.get("all", 0)
-        logger.info(f"采集箱商品数量: 全部={total_available}, 未认领={page_counts.get('unclaimed', 0)}")
+        logger.info(
+            f"采集箱商品数量: 全部={total_available}, 未认领={page_counts.get('unclaimed', 0)}"
+        )
 
         # 采集箱中的索引需要根据 execution_round 计算偏移
         # 因为页面上显示的是所有商品（包括前面轮次已认领的），需要从正确的位置开始

@@ -924,7 +924,7 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                             scrollParent.scrollHeight > scrollParent.clientHeight) {
                             // 找到可滚动的父容器
                             scrollParent.scrollTop = targetScrollTop;
-                            await new Promise(r => setTimeout(r, 500));
+                            await new Promise(r => setTimeout(r, 800));  // 增加等待时间确保 DOM 更新
                             actualScrollTop = scrollParent.scrollTop;
                             scrollerInfo = `parent: ${scrollParent.className.split(' ')[0] || scrollParent.tagName}`;
                             foundScrollable = true;
@@ -936,7 +936,7 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                     // 如果没找到滚动父容器,滚动整个页面
                     if (!foundScrollable) {
                         window.scrollTo({ top: targetScrollTop, behavior: 'instant' });
-                        await new Promise(r => setTimeout(r, 500));
+                        await new Promise(r => setTimeout(r, 800));  // 增加等待时间确保 DOM 更新
                         actualScrollTop = window.scrollY || document.documentElement.scrollTop;
                         scrollerInfo = 'window';
                     }
@@ -944,7 +944,7 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                     // 非 page-mode:滚动容器本身
                     if (recycleScroller) {
                         recycleScroller.scrollTop = targetScrollTop;
-                        await new Promise(r => setTimeout(r, 500));
+                        await new Promise(r => setTimeout(r, 800));  // 增加等待时间确保 DOM 更新
                         actualScrollTop = recycleScroller.scrollTop;
                         scrollerInfo = 'vue-recycle-scroller';
                     }
@@ -962,10 +962,10 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                 let targetTranslateY = index * ROW_HEIGHT;
                 let matchedY = -1;
 
-                // 方法1: 基于Y坐标匹配(容差为行高的70%)
+                // 方法1: 基于Y坐标匹配(容差为行高的30%,更严格以避免错位)
                 for (const item of visibleRows) {
                     const diff = Math.abs(item.y - targetTranslateY);
-                    if (diff < ROW_HEIGHT * 0.7) {
+                    if (diff < ROW_HEIGHT * 0.3) {
                         targetRow = item.row;
                         matchedY = item.y;
                         break;
