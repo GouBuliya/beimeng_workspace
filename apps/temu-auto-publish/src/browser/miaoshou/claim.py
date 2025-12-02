@@ -23,6 +23,7 @@ from loguru import logger
 from playwright.async_api import Frame, Locator, Page
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
+from ...core.retry_handler import SessionExpiredError
 from ...utils.page_load_decorator import (
     PAGE_TIMEOUTS,
     LoadState,
@@ -2601,6 +2602,9 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
 
             logger.info("Collection box navigation workflow completed")
             return True
+        except SessionExpiredError:
+            # Session expired exception needs to propagate up for re-login handling
+            raise
         except Exception as exc:
             logger.error(f"Collection box workflow failed: {exc}")
             logger.exception("Detailed error")
