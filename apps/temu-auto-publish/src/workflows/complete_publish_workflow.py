@@ -753,12 +753,16 @@ class CompletePublishWorkflow:
 
             # 关闭登录后弹窗(已登录时跳过,避免阻塞)
             if not already_logged_in:
+                logger.debug("关闭登录弹窗...")
                 await login_ctrl.dismiss_login_overlays()
+                logger.debug("登录弹窗已关闭")
 
             # 初始化页面
+            logger.debug("获取页面对象...")
             page = login_ctrl.browser_manager.page
             if page is None:
                 raise RuntimeError("Playwright page 未初始化")
+            logger.debug("页面对象已获取")
 
             # 初始化稳定性组件(登录成功后)
             # 复用登录时仍然需要初始化(因为每个工作流实例是独立的)
@@ -769,6 +773,7 @@ class CompletePublishWorkflow:
             )
             logger.debug("稳定性组件初始化完成")
 
+            logger.debug("检查 only_stage4_publish 模式...")
             if self.only_stage4_publish:
                 # 跳转 Temu 采集箱页面(仅发布)
                 collect_box_url = login_ctrl.selectors.get("temu_collect_box", {}).get(
@@ -777,12 +782,15 @@ class CompletePublishWorkflow:
                 await login_ctrl.ensure_collect_box_ready(collect_box_url)
 
             # 准备选品数据
+            logger.debug("准备选品数据...")
             selection_rows = self._prepare_selection_rows()
             staff_name = ""
             if selection_rows:
                 staff_name = self._resolve_collection_owner(selection_rows[0].owner)
+            logger.debug("选品数据准备完成: {} 条", len(selection_rows))
 
             # 初始化控制器
+            logger.debug("初始化控制器...")
             miaoshou_ctrl = MiaoshouController()
             first_edit_ctrl = FirstEditController()
             legacy_manual = self.manual_file_override
@@ -810,6 +818,8 @@ class CompletePublishWorkflow:
                 or publish_ctrl is None
             ):
                 raise RuntimeError("工作流初始化失败,关键控制器未创建")
+            logger.debug("控制器初始化完成")
+            logger.info("阶段0: 预处理完成,开始执行阶段1")
 
             # ===== 阶段 1: 首次编辑 =====
             async with self._perf_tracker.stage("stage1_first_edit", "首次编辑", order=1):

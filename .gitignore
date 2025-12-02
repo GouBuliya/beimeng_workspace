@@ -94,3 +94,16 @@ apps/temu-auto-publish/data/input/*.xlsx
 # 影刀临时文件
 *.flow.lock
 
+
+apps/temu-auto-publish/data/input/web_panel/*.json
+apps/temu-auto-publish/data/input/web_panel/*.csv
+apps/temu-auto-publish/data/input/web_panel/*.xlsx
+apps/temu-auto-publish/data/debug/*
+data/*
+apps/temu-auto-publish/data/debug/*
+apps/temu-auto-publish/data/debug_screenshots/*
+apps/temu-auto-publish/data/metrics/*
+apps/temu-auto-publish/data/output/*
+apps/temu-auto-publish/data/video/*
+apps/temu-auto-publish/data/workflow_states/*
+
