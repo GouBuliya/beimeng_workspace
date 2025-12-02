@@ -1239,6 +1239,43 @@ class CompletePublishWorkflow:
                 logger.info(f"起始偏移 {start_offset} 超过单页容量,跳转到第 {initial_page} 页")
                 await _jump_to_page(initial_page)
 
+            # [关键修复] 每轮开始前重置虚拟列表滚动位置到目标起始位置
+            # 解决问题：第四轮第一个商品定位失败（前几轮操作后滚动位置未重置）
+            first_item_scroll_top = (start_offset % page_size) * 128  # ROW_HEIGHT = 128
+            logger.info(
+                "[虚拟列表重置] 轮次={}, 起始偏移={}, 目标scrollTop={}px",
+                self.execution_round,
+                start_offset,
+                first_item_scroll_top,
+            )
+            await page.evaluate(
+                """(targetScrollTop) => {
+                    const scroller = document.querySelector('.vue-recycle-scroller');
+                    if (scroller) {
+                        // 检查是否为 page-mode
+                        const isPageMode = scroller.classList.contains('page-mode');
+                        if (isPageMode) {
+                            // page-mode: 滚动父容器或页面
+                            let scrollParent = scroller.parentElement;
+                            while (scrollParent && scrollParent !== document.body) {
+                                const style = window.getComputedStyle(scrollParent);
+                                if ((style.overflowY === 'auto' || style.overflowY === 'scroll') &&
+                                    scrollParent.scrollHeight > scrollParent.clientHeight) {
+                                    scrollParent.scrollTop = targetScrollTop;
+                                    return;
+                                }
+                                scrollParent = scrollParent.parentElement;
+                            }
+                            window.scrollTo({ top: targetScrollTop, behavior: 'instant' });
+                        } else {
+                            scroller.scrollTop = targetScrollTop;
+                        }
+                    }
+                }""",
+                first_item_scroll_top,
+            )
+            await page.wait_for_timeout(500)  # 等待虚拟列表重新渲染
+
             for index, selection in enumerate(working_selections):
                 absolute_index = start_offset + index
                 # 计算目标页码和页内相对索引

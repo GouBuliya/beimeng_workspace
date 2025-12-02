@@ -1,6 +1,6 @@
 [project]
 name = "beimeng-workspace"
-version = "0.2.7"
+version = "0.2.8"
 description = "AI-Friendly Python Monorepo - 包含多种应用、脚本和文档的工作空间"
 requires-python = ">=3.12"
 readme = "README.md"
