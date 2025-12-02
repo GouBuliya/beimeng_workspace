@@ -962,13 +962,45 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                 let targetTranslateY = index * ROW_HEIGHT;
                 let matchedY = -1;
 
+                // [关键修复] 方法0: 基于视口内可见行的DOM顺序定位（最可靠）
+                // vue-recycle-scroller 的 translateY 可能在滚动后变得不可靠
+                // 改用视口内可见行的顺序来匹配
+                const getVisibleRowsInViewport = () => {
+                    const allRows = document.querySelectorAll('.vue-recycle-scroller__item-view');
+                    const viewportRows = [];
+                    allRows.forEach(row => {
+                        const rect = row.getBoundingClientRect();
+                        // 行在视口内（至少部分可见）
+                        if (rect.bottom > 0 && rect.top < window.innerHeight) {
+                            viewportRows.push({
+                                row,
+                                top: rect.top,
+                                y: parseFloat((row.getAttribute('style') || '').match(/translateY\\((-?\\d+(?:\\.\\d+)?)/)?.[1] || '0')
+                            });
+                        }
+                    });
+                    // 按视口内的 top 位置排序
+                    viewportRows.sort((a, b) => a.top - b.top);
+                    return viewportRows;
+                };
+
+                const viewportRows = getVisibleRowsInViewport();
+
+                // 如果目标索引在视口可见行范围内,直接取对应位置的行
+                if (index < viewportRows.length) {
+                    targetRow = viewportRows[index].row;
+                    matchedY = viewportRows[index].y;
+                }
+
                 // 方法1: 基于Y坐标匹配(容差为行高的30%,更严格以避免错位)
-                for (const item of visibleRows) {
-                    const diff = Math.abs(item.y - targetTranslateY);
-                    if (diff < ROW_HEIGHT * 0.3) {
-                        targetRow = item.row;
-                        matchedY = item.y;
-                        break;
+                if (!targetRow) {
+                    for (const item of visibleRows) {
+                        const diff = Math.abs(item.y - targetTranslateY);
+                        if (diff < ROW_HEIGHT * 0.3) {
+                            targetRow = item.row;
+                            matchedY = item.y;
+                            break;
+                        }
                     }
                 }
 
@@ -988,12 +1020,14 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                 if (!targetRow) {
                     return {
                         success: false,
-                        error: `Target Y=${targetTranslateY} not found in visible rows`,
+                        error: `Target index=${index} not found (viewport has ${viewportRows.length} rows)`,
                         scrollerInfo,
                         isPageMode,
                         targetScrollTop,
                         actualScrollTop,
                         rowCount: rows.length,
+                        viewportRowCount: viewportRows.length,
+                        viewportTops: viewportRows.map(r => Math.round(r.top)),
                         visibleYs: visibleRows.map(r => r.y),
                         inferredIdxs: visibleRows.map(r => inferRowIndex(r.y)),
                         detectedRowHeight: ROW_HEIGHT
@@ -1023,7 +1057,9 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                     actualScrollTop,
                     targetTranslateY,
                     matchedY,
-                    visibleCount: visibleRows.length
+                    visibleCount: visibleRows.length,
+                    viewportRowCount: viewportRows.length,
+                    matchMethod: index < viewportRows.length ? 'viewport-order' : 'translateY'
                 };
             }
             """
@@ -1032,17 +1068,17 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
 
             if result.get("success"):
                 logger.success(
-                    f"✓ JS 点击编辑按钮成功,索引={index}, 容器={result.get('scrollerInfo')}, "
-                    f"page-mode={result.get('isPageMode')}, scrollTop={result.get('actualScrollTop')}px, "
-                    f"匹配Y={result.get('matchedY')}px"
+                    f"✓ JS 点击编辑按钮成功,索引={index}, 匹配方法={result.get('matchMethod')}, "
+                    f"容器={result.get('scrollerInfo')}, 视口行数={result.get('viewportRowCount')}, "
+                    f"scrollTop={result.get('actualScrollTop')}px, 匹配Y={result.get('matchedY')}px"
                 )
                 return True
             else:
                 logger.warning(
                     f"JS 点击失败: {result.get('error')}, 容器={result.get('scrollerInfo')}, "
                     f"page-mode={result.get('isPageMode')}, 目标scrollTop={result.get('targetScrollTop')}, "
-                    f"实际scrollTop={result.get('actualScrollTop')}, 行数={result.get('rowCount')}, "
-                    f"可见Y值={result.get('visibleYs')}"
+                    f"实际scrollTop={result.get('actualScrollTop')}, 视口行数={result.get('viewportRowCount')}, "
+                    f"视口tops={result.get('viewportTops')}, 可见Y值={result.get('visibleYs')}"
                 )
                 return False
 

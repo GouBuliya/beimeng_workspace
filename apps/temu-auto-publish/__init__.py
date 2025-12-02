@@ -10,5 +10,5 @@
 @AUTHOR: Beimeng Team
 """
 
-__version__ = "0.2.9"
+__version__ = "0.3.0"
 __author__ = "Beimeng Team"
