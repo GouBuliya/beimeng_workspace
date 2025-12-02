@@ -9,7 +9,7 @@
 #   3. docker run -v ${PWD}/dist:/app/dist temu-builder:windows
 
 # 使用 Windows Server Core with Python
-FROM python:3.12-windowsservercore-ltsc2022
+FROM python:3.14-windowsservercore-ltsc2022
 
 SHELL ["powershell", "-Command", "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue';"]
 
