@@ -1300,6 +1300,22 @@ class CompletePublishWorkflow:
                                     getattr(selection, "sku_image_urls", None),
                                 )
 
+                            # [诊断日志] 记录尺寸图数据状态
+                            if size_chart_url:
+                                logger.info(
+                                    "[尺寸图诊断] 产品 {} 有尺寸图待上传: {}",
+                                    selection.model_number,
+                                    size_chart_url[:80] + "..."
+                                    if len(size_chart_url) > 80
+                                    else size_chart_url,
+                                )
+                            else:
+                                logger.warning(
+                                    "[尺寸图诊断] 产品 {} 无尺寸图数据 (原始值='{}')",
+                                    selection.model_number,
+                                    getattr(selection, "size_chart_image_url", None),
+                                )
+
                             hook_fn = self._build_first_edit_hook(
                                 first_edit_ctrl=first_edit_ctrl,
                                 sku_image_urls=sku_image_urls,

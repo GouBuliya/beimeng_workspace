@@ -340,6 +340,16 @@ class SelectionTableReader:
                         product_data["image_files"],
                     )
 
+                # [诊断日志] 追踪 size_chart_image_url 的解析过程
+                if not product_data.get("size_chart_image_url"):
+                    raw_size_chart = row.get("size_chart_image_url")
+                    logger.debug(
+                        "[解析诊断] 第 {} 行 ({}) 无尺寸图: raw_value='{}'",
+                        idx + 1,
+                        product_data.get("model_number", "?"),
+                        raw_size_chart,
+                    )
+
                 product = ProductSelectionRow(**product_data)
                 products.append(product)
                 logger.debug(

@@ -229,7 +229,7 @@ async def fill_first_edit_dialog_codegen(page: Page, payload: dict[str, Any]) ->
             else:
                 logger.warning("⚠️ 尺寸图网络图片上传失败,继续后续流程")
         else:
-            logger.warning("⚠️ 未提供尺寸图URL,跳过尺寸图上传")
+            logger.info("⚠️ 未提供尺寸图URL,跳过尺寸图上传")
 
         # 6. 上传产品视频(仅支持网络视频URL)
         product_video_url = (payload.get("product_video_url") or "").strip()
