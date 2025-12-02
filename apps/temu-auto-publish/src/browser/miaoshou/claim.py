@@ -1409,6 +1409,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
         for idx in indexes:
             logger.info(f"勾选索引 {idx} 的商品复选框...")
             selected = False
+            index_not_found = False  # 标记索引是否不存在于页面中
 
             for attempt in range(2):
                 if attempt > 0:
@@ -1421,11 +1422,21 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                 if result.get("success"):
                     selected = True
                     break
-                logger.warning(f"索引 {idx} 第 {attempt + 1} 次勾选失败: {result.get('error')}")
+                # 检查是否因为索引不存在而失败
+                error_msg = result.get("error", "")
+                if "not found in visible rows" in error_msg:
+                    index_not_found = True
+                    logger.info(f"索引 {idx} 不存在于页面中，已到达列表末尾")
+                    break
+                logger.warning(f"索引 {idx} 第 {attempt + 1} 次勾选失败: {error_msg}")
                 await waiter.wait_for_dom_stable(timeout_ms=300)
 
             if selected:
                 success_count += 1
+            elif index_not_found:
+                # 索引不存在，提前终止勾选循环
+                logger.info(f"检测到列表末尾，提前终止勾选。已成功勾选 {success_count} 个")
+                break
             else:
                 fail_count += 1
 
