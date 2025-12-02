@@ -844,10 +844,15 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
             return False
 
     async def _click_edit_button_by_js(self, page: Page, index: int) -> bool:
-        """使用 JavaScript 直接定位并点击第 index 个商品的编辑按钮.
+        """基于 DOM 顺序定位并点击第 index 个商品的编辑按钮.
 
-        通过 JS 滚动页面/容器到目标位置,然后点击编辑按钮.
-        支持 page-mode(页面级滚动)和容器级滚动两种模式.
+        核心算法（重构后）：
+        1. 滚动到目标位置
+        2. 获取所有可见行并按 translateY 排序
+        3. 计算基准索引 baseIndex = round(第一行Y / ROW_HEIGHT)
+        4. 定位目标行 targetRow = sortedRows[index - baseIndex]
+
+        关键改进：不依赖单个行的 translateY 精确值，而是利用行的相对顺序定位。
 
         Args:
             page: Playwright 页面对象
@@ -857,63 +862,23 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
             是否成功点击
         """
         try:
-            # JavaScript:滚动到目标位置,然后点击编辑按钮
             js_code = """
             async (index) => {
-                const DEFAULT_ROW_HEIGHT = 128;
+                const ROW_HEIGHT = 128;
 
-                // 检查是否为 page-mode(页面级滚动)
+                // 获取滚动容器
                 const recycleScroller = document.querySelector('.vue-recycle-scroller');
                 const isPageMode = recycleScroller && recycleScroller.classList.contains('page-mode');
 
-                // 获取所有可见行的辅助函数
-                const getVisibleRows = () => {
-                    const rows = document.querySelectorAll('.vue-recycle-scroller__item-view');
-                    const visibleRows = [];
-                    rows.forEach(row => {
-                        const style = row.getAttribute('style') || '';
-                        const match = style.match(/translateY\\((-?\\d+(?:\\.\\d+)?)\\s*(?:px)?\\s*\\)/);
-                        if (match) {
-                            const y = parseFloat(match[1]);
-                            if (y >= 0) visibleRows.push({ row, y });
-                        }
-                    });
-                    visibleRows.sort((a, b) => a.y - b.y);
-                    return visibleRows;
-                };
-
-                // 动态检测实际行高(通过测量相邻行的Y差值)
-                const detectRowHeight = () => {
-                    const visibleRows = getVisibleRows();
-                    if (visibleRows.length >= 2) {
-                        const diffs = [];
-                        for (let i = 1; i < visibleRows.length; i++) {
-                            const diff = visibleRows[i].y - visibleRows[i-1].y;
-                            if (diff > 50 && diff < 300) diffs.push(diff);
-                        }
-                        if (diffs.length > 0) {
-                            diffs.sort((a, b) => a - b);
-                            return diffs[Math.floor(diffs.length / 2)];
-                        }
-                    }
-                    if (visibleRows.length >= 1) {
-                        const rect = visibleRows[0].row.getBoundingClientRect();
-                        if (rect.height > 50 && rect.height < 300) return rect.height;
-                    }
-                    return DEFAULT_ROW_HEIGHT;
-                };
-
-                const ROW_HEIGHT = detectRowHeight();
+                // 计算目标滚动位置
                 const targetScrollTop = index * ROW_HEIGHT;
 
                 let scrollerInfo = '';
                 let actualScrollTop = 0;
 
+                // 执行滚动
                 if (isPageMode) {
-                    // page-mode:滚动整个页面或找到真正的滚动父容器
                     scrollerInfo = 'page-mode';
-
-                    // 尝试找到有 overflow 的父容器
                     let scrollParent = recycleScroller.parentElement;
                     let foundScrollable = false;
 
@@ -922,9 +887,8 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                         const overflowY = style.overflowY;
                         if ((overflowY === 'auto' || overflowY === 'scroll') &&
                             scrollParent.scrollHeight > scrollParent.clientHeight) {
-                            // 找到可滚动的父容器
                             scrollParent.scrollTop = targetScrollTop;
-                            await new Promise(r => setTimeout(r, 800));  // 增加等待时间确保 DOM 更新
+                            await new Promise(r => setTimeout(r, 800));
                             actualScrollTop = scrollParent.scrollTop;
                             scrollerInfo = `parent: ${scrollParent.className.split(' ')[0] || scrollParent.tagName}`;
                             foundScrollable = true;
@@ -933,134 +897,106 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                         scrollParent = scrollParent.parentElement;
                     }
 
-                    // 如果没找到滚动父容器,滚动整个页面
                     if (!foundScrollable) {
                         window.scrollTo({ top: targetScrollTop, behavior: 'instant' });
-                        await new Promise(r => setTimeout(r, 800));  // 增加等待时间确保 DOM 更新
+                        await new Promise(r => setTimeout(r, 800));
                         actualScrollTop = window.scrollY || document.documentElement.scrollTop;
                         scrollerInfo = 'window';
                     }
                 } else {
-                    // 非 page-mode:滚动容器本身
                     if (recycleScroller) {
                         recycleScroller.scrollTop = targetScrollTop;
-                        await new Promise(r => setTimeout(r, 800));  // 增加等待时间确保 DOM 更新
+                        await new Promise(r => setTimeout(r, 800));
                         actualScrollTop = recycleScroller.scrollTop;
                         scrollerInfo = 'vue-recycle-scroller';
                     }
                 }
 
-                // 重新获取可见行(滚动后)
-                const rows = document.querySelectorAll('.vue-recycle-scroller__item-view');
-                const visibleRows = getVisibleRows();
+                // 获取所有行并解析 translateY
+                const rows = Array.from(
+                    document.querySelectorAll('.vue-recycle-scroller__item-view')
+                );
 
-                // 根据可见行推断索引的辅助函数
-                const inferRowIndex = (y) => Math.round(y / ROW_HEIGHT);
+                const rowsWithY = rows.map(row => {
+                    const style = row.getAttribute('style') || '';
+                    const match = style.match(/translateY\\((-?\\d+(?:\\.\\d+)?)\\s*(?:px)?\\s*\\)/);
+                    const y = match ? parseFloat(match[1]) : -9999;
+                    return { row, y };
+                });
 
-                // 直接使用 index * ROW_HEIGHT 计算目标 translateY
-                let targetRow = null;
-                let targetTranslateY = index * ROW_HEIGHT;
-                let matchedY = -1;
-                let matchMethod = 'none';
+                // 过滤有效行（translateY >= 0 且不是被回收的行）
+                const validRows = rowsWithY
+                    .filter(item => item.y >= 0 && item.y < 100000)
+                    .sort((a, b) => a.y - b.y);
 
-                // [关键修复] 方法0: 滚动后取视口顶部的第一个可见行
-                // 原理：滚动到 targetScrollTop = index * ROW_HEIGHT 后，
-                // 目标行应该位于视口顶部，所以直接取视口内第一个可见行
-                const getVisibleRowsInViewport = () => {
-                    const allRows = document.querySelectorAll('.vue-recycle-scroller__item-view');
-                    const viewportRows = [];
-                    allRows.forEach(row => {
-                        const rect = row.getBoundingClientRect();
-                        // 行在视口内（至少部分可见）
-                        if (rect.bottom > 0 && rect.top < window.innerHeight) {
-                            viewportRows.push({
-                                row,
-                                top: rect.top,
-                                y: parseFloat((row.getAttribute('style') || '').match(/translateY\\((-?\\d+(?:\\.\\d+)?)/)?.[1] || '0')
-                            });
-                        }
-                    });
-                    // 按视口内的 top 位置排序（顶部的行排在前面）
-                    viewportRows.sort((a, b) => a.top - b.top);
-                    return viewportRows;
-                };
-
-                const viewportRows = getVisibleRowsInViewport();
-
-                // 滚动后，目标行应该在视口顶部区域
-                // 取第一个完全在视口内的行（top >= 0），或者第一个可见行
-                if (viewportRows.length > 0) {
-                    // 优先找完全在视口内的第一行（top >= 0）
-                    const fullyVisibleRow = viewportRows.find(r => r.top >= 0);
-                    if (fullyVisibleRow) {
-                        targetRow = fullyVisibleRow.row;
-                        matchedY = fullyVisibleRow.y;
-                        matchMethod = 'viewport-first';
-                    } else {
-                        // 没有完全可见的行，取最靠近顶部的行
-                        targetRow = viewportRows[0].row;
-                        matchedY = viewportRows[0].y;
-                        matchMethod = 'viewport-top';
-                    }
-                }
-
-                // 方法1: 基于Y坐标匹配(容差为行高的30%,更严格以避免错位)
-                if (!targetRow) {
-                    for (const item of visibleRows) {
-                        const diff = Math.abs(item.y - targetTranslateY);
-                        if (diff < ROW_HEIGHT * 0.3) {
-                            targetRow = item.row;
-                            matchedY = item.y;
-                            matchMethod = 'translateY-exact';
-                            break;
-                        }
-                    }
-                }
-
-                // 方法2: 基于推断索引匹配(更健壮的匹配方式)
-                if (!targetRow) {
-                    for (const item of visibleRows) {
-                        const inferredIdx = inferRowIndex(item.y);
-                        if (inferredIdx === index) {
-                            targetRow = item.row;
-                            matchedY = item.y;
-                            matchMethod = 'inferred-index';
-                            break;
-                        }
-                    }
-                }
-
-                // 如果匹配失败,记录所有可见行的 Y 值用于调试
-                if (!targetRow) {
+                if (validRows.length === 0) {
                     return {
                         success: false,
-                        error: `Target index=${index} not found (viewport has ${viewportRows.length} rows)`,
+                        error: '没有找到有效的商品行',
                         scrollerInfo,
                         isPageMode,
                         targetScrollTop,
                         actualScrollTop,
-                        rowCount: rows.length,
-                        viewportRowCount: viewportRows.length,
-                        viewportTops: viewportRows.map(r => Math.round(r.top)),
-                        visibleYs: visibleRows.map(r => r.y),
-                        inferredIdxs: visibleRows.map(r => inferRowIndex(r.y)),
-                        detectedRowHeight: ROW_HEIGHT
+                        totalRows: rows.length
                     };
                 }
 
-                // 在行内查找编辑按钮(精确匹配 J_commonCollectBoxEdit)
+                // 计算基准索引（排序后第一行对应的商品索引）
+                const baseIndex = Math.round(validRows[0].y / ROW_HEIGHT);
+                const relativeIndex = index - baseIndex;
+
+                // 调试信息
+                const debugInfo = {
+                    baseIndex,
+                    relativeIndex,
+                    validRowCount: validRows.length,
+                    firstRowY: validRows[0].y,
+                    allYValues: validRows.map(r => r.y)
+                };
+
+                // 边界检查
+                if (relativeIndex < 0) {
+                    return {
+                        success: false,
+                        error: `相对索引越界: relativeIndex=${relativeIndex} < 0 (需要向上滚动)`,
+                        scrollerInfo,
+                        isPageMode,
+                        targetScrollTop,
+                        actualScrollTop,
+                        ...debugInfo
+                    };
+                }
+
+                if (relativeIndex >= validRows.length) {
+                    return {
+                        success: false,
+                        error: `相对索引越界: relativeIndex=${relativeIndex} >= validRows=${validRows.length} (需要向下滚动)`,
+                        scrollerInfo,
+                        isPageMode,
+                        targetScrollTop,
+                        actualScrollTop,
+                        ...debugInfo
+                    };
+                }
+
+                // 定位目标行
+                const targetRow = validRows[relativeIndex].row;
+                const matchedY = validRows[relativeIndex].y;
+
+                // 在行内查找编辑按钮
                 const editBtn = targetRow.querySelector('.J_commonCollectBoxEdit');
 
                 if (!editBtn) {
                     return {
                         success: false,
-                        error: 'Edit button (.J_commonCollectBoxEdit) not found in target row',
+                        error: '目标行内未找到编辑按钮 (.J_commonCollectBoxEdit)',
                         scrollerInfo,
-                        matchedY
+                        matchedY,
+                        ...debugInfo
                     };
                 }
 
-                // 强制点击
+                // 点击编辑按钮
                 editBtn.click();
 
                 return {
@@ -1069,11 +1005,9 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                     isPageMode,
                     targetScrollTop,
                     actualScrollTop,
-                    targetTranslateY,
                     matchedY,
-                    visibleCount: visibleRows.length,
-                    viewportRowCount: viewportRows.length,
-                    matchMethod
+                    matchMethod: 'dom-order',
+                    ...debugInfo
                 };
             }
             """
@@ -1082,22 +1016,23 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
 
             if result.get("success"):
                 logger.success(
-                    f"✓ JS 点击编辑按钮成功,索引={index}, 匹配方法={result.get('matchMethod')}, "
-                    f"容器={result.get('scrollerInfo')}, 视口行数={result.get('viewportRowCount')}, "
-                    f"scrollTop={result.get('actualScrollTop')}px, 匹配Y={result.get('matchedY')}px"
+                    f"✓ [DOM顺序定位] 点击成功, index={index}, "
+                    f"baseIndex={result.get('baseIndex')}, relativeIndex={result.get('relativeIndex')}, "
+                    f"有效行数={result.get('validRowCount')}, 第一行Y={result.get('firstRowY')}, "
+                    f"匹配Y={result.get('matchedY')}px, 容器={result.get('scrollerInfo')}"
                 )
                 return True
             else:
                 logger.warning(
-                    f"JS 点击失败: {result.get('error')}, 容器={result.get('scrollerInfo')}, "
-                    f"page-mode={result.get('isPageMode')}, 目标scrollTop={result.get('targetScrollTop')}, "
-                    f"实际scrollTop={result.get('actualScrollTop')}, 视口行数={result.get('viewportRowCount')}, "
-                    f"视口tops={result.get('viewportTops')}, 可见Y值={result.get('visibleYs')}"
+                    f"[DOM顺序定位] 点击失败: {result.get('error')}, "
+                    f"index={index}, baseIndex={result.get('baseIndex')}, "
+                    f"relativeIndex={result.get('relativeIndex')}, "
+                    f"有效行数={result.get('validRowCount')}, Y值列表={result.get('allYValues')}"
                 )
                 return False
 
         except Exception as exc:
-            logger.warning(f"JS 点击异常: {exc}")
+            logger.warning(f"[DOM顺序定位] JS 执行异常: {exc}")
             return False
 
     async def _click_edit_button_in_row(
