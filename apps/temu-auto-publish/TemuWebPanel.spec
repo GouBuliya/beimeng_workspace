@@ -1,18 +1,23 @@
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_submodules
 from PyInstaller.utils.hooks import collect_all
+from PyInstaller.utils.hooks import copy_metadata
 
-datas = [('D:\\codespace\\beimeng_workspace\\apps\\temu-auto-publish\\web_panel\\templates', 'web_panel/templates'), ('D:\\codespace\\beimeng_workspace\\apps\\temu-auto-publish\\config', 'config'), ('D:\\codespace\\beimeng_workspace\\apps\\temu-auto-publish\\web_panel\\fields.py', 'web_panel'), ('D:\\codespace\\beimeng_workspace\\apps\\temu-auto-publish\\data\\input\\selection.xlsx', 'data/input')]
+datas = [('/Users/candy/beimeng_workspace/apps/temu-auto-publish/web_panel/templates', 'web_panel/templates'), ('/Users/candy/beimeng_workspace/apps/temu-auto-publish/config', 'config'), ('/Users/candy/beimeng_workspace/apps/temu-auto-publish/web_panel/fields.py', 'web_panel')]
 binaries = []
 hiddenimports = ['web_panel.api', 'web_panel.service', 'web_panel.cli', 'src.workflows.complete_publish_workflow', 'itsdangerous']
+datas += copy_metadata('playwright')
+datas += copy_metadata('playwright_stealth')
 hiddenimports += collect_submodules('src')
+tmp_ret = collect_all('playwright')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 tmp_ret = collect_all('playwright_stealth')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 
 
 a = Analysis(
-    ['D:\\codespace\\beimeng_workspace\\apps\\temu-auto-publish\\start_web_panel_entry.py'],
-    pathex=['D:\\codespace\\beimeng_workspace', 'D:\\codespace\\beimeng_workspace\\apps\\temu-auto-publish', 'D:\\codespace\\beimeng_workspace\\apps\\temu-auto-publish\\src'],
+    ['/Users/candy/beimeng_workspace/apps/temu-auto-publish/start_web_panel_entry.py'],
+    pathex=['/Users/candy/beimeng_workspace', '/Users/candy/beimeng_workspace/apps/temu-auto-publish', '/Users/candy/beimeng_workspace/apps/temu-auto-publish/src'],
     binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
