@@ -1601,14 +1601,58 @@ class CompletePublishWorkflow:
 
         await miaoshou_ctrl.refresh_collection_box(page, filter_owner=filter_owner)
 
-        # 按 execution_round 计算偏移,若不足则强制使用顺序索引占位
-        start_offset = max(0, (self.execution_round - 1) * self.collect_count)
-        end_offset = start_offset + self.collect_count
-        working_products = edited_products[start_offset:end_offset]
+        # 筛选后额外等待页面数据加载完成
+        await page.wait_for_timeout(1500)
 
-        selection_count = min(max(len(working_products), self.collect_count), 5)
-        # 使用列表位置计算采集箱中的绝对索引，而不是 product.index
-        # 因为 product.index 可能是占位符流程中的局部索引，不是采集箱位置
+        # edited_products 是当前批次要处理的商品数据
+        working_products = list(edited_products)
+        selection_count = min(len(working_products), 5)
+
+        # 如果当前批次没有可用商品，直接跳过认领阶段
+        if len(working_products) == 0:
+            logger.info(
+                f"执行轮次 {self.execution_round} 无可用商品，跳过认领阶段"
+            )
+            return StageOutcome(
+                name="stage2_claim",
+                success=True,
+                message="NO_PRODUCTS_FOR_ROUND",
+                details={
+                    "execution_round": self.execution_round,
+                    "skipped": True,
+                },
+            )
+
+        # 获取页面上实际的商品数量，用于边界检查
+        page_counts = await miaoshou_ctrl.get_product_count(page)
+        total_available = page_counts.get("all", 0)
+        logger.info(f"采集箱商品数量: 全部={total_available}, 未认领={page_counts.get('unclaimed', 0)}")
+
+        # 采集箱中的索引需要根据 execution_round 计算偏移
+        # 因为页面上显示的是所有商品（包括前面轮次已认领的），需要从正确的位置开始
+        start_offset = (self.execution_round - 1) * self.collect_count
+
+        # 检查起始偏移是否超出页面实际商品数量
+        if start_offset >= total_available:
+            logger.info(
+                f"执行轮次 {self.execution_round} 起始偏移 {start_offset} >= 页面商品数 {total_available}，跳过认领阶段"
+            )
+            return StageOutcome(
+                name="stage2_claim",
+                success=True,
+                message="OFFSET_EXCEEDS_AVAILABLE",
+                details={
+                    "execution_round": self.execution_round,
+                    "start_offset": start_offset,
+                    "total_available": total_available,
+                    "skipped": True,
+                },
+            )
+
+        # 调整 selection_count，确保不超出页面实际商品范围
+        max_selectable = total_available - start_offset
+        selection_count = min(selection_count, max_selectable)
+
         target_indexes = list(range(start_offset, start_offset + selection_count))
 
         logger.info(
@@ -1624,12 +1668,8 @@ class CompletePublishWorkflow:
         batch_failures: list[str] = []
         batch_success = 0
 
-        abs_indexes = target_indexes + list(
-            range(
-                target_indexes[-1] + 1 if target_indexes else start_offset,
-                start_offset + selection_count,
-            )
-        )
+        # 直接使用 target_indexes 作为要处理的索引列表
+        abs_indexes = target_indexes
         for batch_start in range(0, len(abs_indexes), batch_size):
             batch_indexes = abs_indexes[batch_start : batch_start + batch_size]
             if not batch_indexes:

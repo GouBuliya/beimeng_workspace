@@ -42,7 +42,24 @@ from .fields import FORM_FIELDS
 from .models import HealthStatus, RunStatus, WorkflowOptions
 from .service import SelectionFileStore, WorkflowTaskManager, create_task_manager
 
+# ========== 日志文件配置 ==========
 APP_ROOT = Path(__file__).resolve().parents[1]
+_LOG_DIR = APP_ROOT / "data" / "logs"
+_LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+# 添加日志文件输出（按日期轮转）
+_log_file = _LOG_DIR / "web_panel_{time:YYYY-MM-DD}.log"
+logger.add(
+    str(_log_file),
+    rotation="00:00",  # 每天午夜轮转
+    retention="30 days",  # 保留 30 天
+    compression="zip",  # 压缩旧日志
+    encoding="utf-8",
+    level="DEBUG",
+    format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} - {message}",
+)
+logger.info(f"日志文件已配置: {_LOG_DIR}")
+
 TEMPLATE_DIR = APP_ROOT / "web_panel" / "templates"
 DEFAULT_SELECTION = APP_ROOT / "data" / "input" / "10月新品可上架.csv"
 SELECTOR_FILE = APP_ROOT / "config" / "miaoshou_selectors_v2.json"

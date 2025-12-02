@@ -764,7 +764,6 @@ class TestCompletePublishWorkflowExecution:
         patches = {
             "settings": patch("src.workflows.complete_publish_workflow.settings"),
             "reset_tracker": patch("src.workflows.complete_publish_workflow.reset_tracker"),
-            "get_tracker": patch("src.workflows.complete_publish_workflow.get_tracker"),
             "get_checkpoint_manager": patch(
                 "src.workflows.complete_publish_workflow.get_checkpoint_manager"
             ),
