@@ -890,10 +890,7 @@ class BrowserManager:
                 try:
                     proc_name = proc.info.get("name", "").lower()
                     # 匹配 chromium, chrome, msedge 等浏览器进程
-                    if any(
-                        browser in proc_name
-                        for browser in ("chrom", "chromium", "msedge")
-                    ):
+                    if any(browser in proc_name for browser in ("chrom", "chromium", "msedge")):
                         memory_info = proc.info.get("memory_info")
                         if memory_info:
                             total_memory += memory_info.rss

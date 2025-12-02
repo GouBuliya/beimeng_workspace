@@ -417,7 +417,9 @@ class CompletePublishWorkflow:
 
         # 4. 输出清理报告
         if cleanup_errors:
-            logger.warning(f"[SafeCleanup] 清理期间发生 {len(cleanup_errors)} 个错误: {cleanup_errors}")
+            logger.warning(
+                f"[SafeCleanup] 清理期间发生 {len(cleanup_errors)} 个错误: {cleanup_errors}"
+            )
         else:
             logger.debug("[SafeCleanup] 资源清理完成")
 
@@ -455,7 +457,9 @@ class CompletePublishWorkflow:
 
                 if outcome.success:
                     if attempt > 0:
-                        logger.success(f"[AutoRecovery] 阶段 {stage_name} 在第 {attempt + 1} 次尝试后成功")
+                        logger.success(
+                            f"[AutoRecovery] 阶段 {stage_name} 在第 {attempt + 1} 次尝试后成功"
+                        )
                     return result
 
                 # 阶段失败，检查是否需要重试
@@ -486,9 +490,7 @@ class CompletePublishWorkflow:
                     continue
 
                 # 最后一次尝试也失败
-                logger.error(
-                    f"[AutoRecovery] 阶段 {stage_name} 在 {retries + 1} 次尝试后仍然失败"
-                )
+                logger.error(f"[AutoRecovery] 阶段 {stage_name} 在 {retries + 1} 次尝试后仍然失败")
                 return result
 
             except Exception as exc:
@@ -665,9 +667,7 @@ class CompletePublishWorkflow:
                 if status.gc_triggered:
                     logger.info("[Stability] 最终 GC 已执行")
                 if status.temp_files_cleaned > 0:
-                    logger.info(
-                        f"[Stability] 清理临时文件: {status.temp_files_cleaned} 个"
-                    )
+                    logger.info(f"[Stability] 清理临时文件: {status.temp_files_cleaned} 个")
             except Exception as exc:
                 logger.warning(f"[Stability] 资源清理失败: {exc}")
             self._resource_manager = None
@@ -1665,9 +1665,7 @@ class CompletePublishWorkflow:
                 f"存在 {len(batch_failures)} 个失败"
             )
         elif overall_success:
-            message = (
-                f"认领成功 {selection_count} 个商品,每商品 {self.claim_times} 次 (共 {expected_total} 次)"
-            )
+            message = f"认领成功 {selection_count} 个商品,每商品 {self.claim_times} 次 (共 {expected_total} 次)"
         else:
             message = "认领结果存在异常, 详见 details"
 

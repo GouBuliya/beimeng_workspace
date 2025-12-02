@@ -531,8 +531,7 @@ class CheckpointManager:
 
         task = asyncio.create_task(cleanup_loop(), name="checkpoint_auto_cleanup")
         logger.info(
-            f"[AutoCleanup] 已启动检查点自动清理任务 "
-            f"(间隔: {interval_hours}h, 保留: {retention}h)"
+            f"[AutoCleanup] 已启动检查点自动清理任务 (间隔: {interval_hours}h, 保留: {retention}h)"
         )
         return task
 

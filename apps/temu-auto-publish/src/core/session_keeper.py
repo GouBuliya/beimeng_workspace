@@ -142,8 +142,7 @@ class SessionKeeper:
         self._paused = False
         self._task = asyncio.create_task(self._refresh_loop(), name="session_keeper")
         logger.info(
-            f"[SessionKeeper] 会话保活已启动 "
-            f"(刷新间隔: {self.config.refresh_interval_minutes}分钟)"
+            f"[SessionKeeper] 会话保活已启动 (刷新间隔: {self.config.refresh_interval_minutes}分钟)"
         )
 
     async def stop(self) -> None:

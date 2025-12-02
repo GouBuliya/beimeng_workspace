@@ -244,9 +244,7 @@ class ResourceManager:
 
         return cleaned
 
-    async def close_extra_pages(
-        self, browser_manager: "BrowserManager | None"
-    ) -> int:
+    async def close_extra_pages(self, browser_manager: "BrowserManager | None") -> int:
         """关闭多余页面.
 
         Args:
@@ -262,9 +260,7 @@ class ResourceManager:
             return 0
 
         try:
-            return await browser_manager.close_extra_pages(
-                keep_count=self.limits.max_page_count
-            )
+            return await browser_manager.close_extra_pages(keep_count=self.limits.max_page_count)
         except Exception as e:
             logger.warning(f"关闭多余页面失败: {e}")
             return 0
@@ -311,8 +307,7 @@ class ResourceManager:
 
             if not mem_ok:
                 logger.warning(
-                    f"[ResourceManager] 内存仍超限: {status.memory_usage_mb}MB，"
-                    "建议重启浏览器"
+                    f"[ResourceManager] 内存仍超限: {status.memory_usage_mb}MB，建议重启浏览器"
                 )
 
         # 检查是否应该触发预防性 GC

@@ -1248,7 +1248,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         f"偏移={result.get('yOffset')}, 首可见索引={result.get('firstVisibleIndex')}"
                     )
                     # 调试: 输出可见行信息
-                    debug_rows = result.get('debugRows', [])
+                    debug_rows = result.get("debugRows", [])
                     if debug_rows:
                         logger.debug(f"  可见行(前5): {debug_rows}")
                 else:

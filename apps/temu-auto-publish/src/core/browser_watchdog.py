@@ -196,8 +196,7 @@ class BrowserWatchdog:
         self._paused = False
         self._task = asyncio.create_task(self._monitor_loop(), name="browser_watchdog")
         logger.info(
-            f"[Watchdog] 浏览器监控已启动 "
-            f"(心跳间隔: {self.config.heartbeat_interval_sec}s)"
+            f"[Watchdog] 浏览器监控已启动 (心跳间隔: {self.config.heartbeat_interval_sec}s)"
         )
 
     async def stop(self) -> None:
@@ -251,9 +250,7 @@ class BrowserWatchdog:
 
                 # 如果不健康，尝试恢复
                 if not health_result.is_healthy:
-                    logger.warning(
-                        f"[Watchdog] 检测到浏览器异常: {health_result.message}"
-                    )
+                    logger.warning(f"[Watchdog] 检测到浏览器异常: {health_result.message}")
 
                     recovery_success = await self.recover()
 
@@ -275,10 +272,7 @@ class BrowserWatchdog:
                                 logger.warning(f"[Watchdog] 恢复失败回调执行失败: {e}")
 
                         # 检查是否超过最大连续失败次数
-                        if (
-                            self._stats.consecutive_failures
-                            >= self.config.max_consecutive_failures
-                        ):
+                        if self._stats.consecutive_failures >= self.config.max_consecutive_failures:
                             logger.error(
                                 f"[Watchdog] 连续失败次数达到上限 "
                                 f"({self.config.max_consecutive_failures})，停止监控"
@@ -449,9 +443,7 @@ class BrowserWatchdog:
                             return True
 
                 except Exception as e:
-                    logger.warning(
-                        f"[Watchdog] 恢复尝试 {attempt + 1} 失败: {e}"
-                    )
+                    logger.warning(f"[Watchdog] 恢复尝试 {attempt + 1} 失败: {e}")
 
                 # 重试前等待
                 if attempt < self.config.max_recovery_attempts - 1:
@@ -510,9 +502,7 @@ class BrowserWatchdog:
                             pass
 
                     # 创建新上下文
-                    self.browser_manager.context = (
-                        await self.browser_manager.browser.new_context()
-                    )
+                    self.browser_manager.context = await self.browser_manager.browser.new_context()
                     if cookies:
                         await self.browser_manager.context.add_cookies(cookies)
 

@@ -23,13 +23,13 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Awaitable, Callable
 
 from loguru import logger
 
-from .health_checker import HealthChecker, HealthStatus, get_health_checker
+from .health_checker import HealthChecker, get_health_checker
 
 if TYPE_CHECKING:
     from ..browser.browser_manager import BrowserManager
@@ -157,9 +157,7 @@ class ContinuousHealthMonitor:
             return
 
         self._running = True
-        self._task = asyncio.create_task(
-            self._monitor_loop(), name="continuous_health_monitor"
-        )
+        self._task = asyncio.create_task(self._monitor_loop(), name="continuous_health_monitor")
         logger.info(
             f"[HealthMonitor] 持续健康监控已启动 "
             f"(检查间隔: {self.config.check_interval_sec}s, "
@@ -212,9 +210,7 @@ class ContinuousHealthMonitor:
                 if self._stats.last_status != overall_status:
                     if self.on_status_change:
                         try:
-                            await self.on_status_change(
-                                self._stats.last_status, overall_status
-                            )
+                            await self.on_status_change(self._stats.last_status, overall_status)
                         except Exception as e:
                             logger.warning(f"[HealthMonitor] 状态变化回调执行失败: {e}")
                     self._stats.last_status = overall_status
@@ -257,10 +253,7 @@ class ContinuousHealthMonitor:
                 )
 
                 # 达到告警阈值
-                if (
-                    self._consecutive_failures[component]
-                    >= self.config.alert_threshold
-                ):
+                if self._consecutive_failures[component] >= self.config.alert_threshold:
                     await self._send_alert(component, check)
 
             elif status == "warning":
@@ -326,9 +319,7 @@ class ContinuousHealthMonitor:
             "is_running": self._running,
             "last_status": self._stats.last_status,
             "last_check_time": (
-                self._stats.last_check_time.isoformat()
-                if self._stats.last_check_time
-                else None
+                self._stats.last_check_time.isoformat() if self._stats.last_check_time else None
             ),
             "stats": {
                 "total_checks": self._stats.total_checks,
