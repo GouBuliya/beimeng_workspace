@@ -1,3 +1,10 @@
+## [0.2.3](https://github.com/GouBuliya/beimeng_workspace/compare/v0.2.2...v0.2.3) (2025-12-02)
+
+
+### Bug Fixes
+
+* multiple CI/CD issues ([257004c](https://github.com/GouBuliya/beimeng_workspace/commit/257004ca2c8478958814f9901b29c318285f1e5a))
+
 ## [0.2.2](https://github.com/GouBuliya/beimeng_workspace/compare/v0.2.1...v0.2.2) (2025-12-02)
 
 
