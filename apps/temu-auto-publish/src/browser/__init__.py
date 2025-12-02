@@ -9,11 +9,6 @@
   - FirstEditController: 首次编辑控制器(SOP步骤4)
   - BatchEditController: 批量编辑控制器(SOP步骤7)
   - PublishController: 发布控制器(SOP步骤8-11)
-  - SearchController: 搜索控制器(旧版,保留)
-  - EditController: 编辑控制器(旧版,保留)
-@GOTCHAS:
-  - 新版流程使用 Collection + Miaoshou + FirstEdit + BatchEdit + Publish 控制器
-  - 旧版 Search + Edit 控制器保留用于参考
 @DEPENDENCIES:
   - 外部: playwright
 @RELATED: ../data_processor/, ../../config/
@@ -23,24 +18,20 @@ from .batch_edit_controller import BatchEditController
 from .browser_manager import BrowserManager
 from .collection_controller import CollectionController
 from .cookie_manager import CookieManager
-from .edit_controller import EditController
 from .first_edit_controller import FirstEditController
 from .image_manager import ImageManager
 from .login_controller import LoginController
 from .miaoshou_controller import MiaoshouController
 from .publish_controller import PublishController
-from .search_controller import SearchController
 
 __all__ = [
     "BatchEditController",
     "BrowserManager",
     "CollectionController",
     "CookieManager",
-    "EditController",  # 旧版,保留
     "FirstEditController",
     "ImageManager",
     "LoginController",
     "MiaoshouController",
     "PublishController",
-    "SearchController",  # 旧版,保留
 ]
