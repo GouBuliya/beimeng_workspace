@@ -14,9 +14,10 @@ from typing import Final
 import typer
 from PyInstaller.__main__ import run as pyinstaller_run
 
-REPO_ROOT: Final[Path] = Path(__file__).resolve().parents[2]
-APP_ROOT: Final[Path] = REPO_ROOT / "apps" / "temu-auto-publish"
-ENTRY_FILE: Final[Path] = APP_ROOT / "start_web_panel_entry.py"
+SCRIPT_DIR: Final[Path] = Path(__file__).resolve().parent
+APP_ROOT: Final[Path] = SCRIPT_DIR.parent
+REPO_ROOT: Final[Path] = APP_ROOT.parents[1]
+ENTRY_FILE: Final[Path] = SCRIPT_DIR / "start_web_panel_entry.py"
 DEFAULT_NAME: Final[str] = "TemuWebPanel"
 
 
@@ -69,7 +70,8 @@ def build(
     """运行 PyInstaller 生成 exe."""
 
     if not ENTRY_FILE.exists():
-        raise typer.Exit(f"入口脚本不存在: {ENTRY_FILE}")
+        typer.echo(f"入口脚本不存在: {ENTRY_FILE}", err=True)
+        raise typer.Exit(1)
     typer.echo(f"开始构建 {name} (onefile={onefile}, clean={clean})")
     pyinstaller_run(_build_args(name=name, clean=clean, onefile=onefile))
     typer.echo("构建完成, 产物位于 dist/ 目录")

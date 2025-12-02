@@ -11,11 +11,57 @@ on:
         default: false
         type: boolean
 
-env:
-  BUILD_SCRIPT: apps/temu-auto-publish/scripts/build_app.py
-
 jobs:
-  build-multiplatform:
+  build-windows:
+    name: Build Windows Executable
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        shell: pwsh
+        run: |
+          irm https://astral.sh/uv/install.ps1 | iex
+          "$HOME\.cargo\bin" >> $env:GITHUB_PATH
+
+      - name: Cache uv
+        uses: actions/cache@v4
+        with:
+          path: ~/AppData/Local/uv
+          key: uv-release-windows-${{ hashFiles('uv.lock') }}
+          restore-keys: uv-release-windows-
+
+      - name: Sync dependencies
+        run: uv sync --extra dev --extra temu
+
+      - name: Install Playwright browsers
+        run: uv run playwright install chromium
+
+      - name: Build Windows executable
+        shell: pwsh
+        run: |
+          cd apps/temu-auto-publish
+          uv run python scripts/build_windows_exe.py --name TemuWebPanel
+
+      - name: List build outputs
+        shell: pwsh
+        run: Get-ChildItem -Path apps/temu-auto-publish/dist/ -Recurse
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TemuWebPanel-windows-x64
+          path: apps/temu-auto-publish/dist/TemuWebPanel.exe
+          if-no-files-found: error
+
+  build-macos:
     name: Build ${{ matrix.os }} Executable
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
@@ -23,18 +69,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: Windows
-            runner: windows-latest
-            artifact-name: TemuWebPanel-windows-x64
-            artifact-path: apps/temu-auto-publish/dist/TemuWebPanel-windows-x64.exe
           - os: macOS-ARM
             runner: macos-latest
             artifact-name: TemuWebPanel-macos-arm64
-            artifact-path: apps/temu-auto-publish/dist/TemuWebPanel-macos-arm64
           - os: macOS-Intel
             runner: macos-13
             artifact-name: TemuWebPanel-macos-x64
-            artifact-path: apps/temu-auto-publish/dist/TemuWebPanel-macos-x64
 
     steps:
       - name: Checkout
@@ -45,15 +85,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install uv (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          irm https://astral.sh/uv/install.ps1 | iex
-          "$HOME\.cargo\bin" >> $env:GITHUB_PATH
-
-      - name: Install uv (Unix)
-        if: runner.os != 'Windows'
+      - name: Install uv
         run: |
           curl -LsSf https://astral.sh/uv/install.sh | sh
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
@@ -61,12 +93,9 @@ jobs:
       - name: Cache uv
         uses: actions/cache@v4
         with:
-          path: |
-            ~/.cache/uv
-            ~/AppData/Local/uv
-          key: uv-release-${{ runner.os }}-${{ hashFiles('uv.lock') }}
-          restore-keys: |
-            uv-release-${{ runner.os }}-
+          path: ~/.cache/uv
+          key: uv-release-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('uv.lock') }}
+          restore-keys: uv-release-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Sync dependencies
         run: uv sync --extra dev --extra temu
@@ -74,18 +103,17 @@ jobs:
       - name: Install Playwright browsers
         run: uv run playwright install chromium
 
-      - name: Build executable
-        run: uv run python ${{ env.BUILD_SCRIPT }} build --with-suffix
+      - name: Build macOS executable
+        run: uv run python apps/temu-auto-publish/scripts/build_app.py build --with-suffix
 
       - name: List build outputs
-        shell: bash
-        run: ls -la apps/temu-auto-publish/dist/ || echo "No dist directory"
+        run: ls -la apps/temu-auto-publish/dist/
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact-name }}
-          path: ${{ matrix.artifact-path }}
+          path: apps/temu-auto-publish/dist/TemuWebPanel-*
           if-no-files-found: error
 
   publish-docker:
@@ -139,7 +167,7 @@ jobs:
   attach-release:
     name: Attach Assets to Release
     runs-on: ubuntu-latest
-    needs: [build-multiplatform]
+    needs: [build-windows, build-macos]
     if: github.event_name == 'release'
     permissions:
       contents: write
@@ -152,21 +180,25 @@ jobs:
       - name: List downloaded artifacts
         run: find dist -type f | head -20
 
-      - name: Compress artifacts for release
+      - name: Prepare release assets
         run: |
           cd dist
-          for dir in */; do
-            name="${dir%/}"
-            if [ -d "$dir" ]; then
-              # 找到目录中的可执行文件
-              find "$dir" -type f | while read file; do
-                # 保持原文件名，移动到 dist 根目录
-                mv "$file" "./${name}$(basename "$file" | grep -o '\.[^.]*$' || echo '')" 2>/dev/null || \
-                mv "$file" "./${name}" 2>/dev/null || true
-              done
-              rm -rf "$dir"
-            fi
-          done
+          # 重命名 Windows 可执行文件
+          if [ -f "TemuWebPanel-windows-x64/TemuWebPanel.exe" ]; then
+            mv "TemuWebPanel-windows-x64/TemuWebPanel.exe" "TemuWebPanel-windows-x64.exe"
+            rm -rf "TemuWebPanel-windows-x64"
+          fi
+          # 处理 macOS ARM64
+          if [ -d "TemuWebPanel-macos-arm64" ]; then
+            mv TemuWebPanel-macos-arm64/TemuWebPanel-* ./TemuWebPanel-macos-arm64 2>/dev/null || true
+            rm -rf "TemuWebPanel-macos-arm64" 2>/dev/null || true
+          fi
+          # 处理 macOS Intel
+          if [ -d "TemuWebPanel-macos-x64" ]; then
+            mv TemuWebPanel-macos-x64/TemuWebPanel-* ./TemuWebPanel-macos-x64 2>/dev/null || true
+            rm -rf "TemuWebPanel-macos-x64" 2>/dev/null || true
+          fi
+          echo "=== Release assets ==="
           ls -la
 
       - name: Publish to GitHub Release
