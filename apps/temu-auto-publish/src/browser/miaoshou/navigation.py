@@ -961,10 +961,11 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                 let targetRow = null;
                 let targetTranslateY = index * ROW_HEIGHT;
                 let matchedY = -1;
+                let matchMethod = 'none';
 
-                // [关键修复] 方法0: 基于视口内可见行的DOM顺序定位（最可靠）
-                // vue-recycle-scroller 的 translateY 可能在滚动后变得不可靠
-                // 改用视口内可见行的顺序来匹配
+                // [关键修复] 方法0: 滚动后取视口顶部的第一个可见行
+                // 原理：滚动到 targetScrollTop = index * ROW_HEIGHT 后，
+                // 目标行应该位于视口顶部，所以直接取视口内第一个可见行
                 const getVisibleRowsInViewport = () => {
                     const allRows = document.querySelectorAll('.vue-recycle-scroller__item-view');
                     const viewportRows = [];
@@ -979,17 +980,28 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                             });
                         }
                     });
-                    // 按视口内的 top 位置排序
+                    // 按视口内的 top 位置排序（顶部的行排在前面）
                     viewportRows.sort((a, b) => a.top - b.top);
                     return viewportRows;
                 };
 
                 const viewportRows = getVisibleRowsInViewport();
 
-                // 如果目标索引在视口可见行范围内,直接取对应位置的行
-                if (index < viewportRows.length) {
-                    targetRow = viewportRows[index].row;
-                    matchedY = viewportRows[index].y;
+                // 滚动后，目标行应该在视口顶部区域
+                // 取第一个完全在视口内的行（top >= 0），或者第一个可见行
+                if (viewportRows.length > 0) {
+                    // 优先找完全在视口内的第一行（top >= 0）
+                    const fullyVisibleRow = viewportRows.find(r => r.top >= 0);
+                    if (fullyVisibleRow) {
+                        targetRow = fullyVisibleRow.row;
+                        matchedY = fullyVisibleRow.y;
+                        matchMethod = 'viewport-first';
+                    } else {
+                        // 没有完全可见的行，取最靠近顶部的行
+                        targetRow = viewportRows[0].row;
+                        matchedY = viewportRows[0].y;
+                        matchMethod = 'viewport-top';
+                    }
                 }
 
                 // 方法1: 基于Y坐标匹配(容差为行高的30%,更严格以避免错位)
@@ -999,6 +1011,7 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                         if (diff < ROW_HEIGHT * 0.3) {
                             targetRow = item.row;
                             matchedY = item.y;
+                            matchMethod = 'translateY-exact';
                             break;
                         }
                     }
@@ -1011,6 +1024,7 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                         if (inferredIdx === index) {
                             targetRow = item.row;
                             matchedY = item.y;
+                            matchMethod = 'inferred-index';
                             break;
                         }
                     }
@@ -1059,7 +1073,7 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                     matchedY,
                     visibleCount: visibleRows.length,
                     viewportRowCount: viewportRows.length,
-                    matchMethod: index < viewportRows.length ? 'viewport-order' : 'translateY'
+                    matchMethod
                 };
             }
             """
