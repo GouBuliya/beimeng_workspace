@@ -237,7 +237,8 @@ class CompletePublishWorkflow:
         self._selection_rows_override = (
             list(selection_rows_override) if selection_rows_override else None
         )
-        self.collect_count = max(1, min(self.settings.business.collect_count, 5))
+        # 移除上限限制，一次性处理所有选品
+        self.collect_count = max(1, self.settings.business.collect_count)
         self.claim_times = max(1, self.settings.business.claim_count)
         self.headless = headless if headless is not None else self.settings.browser.headless
 
@@ -1644,7 +1645,7 @@ class CompletePublishWorkflow:
         """根据选品表构造占位首次编辑结果."""
 
         placeholders: list[EditedProduct] = []
-        for index, selection in enumerate(selections[: self.collect_count]):
+        for index, selection in enumerate(selections):
             cost_price = self._resolve_cost_price(selection)
             price_result = self.price_calculator.calculate_batch([cost_price])[0]
             weight_g = self._resolve_weight(selection)
