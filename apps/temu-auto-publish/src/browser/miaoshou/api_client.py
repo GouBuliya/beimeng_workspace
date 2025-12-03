@@ -287,11 +287,25 @@ class MiaoshouApiClient:
         client = await self._get_client()
 
         try:
+            # 需要 POST 请求带上空 body
             response = await client.post(
                 "/api/move/common_collect_box/getSubAccountList",
+                data={},  # 空 body，但确保发送 POST
             )
             response.raise_for_status()
-            result = response.json()
+
+            # 调试：检查响应内容
+            text = response.text
+            if not text:
+                logger.warning("get_sub_accounts: 响应为空")
+                return {"result": "error", "message": "空响应", "list": []}
+
+            try:
+                result = response.json()
+            except Exception as json_err:
+                logger.error(f"get_sub_accounts JSON 解析失败: {json_err}")
+                logger.debug(f"原始响应: {text[:500]}")
+                return {"result": "error", "message": f"JSON 解析失败: {json_err}", "list": []}
 
             if result.get("result") == "success":
                 accounts = result.get("list", [])
@@ -303,7 +317,7 @@ class MiaoshouApiClient:
 
         except Exception as e:
             logger.error(f"获取子账号列表失败: {e}")
-            raise
+            return {"result": "error", "message": str(e), "list": []}
 
     async def find_owner_account_id(self, owner_name: str) -> str | None:
         """根据创建人员名字查找账号 ID.

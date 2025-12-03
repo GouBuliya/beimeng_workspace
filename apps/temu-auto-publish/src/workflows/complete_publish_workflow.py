@@ -1704,19 +1704,65 @@ class CompletePublishWorkflow:
                 items: list[dict] = []
 
                 # 准备 owner 筛选 - 将名字转换为账号 ID
+                # 使用 page.evaluate 调用 API，确保使用相同的浏览器会话
                 owner_account_id: str | None = None
                 if filter_owner:
                     owner_name = filter_owner.strip()
                     if "(" in owner_name:
                         owner_name = owner_name.split("(")[0].strip()
                     logger.info(f"查找创建人员 '{owner_name}' 的账号 ID...")
-                    owner_account_id = await api_client.find_owner_account_id(owner_name)
+
+                    # 通过 page.evaluate 调用 API 获取子账号列表
+                    try:
+                        sub_accounts_result = await page.evaluate("""
+                        async () => {
+                            const response = await fetch('/api/move/common_collect_box/getSubAccountList', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                                body: ''
+                            });
+                            return await response.json();
+                        }
+                        """)
+                        if sub_accounts_result.get("result") == "success":
+                            for acc in sub_accounts_result.get("list", []):
+                                alias_name = acc.get("aliasName", "")
+                                if owner_name in alias_name or owner_name == acc.get("name", ""):
+                                    owner_account_id = str(acc.get("subAppAccountId", ""))
+                                    logger.info(f"找到账号: {alias_name} -> ID {owner_account_id}")
+                                    break
+                        if not owner_account_id:
+                            logger.warning(f"子账号列表中未找到 '{owner_name}'")
+                    except Exception as e:
+                        logger.error(f"page.evaluate 获取子账号失败: {e}")
+
                     if owner_account_id:
                         logger.info(f"找到账号 ID: {owner_account_id}")
                     else:
                         logger.warning(f"未找到 '{owner_name}' 的账号 ID，将获取所有产品")
 
-                # 使用 API 服务端筛选，使用 "all" tab
+                # 使用 page.evaluate 调用 API，确保使用相同的浏览器会话
+                async def fetch_product_list(
+                    tab_name: str, page_no: int, page_size: int, account_id: str | None = None
+                ) -> dict:
+                    """通过 page.evaluate 获取产品列表."""
+                    params = f"pageNo={page_no}&pageSize={page_size}&filter[tabPaneName]={tab_name}"
+                    if account_id:
+                        params += f"&filter[ownerAccountIds][0]={account_id}"
+                    result = await page.evaluate(
+                        f"""
+                        async () => {{
+                            const response = await fetch('/api/move/common_collect_box/searchDetailList', {{
+                                method: 'POST',
+                                headers: {{ 'Content-Type': 'application/x-www-form-urlencoded' }},
+                                body: '{params}'
+                            }});
+                            return await response.json();
+                        }}
+                        """
+                    )
+                    return result
+
                 if owner_account_id:
                     logger.info(
                         f"使用 API 筛选获取创建人员的产品 "
@@ -1727,11 +1773,8 @@ class CompletePublishWorkflow:
                     page_size = 100
 
                     while len(items) < total_to_fetch and page_num <= max_pages:
-                        list_result = await api_client.get_product_list(
-                            tab="all",
-                            page=page_num,
-                            limit=page_size,
-                            owner_account_id=owner_account_id,
+                        list_result = await fetch_product_list(
+                            "all", page_num, page_size, owner_account_id
                         )
 
                         is_success = (
@@ -1763,11 +1806,9 @@ class CompletePublishWorkflow:
                         logger.error(f"未找到创建人员的产品 (account_id={owner_account_id})")
                         api_success = False
                 else:
-                    # 无 owner 筛选，直接获取
-                    list_result = await api_client.get_product_list(
-                        tab="unclaimed",
-                        page=1,
-                        limit=max(100, total_to_fetch),
+                    # 无 owner 筛选，直接获取 (使用 noClaimed tab)
+                    list_result = await fetch_product_list(
+                        "noClaimed", 1, max(100, total_to_fetch), None
                     )
 
                     is_success = (
