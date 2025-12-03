@@ -958,24 +958,43 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
 
                 // 【关键改进】使用 actualScrollTop 计算视口起始索引
                 const viewportStartIndex = Math.floor(actualScrollTop / ROW_HEIGHT);
-                const targetVisualIndex = index - viewportStartIndex;
+
+                // 【第三轮修复】找到第一个完全可见的行（top >= 0）
+                // 虚拟列表可能有缓冲区，会预渲染视口外的行（top < 0）
+                const firstFullyVisibleArrayIndex = visibleRows.findIndex(r => r.top >= 0);
+
+                if (firstFullyVisibleArrayIndex === -1) {
+                    return {
+                        success: false,
+                        error: '没有完全可见的行（所有行 top < 0）',
+                        scrollerInfo,
+                        isPageMode,
+                        targetScrollTop,
+                        actualScrollTop,
+                        allTops: visibleRows.map(r => Math.round(r.top))
+                    };
+                }
+
+                // 目标行在可见行数组中的索引 = (目标索引 - 视口起始索引) + 缓冲行数量
+                const targetArrayIndex = (index - viewportStartIndex) + firstFullyVisibleArrayIndex;
 
                 // 调试信息
                 const debugInfo = {
                     viewportStartIndex,
-                    targetVisualIndex,
+                    firstFullyVisibleArrayIndex,
+                    targetArrayIndex,
                     visibleRowCount: visibleRows.length,
                     actualScrollTop,
                     firstRowTop: Math.round(visibleRows[0].top),
+                    firstFullyVisibleTop: Math.round(visibleRows[firstFullyVisibleArrayIndex].top),
                     allTops: visibleRows.map(r => Math.round(r.top))
                 };
 
-                // 边界检查与自动调整
-                if (targetVisualIndex < 0) {
-                    // 需要向上滚动 - 尝试调整
+                // 边界检查
+                if (targetArrayIndex < 0) {
                     return {
                         success: false,
-                        error: `目标行在视口上方: targetVisualIndex=${targetVisualIndex} < 0`,
+                        error: `目标行在视口上方: targetArrayIndex=${targetArrayIndex} < 0`,
                         scrollerInfo,
                         isPageMode,
                         targetScrollTop,
@@ -983,11 +1002,10 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                     };
                 }
 
-                if (targetVisualIndex >= visibleRows.length) {
-                    // 需要向下滚动 - 尝试调整
+                if (targetArrayIndex >= visibleRows.length) {
                     return {
                         success: false,
-                        error: `目标行在视口下方: targetVisualIndex=${targetVisualIndex} >= visibleRows=${visibleRows.length}`,
+                        error: `目标行在视口下方: targetArrayIndex=${targetArrayIndex} >= visibleRows=${visibleRows.length}`,
                         scrollerInfo,
                         isPageMode,
                         targetScrollTop,
@@ -996,8 +1014,8 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                 }
 
                 // 定位目标行
-                const targetRow = visibleRows[targetVisualIndex].row;
-                const matchedTop = visibleRows[targetVisualIndex].top;
+                const targetRow = visibleRows[targetArrayIndex].row;
+                const matchedTop = visibleRows[targetArrayIndex].top;
 
                 // 在行内查找编辑按钮
                 const editBtn = targetRow.querySelector('.J_commonCollectBoxEdit');
@@ -1034,7 +1052,8 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                 logger.success(
                     f"✓ [视觉位置定位] 点击成功, index={index}, "
                     f"viewportStartIndex={result.get('viewportStartIndex')}, "
-                    f"targetVisualIndex={result.get('targetVisualIndex')}, "
+                    f"bufferRows={result.get('firstFullyVisibleArrayIndex')}, "
+                    f"targetArrayIndex={result.get('targetArrayIndex')}, "
                     f"可见行数={result.get('visibleRowCount')}, "
                     f"actualScrollTop={result.get('actualScrollTop')}px, "
                     f"matchedTop={result.get('matchedTop')}px"
@@ -1044,7 +1063,8 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                 logger.warning(
                     f"[视觉位置定位] 点击失败: {result.get('error')}, "
                     f"index={index}, viewportStartIndex={result.get('viewportStartIndex')}, "
-                    f"targetVisualIndex={result.get('targetVisualIndex')}, "
+                    f"bufferRows={result.get('firstFullyVisibleArrayIndex')}, "
+                    f"targetArrayIndex={result.get('targetArrayIndex')}, "
                     f"可见行数={result.get('visibleRowCount')}, "
                     f"tops={result.get('allTops')}"
                 )
