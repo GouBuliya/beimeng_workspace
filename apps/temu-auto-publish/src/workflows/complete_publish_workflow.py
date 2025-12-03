@@ -1729,176 +1729,26 @@ class CompletePublishWorkflow:
             if api_failures:
                 message += f", 存在 {len(api_failures)} 个失败"
             logger.success(message)
-
-            return StageOutcome(
-                name="stage2_claim",
-                success=True,
-                message=message,
-                details={
-                    "method": "api",
-                    "selected_count": selection_count,
-                    "total_claimed": total_claimed,
-                    "expected_total": expected_total,
-                    "claim_rounds": self.claim_times,
-                    "api_failures": api_failures,
-                },
-            )
-
-        # ==================== API 失败，回退到 DOM 模式 ====================
-        logger.warning("API 认领失败，回退到 DOM 模式")
-
-        # 已在 API 模式中完成导航和筛选，无需重复
-        # 但需要确保在 unclaimed tab
-        navigation_success = await miaoshou_ctrl.navigate_and_filter_collection_box(
-            page,
-            filter_by_user=filter_owner,
-            switch_to_tab="unclaimed",
-        )
-        if not navigation_success:
-            logger.warning("认领阶段导航/筛选失败，尝试备用方式")
-            await miaoshou_ctrl.refresh_collection_box(page, filter_owner=filter_owner)
-
-        # 筛选后额外等待页面数据加载完成
-        await page.wait_for_timeout(1500)
-
-        # 获取页面上实际的商品数量，用于边界检查
-        page_counts = await miaoshou_ctrl.get_product_count(page)
-        total_available = page_counts.get("all", 0)
-        logger.info(
-            f"采集箱商品数量: 全部={total_available}, 未认领={page_counts.get('unclaimed', 0)}"
-        )
-
-        # 采集箱中的索引需要根据 execution_round 计算偏移
-        # 因为页面上显示的是所有商品（包括前面轮次已认领的），需要从正确的位置开始
-        start_offset = (self.execution_round - 1) * self.collect_count
-
-        # 检查起始偏移是否超出页面实际商品数量
-        if start_offset >= total_available:
-            logger.info(
-                f"执行轮次 {self.execution_round} 起始偏移 {start_offset} >= 页面商品数 {total_available}，跳过认领阶段"
-            )
-            return StageOutcome(
-                name="stage2_claim",
-                success=True,
-                message="OFFSET_EXCEEDS_AVAILABLE",
-                details={
-                    "execution_round": self.execution_round,
-                    "start_offset": start_offset,
-                    "total_available": total_available,
-                    "skipped": True,
-                },
-            )
-
-        # 调整 selection_count，确保不超出页面实际商品范围
-        max_selectable = total_available - start_offset
-        selection_count = min(selection_count, max_selectable)
-
-        target_indexes = list(range(start_offset, start_offset + selection_count))
-
-        logger.info(
-            "认领阶段 (DOM 回退): 目标索引 %s (筛选后的商品列表,共 %s 条), 每商品点击 %s 次",
-            target_indexes,
-            selection_count,
-            self.claim_times,
-        )
-
-        # 分批按索引认领(仿首次编辑的批次逻辑,每批最多5个)
-        batch_size = min(5, max(1, self.collect_count))
-        total_expected = 0
-        batch_failures: list[str] = []
-        batch_success = 0
-
-        # 直接使用 target_indexes 作为要处理的索引列表
-        abs_indexes = target_indexes
-        for batch_start in range(0, len(abs_indexes), batch_size):
-            batch_indexes = abs_indexes[batch_start : batch_start + batch_size]
-            if not batch_indexes:
-                batch_failures.append(f"批次 {batch_start // batch_size + 1} 无有效索引")
-                break
-
-            logger.info(
-                "批次 %s (执行轮次 %s): 勾选索引 %s",
-                batch_start // batch_size + 1,
-                self.execution_round,
-                batch_indexes,
-            )
-            selected_ok, selected_fail = await miaoshou_ctrl.select_products_by_row_js(
-                page,
-                indexes=batch_indexes,
-            )
-            if selected_ok < len(batch_indexes):
-                msg = (
-                    f"批次 {batch_start // batch_size + 1} 勾选部分失败: "
-                    f"成功 {selected_ok}/{len(batch_indexes)}, 失败 {selected_fail}"
-                )
-                batch_failures.append(msg)
-                logger.warning(msg)
-                # 即使部分失败也继续认领已勾选的商品
-
-            # 如果有成功勾选的商品，继续认领流程
-            if selected_ok > 0:
-                if not await miaoshou_ctrl.claim_selected_products_to_temu(
-                    page, repeat=self.claim_times
-                ):
-                    msg = f"批次 {batch_start // batch_size + 1} 批量认领失败"
-                    batch_failures.append(msg)
-                    logger.error(msg)
-                    # 认领失败也继续下一批次
-                else:
-                    batch_success += 1
-                    total_expected += selected_ok * self.claim_times
-            else:
-                # 全部勾选失败，记录但继续下一批次
-                msg = f"批次 {batch_start // batch_size + 1} 全部勾选失败，跳过认领"
-                batch_failures.append(msg)
-                logger.error(msg)
-            await page.wait_for_timeout(500)
-
-        # 只要有批次成功就继续流程（部分成功也算成功）
-        claim_success = batch_success > 0
-        has_failures = len(batch_failures) > 0
-
-        # 去重后的阈值:批次总期望 = 实际成功勾选数 x claim_times
-        expected_total = total_expected or (selection_count * self.claim_times)
-        unique_threshold = expected_total
-        verify_success = await miaoshou_ctrl.verify_claim_success(
-            page,
-            expected_count=unique_threshold,
-        )
-        if not verify_success and claim_success:
-            verify_success = await self._retry_claim_verification(
-                page,
-                miaoshou_ctrl,
-                filter_owner,
-                unique_threshold,
-            )
-
-        overall_success = claim_success and verify_success
-        if overall_success and has_failures:
-            message = (
-                f"认领部分成功 (DOM 回退): 期望 {selection_count} 个商品, "
-                f"实际成功 {batch_success} 批次 (共 {expected_total} 次), "
-                f"存在 {len(batch_failures)} 个失败"
-            )
-        elif overall_success:
-            message = f"认领成功 (DOM 回退): {selection_count} 个商品,每商品 {self.claim_times} 次 (共 {expected_total} 次)"
         else:
-            message = "认领结果存在异常 (DOM 回退), 详见 details"
+            message = f"API 认领失败: 期望 {expected_total} 次, 实际 0 次"
+            if api_failures:
+                message += f", 失败详情: {api_failures}"
+            logger.error(message)
 
-        details = {
-            "method": "dom_fallback",
-            "selected_count": selection_count,
-            "batches_success": batch_success,
-            "batch_failures": batch_failures,
-            "has_failures": has_failures,
-            "claim_success": claim_success,
-            "expected_total": expected_total,
-            "unique_threshold": unique_threshold,
-            "verify_success": verify_success,
-            "api_failures": api_failures,
-        }
-
-        return StageOutcome("stage2_claim", overall_success, message, details)
+        return StageOutcome(
+            name="stage2_claim",
+            success=api_success,
+            message=message,
+            details={
+                "method": "api",
+                "selected_count": selection_count,
+                "total_claimed": total_claimed,
+                "expected_total": expected_total,
+                "claim_rounds": self.claim_times,
+                "api_failures": api_failures,
+                "detail_ids": detail_ids if detail_ids else [],
+            },
+        )
 
     async def _retry_claim_verification(
         self,
