@@ -2799,7 +2799,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
         """从页面 DOM 中提取产品 ID 列表.
 
         在 DOM 筛选人员后调用此方法，从当前页面提取产品 ID。
-        支持多种提取方式：Vue 组件数据、页面文本匹配等。
+        支持虚拟列表滚动加载，确保能提取足够数量的产品ID。
 
         Args:
             page: Playwright 页面对象
@@ -2808,71 +2808,112 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
         Returns:
             产品 ID 列表
         """
+        row_height = 128  # 虚拟列表每行高度
+        max_scroll_attempts = 20  # 最大滚动次数，防止无限循环
+        scroll_step = row_height * 5  # 每次滚动5行的高度
+
         try:
-            # 从页面中提取产品 ID
-            result = await page.evaluate(
-                """(count) => {
-                    const ids = [];
-                    const seen = new Set();
-                    const debug = { rowCount: 0, method: 'none', samples: [] };
+            # 收集所有产品ID（通过滚动虚拟列表）
+            all_ids: list[str] = []
+            seen_ids: set[str] = set()
 
-                    // 方法 1: 从虚拟列表行文本中提取
-                    const rows = document.querySelectorAll('.vue-recycle-scroller__item-view');
-                    debug.rowCount = rows.length;
+            logger.info(f"开始滚动虚拟列表提取产品 ID，目标数量: {count}")
 
-                    for (const row of Array.from(rows).slice(0, count * 2)) {
-                        const text = row.textContent || '';
-                        // 支持中英文冒号
-                        const match = text.match(/采集箱产品ID[：:]\\s*(\\d+)/);
-                        if (match && match[1] && !seen.has(match[1])) {
-                            seen.add(match[1]);
-                            ids.push(match[1]);
-                            if (debug.method === 'none') debug.method = 'row';
+            for scroll_attempt in range(max_scroll_attempts):
+                # 从当前可见行提取产品ID
+                result = await page.evaluate(
+                    """() => {
+                        const ids = [];
+                        const debug = { rowCount: 0, scrollTop: 0 };
+
+                        const scroller = document.querySelector('.vue-recycle-scroller');
+                        if (scroller) {
+                            debug.scrollTop = scroller.scrollTop;
                         }
-                        if (debug.samples.length < 2) {
-                            debug.samples.push(text.substring(0, 80));
-                        }
-                        if (ids.length >= count) break;
-                    }
 
-                    // 方法 2: 从整个页面文本匹配
-                    if (ids.length === 0) {
-                        const allText = document.body.innerText;
-                        const regex = /采集箱产品ID[：:]\\s*(\\d+)/g;
-                        let m;
-                        while ((m = regex.exec(allText)) !== null) {
-                            if (m[1] && !seen.has(m[1])) {
-                                seen.add(m[1]);
-                                ids.push(m[1]);
-                                if (debug.method === 'none') debug.method = 'page';
+                        const rows = document.querySelectorAll('.vue-recycle-scroller__item-view');
+                        debug.rowCount = rows.length;
+
+                        for (const row of rows) {
+                            const text = row.textContent || '';
+                            const match = text.match(/采集箱产品ID[：:]\\s*(\\d+)/);
+                            if (match && match[1]) {
+                                ids.push(match[1]);
                             }
-                            if (ids.length >= count) break;
                         }
-                    }
 
-                    return { ids: ids.slice(0, count), debug };
-                }""",
-                count,
+                        return { ids, debug };
+                    }"""
+                )
+
+                new_ids = result.get("ids", [])
+                debug_info = result.get("debug", {})
+
+                # 添加新发现的ID
+                for pid in new_ids:
+                    if pid not in seen_ids:
+                        seen_ids.add(pid)
+                        all_ids.append(pid)
+
+                logger.debug(
+                    f"滚动 {scroll_attempt + 1}: "
+                    f"行数={debug_info.get('rowCount')}, "
+                    f"scrollTop={debug_info.get('scrollTop')}, "
+                    f"新增={len([p for p in new_ids if p not in seen_ids or p == new_ids[0]])}, "
+                    f"累计={len(all_ids)}"
+                )
+
+                # 检查是否已收集足够数量
+                if len(all_ids) >= count:
+                    logger.info(f"已收集到足够的产品 ID: {len(all_ids)} >= {count}")
+                    break
+
+                # 滚动虚拟列表加载更多
+                scroll_result = await page.evaluate(
+                    """(scrollStep) => {
+                        const scroller = document.querySelector('.vue-recycle-scroller');
+                        if (!scroller) return { scrolled: false, reason: 'no_scroller' };
+
+                        const oldScrollTop = scroller.scrollTop;
+                        const maxScroll = scroller.scrollHeight - scroller.clientHeight;
+
+                        if (oldScrollTop >= maxScroll - 10) {
+                            return { scrolled: false, reason: 'at_bottom' };
+                        }
+
+                        scroller.scrollTop = Math.min(oldScrollTop + scrollStep, maxScroll);
+                        return {
+                            scrolled: true,
+                            oldScrollTop,
+                            newScrollTop: scroller.scrollTop,
+                            maxScroll
+                        };
+                    }""",
+                    scroll_step,
+                )
+
+                if not scroll_result.get("scrolled"):
+                    reason = scroll_result.get("reason", "unknown")
+                    logger.debug(f"停止滚动: {reason}")
+                    break
+
+                # 等待虚拟列表更新DOM
+                await page.wait_for_timeout(300)
+
+            logger.info(f"从 DOM 提取到 {len(all_ids)} 个产品 ID")
+            if all_ids:
+                logger.debug(f"产品 ID 列表: {all_ids[:10]}...")
+
+            # 滚动回顶部，恢复初始状态
+            await page.evaluate(
+                """() => {
+                    const scroller = document.querySelector('.vue-recycle-scroller');
+                    if (scroller) scroller.scrollTop = 0;
+                }"""
             )
+            await page.wait_for_timeout(200)
 
-            detail_ids = result.get("ids", [])
-            debug_info = result.get("debug", {})
-
-            logger.debug(
-                f"DOM 提取调试: 行数={debug_info.get('rowCount')}, "
-                f"方法={debug_info.get('method')}, "
-                f"找到={len(detail_ids)}"
-            )
-            if debug_info.get("samples"):
-                for i, sample in enumerate(debug_info["samples"][:2]):
-                    logger.debug(f"  样本{i+1}: {sample}...")
-
-            if detail_ids:
-                logger.info(f"从 DOM 提取到 {len(detail_ids)} 个产品 ID: {detail_ids[:5]}")
-                return detail_ids
-
-            logger.warning("无法从 DOM 提取产品 ID")
-            return []
+            return all_ids[:count] if len(all_ids) > count else all_ids
 
         except Exception as exc:
             logger.error(f"从 DOM 提取产品 ID 失败: {exc}")
