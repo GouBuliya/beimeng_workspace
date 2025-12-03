@@ -1685,191 +1685,61 @@ class CompletePublishWorkflow:
         api_failures: list[str] = []
         detail_ids: list[str] = []
 
-        # Step 1-2: 使用 API 获取未认领产品（替代 DOM 操作）
-        logger.info("Step 1-2: API 获取未认领产品并筛选创建人员")
+        # Step 1-2: 使用 DOM 导航和筛选，获取产品列表
+        logger.info("Step 1-2: DOM 导航到采集箱并筛选创建人员")
 
-        # 确保页面在妙手采集箱页面，否则 API 调用可能失败
-        current_url = page.url
-        logger.debug(f"当前页面 URL: {current_url}")
-        if "common_collect_box" not in current_url:
-            logger.info("导航到妙手采集箱页面...")
-            await page.goto(
-                "https://erp.91miaoshou.com/collect_box/common_collect_box",
-                wait_until="networkidle",
-            )
-            await page.wait_for_timeout(1000)
+        # 使用 DOM 方式导航和筛选
+        navigation_success = await miaoshou_ctrl.navigate_and_filter_collection_box(
+            page,
+            filter_by_user=filter_owner,
+            switch_to_tab="all",  # 使用"全部"标签
+        )
+        if not navigation_success:
+            logger.warning("认领阶段导航/筛选失败，尝试备用方式")
+            await miaoshou_ctrl.refresh_collection_box(page, filter_owner=filter_owner)
 
-        from src.browser.miaoshou.api_client import MiaoshouApiClient
+        # 等待页面数据加载
+        await page.wait_for_timeout(1500)
 
-        context = page.context
-        api_client = await MiaoshouApiClient.from_playwright_context(context)
+        # 从 DOM 获取产品数量
+        page_counts = await miaoshou_ctrl.get_product_count(page)
+        total_available = page_counts.get("all", 0)
+        logger.info(f"DOM 获取产品数量: 全部={total_available}")
 
-        if not api_client:
-            logger.error("无法创建 API 客户端，认领阶段失败")
-            api_success = False
-        else:
-            async with api_client:
-                # 获取未认领产品列表
-                start_offset = (self.execution_round - 1) * self.collect_count
-                total_to_fetch = start_offset + selection_count
-                items: list[dict] = []
+        # 计算当前轮次需要的产品
+        start_offset = (self.execution_round - 1) * self.collect_count
+        detail_ids: list[str] = []
 
-                # 准备 owner 筛选 - 将名字转换为账号 ID
-                # 使用 page.evaluate 调用 API，确保使用相同的浏览器会话
-                owner_account_id: str | None = None
-                if filter_owner:
-                    owner_name = filter_owner.strip()
-                    if "(" in owner_name:
-                        owner_name = owner_name.split("(")[0].strip()
-                    logger.info(f"查找创建人员 '{owner_name}' 的账号 ID...")
+        # 从页面表格提取产品 ID
+        if total_available > 0:
+            # 使用 JS 从表格提取所有产品 ID
+            extracted_ids = await page.evaluate("""
+            () => {
+                const ids = [];
+                // 尝试从表格行提取 data-id 或 checkbox value
+                const rows = document.querySelectorAll('tr[data-id], .el-table__row');
+                rows.forEach(row => {
+                    const id = row.getAttribute('data-id')
+                        || row.querySelector('input[type="checkbox"]')?.value
+                        || row.querySelector('[data-detail-id]')?.getAttribute('data-detail-id');
+                    if (id) ids.push(id);
+                });
+                // 如果没找到，尝试从 checkbox 获取
+                if (ids.length === 0) {
+                    document.querySelectorAll('.el-checkbox__original').forEach(cb => {
+                        if (cb.value && cb.value !== 'on') ids.push(cb.value);
+                    });
+                }
+                return ids;
+            }
+            """)
+            logger.info(f"从 DOM 提取到 {len(extracted_ids)} 个产品 ID")
 
-                    # 通过 Playwright request API 调用（自动带 cookies）
-                    try:
-                        api_response = await page.request.post(
-                            "https://erp.91miaoshou.com/api/move/common_collect_box/getSubAccountList",
-                            form={},
-                        )
-                        if api_response.ok:
-                            sub_accounts_result = await api_response.json()
-                        else:
-                            body = await api_response.text()
-                            sub_accounts_result = {
-                                "result": "error",
-                                "message": f"HTTP {api_response.status}: {body[:200]}",
-                                "list": [],
-                            }
-                        logger.debug(f"子账号 API 响应: {sub_accounts_result}")
-                        if sub_accounts_result.get("result") == "success":
-                            for acc in sub_accounts_result.get("list", []):
-                                alias_name = acc.get("aliasName", "")
-                                if owner_name in alias_name or owner_name == acc.get("name", ""):
-                                    owner_account_id = str(acc.get("subAppAccountId", ""))
-                                    logger.info(f"找到账号: {alias_name} -> ID {owner_account_id}")
-                                    break
-                        else:
-                            logger.warning(f"子账号 API 失败: {sub_accounts_result.get('message')}")
-                        if not owner_account_id:
-                            logger.warning(f"子账号列表中未找到 '{owner_name}'")
-                    except Exception as e:
-                        logger.error(f"Playwright request 获取子账号失败: {e}")
-
-                    if owner_account_id:
-                        logger.info(f"找到账号 ID: {owner_account_id}")
-                    else:
-                        logger.warning(f"未找到 '{owner_name}' 的账号 ID，将获取所有产品")
-
-                # 使用 Playwright request API 调用（自动带 cookies）
-                async def fetch_product_list(
-                    tab_name: str, page_no: int, page_size: int, account_id: str | None = None
-                ) -> dict:
-                    """通过 Playwright request API 获取产品列表."""
-                    form_data: dict = {
-                        "pageNo": str(page_no),
-                        "pageSize": str(page_size),
-                        "filter[tabPaneName]": tab_name,
-                    }
-                    if account_id:
-                        form_data["filter[ownerAccountIds][0]"] = account_id
-
-                    try:
-                        api_response = await page.request.post(
-                            "https://erp.91miaoshou.com/api/move/common_collect_box/searchDetailList",
-                            form=form_data,
-                        )
-                        if api_response.ok:
-                            return await api_response.json()
-                        else:
-                            body = await api_response.text()
-                            return {
-                                "result": "error",
-                                "message": f"HTTP {api_response.status}: {body[:200]}",
-                                "detailList": [],
-                            }
-                    except Exception as e:
-                        return {"result": "error", "message": str(e), "detailList": []}
-
-                if owner_account_id:
-                    logger.info(
-                        f"使用 API 筛选获取创建人员的产品 "
-                        f"(owner_account_id={owner_account_id}, tab=all)..."
-                    )
-                    page_num = 1
-                    max_pages = 10  # 服务端筛选效率高，通常不需要太多页
-                    page_size = 100
-
-                    while len(items) < total_to_fetch and page_num <= max_pages:
-                        list_result = await fetch_product_list(
-                            "all", page_num, page_size, owner_account_id
-                        )
-
-                        is_success = (
-                            list_result.get("result") == "success" or list_result.get("code") == 0
-                        )
-                        if not is_success:
-                            logger.error(f"第 {page_num} 页获取失败: {list_result.get('message')}")
-                            break
-
-                        # 兼容两种响应格式
-                        if "detailList" in list_result:
-                            page_items = list_result.get("detailList", [])
-                        else:
-                            page_items = list_result.get("data", {}).get("list", [])
-
-                        if not page_items:
-                            logger.debug(f"第 {page_num} 页无数据，停止搜索")
-                            break
-
-                        items.extend(page_items)
-                        logger.debug(
-                            f"第 {page_num} 页: 获取 {len(page_items)} 个, 累计 {len(items)} 个"
-                        )
-                        page_num += 1
-
-                    logger.info(f"API 筛选完成: 找到 {len(items)} 个产品")
-
-                    if not items:
-                        logger.error(f"未找到创建人员的产品 (account_id={owner_account_id})")
-                        api_success = False
-                else:
-                    # 无 owner 筛选，直接获取 (使用 noClaimed tab)
-                    list_result = await fetch_product_list(
-                        "noClaimed", 1, max(100, total_to_fetch), None
-                    )
-
-                    is_success = (
-                        list_result.get("result") == "success" or list_result.get("code") == 0
-                    )
-                    if is_success:
-                        if "detailList" in list_result:
-                            items = list_result.get("detailList", [])
-                        else:
-                            items = list_result.get("data", {}).get("list", [])
-                        logger.info(f"API 返回 {len(items)} 个未认领产品")
-                    else:
-                        logger.error(f"API 获取失败: {list_result.get('message')}")
-                        api_success = False
-
-                # 提取产品 ID (使用 commonCollectBoxDetailId 或 detailId)
-                all_ids = []
-                for item in items:
-                    detail_id = (
-                        item.get("commonCollectBoxDetailId")
-                        or item.get("detailId")
-                        or item.get("id")
-                    )
-                    if detail_id:
-                        all_ids.append(str(detail_id))
-
-                # 根据偏移量截取当前轮次的产品 ID
-                logger.info(
-                    f"提取产品 ID: 起始偏移={start_offset}, 需要={selection_count}, "
-                    f"总可用={len(all_ids)}"
-                )
-
-                if len(all_ids) > start_offset:
-                    detail_ids = all_ids[start_offset : start_offset + selection_count]
-                else:
-                    detail_ids = []
+            if len(extracted_ids) > start_offset:
+                detail_ids = extracted_ids[start_offset : start_offset + selection_count]
+            else:
+                # DOM 提取失败，尝试使用索引方式
+                logger.warning("DOM 提取 ID 不足，将使用索引方式认领")
 
         if not detail_ids:
             logger.warning("无法获取产品 ID，认领阶段失败")
