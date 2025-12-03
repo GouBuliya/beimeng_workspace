@@ -331,6 +331,9 @@ def _build_edit_payload(
     edit_data["productOriginProvince"] = "43000000000031"
     edit_data["productOriginCertFiles"] = []
 
+    # 英语标题设置为空格（必填但无实际内容）
+    edit_data["multiLanguageTitleMap"] = {"en": " "}
+
     # 定制品开关（默认关闭）
     edit_data["personalizationSwitch"] = "0"
 
