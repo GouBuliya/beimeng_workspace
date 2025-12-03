@@ -1032,7 +1032,8 @@ class MiaoshouApiClient:
             if result.get("result") == "success":
                 logger.info(f"发布任务创建成功: {len(detail_ids)} 个产品")
             else:
-                logger.warning(f"发布失败: {result.get('message', '未知错误')}")
+                error_msg = result.get("message") or result.get("errorMsg") or str(result)
+                logger.warning(f"发布失败: {error_msg}")
 
             return result
 

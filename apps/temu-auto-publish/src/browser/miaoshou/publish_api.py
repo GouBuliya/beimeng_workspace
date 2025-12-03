@@ -149,7 +149,12 @@ async def run_publish_via_api(
                     f"API 发布完成: 成功 {result['published_count']}/{result['total_count']}"
                 )
             else:
-                result["error"] = f"发布失败: {publish_result.get('message')}"
+                error_msg = (
+                    publish_result.get("message")
+                    or publish_result.get("errorMsg")
+                    or str(publish_result)
+                )
+                result["error"] = f"发布失败: {error_msg}"
                 logger.warning(result["error"])
 
     except Exception as e:
