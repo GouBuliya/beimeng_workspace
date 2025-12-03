@@ -826,89 +826,79 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
 
                 // 如果只需要点击复选框,直接处理后返回
                 if (target === 'checkbox') {
-                    // 【第五轮修复】虚拟表格有两个独立容器：
-                    // 1. 固定左侧列（包含复选框）
-                    // 2. 主内容区（包含商品信息）
-                    // targetRow 是主内容区的行，不包含复选框！
-                    // 需要在固定列容器中找到对应位置的复选框
+                    // 【第六轮修复】直接获取所有可见复选框，用相同的索引逻辑定位
+                    // 不依赖 targetRow，因为复选框可能在独立的固定列容器中
 
-                    let checkbox = null;
+                    // 获取所有复选框元素
+                    const allCheckboxes = Array.from(
+                        document.querySelectorAll('.jx-checkbox__inner')
+                    );
 
-                    // 方法1: 先尝试在 targetRow 内查找（兼容单容器结构）
-                    const rowCheckboxSelectors = [
-                        '.is-selection-column .jx-checkbox__inner',
-                        '.jx-checkbox__inner',
-                        'input[type="checkbox"]',
-                    ];
-                    for (const selector of rowCheckboxSelectors) {
-                        const found = targetRow.querySelector(selector);
-                        if (found) {
-                            checkbox = found;
-                            break;
-                        }
-                    }
-
-                    // 方法2: 在固定列容器中按视觉位置查找
-                    if (!checkbox) {
-                        // 获取固定列容器中的所有复选框行
-                        const fixedLeftRows = Array.from(
-                            document.querySelectorAll('.is-fixed-left .vue-recycle-scroller__item-view')
-                        );
-
-                        if (fixedLeftRows.length > 0) {
-                            // 按视觉位置排序
-                            const sortedFixedRows = fixedLeftRows.map(row => ({
-                                row,
-                                top: row.getBoundingClientRect().top
-                            })).filter(r => r.top > -ROW_HEIGHT && r.top < window.innerHeight + ROW_HEIGHT)
-                              .sort((a, b) => a.top - b.top);
-
-                            // 找到与 targetRow 视觉位置最接近的固定列行
-                            const targetTop = matchedTop;
-                            let closestRow = null;
-                            let minDiff = Infinity;
-
-                            for (const item of sortedFixedRows) {
-                                const diff = Math.abs(item.top - targetTop);
-                                if (diff < minDiff) {
-                                    minDiff = diff;
-                                    closestRow = item.row;
-                                }
-                            }
-
-                            if (closestRow && minDiff < ROW_HEIGHT * 0.5) {
-                                checkbox = closestRow.querySelector('.jx-checkbox__inner') ||
-                                          closestRow.querySelector('.jx-checkbox') ||
-                                          closestRow.querySelector('input[type="checkbox"]');
-                            }
-                        }
-                    }
-
-                    // 方法3: 全局按视觉位置查找（最后的回退）
-                    if (!checkbox) {
-                        const allCheckboxes = Array.from(
-                            document.querySelectorAll('.is-selection-column .jx-checkbox__inner')
-                        );
-                        const targetTop = matchedTop;
-
-                        for (const cb of allCheckboxes) {
-                            const cbTop = cb.getBoundingClientRect().top;
-                            if (Math.abs(cbTop - targetTop) < ROW_HEIGHT * 0.5) {
-                                checkbox = cb;
-                                break;
-                            }
-                        }
-                    }
-
-                    if (!checkbox) {
+                    if (allCheckboxes.length === 0) {
                         return {
                             success: false,
-                            error: 'Checkbox not found (tried row, fixed-left, global)',
+                            error: 'No checkboxes found on page',
                             scrollerInfo,
                             matchedTop: Math.round(matchedTop),
                             ...debugInfo
                         };
                     }
+
+                    // 按视觉位置排序（与主内容区行相同的逻辑）
+                    const visibleCheckboxes = allCheckboxes.map(cb => {
+                        const rect = cb.getBoundingClientRect();
+                        return { checkbox: cb, top: rect.top };
+                    }).filter(c => c.top > -ROW_HEIGHT && c.top < window.innerHeight + ROW_HEIGHT)
+                      .sort((a, b) => a.top - b.top);
+
+                    if (visibleCheckboxes.length === 0) {
+                        return {
+                            success: false,
+                            error: 'No visible checkboxes in viewport',
+                            scrollerInfo,
+                            matchedTop: Math.round(matchedTop),
+                            totalCheckboxes: allCheckboxes.length,
+                            ...debugInfo
+                        };
+                    }
+
+                    // 找到第一个完全可见的复选框（top >= 0）
+                    const firstFullyVisibleCbIndex = visibleCheckboxes.findIndex(c => c.top >= 0);
+
+                    if (firstFullyVisibleCbIndex === -1) {
+                        return {
+                            success: false,
+                            error: 'No fully visible checkbox (all top < 0)',
+                            scrollerInfo,
+                            matchedTop: Math.round(matchedTop),
+                            cbTops: visibleCheckboxes.map(c => Math.round(c.top)),
+                            ...debugInfo
+                        };
+                    }
+
+                    // 用相同的公式计算目标复选框索引
+                    const targetCbIndex = (index - viewportStartIndex) + firstFullyVisibleCbIndex;
+
+                    const cbDebugInfo = {
+                        ...debugInfo,
+                        visibleCbCount: visibleCheckboxes.length,
+                        firstFullyVisibleCbIndex,
+                        targetCbIndex,
+                        cbTops: visibleCheckboxes.slice(0, 10).map(c => Math.round(c.top))
+                    };
+
+                    if (targetCbIndex < 0 || targetCbIndex >= visibleCheckboxes.length) {
+                        return {
+                            success: false,
+                            error: `Checkbox index out of range: ${targetCbIndex} (0-${visibleCheckboxes.length-1})`,
+                            scrollerInfo,
+                            matchedTop: Math.round(matchedTop),
+                            ...cbDebugInfo
+                        };
+                    }
+
+                    const checkbox = visibleCheckboxes[targetCbIndex].checkbox;
+                    const cbTop = visibleCheckboxes[targetCbIndex].top;
 
                     try {
                         checkbox.click();
@@ -916,8 +906,9 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                             success: true,
                             scrollerInfo,
                             matchedTop: Math.round(matchedTop),
-                            matchMethod: 'visual-position',
-                            ...debugInfo
+                            cbTop: Math.round(cbTop),
+                            matchMethod: 'checkbox-visual-position',
+                            ...cbDebugInfo
                         };
                     } catch (e) {
                         return {
@@ -925,7 +916,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                             error: 'Checkbox click failed: ' + e.message,
                             scrollerInfo,
                             matchedTop: Math.round(matchedTop),
-                            ...debugInfo
+                            ...cbDebugInfo
                         };
                     }
                 }
