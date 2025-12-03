@@ -1673,7 +1673,7 @@ class CompletePublishWorkflow:
                 logger.warning("Unable to resolve collection owner for claim stage: {}", exc)
                 filter_owner = None
 
-        # ==================== 默认使用 API 认领 ====================
+        # ==================== 使用 API 认领 ====================
         logger.info(
             "认领阶段 (API 模式): 目标 %s 个商品, 每商品认领 %s 次",
             selection_count,
@@ -1683,69 +1683,160 @@ class CompletePublishWorkflow:
         total_claimed = 0
         api_success = True
         api_failures: list[str] = []
-        detail_ids: list[str] = []
 
-        # Step 1-2: 使用 DOM 导航和筛选，获取产品列表
-        logger.info("Step 1-2: DOM 导航到采集箱并筛选创建人员")
-
-        # 使用 DOM 方式导航和筛选
-        navigation_success = await miaoshou_ctrl.navigate_and_filter_collection_box(
-            page,
-            filter_by_user=filter_owner,
-            switch_to_tab="all",  # 使用"全部"标签
-        )
-        if not navigation_success:
-            logger.warning("认领阶段导航/筛选失败，尝试备用方式")
-            await miaoshou_ctrl.refresh_collection_box(page, filter_owner=filter_owner)
-
-        # 等待页面数据加载
-        await page.wait_for_timeout(1500)
-
-        # 从 DOM 获取产品数量
-        page_counts = await miaoshou_ctrl.get_product_count(page)
-        total_available = page_counts.get("all", 0)
-        logger.info(f"DOM 获取产品数量: 全部={total_available}")
-
-        # 计算当前轮次需要的产品
+        # 计算当前轮次需要的产品偏移量
         start_offset = (self.execution_round - 1) * self.collect_count
         detail_ids: list[str] = []
 
-        # 从页面表格提取产品 ID
-        if total_available > 0:
-            # 使用 JS 从表格提取所有产品 ID
-            # 根据页面结构，ID 在文本 "采集箱产品ID: 3037726721" 中（10位数字）
-            extracted_ids = await page.evaluate("""
-            () => {
-                const ids = [];
-                // 方法1: 精确匹配 "采集箱产品ID: XXXXXXXXXX"（至少8位数字）
-                const spans = document.querySelectorAll('span, div, td');
-                spans.forEach(el => {
-                    const text = el.textContent || '';
-                    const match = text.match(/采集箱产品ID[:：]\\s*(\\d{8,})/);
-                    if (match && !ids.includes(match[1])) {
-                        ids.push(match[1]);
-                    }
-                });
-                // 方法2: 从表格行的 data 属性获取
-                if (ids.length === 0) {
-                    document.querySelectorAll('.el-table__row, tr').forEach(row => {
-                        const id = row.getAttribute('data-id')
-                            || row.getAttribute('data-row-key');
-                        if (id && /^\\d{8,}$/.test(id) && !ids.includes(id)) {
-                            ids.push(id);
-                        }
-                    });
-                }
-                return ids;
-            }
-            """)
-            logger.info(f"从 DOM 提取到 {len(extracted_ids)} 个产品 ID: {extracted_ids[:3]}...")
+        # 使用 API 获取产品列表（通过 page.evaluate + fetch）
+        # API: POST /api/move/common_collect_box/searchDetailList
+        logger.info("使用 API 获取产品 ID 列表")
 
-            if len(extracted_ids) > start_offset:
-                detail_ids = extracted_ids[start_offset : start_offset + selection_count]
+        # 获取 owner_account_id（如果有筛选）
+        owner_account_id = ""
+        if filter_owner:
+            logger.info(f"需要筛选创建人员: {filter_owner}")
+            # 从产品列表中查找匹配创建人员的 subAppAccountId
+            # 需要多页搜索因为目标创建人员的产品可能不在前面
+            # 匹配策略：模糊匹配用户名部分（括号前的名字或括号内的账号名）
+            sample_result = await page.evaluate(
+                r"""
+                async (filterName) => {
+                    try {
+                        // 搜索多页以找到目标创建人员
+                        const allOwners = new Map();  // ownerName -> accountId
+                        const filterLower = filterName.toLowerCase();
+
+                        for (let pageNo = 1; pageNo <= 10; pageNo++) {
+                            const formData = new URLSearchParams();
+                            formData.append('pageNo', String(pageNo));
+                            formData.append('pageSize', '100');
+                            formData.append('filter[tabPaneName]', 'all');
+
+                            const resp = await fetch(
+                                '/api/move/common_collect_box/searchDetailList',
+                                {
+                                    method: 'POST',
+                                    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                                    body: formData.toString()
+                                }
+                            );
+                            const data = await resp.json();
+                            if (data.result !== 'success' || !data.detailList) break;
+
+                            for (const item of data.detailList) {
+                                const ownerName = item.ownerSubAccountAliasName || '';
+                                const accountId = item.subAppAccountId;
+                                if (ownerName && accountId && !allOwners.has(ownerName)) {
+                                    allOwners.set(ownerName, accountId);
+                                }
+                                // 多种匹配方式
+                                if (ownerName) {
+                                    const ownerLower = ownerName.toLowerCase();
+                                    // 1. 完全包含
+                                    // 2. 用户名部分匹配（括号前的名字）
+                                    // 3. 账号部分匹配（括号内）
+                                    const nameMatch = ownerLower.includes(filterLower);
+                                    const bracketMatch = ownerName.match(/\(([^)]+)\)/);
+                                    const accountMatch = bracketMatch &&
+                                        bracketMatch[1].toLowerCase().includes(filterLower);
+                                    const prefixMatch = ownerName.split('(')[0]
+                                        .toLowerCase().includes(filterLower);
+
+                                    if (nameMatch || accountMatch || prefixMatch) {
+                                        return {
+                                            success: true,
+                                            accountId: accountId,
+                                            ownerName: ownerName
+                                        };
+                                    }
+                                }
+                            }
+                            // 如果没有更多数据，停止
+                            if (data.detailList.length < 100) break;
+                        }
+                        // 返回所有可用的创建人员名称和 ID
+                        const ownerList = [];
+                        for (const [name, id] of allOwners.entries()) {
+                            ownerList.push({name, id});
+                        }
+                        return {
+                            success: false,
+                            availableOwners: ownerList.slice(0, 30)
+                        };
+                    } catch (e) {
+                        return {error: e.message};
+                    }
+                }
+                """,
+                filter_owner,
+            )
+            if sample_result and sample_result.get("success"):
+                owner_account_id = str(sample_result.get("accountId", ""))
+                owner_name = sample_result.get("ownerName", "")
+                logger.info(f"找到创建人员: {owner_name} -> accountId={owner_account_id}")
+            elif sample_result and "availableOwners" in sample_result:
+                owners = sample_result.get("availableOwners", [])
+                names_with_ids = [f"{o['name']}({o['id']})" for o in owners[:15]]
+                logger.warning(f"未找到匹配 '{filter_owner}' 的账号，可用: {names_with_ids}")
+            elif sample_result and sample_result.get("error"):
+                logger.error(f"查找创建人员失败: {sample_result.get('error')}")
+
+        # 调用 searchDetailList API 获取产品列表
+        api_result = await page.evaluate(
+            """
+            async (params) => {
+                try {
+                    const formData = new URLSearchParams();
+                    formData.append('pageNo', params.pageNo);
+                    formData.append('pageSize', params.pageSize);
+                    formData.append('filter[tabPaneName]', params.tabPaneName);
+                    if (params.ownerAccountId) {
+                        formData.append('filter[ownerAccountIds][0]', params.ownerAccountId);
+                    }
+
+                    const resp = await fetch(
+                        '/api/move/common_collect_box/searchDetailList',
+                        {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                            body: formData.toString()
+                        }
+                    );
+                    return await resp.json();
+                } catch (e) {
+                    return {error: e.message};
+                }
+            }
+            """,
+            {
+                "pageNo": "1",
+                "pageSize": str(selection_count + start_offset + 10),  # 多获取一些
+                "tabPaneName": "all",
+                "ownerAccountId": owner_account_id,
+            },
+        )
+
+        if api_result and api_result.get("result") == "success":
+            detail_list = api_result.get("detailList", [])
+            total_available = api_result.get("total", 0)
+            logger.info(f"API 获取产品列表成功: {len(detail_list)} 条 / 共 {total_available} 条")
+
+            # 提取产品 ID - 使用 commonCollectBoxDetailId 字段
+            all_ids = []
+            for item in detail_list:
+                product_id = item.get("commonCollectBoxDetailId")
+                if product_id:
+                    all_ids.append(str(product_id))
+            logger.info(f"提取到 {len(all_ids)} 个产品 ID: {all_ids[:5]}...")
+
+            if len(all_ids) > start_offset:
+                detail_ids = all_ids[start_offset : start_offset + selection_count]
             else:
-                # DOM 提取失败，尝试使用索引方式
-                logger.warning(f"DOM 提取 ID 不足 ({len(extracted_ids)}个)，将使用索引方式认领")
+                logger.warning(f"API 返回 ID 不足 ({len(all_ids)}个)，需要 {start_offset} 起始偏移")
+        else:
+            error_msg = api_result.get("error") or api_result.get("message", "未知错误")
+            logger.warning(f"API 获取产品列表失败: {error_msg}")
 
         if not detail_ids:
             logger.warning("无法获取产品 ID，认领阶段失败")
@@ -1820,51 +1911,6 @@ class CompletePublishWorkflow:
                 "detail_ids": detail_ids if detail_ids else [],
             },
         )
-
-    async def _retry_claim_verification(
-        self,
-        page,
-        miaoshou_ctrl: MiaoshouController,
-        filter_owner: str | None,
-        expected_count: int,
-    ) -> bool:
-        """Retry claim verification by re-navigating to the claimed tab.
-
-        Args:
-            page: Active Playwright page instance.
-            miaoshou_ctrl: Active Miaoshou controller.
-            filter_owner: Owner filter applied during the initial navigation.
-            expected_count: Expected claimed item count.
-
-        Returns:
-            True when the claimed count meets the expected threshold after re-navigation.
-        """
-        logger.info("Fallback: re-open claimed tab to verify claim results")
-
-        try:
-            await miaoshou_ctrl.navigate_and_filter_collection_box(
-                page,
-                filter_by_user=filter_owner,
-                switch_to_tab="claimed",
-            )
-            counts = await miaoshou_ctrl.get_product_count(page)
-            claimed_count = counts.get("claimed", 0)
-            if claimed_count >= expected_count:
-                logger.success(
-                    "Fallback verification succeeded via re-navigation: claimed=%s expected>=%s",
-                    claimed_count,
-                    expected_count,
-                )
-                return True
-            logger.warning(
-                "Fallback verification mismatch after re-navigation: claimed=%s expected>=%s",
-                claimed_count,
-                expected_count,
-            )
-            return False
-        except Exception as exc:
-            logger.warning("Fallback claim verification failed: {}", exc)
-            return False
 
     async def _stage_batch_edit(
         self,

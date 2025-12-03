@@ -31,6 +31,7 @@ async def run_batch_edit_via_api(
     cookie_file: str | None = None,
     outer_package_image: str | None = None,
     product_guide_pdf: str | None = None,
+    max_products: int = 20,
 ) -> dict[str, Any]:
     """使用 API 执行批量编辑完整 18 步.
 
@@ -58,6 +59,7 @@ async def run_batch_edit_via_api(
         cookie_file: Cookie 文件路径（可选，默认从 page 获取）
         outer_package_image: 外包装图片本地路径
         product_guide_pdf: 产品说明书 PDF 本地路径
+        max_products: 每次最多编辑的产品数量（默认 20）
 
     Returns:
         执行结果:
@@ -147,6 +149,14 @@ async def run_batch_edit_via_api(
             # 提取 collectBoxDetailId
             detail_ids = [str(item.get("collectBoxDetailId")) for item in items]
             detail_ids = [did for did in detail_ids if did and did != "None"]
+
+            # 限制每次编辑的产品数量
+            if max_products > 0 and len(detail_ids) > max_products:
+                logger.info(
+                    f"限制编辑数量: {len(detail_ids)} -> {max_products} 个产品"
+                )
+                detail_ids = detail_ids[:max_products]
+
             result["total_count"] = len(detail_ids)
             result["detail_ids"] = detail_ids
 
@@ -300,8 +310,10 @@ def _build_edit_payload(
         if attrs:
             edit_data["attributes"] = _map_category_attrs(attrs)
 
-    # 产地映射（默认设置为中国）
+    # 产地映射（默认设置为中国浙江省，代码 43000000000031）
     edit_data["productOriginCountry"] = "CN"
+    edit_data["productOriginProvince"] = "43000000000031"
+    edit_data["productOriginCertFiles"] = []
 
     # 定制品开关（默认关闭）
     edit_data["personalizationSwitch"] = "0"

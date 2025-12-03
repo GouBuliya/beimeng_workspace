@@ -61,9 +61,9 @@ ONLY_CLAIM_OPTION = typer.Option(
 )
 
 USE_API_BATCH_EDIT_OPTION = typer.Option(
-    False,
+    True,
     "--use-api-batch-edit/--no-use-api-batch-edit",
-    help="是否使用 API 方式执行批量编辑 (更快速, 支持文件上传)",
+    help="是否使用 API 方式执行批量编辑 (更快速, 支持文件上传, 默认开启)",
 )
 
 
