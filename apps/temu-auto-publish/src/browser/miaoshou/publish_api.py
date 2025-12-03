@@ -2,11 +2,13 @@
 @PURPOSE: API 方式执行发布流程
 @OUTLINE:
   - async def run_publish_via_api(): 主入口，执行 API 发布完整流程
+  - async def _ensure_products_have_shop(): 确保产品已关联店铺
 @DEPENDENCIES:
   - 内部: .api_client.MiaoshouApiClient
 @RELATED: api_client.py, batch_edit_api.py, complete_publish_workflow.py
 @CHANGELOG:
   - 2025-12-04: 初始实现，支持 API 发布
+  - 2025-12-04: 发布前自动全选店铺，修复"未选择发布店铺"问题
 """
 
 from __future__ import annotations
@@ -17,6 +19,80 @@ from loguru import logger
 from playwright.async_api import Page
 
 from .api_client import MiaoshouApiClient
+
+
+async def _ensure_products_have_shop(
+    client: MiaoshouApiClient,
+    detail_ids: list[str],
+) -> dict[str, Any]:
+    """确保产品已关联店铺（发布前必须）.
+
+    在发布前调用此方法，为产品设置 collectBoxDetailShopList。
+    会自动获取所有已授权店铺并全选。
+
+    Args:
+        client: API 客户端
+        detail_ids: 产品 ID 列表
+
+    Returns:
+        结果字典：
+        {
+            "success": bool,
+            "shop_count": int,  # 选择的店铺数量
+            "error": str | None,
+        }
+    """
+    result: dict[str, Any] = {
+        "success": False,
+        "shop_count": 0,
+        "error": None,
+    }
+
+    try:
+        # 获取店铺列表
+        shop_result = await client.get_shop_list(platform="pddkj")
+        if shop_result.get("result") != "success":
+            result["error"] = f"获取店铺列表失败: {shop_result.get('message')}"
+            logger.warning(result["error"])
+            return result
+
+        shop_list = shop_result.get("shopList", [])
+        # 只选择授权状态有效的店铺
+        shop_ids = [
+            str(shop.get("shopId"))
+            for shop in shop_list
+            if shop.get("authStatus") == "valid" and shop.get("shopId")
+        ]
+
+        if not shop_ids:
+            result["error"] = "没有可用的已授权店铺"
+            logger.warning(result["error"])
+            return result
+
+        logger.info(f"发布前设置店铺: 为 {len(detail_ids)} 个产品选择 {len(shop_ids)} 个店铺")
+
+        # 构建店铺列表
+        shop_list_data = [{"shopId": sid} for sid in shop_ids]
+
+        # 调用批量编辑 API 设置店铺
+        edit_result = await client.batch_edit_products(
+            detail_ids=detail_ids,
+            edits={"collectBoxDetailShopList": shop_list_data},
+        )
+
+        if edit_result.get("success"):
+            result["success"] = True
+            result["shop_count"] = len(shop_ids)
+            logger.info(f"店铺设置成功: {len(shop_ids)} 个店铺已关联到 {len(detail_ids)} 个产品")
+        else:
+            result["error"] = f"设置店铺失败: {edit_result.get('error_map', {})}"
+            logger.warning(result["error"])
+
+    except Exception as e:
+        result["error"] = f"设置店铺异常: {e}"
+        logger.exception(result["error"])
+
+    return result
 
 
 async def run_publish_via_api(
@@ -134,9 +210,17 @@ async def run_publish_via_api(
                 logger.error(result["error"])
                 return result
 
-            logger.info(f"API 发布: 准备发布 {len(detail_ids)} 个产品到店铺 {shop_id}")
+            logger.info(f"API 发布: 准备发布 {len(detail_ids)} 个产品")
 
-            # Step 4: 执行发布
+            # Step 4: 发布前确保产品已关联店铺（自动全选）
+            shop_result = await _ensure_products_have_shop(client, detail_ids)
+            if not shop_result.get("success"):
+                # 店铺设置失败，但仍尝试发布（使用默认店铺）
+                logger.warning(
+                    f"店铺设置未成功: {shop_result.get('error')}，将使用默认店铺发布"
+                )
+
+            # Step 5: 执行发布
             publish_result = await client.publish_to_shop(
                 detail_ids=detail_ids,
                 shop_id=shop_id,
