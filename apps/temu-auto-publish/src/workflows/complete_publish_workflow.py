@@ -1675,12 +1675,12 @@ class CompletePublishWorkflow:
         api_success = True
         api_failures: list[str] = []
 
-        # Step 1: 先用 DOM 操作筛选人员
-        logger.info("Step 1: DOM 筛选人员 -> 点击搜索")
+        # Step 1: 先用 DOM 操作筛选人员，然后切换到"全部"tab
+        logger.info("Step 1: DOM 筛选人员 -> 点击搜索 -> 切换到全部tab")
         navigation_ok = await miaoshou_ctrl.navigate_and_filter_collection_box(
             page,
             filter_by_user=filter_owner,
-            switch_to_tab="unclaimed",
+            switch_to_tab="all",
         )
         if not navigation_ok:
             logger.warning("DOM 筛选导航失败，尝试备用方式")
