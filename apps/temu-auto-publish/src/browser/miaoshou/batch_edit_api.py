@@ -287,6 +287,7 @@ def _build_edit_payload(
     uploaded_files: dict[str, Any] | None = None,
     outer_package_shape: int | None = None,
     outer_package_type: int | None = None,
+    shop_id: str = "9134811",
 ) -> dict[str, Any]:
     """从业务 payload 构建 API 编辑数据.
 
@@ -295,6 +296,7 @@ def _build_edit_payload(
         uploaded_files: 已上传的文件 URL
         outer_package_shape: 外包装形状 key
         outer_package_type: 外包装类型 key
+        shop_id: 发布目标店铺 ID（默认 9134811）
 
     Returns:
         API 可接受的编辑字段字典
@@ -320,6 +322,9 @@ def _build_edit_payload(
     edit_data["technologyType"] = ""
     edit_data["firstType"] = ""
     edit_data["twiceType"] = ""
+
+    # 店铺列表（发布时必需）
+    edit_data["collectBoxDetailShopList"] = [{"shopId": shop_id}]
 
     # 外包装图片
     outer_package_url = uploaded_files.get("outer_package_url")
