@@ -510,23 +510,36 @@ def _update_product_detail(
     if isinstance(sku_map, dict) and sku_map:
         for _sku_key, sku_data in sku_map.items():
             if isinstance(sku_data, dict):
+                # 调试：打印 SKU 数据中的所有价格相关字段
+                price_fields = {
+                    k: v for k, v in sku_data.items()
+                    if "price" in k.lower() or "cost" in k.lower() or "supply" in k.lower()
+                }
+                logger.debug(f"SKU 价格字段: {price_fields}")
+
                 # 计算建议售价 = 当前供货价 × 10
-                # 优先使用选品表的成本价，否则使用 SKU 原价
+                # 优先使用选品表的成本价，否则使用 SKU 的供货价/原价
                 current_price = None
                 if selection and selection.cost_price:
                     current_price = float(selection.cost_price)
+                    logger.debug(f"使用选品表成本价: {current_price}")
                 else:
-                    # 从 SKU 原价获取（originPrice 或 price）
-                    origin_price = sku_data.get("originPrice") or sku_data.get("price")
-                    if origin_price:
-                        with contextlib.suppress(ValueError, TypeError):
-                            current_price = float(origin_price)
+                    # 尝试多个可能的供货价字段名
+                    for field_name in ["supplyPrice", "supplierPrice", "costPrice", "originPrice", "price"]:
+                        field_value = sku_data.get(field_name)
+                        if field_value:
+                            with contextlib.suppress(ValueError, TypeError):
+                                current_price = float(field_value)
+                                logger.debug(f"使用 SKU.{field_name}: {current_price}")
+                                break
 
                 if current_price:
                     # 建议售价 = 当前供货价 × 10
                     suggested_price = round(current_price * 10, 2)
                     sku_data["price"] = str(int(suggested_price))
-                    logger.debug(f"SKU 价格: {current_price} × 10 = {suggested_price}")
+                    logger.info(f"SKU 价格更新: {current_price} × 10 = {suggested_price}")
+                else:
+                    logger.warning(f"无法获取供货价，SKU 数据: {list(sku_data.keys())}")
 
                 # 始终更新库存
                 sku_data["stock"] = "999"
