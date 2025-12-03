@@ -328,25 +328,35 @@ class LoginController:
             if cookies and self.browser_manager.context:
                 await self.browser_manager.context.add_cookies(cookies)
                 logger.debug("✓ 已加载 {} 条 Cookie", len(cookies))
+
                 # 验证登录状态 - 直接访问首页而不是登录页
                 welcome_url = self.selectors.get("homepage", {}).get(
                     "url", "https://erp.91miaoshou.com/welcome"
                 )
-                await self.browser_manager.goto(welcome_url)
-                # 激进优化: 条件等待替代固定2秒等待
-                with contextlib.suppress(Exception):
-                    await self.browser_manager.page.wait_for_selector(
-                        ".jx-main, .pro-layout, [class*='welcome'], [class*='dashboard']",
-                        state="visible",
-                        timeout=3000,
-                    )
 
-                # 检查是否已登录
-                if await self._check_login_status():
-                    logger.success("✓ Cookie 登录成功")
+                # 导航到首页，带超时兜底
+                cookie_login_success = False
+                try:
+                    await self.browser_manager.goto(welcome_url)
+                    # 激进优化: 条件等待替代固定2秒等待
+                    with contextlib.suppress(Exception):
+                        await self.browser_manager.page.wait_for_selector(
+                            ".jx-main, .pro-layout, [class*='welcome'], [class*='dashboard']",
+                            state="visible",
+                            timeout=3000,
+                        )
+
+                    # 检查是否已登录
+                    if await self._check_login_status():
+                        logger.success("✓ Cookie 登录成功")
+                        cookie_login_success = True
+                except Exception as nav_exc:
+                    logger.warning(f"Cookie 登录导航超时: {nav_exc}")
+
+                if cookie_login_success:
                     return True
                 else:
-                    logger.warning("Cookie 已失效,需要重新登录")
+                    logger.warning("Cookie 登录失败,将执行手动登录兜底")
                     self.cookie_manager.clear()
 
         # 2. 执行自动化登录
