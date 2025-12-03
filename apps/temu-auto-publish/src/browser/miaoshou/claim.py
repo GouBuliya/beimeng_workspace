@@ -826,19 +826,19 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
 
                 // 如果只需要点击复选框,直接处理后返回
                 if (target === 'checkbox') {
-                    // 【第十一轮修复】只获取行内的复选框，排除表头的全选复选框
-                    // 表头复选框在 .pro-virtual-table__header 中
-                    // 行复选框在 .vue-recycle-scroller__item-view 中
+                    // 【第十二轮修复】点击 label 元素而不是空的 span
+                    // .jx-checkbox__inner 是空的视觉样式 span，可能没有点击事件
+                    // 应该点击 label.jx-checkbox 来触发复选框
 
-                    // 只获取行内的复选框（排除表头）
-                    const allCheckboxes = Array.from(
-                        document.querySelectorAll('.vue-recycle-scroller__item-view .jx-checkbox__inner')
+                    // 获取行内的复选框 label 元素（排除表头）
+                    const allCheckboxLabels = Array.from(
+                        document.querySelectorAll('.vue-recycle-scroller__item-view label.jx-checkbox')
                     );
 
-                    if (allCheckboxes.length === 0) {
+                    if (allCheckboxLabels.length === 0) {
                         return {
                             success: false,
-                            error: 'No checkboxes found on page',
+                            error: 'No checkbox labels found on page',
                             scrollerInfo,
                             matchedTop: Math.round(matchedTop),
                             ...debugInfo
@@ -846,9 +846,9 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                     }
 
                     // 按视觉位置排序，与 visibleRows 使用相同的逻辑
-                    const visibleCheckboxes = allCheckboxes.map(cb => {
-                        const rect = cb.getBoundingClientRect();
-                        return { checkbox: cb, top: rect.top };
+                    const visibleCheckboxes = allCheckboxLabels.map(label => {
+                        const rect = label.getBoundingClientRect();
+                        return { label, top: rect.top };
                     }).filter(c => {
                         // 使用与 visibleRows 相同的过滤条件
                         return c.top > -ROW_HEIGHT && c.top < window.innerHeight + ROW_HEIGHT;
@@ -856,7 +856,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
 
                     const cbDebugInfo = {
                         ...debugInfo,
-                        totalCheckboxes: allCheckboxes.length,
+                        totalCheckboxes: allCheckboxLabels.length,
                         visibleCbCount: visibleCheckboxes.length,
                         matchedTop: Math.round(matchedTop),
                         cbTops: visibleCheckboxes.map(c => Math.round(c.top))
@@ -875,20 +875,21 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                     const targetCheckbox = visibleCheckboxes[targetArrayIndex];
 
                     try {
-                        targetCheckbox.checkbox.click();
+                        // 点击 label 触发复选框
+                        targetCheckbox.label.click();
                         return {
                             success: true,
                             scrollerInfo,
                             matchedTop: Math.round(matchedTop),
                             cbTop: Math.round(targetCheckbox.top),
                             cbArrayIndex: targetArrayIndex,
-                            matchMethod: 'checkbox-same-index',
+                            matchMethod: 'checkbox-label-click',
                             ...cbDebugInfo
                         };
                     } catch (e) {
                         return {
                             success: false,
-                            error: 'Checkbox click failed: ' + e.message,
+                            error: 'Checkbox label click failed: ' + e.message,
                             scrollerInfo,
                             matchedTop: Math.round(matchedTop),
                             ...cbDebugInfo
