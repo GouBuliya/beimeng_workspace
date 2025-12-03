@@ -1688,6 +1688,17 @@ class CompletePublishWorkflow:
         # Step 1-2: 使用 API 获取未认领产品（替代 DOM 操作）
         logger.info("Step 1-2: API 获取未认领产品并筛选创建人员")
 
+        # 确保页面在妙手 ERP 域名下，否则 API 调用会失败
+        current_url = page.url
+        logger.debug(f"当前页面 URL: {current_url}")
+        if "erp.91miaoshou.com" not in current_url:
+            logger.info("导航到妙手采集箱页面...")
+            await page.goto(
+                "https://erp.91miaoshou.com/collect_box/common_collect_box",
+                wait_until="networkidle",
+            )
+            await page.wait_for_timeout(1000)
+
         from src.browser.miaoshou.api_client import MiaoshouApiClient
 
         context = page.context
@@ -1719,12 +1730,17 @@ class CompletePublishWorkflow:
                             try {
                                 const response = await fetch('/api/move/common_collect_box/getSubAccountList', {
                                     method: 'POST',
-                                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                                    headers: {
+                                        'Content-Type': 'application/x-www-form-urlencoded',
+                                        'Accept': 'application/json, text/plain, */*',
+                                        'X-Requested-With': 'XMLHttpRequest'
+                                    },
+                                    credentials: 'include',
                                     body: ''
                                 });
                                 const text = await response.text();
                                 if (!text) {
-                                    return { result: 'error', message: '空响应', list: [] };
+                                    return { result: 'error', message: '空响应', status: response.status, list: [] };
                                 }
                                 try {
                                     return JSON.parse(text);
@@ -1770,12 +1786,17 @@ class CompletePublishWorkflow:
                             try {{
                                 const response = await fetch('/api/move/common_collect_box/searchDetailList', {{
                                     method: 'POST',
-                                    headers: {{ 'Content-Type': 'application/x-www-form-urlencoded' }},
+                                    headers: {{
+                                        'Content-Type': 'application/x-www-form-urlencoded',
+                                        'Accept': 'application/json, text/plain, */*',
+                                        'X-Requested-With': 'XMLHttpRequest'
+                                    }},
+                                    credentials: 'include',
                                     body: '{params}'
                                 }});
                                 const text = await response.text();
                                 if (!text) {{
-                                    return {{ result: 'error', message: '空响应', detailList: [] }};
+                                    return {{ result: 'error', message: '空响应', status: response.status, detailList: [] }};
                                 }}
                                 try {{
                                     return JSON.parse(text);
