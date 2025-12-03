@@ -2819,6 +2819,53 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
 
             logger.info(f"开始滚动虚拟列表提取产品 ID，目标数量: {count}")
 
+            # 首先检测滚动容器
+            scroller_info = await page.evaluate(
+                """() => {
+                    // 查找 vue-recycle-scroller 及其可滚动的父元素
+                    const scroller = document.querySelector('.vue-recycle-scroller');
+                    if (!scroller) return { found: false };
+
+                    // 检查 scroller 本身
+                    const scrollerInfo = {
+                        scrollHeight: scroller.scrollHeight,
+                        clientHeight: scroller.clientHeight,
+                        canScroll: scroller.scrollHeight > scroller.clientHeight + 10
+                    };
+
+                    // 向上查找可滚动的父元素
+                    let parent = scroller.parentElement;
+                    let scrollableParent = null;
+                    let depth = 0;
+                    while (parent && depth < 10) {
+                        if (parent.scrollHeight > parent.clientHeight + 10) {
+                            const style = window.getComputedStyle(parent);
+                            const overflow = style.overflowY;
+                            if (overflow === 'auto' || overflow === 'scroll') {
+                                scrollableParent = {
+                                    tagName: parent.tagName,
+                                    className: parent.className.slice(0, 50),
+                                    scrollHeight: parent.scrollHeight,
+                                    clientHeight: parent.clientHeight,
+                                    depth: depth
+                                };
+                                break;
+                            }
+                        }
+                        parent = parent.parentElement;
+                        depth++;
+                    }
+
+                    return {
+                        found: true,
+                        scroller: scrollerInfo,
+                        scrollableParent
+                    };
+                }"""
+            )
+
+            logger.debug(f"滚动容器检测: {scroller_info}")
+
             for scroll_attempt in range(max_scroll_attempts):
                 # 从当前可见行提取产品ID
                 result = await page.evaluate(
@@ -2850,16 +2897,18 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                 debug_info = result.get("debug", {})
 
                 # 添加新发现的ID
+                added_count = 0
                 for pid in new_ids:
                     if pid not in seen_ids:
                         seen_ids.add(pid)
                         all_ids.append(pid)
+                        added_count += 1
 
                 logger.debug(
                     f"滚动 {scroll_attempt + 1}: "
                     f"行数={debug_info.get('rowCount')}, "
                     f"scrollTop={debug_info.get('scrollTop')}, "
-                    f"新增={len([p for p in new_ids if p not in seen_ids or p == new_ids[0]])}, "
+                    f"新增={added_count}, "
                     f"累计={len(all_ids)}"
                 )
 
@@ -2868,25 +2917,58 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                     logger.info(f"已收集到足够的产品 ID: {len(all_ids)} >= {count}")
                     break
 
-                # 滚动虚拟列表加载更多
+                # 滚动虚拟列表加载更多 - 尝试多种滚动方式
                 scroll_result = await page.evaluate(
                     """(scrollStep) => {
+                        // 查找可滚动的容器
                         const scroller = document.querySelector('.vue-recycle-scroller');
                         if (!scroller) return { scrolled: false, reason: 'no_scroller' };
 
-                        const oldScrollTop = scroller.scrollTop;
-                        const maxScroll = scroller.scrollHeight - scroller.clientHeight;
+                        // 方法1: 尝试滚动 scroller 本身
+                        let targetElement = scroller;
+                        let maxScroll = scroller.scrollHeight - scroller.clientHeight;
 
-                        if (oldScrollTop >= maxScroll - 10) {
-                            return { scrolled: false, reason: 'at_bottom' };
+                        // 如果 scroller 不可滚动，查找可滚动的父元素
+                        if (maxScroll <= 10) {
+                            let parent = scroller.parentElement;
+                            let depth = 0;
+                            while (parent && depth < 10) {
+                                const parentMax = parent.scrollHeight - parent.clientHeight;
+                                if (parentMax > 10) {
+                                    const style = window.getComputedStyle(parent);
+                                    if (style.overflowY === 'auto' || style.overflowY === 'scroll') {
+                                        targetElement = parent;
+                                        maxScroll = parentMax;
+                                        break;
+                                    }
+                                }
+                                parent = parent.parentElement;
+                                depth++;
+                            }
                         }
 
-                        scroller.scrollTop = Math.min(oldScrollTop + scrollStep, maxScroll);
+                        const oldScrollTop = targetElement.scrollTop;
+
+                        // 检查是否已到底部
+                        if (oldScrollTop >= maxScroll - 10) {
+                            return {
+                                scrolled: false,
+                                reason: 'at_bottom',
+                                maxScroll,
+                                oldScrollTop,
+                                element: targetElement.className.slice(0, 30)
+                            };
+                        }
+
+                        // 执行滚动
+                        targetElement.scrollTop = Math.min(oldScrollTop + scrollStep, maxScroll);
+
                         return {
                             scrolled: true,
                             oldScrollTop,
-                            newScrollTop: scroller.scrollTop,
-                            maxScroll
+                            newScrollTop: targetElement.scrollTop,
+                            maxScroll,
+                            element: targetElement.className.slice(0, 30)
                         };
                     }""",
                     scroll_step,
@@ -2894,8 +2976,19 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
 
                 if not scroll_result.get("scrolled"):
                     reason = scroll_result.get("reason", "unknown")
-                    logger.debug(f"停止滚动: {reason}")
+                    logger.debug(
+                        f"停止滚动: {reason}, "
+                        f"maxScroll={scroll_result.get('maxScroll')}, "
+                        f"scrollTop={scroll_result.get('oldScrollTop')}, "
+                        f"element={scroll_result.get('element')}"
+                    )
                     break
+                else:
+                    logger.debug(
+                        f"滚动成功: {scroll_result.get('oldScrollTop')} -> "
+                        f"{scroll_result.get('newScrollTop')} / {scroll_result.get('maxScroll')}, "
+                        f"element={scroll_result.get('element')}"
+                    )
 
                 # 等待虚拟列表更新DOM
                 await page.wait_for_timeout(300)
@@ -2908,7 +3001,21 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
             await page.evaluate(
                 """() => {
                     const scroller = document.querySelector('.vue-recycle-scroller');
-                    if (scroller) scroller.scrollTop = 0;
+                    if (!scroller) return;
+
+                    // 重置 scroller
+                    scroller.scrollTop = 0;
+
+                    // 也重置可能的父滚动容器
+                    let parent = scroller.parentElement;
+                    let depth = 0;
+                    while (parent && depth < 10) {
+                        if (parent.scrollTop > 0) {
+                            parent.scrollTop = 0;
+                        }
+                        parent = parent.parentElement;
+                        depth++;
+                    }
                 }"""
             )
             await page.wait_for_timeout(200)
