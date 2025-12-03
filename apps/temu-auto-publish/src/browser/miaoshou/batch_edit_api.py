@@ -208,9 +208,9 @@ async def run_batch_edit_via_api(
             else:
                 logger.warning("获取店铺列表失败，将使用默认店铺")
 
-            # Step 7: 构建编辑数据
+            # Step 7: 构建基础编辑数据
             logger.info("API 批量编辑: 构建编辑数据...")
-            edit_data = _build_edit_payload(
+            base_edit_data = _build_edit_payload(
                 payload,
                 uploaded_files=uploaded_files,
                 outer_package_shape=outer_package_shape,
@@ -218,22 +218,50 @@ async def run_batch_edit_via_api(
                 shop_ids=shop_ids,
             )
 
-            # Step 8: 批量保存编辑
-            logger.info("API 批量编辑: 保存编辑数据...")
-            edit_result = await client.batch_edit_products(
+            # Step 8: 获取每个产品的 SKU 信息并计算价格
+            logger.info("API 批量编辑: 获取产品 SKU 信息...")
+            item_info_result = await client.get_collect_item_info(
                 detail_ids=detail_ids,
-                edits=edit_data,
+                with_sku_map=True,
             )
 
-            if edit_result.get("success"):
+            # 构建每个产品的编辑数据（包含价格 ×10 的 skuMap）
+            items_to_save = []
+            if item_info_result.get("result") == "success":
+                item_info_map = item_info_result.get("collectItemInfoMap", {})
+                for detail_id in detail_ids:
+                    item_data = {"site": "PDDKJ", "detailId": str(detail_id)}
+                    item_data.update(base_edit_data)
+
+                    # 获取该产品的 SKU 信息并计算价格
+                    product_info = item_info_map.get(str(detail_id), {})
+                    sku_map = product_info.get("skuMap", {})
+                    if sku_map:
+                        updated_sku_map = _update_sku_prices(sku_map)
+                        item_data["skuMap"] = updated_sku_map
+
+                    items_to_save.append(item_data)
+            else:
+                # 如果获取 SKU 信息失败，使用基础编辑数据
+                logger.warning("获取 SKU 信息失败，跳过价格计算")
+                for detail_id in detail_ids:
+                    item_data = {"site": "PDDKJ", "detailId": str(detail_id)}
+                    item_data.update(base_edit_data)
+                    items_to_save.append(item_data)
+
+            # Step 9: 批量保存编辑
+            logger.info(f"API 批量编辑: 保存 {len(items_to_save)} 个产品...")
+            edit_result = await client.save_collect_item_info(items=items_to_save)
+
+            if edit_result.get("result") == "success":
                 result["success"] = True
-                result["edited_count"] = edit_result.get("success_count", len(detail_ids))
+                result["edited_count"] = edit_result.get("successNum", len(detail_ids))
                 logger.success(
                     f"API 批量编辑完成: 成功 {result['edited_count']}/{result['total_count']}"
                 )
             else:
-                result["error"] = f"保存编辑失败: {edit_result.get('error_map', {})}"
-                result["edited_count"] = edit_result.get("success_count", 0)
+                result["error"] = f"保存编辑失败: {edit_result.get('errorMap', {})}"
+                result["edited_count"] = edit_result.get("successNum", 0)
                 logger.warning(result["error"])
 
     except Exception as e:
@@ -365,6 +393,47 @@ def _build_edit_payload(
         edit_data["productGuideFileUrl"] = product_guide_url
 
     return edit_data
+
+
+def _update_sku_prices(sku_map: dict[str, Any]) -> dict[str, Any]:
+    """更新 SKU 价格为供货价 × 10.
+
+    Args:
+        sku_map: 原始 SKU 映射
+
+    Returns:
+        更新价格后的 SKU 映射
+    """
+    updated_map = {}
+
+    for sku_key, sku_data in sku_map.items():
+        if not isinstance(sku_data, dict):
+            updated_map[sku_key] = sku_data
+            continue
+
+        # 复制 SKU 数据
+        new_sku = dict(sku_data)
+
+        # 获取供货价（尝试多个字段名）
+        current_price = None
+        for field_name in ["supplyPrice", "supplierPrice", "costPrice", "originPrice", "price"]:
+            field_value = sku_data.get(field_name)
+            if field_value:
+                try:
+                    current_price = float(field_value)
+                    break
+                except (ValueError, TypeError):
+                    continue
+
+        if current_price:
+            # 建议售价 = 供货价 × 10
+            suggested_price = round(current_price * 10, 2)
+            new_sku["price"] = str(int(suggested_price))
+            logger.debug(f"SKU 价格更新: {current_price} × 10 = {suggested_price}")
+
+        updated_map[sku_key] = new_sku
+
+    return updated_map
 
 
 def _map_category_attrs(attrs: dict[str, Any]) -> list[dict[str, Any]]:
