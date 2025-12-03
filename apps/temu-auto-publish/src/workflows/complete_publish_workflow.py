@@ -2291,25 +2291,10 @@ class CompletePublishWorkflow:
     def _finalize_selection_rows(
         self, rows: Sequence[ProductSelectionRow]
     ) -> list[ProductSelectionRow]:
-        """根据 collect_count 和 execution_round 截取正确的数据段并输出日志."""
+        """一次性处理所有选品数据并输出日志."""
 
-        # 当外部注入数据时不再截断,便于按 execution_round 逐批处理不同商品
-        if self._selection_rows_override is not None:
-            limited_rows = list(rows)
-        else:
-            # 根据 execution_round 计算起始偏移,截取对应批次的数据
-            start_offset = max(0, (self.execution_round - 1) * self.collect_count)
-            end_offset = start_offset + self.collect_count
-            limited_rows = list(rows[start_offset:end_offset])
-
-            if start_offset > 0:
-                logger.info(
-                    "起始轮次=%s: 跳过前 %s 条,处理第 %s-%s 条数据",
-                    self.execution_round,
-                    start_offset,
-                    start_offset + 1,
-                    min(end_offset, len(rows)),
-                )
+        # 一次性处理所有选品，不再按轮次截断
+        limited_rows = list(rows)
 
         for idx, row in enumerate(limited_rows, start=1):
             cost_value = float(row.cost_price) if row.cost_price else 0.0
@@ -2321,15 +2306,6 @@ class CompletePublishWorkflow:
                 row.model_number,
                 row.collect_count,
                 cost_value,
-            )
-
-        expected_count = self.collect_count
-        if len(limited_rows) < expected_count:
-            logger.warning(
-                "当前批次选品数据仅有 %s 条, 低于预期 %s 条 (总数据 %s 条)",
-                len(limited_rows),
-                expected_count,
-                len(rows),
             )
 
         return limited_rows
