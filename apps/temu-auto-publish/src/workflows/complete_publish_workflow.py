@@ -1688,10 +1688,10 @@ class CompletePublishWorkflow:
         # Step 1-2: 使用 API 获取未认领产品（替代 DOM 操作）
         logger.info("Step 1-2: API 获取未认领产品并筛选创建人员")
 
-        # 确保页面在妙手 ERP 域名下，否则 API 调用会失败
+        # 确保页面在妙手采集箱页面，否则 API 调用可能失败
         current_url = page.url
         logger.debug(f"当前页面 URL: {current_url}")
-        if "erp.91miaoshou.com" not in current_url:
+        if "common_collect_box" not in current_url:
             logger.info("导航到妙手采集箱页面...")
             await page.goto(
                 "https://erp.91miaoshou.com/collect_box/common_collect_box",
