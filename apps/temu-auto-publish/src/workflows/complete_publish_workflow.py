@@ -1640,7 +1640,7 @@ class CompletePublishWorkflow:
 
         # edited_products 是当前批次要处理的商品数据
         working_products = list(edited_products)
-        selection_count = min(len(working_products), 5)
+        selection_count = len(working_products)  # 认领所有产品，分批在后面处理
 
         # 如果当前批次没有可用商品，直接跳过认领阶段
         if len(working_products) == 0:
@@ -1707,12 +1707,30 @@ class CompletePublishWorkflow:
             await page.evaluate("window.scrollBy(0, -100)")
             await page.wait_for_timeout(500)
 
-        detail_ids = await miaoshou_ctrl.extract_product_ids_from_dom(
-            page, count=selection_count
+        # 根据 execution_round 计算偏移量
+        start_offset = (self.execution_round - 1) * self.collect_count
+        # 提取时多取一些，然后根据偏移量截取
+        total_to_extract = start_offset + selection_count
+
+        logger.info(
+            f"提取产品 ID: 起始偏移={start_offset}, 需要={selection_count}, "
+            f"总提取={total_to_extract}"
         )
 
+        all_ids = await miaoshou_ctrl.extract_product_ids_from_dom(
+            page, count=total_to_extract
+        )
+
+        # 根据偏移量截取当前轮次的产品 ID
+        if len(all_ids) > start_offset:
+            detail_ids = all_ids[start_offset : start_offset + selection_count]
+        else:
+            detail_ids = []
+
         if not detail_ids:
-            logger.warning("无法从 DOM 提取产品 ID")
+            logger.warning(
+                f"无法提取产品 ID: 总提取={len(all_ids)}, 偏移={start_offset}"
+            )
             api_success = False
         else:
             logger.info(f"提取到 {len(detail_ids)} 个产品 ID: {detail_ids[:5]}...")
