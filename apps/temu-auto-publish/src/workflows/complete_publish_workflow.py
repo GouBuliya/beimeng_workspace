@@ -456,10 +456,7 @@ class CompletePublishWorkflow:
                 result = await stage_func()
 
                 # 判断结果类型
-                if isinstance(result, tuple):
-                    outcome = result[0]
-                else:
-                    outcome = result
+                outcome = result[0] if isinstance(result, tuple) else result
 
                 if outcome.success:
                     if attempt > 0:
@@ -1133,18 +1130,42 @@ class CompletePublishWorkflow:
             }
             return StageOutcome("stage1_first_edit", True, "首次编辑已跳过", details), placeholders
 
-        # 导航到采集箱并筛选
+        # 导航到采集箱并筛选（带登录兜底机制）
         navigation_success = await miaoshou_ctrl.navigate_and_filter_collection_box(
             page,
             filter_by_user=staff_name,
             switch_to_tab="all",
         )
+
+        # 检查是否被重定向到登录页（Cookie 失效）
+        if not navigation_success or await self._is_redirected_to_login(page):
+            logger.warning("导航失败或 Cookie 已失效，尝试重新登录...")
+            # 获取凭据并重新登录
+            username, password = self._resolve_credentials()
+            if username and password and self.login_ctrl:
+                relogin_success = await self.login_ctrl.login(
+                    username=username,
+                    password=password,
+                    force=True,
+                    headless=self.headless,
+                    keep_browser_open=True,
+                )
+                if relogin_success:
+                    logger.info("重新登录成功，再次尝试导航...")
+                    # 更新 page 引用（登录后可能创建新页面）
+                    page = self.login_ctrl.browser_manager.page
+                    navigation_success = await miaoshou_ctrl.navigate_and_filter_collection_box(
+                        page,
+                        filter_by_user=staff_name,
+                        switch_to_tab="all",
+                    )
+
         if not navigation_success:
             return (
                 StageOutcome(
                     name="stage1_first_edit",
                     success=False,
-                    message="导航或筛选妙手公用采集箱失败",
+                    message="导航或筛选妙手公用采集箱失败（重试后仍失败）",
                     details={},
                 ),
                 [],
@@ -2356,6 +2377,52 @@ class CompletePublishWorkflow:
 
         logger.error("✗ 未能找到标题输入框, 无法更新标题")
         return False
+
+    async def _is_redirected_to_login(self, page) -> bool:
+        """检查页面是否被重定向到登录页.
+
+        用于检测 Cookie 失效的情况。
+
+        Args:
+            page: Playwright Page 对象
+
+        Returns:
+            True 如果被重定向到登录页
+        """
+        if not page:
+            return True
+
+        try:
+            url = page.url.lower()
+
+            # 检测重定向到登录页的 URL 模式
+            if (
+                "redirect=" in url
+                or "redirect%3d" in url
+                or "sub_account/users" in url
+                or "login" in url
+            ):
+                logger.debug(f"检测到重定向到登录页: {url}")
+                return True
+
+            # 检测登录表单
+            login_form_count = await page.locator(
+                "input[name='mobile'], input[name='username'], "
+                "input[placeholder*='手机'], input[placeholder*='账号']"
+            ).count()
+            login_btn_count = await page.locator(
+                "button:has-text('登录'), button:has-text('立即登录')"
+            ).count()
+
+            if login_form_count > 0 and login_btn_count > 0:
+                logger.debug("检测到登录表单")
+                return True
+
+            return False
+
+        except Exception as e:
+            logger.debug(f"检查登录重定向时出错: {e}")
+            return False
 
     def _resolve_collection_owner(self, owner_value: str) -> str:
         """解析妙手采集箱筛选所需的创建人员显示名."""

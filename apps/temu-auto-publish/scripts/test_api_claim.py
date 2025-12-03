@@ -192,7 +192,8 @@ async def test_owner_filter():
 
             # 客户端筛选
             filtered = [
-                item for item in all_items
+                item
+                for item in all_items
                 if short_name in (item.get("ownerSubAccountAliasName") or "")
             ]
             logger.info(f"  获取 50 个产品，筛选后匹配 '{short_name}' 的有 {len(filtered)} 个")

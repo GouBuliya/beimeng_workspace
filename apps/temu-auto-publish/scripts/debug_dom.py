@@ -1,4 +1,5 @@
 """调试 DOM 结构，查找产品 ID 提取方式."""
+
 import asyncio
 import sys
 from pathlib import Path
@@ -15,7 +16,7 @@ async def debug_dom():
     cookie_file = project_root.parent.parent / "data/temp/miaoshou_cookies.json"
     manager = CookieManager(str(cookie_file))
     cookies = manager.load_playwright_cookies()
-    
+
     if not cookies:
         print("无法加载 Cookie")
         return
@@ -24,11 +25,11 @@ async def debug_dom():
         browser = await p.chromium.launch(headless=False)
         context = await browser.new_context()
         await context.add_cookies(cookies)
-        
+
         page = await context.new_page()
         await page.goto("https://erp.91miaoshou.com/common_collect_box/items?tabPaneName=all")
         await page.wait_for_timeout(3000)
-        
+
         # 调试 DOM 结构
         result = await page.evaluate("""() => {
             const debug = {
@@ -72,14 +73,16 @@ async def debug_dom():
             
             return debug;
         }""")
-        
+
         print("=== DOM 调试信息 ===")
         print(f"Scroller 存在: {result['scrollerExists']}")
         print(f"行数: {result['rowCount']}")
-        print(f"样本行文本: {result['sampleRowText'][:200] if result['sampleRowText'] else 'N/A'}...")
+        print(
+            f"样本行文本: {result['sampleRowText'][:200] if result['sampleRowText'] else 'N/A'}..."
+        )
         print(f"Vue 数据: {result['vueData']}")
         print(f"页面文本匹配: {result['allMatches']}")
-        
+
         await browser.close()
 
 
