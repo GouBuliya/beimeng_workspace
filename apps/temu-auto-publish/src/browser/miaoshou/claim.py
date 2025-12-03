@@ -2789,3 +2789,66 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                 "message": str(exc),
                 "claimed_count": 0,
             }
+
+    async def extract_product_ids_from_dom(
+        self,
+        page: Page,
+        *,
+        count: int = 10,
+    ) -> list[str]:
+        """从页面 DOM 中提取产品 ID 列表.
+
+        在 DOM 筛选人员后调用此方法，从当前页面提取产品 ID。
+        通过 Vue 组件数据或 DOM 属性获取。
+
+        Args:
+            page: Playwright 页面对象
+            count: 需要提取的产品数量
+
+        Returns:
+            产品 ID 列表
+        """
+        try:
+            # 从 Vue 虚拟列表组件数据中提取
+            detail_ids = await page.evaluate(
+                """(count) => {
+                    const ids = [];
+
+                    // 尝试从 Vue 组件获取数据
+                    const scroller = document.querySelector('.vue-recycle-scroller');
+                    if (scroller && scroller.__vue__) {
+                        const items = scroller.__vue__.items || scroller.__vue__.$data?.items || [];
+                        for (const item of items.slice(0, count)) {
+                            const id = item.commonCollectBoxDetailId || item.detailId || item.id;
+                            if (id) ids.push(String(id));
+                        }
+                    }
+
+                    // 如果 Vue 数据获取失败，尝试从表格行的 data 属性获取
+                    if (ids.length === 0) {
+                        const rows = document.querySelectorAll(
+                            '.vue-recycle-scroller__item-view, .el-table__row, tr[data-row-key]'
+                        );
+                        for (const row of Array.from(rows).slice(0, count)) {
+                            const id = row.dataset?.rowKey || row.dataset?.id ||
+                                       row.getAttribute('data-row-key') ||
+                                       row.getAttribute('data-id');
+                            if (id) ids.push(String(id));
+                        }
+                    }
+
+                    return ids;
+                }""",
+                count,
+            )
+
+            if detail_ids:
+                logger.info(f"从 DOM 提取到 {len(detail_ids)} 个产品 ID")
+                return detail_ids
+
+            logger.warning("无法从 DOM 提取产品 ID")
+            return []
+
+        except Exception as exc:
+            logger.error(f"从 DOM 提取产品 ID 失败: {exc}")
+            return []

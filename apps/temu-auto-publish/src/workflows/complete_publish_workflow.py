@@ -1675,26 +1675,50 @@ class CompletePublishWorkflow:
         api_success = True
         api_failures: list[str] = []
 
-        # 每个商品需要认领 claim_times 次
-        for claim_round in range(1, self.claim_times + 1):
-            logger.info(f"API 认领第 {claim_round}/{self.claim_times} 轮")
-            try:
-                result = await miaoshou_ctrl.claim_products_via_api(
-                    page,
-                    count=selection_count,
-                    platform="pddkj",
-                    owner_account=filter_owner,
-                )
-                if result.get("success"):
-                    claimed_count = result.get("claimed_count", 0)
-                    total_claimed += claimed_count
-                    logger.success(f"第 {claim_round} 轮 API 认领成功: {claimed_count} 个产品")
-                else:
-                    api_failures.append(f"第 {claim_round} 轮失败: {result.get('message')}")
-                    logger.warning(f"第 {claim_round} 轮 API 认领失败: {result.get('message')}")
-            except Exception as exc:
-                api_failures.append(f"第 {claim_round} 轮异常: {exc}")
-                logger.error(f"第 {claim_round} 轮 API 认领异常: {exc}")
+        # Step 1: 先用 DOM 操作筛选人员
+        logger.info("Step 1: DOM 筛选人员 -> 点击搜索")
+        navigation_ok = await miaoshou_ctrl.navigate_and_filter_collection_box(
+            page,
+            filter_by_user=filter_owner,
+            switch_to_tab="unclaimed",
+        )
+        if not navigation_ok:
+            logger.warning("DOM 筛选导航失败，尝试备用方式")
+            await miaoshou_ctrl.refresh_collection_box(page, filter_owner=filter_owner)
+
+        await page.wait_for_timeout(1500)
+
+        # Step 2: 从 DOM 提取筛选后的产品 ID
+        logger.info("Step 2: 从 DOM 提取产品 ID")
+        detail_ids = await miaoshou_ctrl.extract_product_ids_from_dom(
+            page, count=selection_count
+        )
+
+        if not detail_ids:
+            logger.warning("无法从 DOM 提取产品 ID，回退到 DOM 认领模式")
+            api_success = False
+        else:
+            logger.info(f"提取到 {len(detail_ids)} 个产品 ID: {detail_ids[:3]}...")
+
+            # Step 3: 使用 API 认领指定的产品 ID
+            for claim_round in range(1, self.claim_times + 1):
+                logger.info(f"API 认领第 {claim_round}/{self.claim_times} 轮")
+                try:
+                    result = await miaoshou_ctrl.claim_specific_products_via_api(
+                        page,
+                        detail_ids=detail_ids,
+                        platform="pddkj",
+                    )
+                    if result.get("success"):
+                        claimed_count = result.get("claimed_count", 0)
+                        total_claimed += claimed_count
+                        logger.success(f"第 {claim_round} 轮 API 认领成功: {claimed_count} 个产品")
+                    else:
+                        api_failures.append(f"第 {claim_round} 轮失败: {result.get('message')}")
+                        logger.warning(f"第 {claim_round} 轮 API 认领失败: {result.get('message')}")
+                except Exception as exc:
+                    api_failures.append(f"第 {claim_round} 轮异常: {exc}")
+                    logger.error(f"第 {claim_round} 轮 API 认领异常: {exc}")
 
         # 判断 API 认领结果
         expected_total = selection_count * self.claim_times
@@ -1723,11 +1747,12 @@ class CompletePublishWorkflow:
         # ==================== API 失败，回退到 DOM 模式 ====================
         logger.warning("API 认领失败，回退到 DOM 模式")
 
-        # 使用和首次编辑相同的导航和筛选方式，确保看到相同的商品列表
+        # 已在 API 模式中完成导航和筛选，无需重复
+        # 但需要确保在 unclaimed tab
         navigation_success = await miaoshou_ctrl.navigate_and_filter_collection_box(
             page,
             filter_by_user=filter_owner,
-            switch_to_tab="all",
+            switch_to_tab="unclaimed",
         )
         if not navigation_success:
             logger.warning("认领阶段导航/筛选失败，尝试备用方式")

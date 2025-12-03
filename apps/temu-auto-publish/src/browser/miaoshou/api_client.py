@@ -370,7 +370,11 @@ class MiaoshouApiClient:
 
         # 客户端筛选：如果指定了 owner_account，按 ownerSubAccountAliasName 过滤
         if owner_account:
+            # 提取名字部分（去掉账号），支持 "李英亮(lyl123456789)" 格式
             owner_filter = owner_account.strip()
+            if "(" in owner_filter:
+                owner_filter = owner_filter.split("(")[0].strip()
+
             filtered_items = [
                 item for item in items
                 if owner_filter in (item.get("ownerSubAccountAliasName") or "")
