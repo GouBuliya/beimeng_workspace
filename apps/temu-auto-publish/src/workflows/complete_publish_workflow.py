@@ -1134,40 +1134,65 @@ class CompletePublishWorkflow:
             }
             return StageOutcome("stage1_first_edit", True, "首次编辑已跳过", details), placeholders
 
-        # API 模式首次编辑
+        # API 模式首次编辑（带重试机制）
         if self.use_api_first_edit:
-            logger.info("使用 API 模式执行首次编辑...")
-            api_result = await run_first_edit_via_api(
-                page,
-                list(working_selections),
-                filter_owner=staff_name,
-                max_count=self.collect_count,  # 每轮处理数量（默认 5）
-                start_offset=start_offset,  # 当前轮次的起始偏移
-            )
+            max_api_retries = 3
+            api_result = None
 
-            if api_result.success:
-                # 构建占位符编辑结果
-                placeholders = self._build_placeholder_edits(selections)
-                details = {
-                    "owner": staff_name,
-                    "edited_products": [prod.to_payload() for prod in placeholders],
-                    "errors": api_result.error_details,
-                    "api_mode": True,
-                    "api_success_count": api_result.success_count,
-                    "api_failed_count": api_result.failed_count,
-                }
-                return (
-                    StageOutcome(
-                        "stage1_first_edit",
-                        True,
-                        f"API 模式首次编辑完成: 成功 {api_result.success_count}",
-                        details,
-                    ),
-                    placeholders,
+            for attempt in range(max_api_retries):
+                logger.info(f"使用 API 模式执行首次编辑... (尝试 {attempt + 1}/{max_api_retries})")
+                api_result = await run_first_edit_via_api(
+                    page,
+                    list(working_selections),
+                    filter_owner=staff_name,
+                    max_count=self.collect_count,  # 每轮处理数量（默认 5）
+                    start_offset=start_offset,  # 当前轮次的起始偏移
                 )
-            else:
-                logger.warning("API 模式首次编辑失败，回退到 DOM 模式")
-                # 继续执行原有的 DOM 模式
+
+                # 判断是否有成功的产品（部分成功也算成功，不回退 DOM）
+                if api_result.success_count > 0:
+                    # 构建占位符编辑结果
+                    placeholders = self._build_placeholder_edits(selections)
+                    details = {
+                        "owner": staff_name,
+                        "edited_products": [prod.to_payload() for prod in placeholders],
+                        "errors": api_result.error_details,
+                        "api_mode": True,
+                        "api_success_count": api_result.success_count,
+                        "api_failed_count": api_result.failed_count,
+                        "api_attempts": attempt + 1,
+                    }
+                    # 根据是否有失败，生成不同的消息
+                    if api_result.failed_count > 0:
+                        msg = (
+                            f"API 模式首次编辑部分成功: "
+                            f"{api_result.success_count} 成功, {api_result.failed_count} 失败"
+                        )
+                        logger.warning(msg)
+                    else:
+                        msg = f"API 模式首次编辑完成: 成功 {api_result.success_count}"
+                    return (
+                        StageOutcome(
+                            "stage1_first_edit",
+                            True,
+                            msg,
+                            details,
+                        ),
+                        placeholders,
+                    )
+                else:
+                    # 全部失败才重试或回退
+                    if attempt < max_api_retries - 1:
+                        logger.warning(
+                            f"API 模式首次编辑全部失败 (尝试 {attempt + 1}/{max_api_retries})，"
+                            f"等待 2 秒后重试..."
+                        )
+                        await asyncio.sleep(2)
+                    else:
+                        logger.warning(
+                            f"API 模式首次编辑在 {max_api_retries} 次尝试后仍然全部失败，回退到 DOM 模式"
+                        )
+                        # 继续执行原有的 DOM 模式
 
         # 导航到采集箱并筛选（带登录兜底机制）
         navigation_success = await miaoshou_ctrl.navigate_and_filter_collection_box(
