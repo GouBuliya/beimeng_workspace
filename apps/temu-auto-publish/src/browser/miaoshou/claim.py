@@ -344,8 +344,8 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
     async def _select_checkboxes_by_js(self, page: Page, indexes: list[int]) -> int:
         """使用 JavaScript 批量勾选复选框(带自动滚动).
 
-        支持 page-mode(页面级滚动)和容器级滚动两种模式.
-        通过动态检测行高偏移来精确定位目标行.
+        【第五轮重构】复用 _click_claim_button_in_row_by_js 的定位逻辑，
+        确保与首次编辑的定位方式完全一致。
 
         Args:
             page: Playwright 页面对象
@@ -354,6 +354,18 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
         Returns:
             成功勾选的数量
         """
+        selected = 0
+        for idx in indexes:
+            result = await self._click_claim_button_in_row_by_js(page, idx, target="checkbox")
+            if result.get("success"):
+                selected += 1
+                logger.debug(f"✓ 复选框勾选成功: index={idx}")
+            else:
+                logger.warning(f"✗ 复选框勾选失败: index={idx}, error={result.get('error')}")
+        return selected
+
+    async def _select_checkboxes_by_js_legacy(self, page: Page, indexes: list[int]) -> int:
+        """【已废弃】旧版批量勾选复选框逻辑，保留以备回滚."""
         try:
             js_code = """
             async (indexes) => {
@@ -625,114 +637,12 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
             return 0
 
     async def _click_checkbox_by_js(self, page: Page, index: int) -> bool:
-        """使用 JavaScript 滚动到目标位置并点击复选框."""
-        try:
-            js_code = """
-            async (index) => {
-                const DEFAULT_ROW_HEIGHT = 128;
+        """使用 JavaScript 滚动到目标位置并点击复选框.
 
-                // 【第四轮修复】虚拟列表顶部偏移补偿
-                const TOP_OFFSET_ROWS = 2;
-
-                const scroller = document.querySelector('.vue-recycle-scroller') ||
-                                document.querySelector('.vue-recycle-scroller__item-wrapper')?.parentElement;
-
-                if (!scroller) return false;
-
-                // 获取可见行
-                // 关键修复: 只选择包含复选框的行
-                const getVisibleRows = () => {
-                    const rows = document.querySelectorAll('.vue-recycle-scroller__item-view');
-                    const visibleRows = [];
-                    rows.forEach(row => {
-                        // 只选择包含复选框的行
-                        const hasCheckbox = row.querySelector('.is-selection-column') !== null ||
-                                          row.querySelector('.jx-checkbox') !== null;
-                        if (!hasCheckbox) return;
-
-                        const style = row.getAttribute('style') || '';
-                        const match = style.match(/translateY\\((-?\\d+(?:\\.\\d+)?)\\s*(?:px)?\\s*\\)/);
-                        if (match) {
-                            const y = parseFloat(match[1]);
-                            if (y >= 0) visibleRows.push({ row, y });
-                        }
-                    });
-                    visibleRows.sort((a, b) => a.y - b.y);
-                    return visibleRows;
-                };
-
-                // 动态检测实际行高
-                const detectRowHeight = () => {
-                    const visibleRows = getVisibleRows();
-                    if (visibleRows.length >= 2) {
-                        const diffs = [];
-                        for (let i = 1; i < visibleRows.length; i++) {
-                            const diff = visibleRows[i].y - visibleRows[i-1].y;
-                            if (diff > 50 && diff < 300) diffs.push(diff);
-                        }
-                        if (diffs.length > 0) {
-                            diffs.sort((a, b) => a - b);
-                            return diffs[Math.floor(diffs.length / 2)];
-                        }
-                    }
-                    if (visibleRows.length >= 1) {
-                        const rect = visibleRows[0].row.getBoundingClientRect();
-                        if (rect.height > 50 && rect.height < 300) return rect.height;
-                    }
-                    return DEFAULT_ROW_HEIGHT;
-                };
-
-                const ROW_HEIGHT = detectRowHeight();
-
-                // 【第四轮修复】计算顶部偏移
-                const TOP_OFFSET_Y = TOP_OFFSET_ROWS * ROW_HEIGHT;
-
-                // 滚动到目标位置（加上顶部偏移）
-                scroller.scrollTop = index * ROW_HEIGHT + TOP_OFFSET_Y;
-                await new Promise(r => setTimeout(r, 200));
-
-                // 重新获取可见行
-                const visibleRows = getVisibleRows();
-                if (visibleRows.length === 0) return false;
-
-                // 基于索引推断找到目标行（加上顶部偏移）
-                const targetY = index * ROW_HEIGHT + TOP_OFFSET_Y;
-                let targetRow = null;
-
-                // 方法1: Y坐标匹配
-                for (const item of visibleRows) {
-                    if (Math.abs(item.y - targetY) < ROW_HEIGHT * 0.7) {
-                        targetRow = item.row;
-                        break;
-                    }
-                }
-
-                // 方法2: 基于推断索引匹配（减去顶部偏移）
-                if (!targetRow) {
-                    for (const item of visibleRows) {
-                        const inferredIdx = Math.round((item.y - TOP_OFFSET_Y) / ROW_HEIGHT);
-                        if (inferredIdx === index) {
-                            targetRow = item.row;
-                            break;
-                        }
-                    }
-                }
-
-                // 回退: 使用第一个可见行
-                if (!targetRow) targetRow = visibleRows[0].row;
-
-                const checkbox = targetRow.querySelector('.jx-checkbox__inner') ||
-                                targetRow.querySelector('.jx-checkbox');
-                if (checkbox) {
-                    checkbox.click();
-                    return true;
-                }
-                return false;
-            }
-            """
-            return await page.evaluate(js_code, index)
-        except Exception:
-            return False
+        【第五轮重构】复用 _click_claim_button_in_row_by_js 的定位逻辑。
+        """
+        result = await self._click_claim_button_in_row_by_js(page, index, target="checkbox")
+        return result.get("success", False)
 
     async def _click_claim_button_in_row_by_js(
         self,
