@@ -1288,6 +1288,72 @@ class MiaoshouApiClient:
             logger.error(f"保存产品编辑失败: {e}")
             return {"result": "error", "message": str(e)}
 
+    async def get_shop_list(
+        self,
+        platform: str = "pddkj",
+    ) -> dict[str, Any]:
+        """获取已授权店铺列表.
+
+        调用 /api/auth/shop/getShopList 获取当前账号下已绑定的店铺列表。
+
+        Args:
+            platform: 平台代码，默认 pddkj（Temu）
+
+        Returns:
+            API 响应，格式为:
+            {
+                "result": "success",
+                "shopList": [
+                    {
+                        "shopId": "9134811",
+                        "platformShopId": "634418225064255",
+                        "platformShopName": "Crafty DIY Shop",
+                        "shopNick": "店铺昵称",
+                        "authStatus": "valid",
+                        ...
+                    },
+                    ...
+                ]
+            }
+
+        Examples:
+            >>> client = await MiaoshouApiClient.from_cookie_file()
+            >>> result = await client.get_shop_list()
+            >>> shops = result.get("shopList", [])
+            >>> for shop in shops:
+            ...     print(f"{shop['shopId']}: {shop['platformShopName']}")
+        """
+        client = await self._get_client()
+
+        try:
+            response = await client.post(
+                "/api/auth/shop/getShopList",
+                data={
+                    "pageNo": "1",
+                    "pageSize": "100000",
+                    "platform": platform,
+                    "includeShopeeGlobal": "0",
+                    "excludeShopeeCnscShop": "0",
+                },
+            )
+            response.raise_for_status()
+            result = response.json()
+
+            if result.get("result") == "success":
+                shop_list = result.get("shopList", [])
+                logger.info(f"获取店铺列表成功: 共 {len(shop_list)} 个店铺")
+            else:
+                logger.warning(f"获取店铺列表失败: {result.get('message', '未知错误')}")
+
+            return result
+
+        except httpx.HTTPStatusError as e:
+            logger.error(f"获取店铺列表 HTTP 错误: {e.response.status_code}")
+            return {"result": "error", "message": f"HTTP {e.response.status_code}"}
+        except Exception as e:
+            logger.error(f"获取店铺列表失败: {e}")
+            return {"result": "error", "message": str(e)}
+
     async def __aenter__(self) -> MiaoshouApiClient:
         """异步上下文管理器入口."""
         return self

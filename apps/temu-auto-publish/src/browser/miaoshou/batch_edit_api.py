@@ -193,16 +193,32 @@ async def run_batch_edit_via_api(
                     if type_options:
                         outer_package_type = type_options[0].get("key")
 
-            # Step 6: 构建编辑数据
+            # Step 6: 获取店铺列表（默认全选）
+            shop_ids: list[str] = []
+            shop_result = await client.get_shop_list(platform="pddkj")
+            if shop_result.get("result") == "success":
+                shop_list = shop_result.get("shopList", [])
+                # 只选择授权状态有效的店铺
+                shop_ids = [
+                    str(shop.get("shopId"))
+                    for shop in shop_list
+                    if shop.get("authStatus") == "valid" and shop.get("shopId")
+                ]
+                logger.info(f"API 批量编辑: 已获取 {len(shop_ids)} 个有效店铺")
+            else:
+                logger.warning("获取店铺列表失败，将使用默认店铺")
+
+            # Step 7: 构建编辑数据
             logger.info("API 批量编辑: 构建编辑数据...")
             edit_data = _build_edit_payload(
                 payload,
                 uploaded_files=uploaded_files,
                 outer_package_shape=outer_package_shape,
                 outer_package_type=outer_package_type,
+                shop_ids=shop_ids,
             )
 
-            # Step 7: 批量保存编辑
+            # Step 8: 批量保存编辑
             logger.info("API 批量编辑: 保存编辑数据...")
             edit_result = await client.batch_edit_products(
                 detail_ids=detail_ids,
@@ -287,7 +303,7 @@ def _build_edit_payload(
     uploaded_files: dict[str, Any] | None = None,
     outer_package_shape: int | None = None,
     outer_package_type: int | None = None,
-    shop_id: str = "9134811",
+    shop_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     """从业务 payload 构建 API 编辑数据.
 
@@ -296,7 +312,7 @@ def _build_edit_payload(
         uploaded_files: 已上传的文件 URL
         outer_package_shape: 外包装形状 key
         outer_package_type: 外包装类型 key
-        shop_id: 发布目标店铺 ID（默认 9134811）
+        shop_ids: 发布目标店铺 ID 列表（默认全选已授权店铺）
 
     Returns:
         API 可接受的编辑字段字典
@@ -323,8 +339,12 @@ def _build_edit_payload(
     edit_data["firstType"] = ""
     edit_data["twiceType"] = ""
 
-    # 店铺列表（发布时必需）
-    edit_data["collectBoxDetailShopList"] = [{"shopId": shop_id}]
+    # 店铺列表（发布时必需，默认全选已授权店铺）
+    if shop_ids:
+        edit_data["collectBoxDetailShopList"] = [{"shopId": sid} for sid in shop_ids]
+    else:
+        # 如果没有获取到店铺列表，使用默认店铺
+        edit_data["collectBoxDetailShopList"] = [{"shopId": "9134811"}]
 
     # 外包装图片
     outer_package_url = uploaded_files.get("outer_package_url")
