@@ -829,9 +829,10 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                     // 【第六轮修复】直接获取所有可见复选框，用相同的索引逻辑定位
                     // 不依赖 targetRow，因为复选框可能在独立的固定列容器中
 
-                    // 获取所有复选框元素
+                    // 获取所有复选框元素（排除表头的"全选"复选框）
+                    // 只选择虚拟列表行内的复选框，避免索引偏移
                     const allCheckboxes = Array.from(
-                        document.querySelectorAll('.jx-checkbox__inner')
+                        document.querySelectorAll('.vue-recycle-scroller__item-view .jx-checkbox__inner')
                     );
 
                     if (allCheckboxes.length === 0) {
