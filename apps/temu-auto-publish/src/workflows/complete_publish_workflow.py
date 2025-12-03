@@ -1713,33 +1713,44 @@ class CompletePublishWorkflow:
         # 从页面表格提取产品 ID
         if total_available > 0:
             # 使用 JS 从表格提取所有产品 ID
+            # 根据页面结构，ID 在文本 "采集箱产品ID: XXXXXXX" 中
             extracted_ids = await page.evaluate("""
             () => {
                 const ids = [];
-                // 尝试从表格行提取 data-id 或 checkbox value
-                const rows = document.querySelectorAll('tr[data-id], .el-table__row');
-                rows.forEach(row => {
-                    const id = row.getAttribute('data-id')
-                        || row.querySelector('input[type="checkbox"]')?.value
-                        || row.querySelector('[data-detail-id]')?.getAttribute('data-detail-id');
-                    if (id) ids.push(id);
-                });
-                // 如果没找到，尝试从 checkbox 获取
+                // 方法1: 从文本 "采集箱产品ID: XXXXXXX" 提取
+                const allText = document.body.innerText;
+                const idMatches = allText.match(/采集箱产品ID[:：]\\s*(\\d+)/g);
+                if (idMatches) {
+                    idMatches.forEach(match => {
+                        const id = match.match(/\\d+/);
+                        if (id) ids.push(id[0]);
+                    });
+                }
+                // 方法2: 如果方法1失败，尝试从 data 属性获取
+                if (ids.length === 0) {
+                    document.querySelectorAll('[data-id], [data-detail-id]').forEach(el => {
+                        const id = el.getAttribute('data-id') || el.getAttribute('data-detail-id');
+                        if (id && !ids.includes(id)) ids.push(id);
+                    });
+                }
+                // 方法3: 从 checkbox 获取
                 if (ids.length === 0) {
                     document.querySelectorAll('.el-checkbox__original').forEach(cb => {
-                        if (cb.value && cb.value !== 'on') ids.push(cb.value);
+                        if (cb.value && cb.value !== 'on' && !ids.includes(cb.value)) {
+                            ids.push(cb.value);
+                        }
                     });
                 }
                 return ids;
             }
             """)
-            logger.info(f"从 DOM 提取到 {len(extracted_ids)} 个产品 ID")
+            logger.info(f"从 DOM 提取到 {len(extracted_ids)} 个产品 ID: {extracted_ids[:3]}...")
 
             if len(extracted_ids) > start_offset:
                 detail_ids = extracted_ids[start_offset : start_offset + selection_count]
             else:
                 # DOM 提取失败，尝试使用索引方式
-                logger.warning("DOM 提取 ID 不足，将使用索引方式认领")
+                logger.warning(f"DOM 提取 ID 不足 ({len(extracted_ids)}个)，将使用索引方式认领")
 
         if not detail_ids:
             logger.warning("无法获取产品 ID，认领阶段失败")
