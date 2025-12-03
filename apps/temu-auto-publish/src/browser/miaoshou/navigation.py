@@ -844,15 +844,15 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
             return False
 
     async def _click_edit_button_by_js(self, page: Page, index: int) -> bool:
-        """基于 DOM 顺序定位并点击第 index 个商品的编辑按钮.
+        """基于实际滚动位置和视觉排序定位并点击第 index 个商品的编辑按钮.
 
-        核心算法（重构后）：
+        核心算法（第二轮重构）：
         1. 滚动到目标位置
-        2. 获取所有可见行并按 translateY 排序
-        3. 计算基准索引 baseIndex = round(第一行Y / ROW_HEIGHT)
-        4. 定位目标行 targetRow = sortedRows[index - baseIndex]
+        2. 使用 actualScrollTop 计算视口起始索引（不依赖 translateY）
+        3. 获取可见行并按视觉位置（getBoundingClientRect）排序
+        4. 根据相对索引定位目标行
 
-        关键改进：不依赖单个行的 translateY 精确值，而是利用行的相对顺序定位。
+        关键改进：不依赖 translateY 值，使用实际滚动位置和视觉位置排序。
 
         Args:
             page: Playwright 页面对象
@@ -875,6 +875,7 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
 
                 let scrollerInfo = '';
                 let actualScrollTop = 0;
+                let scrollContainer = null;
 
                 // 执行滚动
                 if (isPageMode) {
@@ -890,6 +891,7 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                             scrollParent.scrollTop = targetScrollTop;
                             await new Promise(r => setTimeout(r, 800));
                             actualScrollTop = scrollParent.scrollTop;
+                            scrollContainer = scrollParent;
                             scrollerInfo = `parent: ${scrollParent.className.split(' ')[0] || scrollParent.tagName}`;
                             foundScrollable = true;
                             break;
@@ -908,31 +910,44 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                         recycleScroller.scrollTop = targetScrollTop;
                         await new Promise(r => setTimeout(r, 800));
                         actualScrollTop = recycleScroller.scrollTop;
+                        scrollContainer = recycleScroller;
                         scrollerInfo = 'vue-recycle-scroller';
                     }
                 }
 
-                // 获取所有行并解析 translateY
+                // 获取所有行
                 const rows = Array.from(
                     document.querySelectorAll('.vue-recycle-scroller__item-view')
                 );
 
-                const rowsWithY = rows.map(row => {
-                    const style = row.getAttribute('style') || '';
-                    const match = style.match(/translateY\\((-?\\d+(?:\\.\\d+)?)\\s*(?:px)?\\s*\\)/);
-                    const y = match ? parseFloat(match[1]) : -9999;
-                    return { row, y };
-                });
-
-                // 过滤有效行（translateY >= 0 且不是被回收的行）
-                const validRows = rowsWithY
-                    .filter(item => item.y >= 0 && item.y < 100000)
-                    .sort((a, b) => a.y - b.y);
-
-                if (validRows.length === 0) {
+                if (rows.length === 0) {
                     return {
                         success: false,
-                        error: '没有找到有效的商品行',
+                        error: '没有找到商品行元素',
+                        scrollerInfo,
+                        isPageMode,
+                        targetScrollTop,
+                        actualScrollTop
+                    };
+                }
+
+                // 【关键改进】使用视觉位置排序（getBoundingClientRect），而非 translateY
+                const visibleRows = rows.map(row => {
+                    const rect = row.getBoundingClientRect();
+                    return {
+                        row,
+                        top: rect.top,
+                        bottom: rect.bottom
+                    };
+                }).filter(r => {
+                    // 过滤视口内的行（包括部分可见的）
+                    return r.bottom > 0 && r.top < window.innerHeight + ROW_HEIGHT;
+                }).sort((a, b) => a.top - b.top);  // 按视觉位置排序
+
+                if (visibleRows.length === 0) {
+                    return {
+                        success: false,
+                        error: '视口内没有可见的商品行',
                         scrollerInfo,
                         isPageMode,
                         targetScrollTop,
@@ -941,47 +956,48 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                     };
                 }
 
-                // 计算基准索引（排序后第一行对应的商品索引）
-                const baseIndex = Math.round(validRows[0].y / ROW_HEIGHT);
-                const relativeIndex = index - baseIndex;
+                // 【关键改进】使用 actualScrollTop 计算视口起始索引
+                const viewportStartIndex = Math.floor(actualScrollTop / ROW_HEIGHT);
+                const targetVisualIndex = index - viewportStartIndex;
 
                 // 调试信息
                 const debugInfo = {
-                    baseIndex,
-                    relativeIndex,
-                    validRowCount: validRows.length,
-                    firstRowY: validRows[0].y,
-                    allYValues: validRows.map(r => r.y)
+                    viewportStartIndex,
+                    targetVisualIndex,
+                    visibleRowCount: visibleRows.length,
+                    actualScrollTop,
+                    firstRowTop: Math.round(visibleRows[0].top),
+                    allTops: visibleRows.map(r => Math.round(r.top))
                 };
 
-                // 边界检查
-                if (relativeIndex < 0) {
+                // 边界检查与自动调整
+                if (targetVisualIndex < 0) {
+                    // 需要向上滚动 - 尝试调整
                     return {
                         success: false,
-                        error: `相对索引越界: relativeIndex=${relativeIndex} < 0 (需要向上滚动)`,
+                        error: `目标行在视口上方: targetVisualIndex=${targetVisualIndex} < 0`,
                         scrollerInfo,
                         isPageMode,
                         targetScrollTop,
-                        actualScrollTop,
                         ...debugInfo
                     };
                 }
 
-                if (relativeIndex >= validRows.length) {
+                if (targetVisualIndex >= visibleRows.length) {
+                    // 需要向下滚动 - 尝试调整
                     return {
                         success: false,
-                        error: `相对索引越界: relativeIndex=${relativeIndex} >= validRows=${validRows.length} (需要向下滚动)`,
+                        error: `目标行在视口下方: targetVisualIndex=${targetVisualIndex} >= visibleRows=${visibleRows.length}`,
                         scrollerInfo,
                         isPageMode,
                         targetScrollTop,
-                        actualScrollTop,
                         ...debugInfo
                     };
                 }
 
                 // 定位目标行
-                const targetRow = validRows[relativeIndex].row;
-                const matchedY = validRows[relativeIndex].y;
+                const targetRow = visibleRows[targetVisualIndex].row;
+                const matchedTop = visibleRows[targetVisualIndex].top;
 
                 // 在行内查找编辑按钮
                 const editBtn = targetRow.querySelector('.J_commonCollectBoxEdit');
@@ -991,7 +1007,7 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                         success: false,
                         error: '目标行内未找到编辑按钮 (.J_commonCollectBoxEdit)',
                         scrollerInfo,
-                        matchedY,
+                        matchedTop: Math.round(matchedTop),
                         ...debugInfo
                     };
                 }
@@ -1005,8 +1021,8 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                     isPageMode,
                     targetScrollTop,
                     actualScrollTop,
-                    matchedY,
-                    matchMethod: 'dom-order',
+                    matchedTop: Math.round(matchedTop),
+                    matchMethod: 'visual-position',
                     ...debugInfo
                 };
             }
@@ -1016,23 +1032,26 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
 
             if result.get("success"):
                 logger.success(
-                    f"✓ [DOM顺序定位] 点击成功, index={index}, "
-                    f"baseIndex={result.get('baseIndex')}, relativeIndex={result.get('relativeIndex')}, "
-                    f"有效行数={result.get('validRowCount')}, 第一行Y={result.get('firstRowY')}, "
-                    f"匹配Y={result.get('matchedY')}px, 容器={result.get('scrollerInfo')}"
+                    f"✓ [视觉位置定位] 点击成功, index={index}, "
+                    f"viewportStartIndex={result.get('viewportStartIndex')}, "
+                    f"targetVisualIndex={result.get('targetVisualIndex')}, "
+                    f"可见行数={result.get('visibleRowCount')}, "
+                    f"actualScrollTop={result.get('actualScrollTop')}px, "
+                    f"matchedTop={result.get('matchedTop')}px"
                 )
                 return True
             else:
                 logger.warning(
-                    f"[DOM顺序定位] 点击失败: {result.get('error')}, "
-                    f"index={index}, baseIndex={result.get('baseIndex')}, "
-                    f"relativeIndex={result.get('relativeIndex')}, "
-                    f"有效行数={result.get('validRowCount')}, Y值列表={result.get('allYValues')}"
+                    f"[视觉位置定位] 点击失败: {result.get('error')}, "
+                    f"index={index}, viewportStartIndex={result.get('viewportStartIndex')}, "
+                    f"targetVisualIndex={result.get('targetVisualIndex')}, "
+                    f"可见行数={result.get('visibleRowCount')}, "
+                    f"tops={result.get('allTops')}"
                 )
                 return False
 
         except Exception as exc:
-            logger.warning(f"[DOM顺序定位] JS 执行异常: {exc}")
+            logger.warning(f"[视觉位置定位] JS 执行异常: {exc}")
             return False
 
     async def _click_edit_button_in_row(
