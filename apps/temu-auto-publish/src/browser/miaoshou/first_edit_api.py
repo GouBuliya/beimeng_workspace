@@ -15,6 +15,8 @@
 
 from __future__ import annotations
 
+import contextlib
+import re
 import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -22,7 +24,6 @@ from typing import TYPE_CHECKING, Any
 from loguru import logger
 from playwright.async_api import Page
 
-from ...data_processor.price_calculator import PriceResult
 from ...data_processor.random_generator import RandomDataGenerator
 from ...data_processor.selection_table_reader import ProductSelectionRow
 from .api_client import MiaoshouApiClient
@@ -31,41 +32,31 @@ if TYPE_CHECKING:
     from playwright.async_api import BrowserContext
 
 
-def _has_model_suffix(title: str, model_number: str) -> bool:
-    """检查标题是否已包含型号后缀.
+def _strip_model_suffix(title: str) -> str:
+    """移除标题末尾的所有型号后缀（如 A055 A068 A073）.
 
-    支持的后缀格式:
-    - 完整型号匹配: "A026"
-    - 复合型号匹配: "A045/A046" 中的任一部分
-    - 末尾匹配: 标题以型号结尾
+    型号后缀格式: 空格 + A/a + 数字（可能有多个连续）
 
     Args:
         title: 原标题
-        model_number: 型号编号（可能包含 "/" 分隔的多个型号）
 
     Returns:
-        True 如果标题已包含型号后缀
+        移除型号后缀后的标题
 
     Examples:
-        >>> _has_model_suffix("收纳柜 A026", "A026")
-        True
-        >>> _has_model_suffix("洗衣篮 A045", "A045/A046")
-        True
-        >>> _has_model_suffix("收纳柜", "A026")
-        False
+        >>> _strip_model_suffix("猫厕所 A055")
+        '猫厕所'
+        >>> _strip_model_suffix("猫厕所 A055 A068 A073")
+        '猫厕所'
+        >>> _strip_model_suffix("猫厕所")
+        '猫厕所'
     """
-    if not title or not model_number:
-        return False
-
-    # 处理复合型号（如 "A045/A046"）
-    model_parts = [m.strip() for m in model_number.split("/") if m.strip()]
-
-    for model_part in model_parts:
-        # 检查型号是否在标题中（精确匹配或作为单词边界）
-        if model_part in title:
-            return True
-
-    return False
+    if not title:
+        return title
+    # 移除标题末尾的所有型号后缀（空格 + A/a + 数字，可能有多个）
+    # 例如: " A055 A068 A073" 或 " A045/A046"
+    cleaned = re.sub(r"(\s+[Aa]\d+(/[Aa]\d+)?)+\s*$", "", title)
+    return cleaned.strip()
 
 
 @dataclass
@@ -382,16 +373,16 @@ def _update_product_detail(
     # 更新标题（始终执行，即使没有选品数据也添加默认型号后缀）
     # 注意：不使用 title_generator，因为会导致 [TEMU_AI:...] 重复嵌套
     # 参考 DOM 模式的 _fill_title()，直接在原标题后追加型号
+    # 重要：先移除所有已有的型号后缀，再追加当前选品的型号
+    # 这样可以避免多次运行时型号累积（如 A055 A068 A073）
     original_title = detail.get("title", "")
     if selection and selection.model_number:
-        model_suffix = f" {selection.model_number}"
-        # 检查标题是否已包含型号后缀，避免重复添加
-        # 支持的后缀格式: A026, A045/A046, A057 等
-        if _has_model_suffix(original_title, selection.model_number):
-            logger.debug(f"标题已包含型号后缀，跳过追加: {selection.model_number}")
-        else:
-            detail["title"] = original_title + model_suffix
-            logger.debug(f"更新标题: 追加型号 {selection.model_number}")
+        # 先移除标题末尾已有的型号后缀
+        clean_title = _strip_model_suffix(original_title)
+        # 追加当前选品的型号
+        new_title = f"{clean_title} {selection.model_number}"
+        detail["title"] = new_title
+        logger.debug(f"更新标题: '{original_title[:30]}...' -> '{new_title[:30]}...'")
     else:
         logger.debug("保持原标题（无选品数据）")
 
@@ -514,20 +505,29 @@ def _update_product_detail(
 
             logger.debug(f"更新规格选项: {spec_options}")
 
-    # 更新 skuMap（始终执行库存、重量、尺寸更新）
+    # 更新 skuMap（始终执行库存、重量、尺寸、价格更新）
     sku_map = detail.get("skuMap", {})
     if isinstance(sku_map, dict) and sku_map:
-        # 计算价格（如果有选品数据）
-        sale_price = None
-        if selection and selection.cost_price:
-            price_info = PriceResult.calculate(selection.cost_price)
-            sale_price = str(price_info.suggested_price)
-
         for _sku_key, sku_data in sku_map.items():
             if isinstance(sku_data, dict):
-                # 更新价格（仅当有选品数据时）
-                if sale_price:
-                    sku_data["price"] = sale_price
+                # 计算建议售价 = 当前供货价 × 10
+                # 优先使用选品表的成本价，否则使用 SKU 原价
+                current_price = None
+                if selection and selection.cost_price:
+                    current_price = float(selection.cost_price)
+                else:
+                    # 从 SKU 原价获取（originPrice 或 price）
+                    origin_price = sku_data.get("originPrice") or sku_data.get("price")
+                    if origin_price:
+                        with contextlib.suppress(ValueError, TypeError):
+                            current_price = float(origin_price)
+
+                if current_price:
+                    # 建议售价 = 当前供货价 × 10
+                    suggested_price = round(current_price * 10, 2)
+                    sku_data["price"] = str(int(suggested_price))
+                    logger.debug(f"SKU 价格: {current_price} × 10 = {suggested_price}")
+
                 # 始终更新库存
                 sku_data["stock"] = "999"
                 # 始终更新重量
@@ -538,8 +538,7 @@ def _update_product_detail(
                 sku_data["packageHeight"] = str(height_cm)
 
         logger.debug(
-            f"更新 SKU: 价格={sale_price or '保持原价'}, 库存=999, "
-            f"重量={weight_g}g, 尺寸={length_cm}x{width_cm}x{height_cm}cm"
+            f"更新 SKU: 库存=999, 重量={weight_g}g, 尺寸={length_cm}x{width_cm}x{height_cm}cm"
         )
 
     # 更新顶层的重量和尺寸（有些 API 需要这个）
