@@ -52,6 +52,7 @@ from ..browser.first_edit_controller import FirstEditController
 from ..browser.first_edit_dialog_codegen import fill_first_edit_dialog_codegen
 from ..browser.image_manager import ImageManager
 from ..browser.login_controller import LoginController
+from ..browser.miaoshou.batch_edit_api import run_batch_edit_via_api
 from ..browser.miaoshou_controller import MiaoshouController
 from ..browser.publish_controller import PublishController
 
@@ -183,6 +184,7 @@ class CompletePublishWorkflow:
         selection_rows_override: Sequence[ProductSelectionRow] | None = None,
         use_ai_titles: bool = False,
         use_codegen_batch_edit: bool = False,
+        use_api_batch_edit: bool = False,
         skip_first_edit: bool = False,
         only_claim: bool = False,
         only_stage4_publish: bool = False,
@@ -206,6 +208,7 @@ class CompletePublishWorkflow:
             selection_table: 选品表路径,必须由外部提供(Web 上传或 CLI 参数).
             use_ai_titles: 是否启用 AI 生成标题 (失败时自动回退).
             use_codegen_batch_edit: 是否使用 codegen 录制的批量编辑模块 (默认 False, 推荐使用优化后的 BatchEditController).
+            use_api_batch_edit: 是否使用 API 方式执行批量编辑 (默认 False, 仅编辑纯数据字段).
             skip_first_edit: 是否直接跳过首次编辑阶段.
             resume_from_checkpoint: 是否从检查点恢复.
             checkpoint_id: 指定要恢复的检查点ID,为空则使用最新检查点.
@@ -219,6 +222,7 @@ class CompletePublishWorkflow:
         self.settings = settings
         self.use_ai_titles = use_ai_titles
         self.use_codegen_batch_edit = use_codegen_batch_edit
+        self.use_api_batch_edit = use_api_batch_edit
         self.skip_first_edit = skip_first_edit
         self.only_claim = only_claim
         self.only_stage4_publish = only_stage4_publish
@@ -1854,7 +1858,13 @@ class CompletePublishWorkflow:
         batch_edit_ctrl: BatchEditController,
         edited_products: Sequence[EditedProduct],
     ) -> StageOutcome:
-        """阶段 3: Temu 全托管批量编辑 18 步,增加重试保障."""
+        """阶段 3: Temu 全托管批量编辑 18 步,增加重试保障.
+
+        支持三种模式:
+        1. use_api_batch_edit=True: API 模式，仅编辑纯数据字段（最快速）
+        2. use_codegen_batch_edit=True: Codegen DOM 模式（推荐，完整 18 步）
+        3. 默认: Legacy BatchEditController 模式
+        """
 
         if not edited_products:
             message = "无待批量编辑商品,批量编辑阶段跳过"
@@ -1880,6 +1890,40 @@ class CompletePublishWorkflow:
                 logger.warning("无法解析二次编辑阶段的创建人员: {}", exc)
                 filter_owner = None
 
+        # ===== API 批量编辑模式 =====
+        if self.use_api_batch_edit:
+            logger.info("使用 API 方式执行批量编辑（纯数据字段）")
+            payload = self._build_api_batch_edit_payload()
+
+            api_result = await run_batch_edit_via_api(
+                page,
+                payload,
+                filter_owner=filter_owner,
+            )
+
+            success = api_result.get("success", False)
+            edited_count = api_result.get("edited_count", 0)
+            total_count = api_result.get("total_count", 0)
+
+            message = (
+                f"API 批量编辑完成: {edited_count}/{total_count} 个产品"
+                if success
+                else f"API 批量编辑失败: {api_result.get('error', '未知错误')}"
+            )
+
+            return StageOutcome(
+                name="stage3_batch_edit",
+                success=success,
+                message=message,
+                details={
+                    "mode": "api",
+                    "edited_count": edited_count,
+                    "total_count": total_count,
+                    "error": api_result.get("error"),
+                },
+            )
+
+        # ===== DOM 批量编辑模式 =====
         def _build_codegen_payload() -> dict[str, object]:
             manual_source = self.manual_file_override
             manual_path_str = ""
@@ -2274,6 +2318,23 @@ class CompletePublishWorkflow:
         if username:
             return f"{owner}({username})"
         return owner
+
+    def _build_api_batch_edit_payload(self) -> dict[str, object]:
+        """构建 API 批量编辑的 payload.
+
+        Returns:
+            包含类目属性等编辑数据的字典
+        """
+        return {
+            "category_path": ["收纳用品", "收纳篮,箱子,盒子", "盖式储物箱"],
+            "category_attrs": {
+                "product_use": "多用途",
+                "shape": "其他形状",
+                "material": "其他材料",
+                "closure_type": "其他闭合类型",
+                "style": "当代",
+            },
+        }
 
     def _resolve_image_base_dir(self) -> Path:
         """解析图片基础目录路径.
