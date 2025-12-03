@@ -85,6 +85,61 @@ class LoginController:
             logger.warning(f"加载选择器配置失败: {e}")
             return {}
 
+    async def _clear_browser_cache(self, page) -> bool:
+        """清除浏览器缓存和存储，用于登录失败时的兜底重试.
+
+        清除内容包括:
+        - Cookie
+        - LocalStorage
+        - SessionStorage
+        - 缓存（通过 CDP）
+
+        Args:
+            page: Playwright 页面对象
+
+        Returns:
+            True 如果清除成功
+        """
+        try:
+            context = self.browser_manager.context
+            if not context:
+                logger.warning("浏览器上下文不存在，无法清除缓存")
+                return False
+
+            # 1. 清除 Cookie
+            await context.clear_cookies()
+            logger.debug("已清除 Cookie")
+
+            # 2. 清除 LocalStorage 和 SessionStorage
+            try:
+                await page.evaluate("""() => {
+                    try { localStorage.clear(); } catch(e) {}
+                    try { sessionStorage.clear(); } catch(e) {}
+                }""")
+                logger.debug("已清除 LocalStorage 和 SessionStorage")
+            except Exception as e:
+                logger.debug(f"清除 Storage 失败: {e}")
+
+            # 3. 通过 CDP 清除浏览器缓存
+            try:
+                client = await context.new_cdp_session(page)
+                await client.send("Network.clearBrowserCache")
+                await client.detach()
+                logger.debug("已通过 CDP 清除浏览器缓存")
+            except Exception as e:
+                logger.debug(f"CDP 清除缓存失败: {e}")
+
+            # 4. 同时清除本地 Cookie 文件
+            self.cookie_manager.clear()
+            logger.debug("已清除本地 Cookie 文件")
+
+            logger.info("✓ 浏览器缓存已清除")
+            return True
+
+        except Exception as e:
+            logger.warning(f"清除浏览器缓存失败: {e}")
+            return False
+
     async def _is_browser_valid(self) -> bool:
         """检查浏览器是否仍然有效且可响应.
 
@@ -314,14 +369,46 @@ class LoginController:
             # 导航到登录页
             login_config = self.selectors.get("login", {})
             login_url = login_config.get("url", "https://erp.91miaoshou.com/sub_account/users")
-            logger.info(f"导航到登录页: {login_url}")
-            await page.goto(login_url, timeout=60000)
-            await wait_dom_loaded(page, context=" [login page]")
 
             # 使用文本定位器(更稳定)
             username_selector = login_config.get("username_input", "input[type='text']")
             password_selector = login_config.get("password_input", "input[type='password']")
             login_btn_selector = login_config.get("login_button", "button:has-text('登录')")
+
+            # 带重试的登录页导航（包含清除缓存兜底）
+            max_nav_retries = 3
+            form_loaded = False
+            cache_cleared = False
+
+            for nav_attempt in range(max_nav_retries):
+                logger.info(f"导航到登录页: {login_url} (尝试 {nav_attempt + 1}/{max_nav_retries})")
+                try:
+                    await page.goto(login_url, timeout=60000)
+                    await wait_dom_loaded(page, context=" [login page]")
+
+                    # 等待登录表单渲染完成
+                    logger.debug("等待登录表单加载...")
+                    await page.locator(username_selector).first.wait_for(
+                        state="visible", timeout=10000
+                    )
+                    logger.debug("登录表单已加载")
+                    form_loaded = True
+                    break
+                except Exception as nav_exc:
+                    logger.warning(f"登录页加载失败 (尝试 {nav_attempt + 1}): {nav_exc}")
+
+                    # 最后一次重试前，尝试清除缓存作为兜底
+                    if nav_attempt == max_nav_retries - 2 and not cache_cleared:
+                        logger.info("尝试清除浏览器缓存后重试...")
+                        await self._clear_browser_cache(page)
+                        cache_cleared = True
+                    elif nav_attempt < max_nav_retries - 1:
+                        logger.info("等待 2 秒后重试导航...")
+                        await page.wait_for_timeout(2000)
+
+            if not form_loaded:
+                logger.error("登录表单加载失败，已重试 %s 次", max_nav_retries)
+                return False
 
             # 等待登录表单并安全填充
             logger.debug("输入用户名...")

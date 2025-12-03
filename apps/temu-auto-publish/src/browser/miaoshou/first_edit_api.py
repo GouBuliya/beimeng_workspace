@@ -47,53 +47,38 @@ async def run_first_edit_via_api(
     selections: list[ProductSelectionRow],
     *,
     filter_owner: str | None = None,
-    max_count: int = 5,
-    start_offset: int = 0,
+    max_count: int | None = None,
 ) -> FirstEditApiResult:
     """使用通用采集箱 API 执行首次编辑.
 
+    一次性处理所有选品数据对应的产品，不分轮次。
+    产品和选品按顺序一一对应。
+
     使用的 API:
-    - get_product_list(): 获取已认领产品列表
+    - get_product_list(): 获取产品列表
     - get_edit_common_box_detail(): 获取产品编辑信息
     - save_edit_common_box_detail(): 保存产品编辑
 
     流程:
     1. 从浏览器会话创建 API 客户端
-    2. 获取已认领产品列表
-    3. 按创建人员筛选（可选）
-    4. 根据 start_offset 和 max_count 截取当前轮次要处理的产品
-    5. 遍历每个产品:
-       - 获取编辑信息 (get_edit_common_box_detail)
-       - 更新标题、价格、库存、重量、尺寸
-       - 更新 SKU 图片 (colorMap)
-       - 更新尺寸图 (sizeChart)
-       - 更新视频 (mainImgVideoUrl)
-       - 保存编辑 (save_edit_common_box_detail)
+    2. 获取产品列表（按创建人员筛选）
+    3. 取前 N 个产品（N = 选品数量或 max_count）
+    4. 遍历每个产品，与选品数据一一对应进行编辑
 
     Args:
         page: Playwright Page 实例，用于获取 Cookie
-        selections: 选品数据列表
+        selections: 选品数据列表（决定处理数量）
         filter_owner: 筛选的创建人员（可选）
-        price_calculator: 价格计算器实例
-        title_generator: 标题生成器实例
-        max_count: 每轮最多处理的产品数量（默认 5，与 DOM 模式一致）
-        start_offset: 从第几个产品开始处理（用于分轮）
+        max_count: 最多处理的产品数量（默认 None = 选品数量）
 
     Returns:
         FirstEditApiResult 结果对象
 
     Examples:
-        >>> # 第一轮：处理前 5 个产品
+        >>> # 一次性处理所有选品
         >>> result = await run_first_edit_via_api(
         ...     page, selections,
         ...     filter_owner="张三",
-        ...     max_count=5, start_offset=0
-        ... )
-        >>> # 第二轮：处理第 6-10 个产品
-        >>> result = await run_first_edit_via_api(
-        ...     page, selections,
-        ...     filter_owner="张三",
-        ...     max_count=5, start_offset=5
         ... )
     """
     logger.info("开始使用通用采集箱 API 执行首次编辑...")
@@ -107,9 +92,23 @@ async def run_first_edit_via_api(
     failed_count = 0
 
     try:
-        # 获取已认领产品列表
-        logger.info("获取已认领产品列表...")
-        list_result = await client.get_product_list(tab="claimed", limit=100)
+        # 先查找创建人员的账号 ID（用于 API 筛选）
+        owner_account_id: str | None = None
+        if filter_owner:
+            owner_account_id = await client.find_owner_account_id(filter_owner)
+            if owner_account_id:
+                logger.info(f"找到创建人员 '{filter_owner}' 的账号 ID: {owner_account_id}")
+            else:
+                logger.warning(f"未找到创建人员 '{filter_owner}' 的账号 ID，将在结果中筛选")
+
+        # 获取全部产品列表（使用 "all" tab）
+        # 如果有 owner_account_id，则在 API 层面筛选
+        logger.info("获取产品列表...")
+        list_result = await client.get_product_list(
+            tab="all",
+            limit=100,
+            owner_account_id=owner_account_id,
+        )
 
         if list_result.get("result") != "success":
             logger.error(f"获取产品列表失败: {list_result.get('message')}")
@@ -122,7 +121,7 @@ async def run_first_edit_via_api(
             )
 
         product_list = list_result.get("detailList", [])
-        logger.info(f"找到 {len(product_list)} 个已认领产品")
+        logger.info(f"找到 {len(product_list)} 个产品")
 
         # 调试：打印前几个产品的字段信息
         if product_list:
@@ -133,8 +132,8 @@ async def run_first_edit_via_api(
             sample_ids = [str(p.get("commonCollectBoxDetailId", "N/A")) for p in product_list[:3]]
             logger.debug(f"产品 ID 样例: {sample_ids}")
 
-        # 按创建人员筛选（如果指定）
-        if filter_owner:
+        # 如果 API 层面未筛选（找不到账号 ID），则在结果中筛选
+        if filter_owner and not owner_account_id:
             filtered = []
             for p in product_list:
                 owner_name = p.get("ownerSubAccountAliasName") or p.get("ownerName", "")
@@ -148,12 +147,13 @@ async def run_first_edit_via_api(
             product_list = filtered
             logger.info(f"按创建人员 '{filter_owner}' 筛选后: {len(product_list)} 个产品")
 
-        # 分轮截取：根据 start_offset 和 max_count 获取当前轮次要处理的产品
+        # 确定处理数量：优先使用 max_count，否则使用选品数量
         total_available = len(product_list)
-        if start_offset >= total_available:
-            logger.warning(
-                f"起始偏移 {start_offset} 超出可用产品数 {total_available}，无产品可处理"
-            )
+        selection_count = len(selections)
+        target_count = max_count if max_count is not None else selection_count
+
+        if total_available == 0:
+            logger.warning("没有可处理的产品")
             return FirstEditApiResult(
                 success=True,
                 processed_count=0,
@@ -162,18 +162,21 @@ async def run_first_edit_via_api(
                 error_details=[],
             )
 
-        end_offset = min(start_offset + max_count, total_available)
-        product_list = product_list[start_offset:end_offset]
+        # 取产品和选品的较小值
+        actual_count = min(target_count, total_available, selection_count)
+        products_to_process = product_list[:actual_count]
+        working_selections = selections[:actual_count]
+
         logger.info(
-            f"本轮处理: 第 {start_offset + 1} 到 {end_offset} 个产品 "
-            f"(共 {len(product_list)} 个，总计 {total_available} 个)"
+            f"一次性处理 {actual_count} 个产品 "
+            f"(可用产品 {total_available} 个，选品 {selection_count} 条)"
         )
 
         # 按选品表顺序处理产品（不使用型号匹配）
         selection_index = 0
 
         # 处理每个产品
-        for product in product_list:
+        for product in products_to_process:
             detail_id = str(product.get("commonCollectBoxDetailId", ""))
             product_title = product.get("title", "未知产品")
 
@@ -185,8 +188,12 @@ async def run_first_edit_via_api(
                 )
                 continue
 
-            # 按顺序获取选品数据
-            selection = selections[selection_index] if selection_index < len(selections) else None
+            # 按顺序获取选品数据（从截取后的 working_selections 中获取）
+            selection = (
+                working_selections[selection_index]
+                if selection_index < len(working_selections)
+                else None
+            )
 
             try:
                 result = await _process_single_product(
@@ -214,12 +221,12 @@ async def run_first_edit_via_api(
 
         logger.info(
             f"首次编辑 API 完成: 成功 {success_count}, 失败 {failed_count}, "
-            f"总计 {len(product_list)}"
+            f"总计 {len(products_to_process)}"
         )
 
         return FirstEditApiResult(
             success=failed_count == 0,
-            processed_count=len(product_list),
+            processed_count=len(products_to_process),
             success_count=success_count,
             failed_count=failed_count,
             error_details=error_details,

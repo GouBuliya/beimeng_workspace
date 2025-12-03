@@ -336,13 +336,14 @@ class MiaoshouApiClient:
             name_part = name_part.split("(")[0].strip()
 
         try:
-            result = await self.get_sub_accounts()
+            # 使用通用采集箱的创建人员列表 API
+            result = await self.get_common_collect_box_owner_list()
             if result.get("result") == "success":
-                for acc in result.get("list", []):
-                    alias_name = acc.get("aliasName", "")
-                    # 尝试匹配 aliasName 或 name
-                    if name_part in alias_name or name_part == acc.get("name", ""):
-                        account_id = str(acc.get("subAppAccountId", ""))
+                for owner in result.get("ownerAccountList", []):
+                    alias_name = owner.get("subAccountAliasName", "")
+                    # 尝试匹配名字部分
+                    if name_part in alias_name:
+                        account_id = str(owner.get("ownerAccountId", ""))
                         logger.info(f"找到账号: {alias_name} -> ID {account_id}")
                         return account_id
             logger.warning(f"未找到创建人员 '{name_part}' 的账号 ID")
@@ -1032,7 +1033,8 @@ class MiaoshouApiClient:
             if result.get("result") == "success":
                 logger.info(f"发布任务创建成功: {len(detail_ids)} 个产品")
             else:
-                logger.warning(f"发布失败: {result.get('message', '未知错误')}")
+                error_msg = result.get("message") or result.get("errorMsg") or str(result)
+                logger.warning(f"发布失败: {error_msg}")
 
             return result
 
@@ -1285,6 +1287,116 @@ class MiaoshouApiClient:
             return {"result": "error", "message": f"HTTP {e.response.status_code}"}
         except Exception as e:
             logger.error(f"保存产品编辑失败: {e}")
+            return {"result": "error", "message": str(e)}
+
+    async def verify_login_status(self) -> bool:
+        """通过 API 验证登录状态.
+
+        调用 getAccountInfo API 检测 Cookie 是否有效，
+        比 DOM 检测更可靠快速。
+
+        Returns:
+            True 如果已登录（Cookie 有效）
+
+        Examples:
+            >>> client = await MiaoshouApiClient.from_cookie_file()
+            >>> if await client.verify_login_status():
+            ...     print("登录有效")
+        """
+        client = await self._get_client()
+
+        try:
+            response = await client.get(
+                "/api/auth/account/getAccountInfo",
+                timeout=10.0,
+            )
+            response.raise_for_status()
+            result = response.json()
+
+            if result.get("result") == "success":
+                account_id = result.get("accountId")
+                sub_account_name = result.get("subAccountName", "")
+                logger.debug(f"API 登录验证成功: accountId={account_id}, subAccount={sub_account_name}")
+                return True
+            else:
+                logger.debug(f"API 登录验证失败: {result.get('message', '未知错误')}")
+                return False
+
+        except httpx.HTTPStatusError as e:
+            # 401/403 表示未登录
+            if e.response.status_code in (401, 403):
+                logger.debug("API 登录验证: 未授权 (401/403)")
+            else:
+                logger.debug(f"API 登录验证 HTTP 错误: {e.response.status_code}")
+            return False
+        except Exception as e:
+            logger.debug(f"API 登录验证异常: {e}")
+            return False
+
+    async def get_shop_list(
+        self,
+        platform: str = "pddkj",
+    ) -> dict[str, Any]:
+        """获取已授权店铺列表.
+
+        调用 /api/auth/shop/getShopList 获取当前账号下已绑定的店铺列表。
+
+        Args:
+            platform: 平台代码，默认 pddkj（Temu）
+
+        Returns:
+            API 响应，格式为:
+            {
+                "result": "success",
+                "shopList": [
+                    {
+                        "shopId": "9134811",
+                        "platformShopId": "634418225064255",
+                        "platformShopName": "Crafty DIY Shop",
+                        "shopNick": "店铺昵称",
+                        "authStatus": "valid",
+                        ...
+                    },
+                    ...
+                ]
+            }
+
+        Examples:
+            >>> client = await MiaoshouApiClient.from_cookie_file()
+            >>> result = await client.get_shop_list()
+            >>> shops = result.get("shopList", [])
+            >>> for shop in shops:
+            ...     print(f"{shop['shopId']}: {shop['platformShopName']}")
+        """
+        client = await self._get_client()
+
+        try:
+            response = await client.post(
+                "/api/auth/shop/getShopList",
+                data={
+                    "pageNo": "1",
+                    "pageSize": "100000",
+                    "platform": platform,
+                    "includeShopeeGlobal": "0",
+                    "excludeShopeeCnscShop": "0",
+                },
+            )
+            response.raise_for_status()
+            result = response.json()
+
+            if result.get("result") == "success":
+                shop_list = result.get("shopList", [])
+                logger.info(f"获取店铺列表成功: 共 {len(shop_list)} 个店铺")
+            else:
+                logger.warning(f"获取店铺列表失败: {result.get('message', '未知错误')}")
+
+            return result
+
+        except httpx.HTTPStatusError as e:
+            logger.error(f"获取店铺列表 HTTP 错误: {e.response.status_code}")
+            return {"result": "error", "message": f"HTTP {e.response.status_code}"}
+        except Exception as e:
+            logger.error(f"获取店铺列表失败: {e}")
             return {"result": "error", "message": str(e)}
 
     async def __aenter__(self) -> MiaoshouApiClient:

@@ -237,7 +237,8 @@ class CompletePublishWorkflow:
         self._selection_rows_override = (
             list(selection_rows_override) if selection_rows_override else None
         )
-        self.collect_count = max(1, min(self.settings.business.collect_count, 5))
+        # 移除上限限制，一次性处理所有选品
+        self.collect_count = max(1, self.settings.business.collect_count)
         self.claim_times = max(1, self.settings.business.claim_count)
         self.headless = headless if headless is not None else self.settings.browser.headless
 
@@ -1084,22 +1085,9 @@ class CompletePublishWorkflow:
                 [],
             )
 
-        page_size = 20
-        use_override_rows = self._selection_rows_override is not None
-        # 数据已在 _finalize_selection_rows 中根据 execution_round 截取,这里直接使用
+        # 一次性处理所有选品，不分轮次
         working_selections = list(selections)
-        # start_offset 用于计算采集箱中的商品位置(基于原始数据的绝对索引)
-        # 修复:不管是否有 override,都应该根据 execution_round 计算偏移
-        # 因为页面上的商品列表是完整的,需要根据轮次定位到正确的商品
-        start_offset = max(0, (self.execution_round - 1) * self.collect_count)
-
-        logger.info(
-            "首次编辑起始偏移: start_offset=%s (execution_round=%s, collect_count=%s, use_override=%s)",
-            start_offset,
-            self.execution_round,
-            self.collect_count,
-            use_override_rows,
-        )
+        logger.info(f"首次编辑: 准备一次性处理 {len(working_selections)} 个产品")
 
         if not working_selections:
             message = f"执行轮位 {self.execution_round} 超出可编辑范围,跳过首次编辑"
@@ -1134,40 +1122,69 @@ class CompletePublishWorkflow:
             }
             return StageOutcome("stage1_first_edit", True, "首次编辑已跳过", details), placeholders
 
-        # API 模式首次编辑
+        # API 模式首次编辑（带重试机制）
         if self.use_api_first_edit:
-            logger.info("使用 API 模式执行首次编辑...")
-            api_result = await run_first_edit_via_api(
-                page,
-                list(working_selections),
-                filter_owner=staff_name,
-                max_count=self.collect_count,  # 每轮处理数量（默认 5）
-                start_offset=start_offset,  # 当前轮次的起始偏移
-            )
+            max_api_retries = 3
+            api_result = None
 
-            if api_result.success:
-                # 构建占位符编辑结果
-                placeholders = self._build_placeholder_edits(selections)
-                details = {
-                    "owner": staff_name,
-                    "edited_products": [prod.to_payload() for prod in placeholders],
-                    "errors": api_result.error_details,
-                    "api_mode": True,
-                    "api_success_count": api_result.success_count,
-                    "api_failed_count": api_result.failed_count,
-                }
-                return (
-                    StageOutcome(
-                        "stage1_first_edit",
-                        True,
-                        f"API 模式首次编辑完成: 成功 {api_result.success_count}",
-                        details,
-                    ),
-                    placeholders,
+            for attempt in range(max_api_retries):
+                logger.info(f"使用 API 模式执行首次编辑... (尝试 {attempt + 1}/{max_api_retries})")
+                api_result = await run_first_edit_via_api(
+                    page,
+                    list(working_selections),
+                    filter_owner=staff_name,
+                    # 一次性处理所有选品，不传 max_count 则使用选品数量
                 )
-            else:
-                logger.warning("API 模式首次编辑失败，回退到 DOM 模式")
-                # 继续执行原有的 DOM 模式
+
+                # 判断是否有成功的产品（部分成功也算成功，不回退 DOM）
+                if api_result.success_count > 0:
+                    # 构建占位符编辑结果
+                    placeholders = self._build_placeholder_edits(selections)
+                    details = {
+                        "owner": staff_name,
+                        "edited_products": [prod.to_payload() for prod in placeholders],
+                        "errors": api_result.error_details,
+                        "api_mode": True,
+                        "api_success_count": api_result.success_count,
+                        "api_failed_count": api_result.failed_count,
+                        "api_attempts": attempt + 1,
+                    }
+                    # 根据是否有失败，生成不同的消息
+                    if api_result.failed_count > 0:
+                        msg = (
+                            f"API 模式首次编辑部分成功: "
+                            f"{api_result.success_count} 成功, {api_result.failed_count} 失败"
+                        )
+                        logger.warning(msg)
+                    else:
+                        msg = f"API 模式首次编辑完成: 成功 {api_result.success_count}"
+                    return (
+                        StageOutcome(
+                            "stage1_first_edit",
+                            True,
+                            msg,
+                            details,
+                        ),
+                        placeholders,
+                    )
+                else:
+                    # 全部失败才重试或回退
+                    if attempt < max_api_retries - 1:
+                        logger.warning(
+                            f"API 模式首次编辑全部失败 (尝试 {attempt + 1}/{max_api_retries})，"
+                            f"等待 2 秒后重试..."
+                        )
+                        await asyncio.sleep(2)
+                    else:
+                        logger.warning(
+                            f"API 模式首次编辑在 {max_api_retries} 次尝试后仍然全部失败，回退到 DOM 模式"
+                        )
+                        # 继续执行原有的 DOM 模式
+
+        # DOM 模式回退所需的变量
+        page_size = 20
+        use_override_rows = self._selection_rows_override is not None
+        start_offset = 0  # 一次性处理，从头开始
 
         # 导航到采集箱并筛选（带登录兜底机制）
         navigation_success = await miaoshou_ctrl.navigate_and_filter_collection_box(
@@ -1628,7 +1645,7 @@ class CompletePublishWorkflow:
         """根据选品表构造占位首次编辑结果."""
 
         placeholders: list[EditedProduct] = []
-        for index, selection in enumerate(selections[: self.collect_count]):
+        for index, selection in enumerate(selections):
             cost_price = self._resolve_cost_price(selection)
             price_result = self.price_calculator.calculate_batch([cost_price])[0]
             weight_g = self._resolve_weight(selection)
@@ -1744,8 +1761,7 @@ class CompletePublishWorkflow:
         api_success = True
         api_failures: list[str] = []
 
-        # 计算当前轮次需要的产品偏移量
-        start_offset = (self.execution_round - 1) * self.collect_count
+        # 一次性认领所有产品（不分轮次）
         detail_ids: list[str] = []
 
         # 使用 API 获取产品列表（通过 page.evaluate + fetch）
@@ -1871,7 +1887,7 @@ class CompletePublishWorkflow:
             """,
             {
                 "pageNo": "1",
-                "pageSize": str(selection_count + start_offset + 10),  # 多获取一些
+                "pageSize": str(selection_count + 10),  # 多获取一些
                 "tabPaneName": "all",
                 "ownerAccountId": owner_account_id,
             },
@@ -1890,10 +1906,8 @@ class CompletePublishWorkflow:
                     all_ids.append(str(product_id))
             logger.info(f"提取到 {len(all_ids)} 个产品 ID: {all_ids[:5]}...")
 
-            if len(all_ids) > start_offset:
-                detail_ids = all_ids[start_offset : start_offset + selection_count]
-            else:
-                logger.warning(f"API 返回 ID 不足 ({len(all_ids)}个)，需要 {start_offset} 起始偏移")
+            # 取前 selection_count 个产品
+            detail_ids = all_ids[:selection_count]
         else:
             error_msg = api_result.get("error") or api_result.get("message", "未知错误")
             logger.warning(f"API 获取产品列表失败: {error_msg}")
@@ -2012,13 +2026,20 @@ class CompletePublishWorkflow:
 
         # ===== API 批量编辑模式 =====
         if self.use_api_batch_edit:
-            logger.info("使用 API 方式执行批量编辑（纯数据字段）")
+            # 二次编辑处理数量 = 选品数量 * claim_times（认领次数）
+            selection_count = len(edited_products)
+            batch_edit_count = selection_count * self.claim_times
+            logger.info(
+                f"使用 API 方式执行批量编辑: {batch_edit_count} 个产品 "
+                f"(选品 {selection_count} * 认领 {self.claim_times} 次)"
+            )
             payload = self._build_api_batch_edit_payload()
 
             api_result = await run_batch_edit_via_api(
                 page,
                 payload,
                 filter_owner=filter_owner,
+                max_products=batch_edit_count,
             )
 
             success = api_result.get("success", False)
@@ -2190,11 +2211,17 @@ class CompletePublishWorkflow:
         shop_name = self._resolve_shop_name(edited_products)
 
         # 使用 API 方式发布
-        logger.info("使用 API 方式执行发布...")
+        # 发布数量 = 选品数量 * claim_times（认领次数）
+        selection_count = len(edited_products)
+        publish_count = selection_count * self.claim_times
+        logger.info(
+            f"使用 API 方式执行发布: {publish_count} 个产品 "
+            f"(选品 {selection_count} * 认领 {self.claim_times} 次)"
+        )
 
         # 获取筛选人员
         owner_candidate = self.collection_owner_override or (
-            edited_products[0].owner if edited_products else ""
+            edited_products[0].selection.owner if edited_products else ""
         )
         filter_owner = self._resolve_collection_owner(owner_candidate) if owner_candidate else None
 
@@ -2202,7 +2229,7 @@ class CompletePublishWorkflow:
             page,
             filter_owner=filter_owner,
             shop_id="9134811",  # 默认店铺 ID
-            max_products=20,
+            max_products=publish_count,
         )
 
         success = api_result.get("success", False)
@@ -2264,25 +2291,10 @@ class CompletePublishWorkflow:
     def _finalize_selection_rows(
         self, rows: Sequence[ProductSelectionRow]
     ) -> list[ProductSelectionRow]:
-        """根据 collect_count 和 execution_round 截取正确的数据段并输出日志."""
+        """一次性处理所有选品数据并输出日志."""
 
-        # 当外部注入数据时不再截断,便于按 execution_round 逐批处理不同商品
-        if self._selection_rows_override is not None:
-            limited_rows = list(rows)
-        else:
-            # 根据 execution_round 计算起始偏移,截取对应批次的数据
-            start_offset = max(0, (self.execution_round - 1) * self.collect_count)
-            end_offset = start_offset + self.collect_count
-            limited_rows = list(rows[start_offset:end_offset])
-
-            if start_offset > 0:
-                logger.info(
-                    "起始轮次=%s: 跳过前 %s 条,处理第 %s-%s 条数据",
-                    self.execution_round,
-                    start_offset,
-                    start_offset + 1,
-                    min(end_offset, len(rows)),
-                )
+        # 一次性处理所有选品，不再按轮次截断
+        limited_rows = list(rows)
 
         for idx, row in enumerate(limited_rows, start=1):
             cost_value = float(row.cost_price) if row.cost_price else 0.0
@@ -2294,15 +2306,6 @@ class CompletePublishWorkflow:
                 row.model_number,
                 row.collect_count,
                 cost_value,
-            )
-
-        expected_count = self.collect_count
-        if len(limited_rows) < expected_count:
-            logger.warning(
-                "当前批次选品数据仅有 %s 条, 低于预期 %s 条 (总数据 %s 条)",
-                len(limited_rows),
-                expected_count,
-                len(rows),
             )
 
         return limited_rows

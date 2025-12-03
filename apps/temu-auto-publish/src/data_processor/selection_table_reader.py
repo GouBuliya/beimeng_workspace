@@ -52,7 +52,7 @@ class ProductSelectionRow(BaseModel):
     product_name: str = Field(default="", description="产品名称/关键字")
     model_number: str = Field(default="A0000", description="型号编号,例如 A0001")
     color_spec: str | None = Field(default=None, description="产品颜色或规格")
-    collect_count: int = Field(default=5, ge=1, le=100, description="需要采集的数量")
+    collect_count: int = Field(default=5, ge=1, le=1000, description="需要采集的数量")
     cost_price: float | None = Field(default=None, ge=0, description="进货价/成本价")
     spec_unit: str | None = Field(default=None, description="规格单位名称")
     spec_options: list[str] | None = Field(default=None, description="规格选项列表")
