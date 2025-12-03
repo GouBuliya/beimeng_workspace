@@ -152,9 +152,7 @@ async def run_batch_edit_via_api(
 
             # 限制每次编辑的产品数量
             if max_products > 0 and len(detail_ids) > max_products:
-                logger.info(
-                    f"限制编辑数量: {len(detail_ids)} -> {max_products} 个产品"
-                )
+                logger.info(f"限制编辑数量: {len(detail_ids)} -> {max_products} 个产品")
                 detail_ids = detail_ids[:max_products]
 
             result["total_count"] = len(detail_ids)

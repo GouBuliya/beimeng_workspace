@@ -517,8 +517,11 @@ class SelectionTableReader:
         # 常见的中文标点：逗号，、引号""、方括号【】
         normalized = text
         normalized = normalized.replace("，", ",")  # 中文逗号 -> 英文逗号
-        normalized = normalized.replace(""", '"')  # 中文左引号 -> 英文引号
-        normalized = normalized.replace(""", '"')  # 中文右引号 -> 英文引号
+        normalized = normalized.replace(
+            """, '"')  # 中文左引号 -> 英文引号
+        normalized = normalized.replace(""",
+            '"',
+        )  # 中文右引号 -> 英文引号
         normalized = normalized.replace("【", "[")  # 中文左方括号
         normalized = normalized.replace("】", "]")  # 中文右方括号
 

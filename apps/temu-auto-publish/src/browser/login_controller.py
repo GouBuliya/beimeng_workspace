@@ -279,14 +279,12 @@ class LoginController:
                 )
                 await self.browser_manager.goto(welcome_url)
                 # 激进优化: 条件等待替代固定2秒等待
-                try:
+                with contextlib.suppress(Exception):
                     await self.browser_manager.page.wait_for_selector(
                         ".jx-main, .pro-layout, [class*='welcome'], [class*='dashboard']",
                         state="visible",
                         timeout=3000,
                     )
-                except Exception:
-                    pass  # 即使超时也继续检查登录状态
 
                 # 检查是否已登录
                 if await self._check_login_status():
@@ -809,10 +807,9 @@ class LoginController:
                     logger.debug(f"✗ 检测到会话过期重定向到登录页: {url}")
                     return False
 
-            # 场景3: 检查是否在后台页面
-            if "welcome" in url or "common_collect_box" in url:
-                logger.debug("✓ 已在后台页面")
-                return True
+            # 场景3: 检查是否在后台页面（更严格的检测）
+            backend_pages = ["welcome", "common_collect_box", "collect_box", "erp"]
+            is_backend = any(bp in url_lower for bp in backend_pages)
 
             # 场景4: 检查是否有登录表单（会话过期但 URL 未变化的情况）
             try:
@@ -831,6 +828,11 @@ class LoginController:
             except Exception as e:
                 logger.debug(f"检查登录表单时出错: {e}")
 
+            # 如果在后台页面且没有登录表单，认为已登录
+            if is_backend:
+                logger.debug("✓ 已在后台页面")
+                return True
+
             # 场景5: 检查是否有产品菜单元素(首页特有)
             homepage_config = self.selectors.get("homepage", {})
             product_menu_selector = homepage_config.get("product_menu", "text='产品'")
@@ -845,6 +847,100 @@ class LoginController:
         except Exception as e:
             logger.debug(f"检查登录状态失败: {e}")
             return False
+
+    async def navigate_with_login_fallback(
+        self,
+        target_url: str,
+        username: str,
+        password: str,
+        max_retries: int = 2,
+    ) -> bool:
+        """导航到目标页面，如果被重定向到登录页则自动重新登录.
+
+        这是一个兜底机制：当 Cookie 实际已失效但时间戳检查通过时，
+        导航会被重定向到登录页，此方法会自动检测并重新登录。
+
+        Args:
+            target_url: 目标页面 URL
+            username: 用户名
+            password: 密码
+            max_retries: 最大重试次数
+
+        Returns:
+            True 如果成功导航到目标页面
+        """
+        page = self.browser_manager.page
+        if not page:
+            logger.error("浏览器页面未初始化")
+            return False
+
+        for attempt in range(max_retries + 1):
+            try:
+                logger.info(f"导航到: {target_url}" + (f" (重试 {attempt})" if attempt > 0 else ""))
+                await page.goto(target_url, timeout=60000)
+                await page.wait_for_timeout(2000)
+
+                # 检查是否被重定向到登录页
+                current_url = page.url.lower()
+
+                # 检测重定向到登录页的情况
+                is_redirected_to_login = (
+                    "redirect=" in current_url
+                    or "redirect%3d" in current_url
+                    or "sub_account/users" in current_url
+                    or "login" in current_url
+                )
+
+                # 检测是否有登录表单
+                has_login_form = False
+                try:
+                    login_form_count = await page.locator(
+                        "input[name='mobile'], input[name='username'], "
+                        "input[placeholder*='手机'], input[placeholder*='账号']"
+                    ).count()
+                    login_btn_count = await page.locator(
+                        "button:has-text('登录'), button:has-text('立即登录')"
+                    ).count()
+                    has_login_form = login_form_count > 0 and login_btn_count > 0
+                except Exception:
+                    pass
+
+                if is_redirected_to_login or has_login_form:
+                    if attempt < max_retries:
+                        logger.warning(
+                            f"Cookie 已失效，被重定向到登录页，正在重新登录... "
+                            f"(尝试 {attempt + 1}/{max_retries + 1})"
+                        )
+                        # 清除失效的 Cookie
+                        self.cookie_manager.clear()
+                        # 重新登录
+                        login_success = await self.login(
+                            username=username,
+                            password=password,
+                            force=True,
+                            headless=self.browser_manager.page is not None,
+                            keep_browser_open=True,
+                        )
+                        if not login_success:
+                            logger.error("重新登录失败")
+                            continue
+                        # 登录成功后重新导航
+                        continue
+                    else:
+                        logger.error(f"导航失败，已达到最大重试次数 ({max_retries})")
+                        return False
+
+                # 导航成功
+                logger.success(f"成功导航到: {page.url}")
+                return True
+
+            except Exception as e:
+                logger.error(f"导航异常: {e}")
+                if attempt < max_retries:
+                    continue
+                return False
+
+        return False
 
     async def login_if_needed(
         self,

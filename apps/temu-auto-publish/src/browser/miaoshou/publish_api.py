@@ -123,9 +123,7 @@ async def run_publish_via_api(
 
             # 限制每次发布的产品数量
             if max_products > 0 and len(detail_ids) > max_products:
-                logger.info(
-                    f"限制发布数量: {len(detail_ids)} -> {max_products} 个产品"
-                )
+                logger.info(f"限制发布数量: {len(detail_ids)} -> {max_products} 个产品")
                 detail_ids = detail_ids[:max_products]
 
             result["total_count"] = len(detail_ids)

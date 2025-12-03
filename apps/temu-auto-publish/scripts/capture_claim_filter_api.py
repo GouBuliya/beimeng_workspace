@@ -60,7 +60,7 @@ async def capture_filter_api():
                             "post_data": post_data,
                         }
                     )
-                    print(f"\n{'='*60}")
+                    print(f"\n{'=' * 60}")
                     print(f"[捕获] {request.method} {url}")
                     if post_data:
                         print(f"POST 数据: {post_data}")
@@ -86,13 +86,17 @@ async def capture_filter_api():
                         print(f"  返回 {len(items)} 个产品")
                         if items:
                             sample = items[0]
-                            print(f"  示例 ownerSubAccountAliasName: {sample.get('ownerSubAccountAliasName')}")
+                            print(
+                                f"  示例 ownerSubAccountAliasName: {sample.get('ownerSubAccountAliasName')}"
+                            )
                     elif "list" in body.get("data", {}):
                         items = body["data"]["list"]
                         print(f"  返回 {len(items)} 个产品")
                         if items:
                             sample = items[0]
-                            print(f"  示例 ownerSubAccountAliasName: {sample.get('ownerSubAccountAliasName')}")
+                            print(
+                                f"  示例 ownerSubAccountAliasName: {sample.get('ownerSubAccountAliasName')}"
+                            )
                     else:
                         # 打印完整响应（如果是小数据）
                         text = json.dumps(body, ensure_ascii=False, indent=2)
