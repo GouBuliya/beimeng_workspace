@@ -229,7 +229,7 @@ async def fill_first_edit_dialog_codegen(page: Page, payload: dict[str, Any]) ->
             else:
                 logger.warning("⚠️ 尺寸图网络图片上传失败,继续后续流程")
         else:
-            logger.warning("⚠️ 未提供尺寸图URL,跳过尺寸图上传")
+            logger.info("⚠️ 未提供尺寸图URL,跳过尺寸图上传")
 
         # 6. 上传产品视频(仅支持网络视频URL)
         product_video_url = (payload.get("product_video_url") or "").strip()
@@ -535,31 +535,146 @@ async def _upload_size_chart_via_url(page: Page, image_url: str) -> bool:
             logger.warning("提供的尺寸图URL无效,跳过上传: {}", image_url)
             return False
 
-        size_group = page.get_by_role("group", name="尺寸图表 :", exact=True)
-        if not await size_group.count():
+        # [增强] 尺寸图分组定位 - 多种备用方式
+        size_group = None
+        size_group_selectors = [
+            page.get_by_role("group", name="尺寸图表 :", exact=True),
+            page.get_by_role("group", name=re.compile("尺寸图")),
+            page.locator("[class*='size-chart'], [class*='sizeChart']"),
+            page.locator("text=尺寸图表").locator(".."),
+        ]
+        for selector in size_group_selectors:
+            try:
+                if await selector.count():
+                    size_group = selector.first
+                    logger.debug("尺寸图分组定位成功")
+                    break
+            except Exception:
+                continue
+
+        if size_group is None:
             logger.warning("未找到尺寸图 group")
             await _capture_html(page, "data/debug/html/size_chart_missing_group.html")
             return False
 
         await size_group.scroll_into_view_if_needed()
 
-        try:
-            thumbnails = size_group.get_by_role("img")
-            thumb_count = await thumbnails.count()
-            if thumb_count:
-                target_index = min(4, max(thumb_count - 1, 0))
-                await thumbnails.nth(target_index).click()
-        except Exception as exc:
-            logger.debug("点击尺寸图缩略图失败: {}", exc)
+        # [核心修复] 优先点击"添加新图片"按钮，这才是正确的触发方式
+        # 参考用户反馈的正确元素: .product-picture-item-add
+        add_btn_clicked = False
+        add_image_selectors = [
+            # [最优先] 用户反馈的正确选择器
+            size_group.locator(".product-picture-item-add"),
+            page.locator(".product-picture-item-add").filter(
+                has=page.locator("[class*='jx-icon']")
+            ),
+            # 带 jx-tooltip 的添加按钮
+            size_group.locator(".jx-tooltip__trigger").filter(
+                has=page.locator("[class*='jx-icon']")
+            ),
+            # 旧版选择器作为备用
+            size_group.locator(".add-image-box .add-image-box-content"),
+            size_group.locator(".add-image-box"),
+            size_group.locator("[class*='add-image']"),
+            # 尝试全局范围查找（尺寸图区域可能嵌套）
+            page.locator(".scroll-menu-pane")
+            .filter(has_text=re.compile("尺寸图"))
+            .locator(".product-picture-item-add"),
+            page.locator(".scroll-menu-pane")
+            .filter(has_text=re.compile("尺寸图"))
+            .locator(".add-image-box"),
+            # 文本匹配备选
+            size_group.locator("text=添加新图片"),
+            size_group.get_by_text("添加新图片", exact=False),
+            # 通用添加按钮
+            size_group.locator("[class*='add'], [class*='upload']").filter(
+                has_text=re.compile("添加|上传|\\+")
+            ),
+        ]
 
-        upload_btn = page.get_by_text("使用网络图片", exact=True)
-        await upload_btn.wait_for(state="visible", timeout=1500)
+        for add_selector in add_image_selectors:
+            try:
+                if await add_selector.count():
+                    await add_selector.first.click()
+                    add_btn_clicked = True
+                    logger.debug("已点击『添加新图片』按钮")
+                    # 等待菜单出现
+                    await asyncio.sleep(0.3)
+                    break
+            except Exception:
+                continue
+
+        # 如果添加按钮点击失败，尝试点击缩略图作为后备
+        if not add_btn_clicked:
+            logger.debug("添加按钮点击失败，尝试点击缩略图")
+            try:
+                thumbnails = size_group.get_by_role("img")
+                thumb_count = await thumbnails.count()
+                if thumb_count:
+                    target_index = min(4, max(thumb_count - 1, 0))
+                    await thumbnails.nth(target_index).click()
+                    logger.debug("已点击尺寸图缩略图")
+                    await asyncio.sleep(0.3)
+            except Exception as exc:
+                logger.debug("点击尺寸图缩略图失败: {}", exc)
+
+        # [增强] "使用网络图片"按钮 - 多种备用定位方式
+        upload_btn = None
+        upload_btn_selectors = [
+            page.get_by_text("使用网络图片", exact=True),
+            page.get_by_text("使用网络图片", exact=False).first,
+            page.locator("text=使用网络图片").first,
+            page.locator("[class*='network'], [class*='url']").filter(has_text="网络"),
+            page.get_by_role("button", name=re.compile("网络图片")),
+            page.get_by_role("menuitem", name=re.compile("网络图片")),
+            # 尝试 dropdown menu 中的选项
+            page.locator(".jx-dropdown-menu").get_by_text("使用网络图片", exact=False),
+            page.locator("[role='menu']").get_by_text("使用网络图片", exact=False),
+        ]
+        for selector in upload_btn_selectors:
+            try:
+                await selector.wait_for(state="visible", timeout=1500)
+                upload_btn = selector
+                logger.debug("使用网络图片按钮定位成功")
+                break
+            except Exception:
+                continue
+
+        if upload_btn is None:
+            logger.warning("未找到『使用网络图片』按钮")
+            await _capture_html(page, "data/debug/html/size_chart_missing_upload_btn.html")
+            return False
+
         await upload_btn.click()
 
-        url_input = page.get_by_role(
-            "textbox", name="请输入图片链接，若要输入多个链接，请以回车换行", exact=True
-        )
-        await url_input.wait_for(state="visible", timeout=1500)
+        # [增强] URL输入框 - 多种备用定位方式
+        url_input = None
+        url_input_selectors = [
+            page.get_by_role(
+                "textbox", name="请输入图片链接，若要输入多个链接，请以回车换行", exact=True
+            ),
+            page.get_by_role("textbox", name=re.compile("请输入图片链接")),
+            page.get_by_role("textbox", name=re.compile("图片链接|图片URL|输入链接")),
+            page.locator("input[placeholder*='图片链接'], textarea[placeholder*='图片链接']"),
+            page.locator("input[placeholder*='URL'], textarea[placeholder*='URL']"),
+            page.locator(".jx-dialog, .el-dialog, [role='dialog']")
+            .locator("input[type='text'], textarea")
+            .first,
+        ]
+        for selector in url_input_selectors:
+            try:
+                await selector.wait_for(state="visible", timeout=800)
+                url_input = selector
+                logger.debug("URL输入框定位成功")
+                break
+            except Exception:
+                continue
+
+        if url_input is None:
+            logger.warning("未找到URL输入框")
+            await _capture_html(page, "data/debug/html/size_chart_missing_input.html")
+            return False
+
         await url_input.click()
         await url_input.press("ControlOrMeta+a")
         await url_input.fill(normalized_url)
@@ -590,8 +705,29 @@ async def _upload_size_chart_via_url(page: Page, image_url: str) -> bool:
         except Exception as exc:
             logger.debug("处理图片空间复选框状态失败: {}", exc)
 
-        confirm_btn = page.get_by_role("button", name="确定")
-        await confirm_btn.wait_for(state="visible", timeout=1500)
+        # [增强] 确认按钮 - 多种备用定位方式
+        confirm_btn = None
+        confirm_btn_selectors = [
+            page.get_by_role("button", name="确定"),
+            page.get_by_role("button", name=re.compile("确定|确认|OK")),
+            page.locator(".jx-dialog, .el-dialog, [role='dialog']").get_by_role(
+                "button", name=re.compile("确定|确认")
+            ),
+            page.locator("button:has-text('确定')"),
+        ]
+        for selector in confirm_btn_selectors:
+            try:
+                await selector.first.wait_for(state="visible", timeout=800)
+                confirm_btn = selector.first
+                logger.debug("确认按钮定位成功")
+                break
+            except Exception:
+                continue
+
+        if confirm_btn is None:
+            logger.warning("未找到确认按钮")
+            return False
+
         await confirm_btn.click()
 
         await _ensure_dialog_closed(
@@ -638,8 +774,25 @@ async def _upload_product_video_via_url(page: Page, video_url: str) -> bool | No
             with contextlib.suppress(Exception):
                 await dialog.first.evaluate("el => { el.scrollTop = 0; }")
 
-        video_group = page.get_by_role("group", name="产品视频 :", exact=True)
-        if not await video_group.count():
+        # 多候选产品视频分组定位器
+        video_group_selectors = [
+            page.get_by_role("group", name="产品视频 :", exact=True),
+            page.get_by_role("group", name="产品视频", exact=False),
+            page.get_by_role("group", name=re.compile(r"产品视频|商品视频")),
+            page.locator("[class*='video-group'], [class*='videoGroup']"),
+            page.locator("text=产品视频").locator(".."),
+        ]
+
+        video_group = None
+        for selector in video_group_selectors:
+            try:
+                if await selector.count():
+                    video_group = selector.first
+                    break
+            except Exception:
+                continue
+
+        if video_group is None:
             logger.warning("未找到产品视频分组,跳过视频上传")
             await _capture_html(page, "data/debug/html/video_missing_group.html")
             return False
@@ -711,13 +864,35 @@ async def _upload_product_video_via_url(page: Page, video_url: str) -> bool | No
             except Exception as exc:
                 logger.debug("点击产品视频区域失败: {}", exc)
 
-        explicit_network_option = page.get_by_text("网络上传", exact=True)
-        try:
-            await explicit_network_option.wait_for(state="visible", timeout=2000)
-            await explicit_network_option.click()
-            logger.debug("已通过显式文本点击『网络上传』")
-        except Exception:
-            raise
+        # 多候选网络上传按钮定位器
+        network_upload_selectors = [
+            page.get_by_text("网络上传", exact=True),
+            page.get_by_text("网络上传", exact=False).first,
+            page.locator("text=网络上传").first,
+            page.get_by_role("button", name=re.compile(r"网络上传|网络视频")),
+            page.get_by_role("menuitem", name=re.compile(r"网络上传|网络视频")),
+            page.locator("[class*='network'], [class*='url']").filter(has_text="网络"),
+            video_group.get_by_text("网络上传", exact=False) if video_group else None,
+        ]
+
+        network_clicked = False
+        for selector in network_upload_selectors:
+            if selector is None:
+                continue
+            try:
+                if await selector.count():
+                    await selector.first.wait_for(state="visible", timeout=2000)
+                    await selector.first.click()
+                    logger.debug("已点击『网络上传』按钮")
+                    network_clicked = True
+                    break
+            except Exception:
+                continue
+
+        if not network_clicked:
+            logger.warning("未能点击『网络上传』按钮")
+            await _capture_html(page, "data/debug/html/video_missing_network_btn.html")
+            raise RuntimeError("未能点击『网络上传』按钮")
 
         video_dialog = await _wait_for_dialog(page, name_pattern="上传视频")
 
@@ -763,18 +938,33 @@ async def _upload_product_video_via_url(page: Page, video_url: str) -> bool | No
         except Exception as exc:
             logger.debug("取消勾选保存到图片空间失败(可能已取消勾选): {}", exc)
 
-        confirm_btn = (
-            video_dialog.get_by_role("button", name="确定")
-            if video_dialog is not None
-            else page.get_by_role("button", name="确定")
-        )
+        # 多候选确认按钮定位器
+        scope = video_dialog if video_dialog is not None else page
+        confirm_btn_selectors = [
+            scope.get_by_role("button", name="确定"),
+            scope.get_by_role("button", name=re.compile(r"确定|确认|OK|提交")),
+            scope.locator("button").filter(has_text=re.compile(r"确定|确认")),
+            scope.locator("[class*='confirm'], [class*='submit']").filter(
+                has_text=re.compile(r"确定|确认")
+            ),
+            scope.locator("text=确定").first,
+        ]
 
-        if not await confirm_btn.count():
+        confirm_btn = None
+        for selector in confirm_btn_selectors:
+            try:
+                if await selector.count():
+                    confirm_btn = selector.last
+                    break
+            except Exception:
+                continue
+
+        if confirm_btn is None:
             logger.warning("未找到视频上传确认按钮")
             await _capture_html(page, "data/debug/html/video_missing_confirm.html")
             return False
 
-        await confirm_btn.last.click()
+        await confirm_btn.click()
 
         await _ensure_dialog_closed(
             page,

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin
@@ -273,6 +274,14 @@ class SelectionTableReader:
         if rename_dict:
             df = df.rename(columns=rename_dict)
             logger.debug("列名标准化: {}", rename_dict)
+
+        # [诊断日志] 检查 image_files 列是否存在
+        final_columns = list(df.columns)
+        if "image_files" not in final_columns:
+            logger.warning(
+                "[列名诊断] 未找到 image_files 列,当前列: {}",
+                [c for c in final_columns if "图" in str(c) or "image" in str(c).lower()],
+            )
         return df
 
     def extract_products(self, df: pd.DataFrame) -> list[ProductSelectionRow]:
@@ -318,6 +327,28 @@ class SelectionTableReader:
                 product_data["sku_image_urls"] = self._build_product_image_urls(
                     product_data["image_files"]
                 )
+
+                # [诊断日志] 追踪 image_files 和 sku_image_urls 的解析过程
+                if not product_data["sku_image_urls"]:
+                    raw_image_files = row.get("image_files")
+                    logger.debug(
+                        "[解析诊断] 第 {} 行 ({}) 无 SKU 图片: "
+                        "raw_image_files='{}', parsed_image_files={}",
+                        idx + 1,
+                        product_data.get("model_number", "?"),
+                        raw_image_files,
+                        product_data["image_files"],
+                    )
+
+                # [诊断日志] 追踪 size_chart_image_url 的解析过程
+                if not product_data.get("size_chart_image_url"):
+                    raw_size_chart = row.get("size_chart_image_url")
+                    logger.debug(
+                        "[解析诊断] 第 {} 行 ({}) 无尺寸图: raw_value='{}'",
+                        idx + 1,
+                        product_data.get("model_number", "?"),
+                        raw_size_chart,
+                    )
 
                 product = ProductSelectionRow(**product_data)
                 products.append(product)
@@ -482,12 +513,22 @@ class SelectionTableReader:
         if not text:
             return None
 
+        # [修复] 将中文标点替换为英文标点，解决用户输入格式问题
+        # 常见的中文标点：逗号，、引号""、方括号【】
+        normalized = text
+        normalized = normalized.replace("，", ",")  # 中文逗号 -> 英文逗号
+        normalized = normalized.replace(""", '"')  # 中文左引号 -> 英文引号
+        normalized = normalized.replace(""", '"')  # 中文右引号 -> 英文引号
+        normalized = normalized.replace("【", "[")  # 中文左方括号
+        normalized = normalized.replace("】", "]")  # 中文右方括号
+
         try:
-            parsed = json.loads(text)
+            parsed = json.loads(normalized)
             if isinstance(parsed, list):
                 return [str(item).strip() for item in parsed if str(item).strip()]
         except json.JSONDecodeError:
-            parts = [item.strip() for item in text.split(",") if item.strip()]
+            # 回退：按英文或中文逗号分割
+            parts = [item.strip() for item in re.split(r"[,，]", text) if item.strip()]
             return parts or None
         return None
 

@@ -11,6 +11,10 @@
     - async def _find_clickable_in_scopes(): 在 Page/Frame 中定位可交互按钮
     - async def _click_claim_confirmation_button(): 在认领弹窗中定位并点击确认按钮
     - async def claim_selected_products_to_temu(): 使用 DOM 操作执行认领
+    - async def claim_products_via_api(): 使用 API 直接认领产品（绕过浏览器）
+    - async def claim_specific_products_via_api(): 使用 API 认领指定产品列表
+@DEPENDENCIES:
+  - 内部: .api_client.MiaoshouApiClient (API 认领)
 """
 
 import re
@@ -344,8 +348,8 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
     async def _select_checkboxes_by_js(self, page: Page, indexes: list[int]) -> int:
         """使用 JavaScript 批量勾选复选框(带自动滚动).
 
-        支持 page-mode(页面级滚动)和容器级滚动两种模式.
-        通过动态检测行高偏移来精确定位目标行.
+        【第五轮重构】复用 _click_claim_button_in_row_by_js 的定位逻辑，
+        确保与首次编辑的定位方式完全一致。
 
         Args:
             page: Playwright 页面对象
@@ -354,21 +358,44 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
         Returns:
             成功勾选的数量
         """
+        selected = 0
+        for idx in indexes:
+            result = await self._click_claim_button_in_row_by_js(page, idx, target="checkbox")
+            if result.get("success"):
+                selected += 1
+                logger.debug(f"✓ 复选框勾选成功: index={idx}")
+            else:
+                logger.warning(f"✗ 复选框勾选失败: index={idx}, error={result.get('error')}")
+        return selected
+
+    async def _select_checkboxes_by_js_legacy(self, page: Page, indexes: list[int]) -> int:
+        """【已废弃】旧版批量勾选复选框逻辑，保留以备回滚."""
         try:
             js_code = """
             async (indexes) => {
                 const MAX_SCROLL_ATTEMPTS = 8;
                 const DEFAULT_ROW_HEIGHT = 128;  // 默认值,会被动态检测覆盖
 
+                // 【第四轮修复】虚拟列表顶部偏移补偿
+                // 虚拟列表上方有固定元素（表头等），导致 translateY 与实际行索引有偏移
+                const TOP_OFFSET_ROWS = 2;
+
                 // 检查是否为 page-mode(页面级滚动)
                 const recycleScroller = document.querySelector('.vue-recycle-scroller');
                 const isPageMode = recycleScroller && recycleScroller.classList.contains('page-mode');
 
                 // 获取所有可见行
+                // 关键修复: 只选择包含复选框的行,因为 pro-virtual-table
+                // 可能有两个独立的虚拟滚动容器(固定列和主内容区)
                 const getVisibleRows = () => {
                     const rows = document.querySelectorAll('.vue-recycle-scroller__item-view');
                     const visibleRows = [];
                     rows.forEach(row => {
+                        // 只选择包含复选框的行
+                        const hasCheckbox = row.querySelector('.is-selection-column') !== null ||
+                                          row.querySelector('.jx-checkbox') !== null;
+                        if (!hasCheckbox) return;
+
                         const style = row.getAttribute('style') || '';
                         const match = style.match(/translateY\\((-?\\d+(?:\\.\\d+)?)\\s*(?:px)?\\s*\\)/);
                         if (match) {
@@ -477,12 +504,15 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                 let debugInfo = { containers: findAllScrollContainers().length, detectedRowHeight: ROW_HEIGHT };
 
                 // 根据可见行推断索引的辅助函数
+                // 【第四轮修复】减去顶部偏移后再计算索引
+                const TOP_OFFSET_Y = TOP_OFFSET_ROWS * ROW_HEIGHT;
                 const inferRowIndex = (y) => {
-                    return Math.round(y / ROW_HEIGHT);
+                    return Math.round((y - TOP_OFFSET_Y) / ROW_HEIGHT);
                 };
 
                 for (const idx of indexes) {
-                    const targetTranslateY = idx * ROW_HEIGHT;
+                    // 【第四轮修复】加上顶部偏移
+                    const targetTranslateY = idx * ROW_HEIGHT + TOP_OFFSET_Y;
                     let targetRow = null;
                     let matchedY = -1;
                     let attempts = 0;
@@ -611,102 +641,12 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
             return 0
 
     async def _click_checkbox_by_js(self, page: Page, index: int) -> bool:
-        """使用 JavaScript 滚动到目标位置并点击复选框."""
-        try:
-            js_code = """
-            async (index) => {
-                const DEFAULT_ROW_HEIGHT = 128;
+        """使用 JavaScript 滚动到目标位置并点击复选框.
 
-                const scroller = document.querySelector('.vue-recycle-scroller') ||
-                                document.querySelector('.vue-recycle-scroller__item-wrapper')?.parentElement;
-
-                if (!scroller) return false;
-
-                // 获取可见行
-                const getVisibleRows = () => {
-                    const rows = document.querySelectorAll('.vue-recycle-scroller__item-view');
-                    const visibleRows = [];
-                    rows.forEach(row => {
-                        const style = row.getAttribute('style') || '';
-                        const match = style.match(/translateY\\((-?\\d+(?:\\.\\d+)?)\\s*(?:px)?\\s*\\)/);
-                        if (match) {
-                            const y = parseFloat(match[1]);
-                            if (y >= 0) visibleRows.push({ row, y });
-                        }
-                    });
-                    visibleRows.sort((a, b) => a.y - b.y);
-                    return visibleRows;
-                };
-
-                // 动态检测实际行高
-                const detectRowHeight = () => {
-                    const visibleRows = getVisibleRows();
-                    if (visibleRows.length >= 2) {
-                        const diffs = [];
-                        for (let i = 1; i < visibleRows.length; i++) {
-                            const diff = visibleRows[i].y - visibleRows[i-1].y;
-                            if (diff > 50 && diff < 300) diffs.push(diff);
-                        }
-                        if (diffs.length > 0) {
-                            diffs.sort((a, b) => a - b);
-                            return diffs[Math.floor(diffs.length / 2)];
-                        }
-                    }
-                    if (visibleRows.length >= 1) {
-                        const rect = visibleRows[0].row.getBoundingClientRect();
-                        if (rect.height > 50 && rect.height < 300) return rect.height;
-                    }
-                    return DEFAULT_ROW_HEIGHT;
-                };
-
-                const ROW_HEIGHT = detectRowHeight();
-
-                // 滚动到目标位置
-                scroller.scrollTop = index * ROW_HEIGHT;
-                await new Promise(r => setTimeout(r, 200));
-
-                // 重新获取可见行
-                const visibleRows = getVisibleRows();
-                if (visibleRows.length === 0) return false;
-
-                // 基于索引推断找到目标行
-                const targetY = index * ROW_HEIGHT;
-                let targetRow = null;
-
-                // 方法1: Y坐标匹配
-                for (const item of visibleRows) {
-                    if (Math.abs(item.y - targetY) < ROW_HEIGHT * 0.7) {
-                        targetRow = item.row;
-                        break;
-                    }
-                }
-
-                // 方法2: 基于推断索引匹配
-                if (!targetRow) {
-                    for (const item of visibleRows) {
-                        const inferredIdx = Math.round(item.y / ROW_HEIGHT);
-                        if (inferredIdx === index) {
-                            targetRow = item.row;
-                            break;
-                        }
-                    }
-                }
-
-                // 回退: 使用第一个可见行
-                if (!targetRow) targetRow = visibleRows[0].row;
-
-                const checkbox = targetRow.querySelector('.jx-checkbox__inner') ||
-                                targetRow.querySelector('.jx-checkbox');
-                if (checkbox) {
-                    checkbox.click();
-                    return true;
-                }
-                return false;
-            }
-            """
-            return await page.evaluate(js_code, index)
-        except Exception:
-            return False
+        【第五轮重构】复用 _click_claim_button_in_row_by_js 的定位逻辑。
+        """
+        result = await self._click_claim_button_in_row_by_js(page, index, target="checkbox")
+        return result.get("success", False)
 
     async def _click_claim_button_in_row_by_js(
         self,
@@ -717,10 +657,10 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
     ) -> dict[str, Any]:
         """使用 JavaScript 直接定位并点击行内目标元素(认领按钮或复选框).
 
-        复用首次编辑的定位逻辑(动态行高检测,translateY 定位等),
-        目标可选:
-        - target="claim_button":点击行内"认领到"按钮并选择下拉第一项
-        - target="checkbox":点击行内复选框(用于批量勾选)
+        【第四轮重构】直接复用首次编辑的视觉位置定位逻辑:
+        - 使用 getBoundingClientRect() 获取视觉位置
+        - 使用 TOP_OFFSET_ROWS = 2 补偿顶部偏移
+        - 使用 viewportStartIndex 和 firstFullyVisibleArrayIndex 定位
 
         Args:
             page: Playwright 页面对象
@@ -728,66 +668,29 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
             target: "claim_button" 或 "checkbox"
 
         Returns:
-            包含操作结果的字典: {success, error?, scrollerInfo, matchedY, ...}
+            包含操作结果的字典: {success, error?, scrollerInfo, matchedTop, ...}
         """
         try:
             js_code = """
             async ({ index, target }) => {
-                const DEFAULT_ROW_HEIGHT = 128;
+                const ROW_HEIGHT = 128;
 
-                // 检查是否为 page-mode(页面级滚动)
+                // 【第四轮修复】虚拟列表顶部偏移补偿（与首次编辑保持一致）
+                const TOP_OFFSET_ROWS = 2;
+
+                // 获取滚动容器
                 const recycleScroller = document.querySelector('.vue-recycle-scroller');
                 const isPageMode = recycleScroller && recycleScroller.classList.contains('page-mode');
 
-                // 获取所有可见行的辅助函数
-                const getVisibleRows = () => {
-                    const rows = document.querySelectorAll('.vue-recycle-scroller__item-view');
-                    const visibleRows = [];
-                    rows.forEach(row => {
-                        const style = row.getAttribute('style') || '';
-                        const match = style.match(/translateY\\((-?\\d+(?:\\.\\d+)?)\\s*(?:px)?\\s*\\)/);
-                        if (match) {
-                            const y = parseFloat(match[1]);
-                            if (y >= 0) visibleRows.push({ row, y });
-                        }
-                    });
-                    visibleRows.sort((a, b) => a.y - b.y);
-                    return visibleRows;
-                };
-
-                // 动态检测实际行高(通过测量相邻行的Y差值)
-                const detectRowHeight = () => {
-                    const visibleRows = getVisibleRows();
-                    if (visibleRows.length >= 2) {
-                        const diffs = [];
-                        for (let i = 1; i < visibleRows.length; i++) {
-                            const diff = visibleRows[i].y - visibleRows[i-1].y;
-                            if (diff > 50 && diff < 300) diffs.push(diff);
-                        }
-                        if (diffs.length > 0) {
-                            diffs.sort((a, b) => a - b);
-                            return diffs[Math.floor(diffs.length / 2)];
-                        }
-                    }
-                    if (visibleRows.length >= 1) {
-                        const rect = visibleRows[0].row.getBoundingClientRect();
-                        if (rect.height > 50 && rect.height < 300) return rect.height;
-                    }
-                    return DEFAULT_ROW_HEIGHT;
-                };
-
-                const ROW_HEIGHT = detectRowHeight();
-                // 滚动到目标索引的位置
+                // 计算目标滚动位置
                 const targetScrollTop = index * ROW_HEIGHT;
 
                 let scrollerInfo = '';
                 let actualScrollTop = 0;
-                let foundScrollContainer = null;  // 保存滚动容器供方法3复用
 
+                // 【第五轮修复】完全复制 navigation.py 的滚动逻辑
                 if (isPageMode) {
-                    // page-mode:滚动整个页面或找到真正的滚动父容器
                     scrollerInfo = 'page-mode';
-
                     let scrollParent = recycleScroller.parentElement;
                     let foundScrollable = false;
 
@@ -796,19 +699,11 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         const overflowY = style.overflowY;
                         if ((overflowY === 'auto' || overflowY === 'scroll') &&
                             scrollParent.scrollHeight > scrollParent.clientHeight) {
-                            // 计算最大可滚动位置
-                            const maxScrollTop = scrollParent.scrollHeight - scrollParent.clientHeight;
-                            // 如果目标位置接近或超过最大位置，直接滚动到最大位置
-                            // 这样可以确保最后几行能被渲染出来
-                            const effectiveScrollTop = targetScrollTop > maxScrollTop - ROW_HEIGHT
-                                ? maxScrollTop
-                                : targetScrollTop;
-                            scrollParent.scrollTop = effectiveScrollTop;
-                            await new Promise(r => setTimeout(r, 500));
+                            scrollParent.scrollTop = targetScrollTop;
+                            await new Promise(r => setTimeout(r, 800));
                             actualScrollTop = scrollParent.scrollTop;
                             scrollerInfo = `parent: ${scrollParent.className.split(' ')[0] || scrollParent.tagName}`;
                             foundScrollable = true;
-                            foundScrollContainer = scrollParent;  // 保存找到的容器
                             break;
                         }
                         scrollParent = scrollParent.parentElement;
@@ -816,251 +711,192 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
 
                     if (!foundScrollable) {
                         window.scrollTo({ top: targetScrollTop, behavior: 'instant' });
-                        await new Promise(r => setTimeout(r, 500));
+                        await new Promise(r => setTimeout(r, 800));
                         actualScrollTop = window.scrollY || document.documentElement.scrollTop;
                         scrollerInfo = 'window';
-                        foundScrollContainer = document.documentElement;  // 使用 documentElement
                     }
                 } else {
                     if (recycleScroller) {
                         recycleScroller.scrollTop = targetScrollTop;
-                        await new Promise(r => setTimeout(r, 500));
+                        await new Promise(r => setTimeout(r, 800));
                         actualScrollTop = recycleScroller.scrollTop;
                         scrollerInfo = 'vue-recycle-scroller';
-                        foundScrollContainer = recycleScroller;
                     }
                 }
 
-                // 重新获取可见行(滚动后)
-                const visibleRows = getVisibleRows();
+                // ========== 【第四轮重构】使用视觉位置定位（与首次编辑完全一致）==========
 
-                // ========== 新方法：从可见行的 translateY 推断索引 ==========
-                // 核心：每行的 translateY 值直接对应其全局索引
-                // 索引 = translateY / ROW_HEIGHT（考虑偏移量）
+                // 【第五轮修复】直接使用所有行，不进行过滤（与 navigation.py 一致）
+                const rows = Array.from(
+                    document.querySelectorAll('.vue-recycle-scroller__item-view')
+                );
 
-                // 检测 Y 偏移量（虚拟列表可能有固定偏移）
-                const minVisibleY = visibleRows.length > 0 ? Math.min(...visibleRows.map(r => r.y)) : 0;
-                const yOffset = minVisibleY % ROW_HEIGHT;
-
-                // 计算每个可见行的全局索引
-                const calcGlobalIndex = (y) => Math.round((y - yOffset) / ROW_HEIGHT);
-
-                // 找到第一个可见行的全局索引
-                const firstVisibleIndex = visibleRows.length > 0 ? calcGlobalIndex(visibleRows[0].y) : 0;
-
-                let targetRow = null;
-                let matchedY = -1;
-                let matchMethod = '';
-
-                // 调试信息
-                const debugInfo = visibleRows.map((r, i) => ({
-                    y: r.y,
-                    visibleIdx: i,
-                    globalIdx: calcGlobalIndex(r.y)
-                }));
-
-                // 方法1（首选）: 直接遍历可见行，找到全局索引匹配的行
-                for (let i = 0; i < visibleRows.length; i++) {
-                    const globalIdx = calcGlobalIndex(visibleRows[i].y);
-                    if (globalIdx === index) {
-                        targetRow = visibleRows[i].row;
-                        matchedY = visibleRows[i].y;
-                        matchMethod = `method1:globalIdx=${globalIdx},visiblePos=${i}`;
-                        break;
-                    }
-                }
-
-                // 方法2（备用）: 基于相对位置（如果方法1失败）
-                if (!targetRow) {
-                    const relativeIndex = index - firstVisibleIndex;
-                    if (relativeIndex >= 0 && relativeIndex < visibleRows.length) {
-                        targetRow = visibleRows[relativeIndex].row;
-                        matchedY = visibleRows[relativeIndex].y;
-                        matchMethod = `method2:relativeIdx=${relativeIndex},firstVisible=${firstVisibleIndex}`;
-                    }
-                }
-
-                // 方法3: 如果目标行不在可见区域,尝试多滚动一点再匹配
-                if (!targetRow && visibleRows.length > 0 && foundScrollContainer) {
-                    // 计算需要额外滚动的距离
-                    const targetScrollPosition = index * ROW_HEIGHT;
-                    const extraScroll = targetScrollPosition - actualScrollTop + ROW_HEIGHT;
-
-                    if (extraScroll > 0) {
-                        const scrollBefore = foundScrollContainer.scrollTop || window.scrollY;
-
-                        // 尝试多种滚动方式确保生效
-                        if (foundScrollContainer === document.documentElement) {
-                            window.scrollBy(0, extraScroll);
-                        } else {
-                            foundScrollContainer.scrollTop += extraScroll;
-                        }
-                        window.scrollBy(0, extraScroll);
-                        await new Promise(r => setTimeout(r, 500));
-
-                        let scrollAfter = foundScrollContainer.scrollTop || window.scrollY;
-
-                        // 如果滚动没有变化，可能到达边界，尝试滚动到最大位置
-                        if (Math.abs(scrollAfter - scrollBefore) < 10) {
-                            const maxScrollTop = foundScrollContainer.scrollHeight - foundScrollContainer.clientHeight;
-                            if (foundScrollContainer === document.documentElement) {
-                                window.scrollTo({ top: maxScrollTop, behavior: 'instant' });
-                            } else {
-                                foundScrollContainer.scrollTop = maxScrollTop;
-                            }
-                            await new Promise(r => setTimeout(r, 300));
-                            scrollAfter = foundScrollContainer.scrollTop || window.scrollY;
-                        }
-
-                        const scrollAfterFinal = scrollAfter;
-
-                        // 重新获取可见行
-                        const newVisibleRows = getVisibleRows();
-                        const newVisibleYs = newVisibleRows.map(r => r.y);
-
-                        // 重新计算偏移量和索引函数
-                        const newMinVisibleY = newVisibleRows.length > 0 ? Math.min(...newVisibleRows.map(r => r.y)) : 0;
-                        const newYOffset = newMinVisibleY % ROW_HEIGHT;
-                        const newCalcGlobalIndex = (y) => Math.round((y - newYOffset) / ROW_HEIGHT);
-
-                        // 方法3a（首选）: 遍历可见行找到匹配的全局索引
-                        for (let i = 0; i < newVisibleRows.length; i++) {
-                            const globalIdx = newCalcGlobalIndex(newVisibleRows[i].y);
-                            if (globalIdx === index) {
-                                targetRow = newVisibleRows[i].row;
-                                matchedY = newVisibleRows[i].y;
-                                matchMethod = `method3a:globalIdx=${globalIdx},visiblePos=${i}`;
-                                scrollerInfo += ` (retry: extra=${extraScroll}, before=${scrollBefore}, after=${scrollAfterFinal})`;
-                                break;
-                            }
-                        }
-
-                        // 方法3b: 如果滚动没有变化（到达底部）且目标索引不在可见范围内
-                        // 检查是否是列表末尾的边界情况
-                        if (!targetRow && Math.abs(scrollAfterFinal - scrollBefore) < 10) {
-                            const globalIdxs = newVisibleRows.map(r => newCalcGlobalIndex(r.y));
-                            const maxGlobalIdx = Math.max(...globalIdxs);
-
-                            // 如果目标索引刚好在最大可见索引之后（差值在合理范围内）
-                            if (index > maxGlobalIdx && index <= maxGlobalIdx + 3) {
-                                // 策略：向上滚动一点，让虚拟列表渲染出更多行
-                                // 然后再滚动回来，此时末尾的行应该已经被渲染
-                                const scrollBackAmount = ROW_HEIGHT * 3;  // 向上滚动3行的距离
-                                const currentScroll = foundScrollContainer.scrollTop || window.scrollY;
-
-                                // 先向上滚动
-                                if (foundScrollContainer === document.documentElement) {
-                                    window.scrollTo({ top: Math.max(0, currentScroll - scrollBackAmount), behavior: 'instant' });
-                                } else {
-                                    foundScrollContainer.scrollTop = Math.max(0, currentScroll - scrollBackAmount);
-                                }
-                                await new Promise(r => setTimeout(r, 200));
-
-                                // 再滚动到最大位置
-                                const maxScrollTop = foundScrollContainer.scrollHeight - foundScrollContainer.clientHeight;
-                                if (foundScrollContainer === document.documentElement) {
-                                    window.scrollTo({ top: maxScrollTop, behavior: 'instant' });
-                                } else {
-                                    foundScrollContainer.scrollTop = maxScrollTop;
-                                }
-                                await new Promise(r => setTimeout(r, 300));
-
-                                // 重新获取可见行
-                                const boundaryRows = getVisibleRows();
-                                const boundaryMinY = boundaryRows.length > 0 ? Math.min(...boundaryRows.map(r => r.y)) : 0;
-                                const boundaryYOffset = boundaryMinY % ROW_HEIGHT;
-                                const calcBoundaryGlobalIndex = (y) => Math.round((y - boundaryYOffset) / ROW_HEIGHT);
-
-                                // 遍历查找目标索引
-                                for (let i = 0; i < boundaryRows.length; i++) {
-                                    const globalIdx = calcBoundaryGlobalIndex(boundaryRows[i].y);
-                                    if (globalIdx === index) {
-                                        targetRow = boundaryRows[i].row;
-                                        matchedY = boundaryRows[i].y;
-                                        matchMethod = `method3b:boundary,globalIdx=${globalIdx}`;
-                                        scrollerInfo += ` (boundary scroll: maxVisible=${maxGlobalIdx}, boundaryRows=${boundaryRows.length})`;
-                                        break;
-                                    }
-                                }
-
-                                // 如果还是找不到，记录详细信息
-                                if (!targetRow) {
-                                    const boundaryGlobalIdxs = boundaryRows.map(r => calcBoundaryGlobalIndex(r.y));
-                                    scrollerInfo += ` (boundary failed: targetIdx=${index}, boundaryIdxs=[${boundaryGlobalIdxs.join(',')}])`;
-                                }
-                            }
-                        }
-
-                        // 如果重试后仍然失败,添加调试信息
-                        if (!targetRow) {
-                            const globalIdxs = newVisibleRows.map(r => newCalcGlobalIndex(r.y));
-                            scrollerInfo += ` (retry failed: extra=${extraScroll}, before=${scrollBefore}, after=${scrollAfterFinal}, targetIdx=${index}, yOffset=${newYOffset}, globalIdxs=[${globalIdxs.join(',')}])`;
-                        }
-                    }
-                }
-
-                if (!targetRow) {
-                    const globalIdxs = visibleRows.map(r => calcGlobalIndex(r.y));
+                if (rows.length === 0) {
                     return {
                         success: false,
-                        error: `Target index=${index} not found in visible rows`,
+                        error: '没有找到商品行元素',
+                        scrollerInfo,
+                        isPageMode,
+                        targetScrollTop,
+                        actualScrollTop
+                    };
+                }
+
+                // 【关键】使用视觉位置排序（getBoundingClientRect），而非 translateY
+                const visibleRows = rows.map(row => {
+                    const rect = row.getBoundingClientRect();
+                    return {
+                        row,
+                        top: rect.top,
+                        bottom: rect.bottom
+                    };
+                }).filter(r => {
+                    // 过滤视口内的行（包括部分可见的）
+                    return r.bottom > 0 && r.top < window.innerHeight + ROW_HEIGHT;
+                }).sort((a, b) => a.top - b.top);  // 按视觉位置排序
+
+                if (visibleRows.length === 0) {
+                    return {
+                        success: false,
+                        error: '视口内没有可见的商品行',
                         scrollerInfo,
                         isPageMode,
                         targetScrollTop,
                         actualScrollTop,
-                        yOffset,
-                        firstVisibleIndex,
-                        visibleCount: visibleRows.length,
-                        visibleYs: visibleRows.map(r => r.y),
-                        globalIdxs,
-                        detectedRowHeight: ROW_HEIGHT,
-                        hasScrollContainer: !!foundScrollContainer
+                        totalRows: rows.length
                     };
                 }
 
+                // 【第四轮修复】修正虚拟列表顶部偏移
+                const viewportStartIndex = Math.floor(actualScrollTop / ROW_HEIGHT) - TOP_OFFSET_ROWS;
+
+                // 找到第一个完全可见的行（top >= 0）
+                const firstFullyVisibleArrayIndex = visibleRows.findIndex(r => r.top >= 0);
+
+                if (firstFullyVisibleArrayIndex === -1) {
+                    return {
+                        success: false,
+                        error: '没有完全可见的行（所有行 top < 0）',
+                        scrollerInfo,
+                        isPageMode,
+                        targetScrollTop,
+                        actualScrollTop,
+                        allTops: visibleRows.map(r => Math.round(r.top))
+                    };
+                }
+
+                // 目标行在可见行数组中的索引 = (目标索引 - 视口起始索引) + 缓冲行数量
+                const targetArrayIndex = (index - viewportStartIndex) + firstFullyVisibleArrayIndex;
+
+                // 调试信息（与 navigation.py 一致）
+                const debugInfo = {
+                    topOffsetRows: TOP_OFFSET_ROWS,
+                    viewportStartIndex,
+                    firstFullyVisibleArrayIndex,
+                    targetArrayIndex,
+                    visibleRowCount: visibleRows.length,
+                    actualScrollTop,
+                    firstRowTop: Math.round(visibleRows[0].top),
+                    firstFullyVisibleTop: Math.round(visibleRows[firstFullyVisibleArrayIndex].top),
+                    allTops: visibleRows.map(r => Math.round(r.top))
+                };
+
+                // 边界检查
+                if (targetArrayIndex < 0) {
+                    return {
+                        success: false,
+                        error: `目标行在视口上方: targetArrayIndex=${targetArrayIndex} < 0`,
+                        scrollerInfo,
+                        isPageMode,
+                        targetScrollTop,
+                        ...debugInfo
+                    };
+                }
+
+                if (targetArrayIndex >= visibleRows.length) {
+                    return {
+                        success: false,
+                        error: `目标行在视口下方: targetArrayIndex=${targetArrayIndex} >= visibleRows=${visibleRows.length}`,
+                        scrollerInfo,
+                        isPageMode,
+                        targetScrollTop,
+                        ...debugInfo
+                    };
+                }
+
+                // 定位目标行
+                const targetRow = visibleRows[targetArrayIndex].row;
+                const matchedTop = visibleRows[targetArrayIndex].top;
+
                 // 如果只需要点击复选框,直接处理后返回
                 if (target === 'checkbox') {
-                    const checkboxSelectors = [
-                        '.is-fixed-left.is-selection-column .jx-checkbox__inner',
-                        '.is-fixed-left.is-selection-column .jx-checkbox',
-                        '.jx-checkbox__inner',
-                        'input[type=\"checkbox\"]',
-                    ];
-                    let checkbox = null;
-                    for (const selector of checkboxSelectors) {
-                        const found = targetRow.querySelector(selector);
-                        if (found) {
-                            checkbox = found;
-                            break;
-                        }
-                    }
-                    if (!checkbox) {
+                    // 【第十二轮修复】点击 label 元素而不是空的 span
+                    // .jx-checkbox__inner 是空的视觉样式 span，可能没有点击事件
+                    // 应该点击 label.jx-checkbox 来触发复选框
+
+                    // 获取行内的复选框 label 元素（排除表头）
+                    const allCheckboxLabels = Array.from(
+                        document.querySelectorAll('.vue-recycle-scroller__item-view label.jx-checkbox')
+                    );
+
+                    if (allCheckboxLabels.length === 0) {
                         return {
                             success: false,
-                            error: 'Checkbox not found in target row',
+                            error: 'No checkbox labels found on page',
                             scrollerInfo,
-                            matchedY,
+                            matchedTop: Math.round(matchedTop),
+                            ...debugInfo
                         };
                     }
+
+                    // 按视觉位置排序，与 visibleRows 使用相同的逻辑
+                    const visibleCheckboxes = allCheckboxLabels.map(label => {
+                        const rect = label.getBoundingClientRect();
+                        return { label, top: rect.top };
+                    }).filter(c => {
+                        // 使用与 visibleRows 相同的过滤条件
+                        return c.top > -ROW_HEIGHT && c.top < window.innerHeight + ROW_HEIGHT;
+                    }).sort((a, b) => a.top - b.top);
+
+                    const cbDebugInfo = {
+                        ...debugInfo,
+                        totalCheckboxes: allCheckboxLabels.length,
+                        visibleCbCount: visibleCheckboxes.length,
+                        matchedTop: Math.round(matchedTop),
+                        cbTops: visibleCheckboxes.map(c => Math.round(c.top))
+                    };
+
+                    // 用相同的 targetArrayIndex 取复选框
+                    if (targetArrayIndex < 0 || targetArrayIndex >= visibleCheckboxes.length) {
+                        return {
+                            success: false,
+                            error: `Checkbox index out of range: ${targetArrayIndex} (0-${visibleCheckboxes.length-1})`,
+                            scrollerInfo,
+                            ...cbDebugInfo
+                        };
+                    }
+
+                    const targetCheckbox = visibleCheckboxes[targetArrayIndex];
+
                     try {
-                        checkbox.click();
+                        // 点击 label 触发复选框
+                        targetCheckbox.label.click();
                         return {
                             success: true,
                             scrollerInfo,
-                            matchedY,
-                            matchMethod,
-                            yOffset,
-                            firstVisibleIndex,
-                            rowHeight: ROW_HEIGHT,
-                            debugRows: debugInfo.slice(0, 5),  // 前5行的调试信息
-                            clickedSelector: checkbox.className || 'checkbox',
+                            matchedTop: Math.round(matchedTop),
+                            cbTop: Math.round(targetCheckbox.top),
+                            cbArrayIndex: targetArrayIndex,
+                            matchMethod: 'checkbox-label-click',
+                            ...cbDebugInfo
                         };
                     } catch (e) {
                         return {
                             success: false,
-                            error: 'Checkbox click failed',
+                            error: 'Checkbox label click failed: ' + e.message,
                             scrollerInfo,
-                            matchedY,
+                            matchedTop: Math.round(matchedTop),
+                            ...cbDebugInfo
                         };
                     }
                 }
@@ -1104,8 +940,9 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         success: false,
                         error: 'Claim button not found in target row',
                         scrollerInfo,
-                        matchedY,
-                        buttonsFound: allButtons.length
+                        matchedTop: Math.round(matchedTop),
+                        buttonsFound: allButtons.length,
+                        ...debugInfo
                     };
                 }
 
@@ -1187,9 +1024,10 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         success: false,
                         error: 'Dropdown menu not found after clicking claim button',
                         scrollerInfo,
-                        matchedY,
+                        matchedTop: Math.round(matchedTop),
                         claimBtnClicked: true,
-                        ariaControls: ariaControls || 'none'
+                        ariaControls: ariaControls || 'none',
+                        ...debugInfo
                     };
                 }
 
@@ -1215,10 +1053,11 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         success: false,
                         error: 'No option found in dropdown menu',
                         scrollerInfo,
-                        matchedY,
+                        matchedTop: Math.round(matchedTop),
                         claimBtnClicked: true,
                         dropdownFound: true,
-                        dropdownId: dropdown.id || 'unknown'
+                        dropdownId: dropdown.id || 'unknown',
+                        ...debugInfo
                     };
                 }
 
@@ -1231,10 +1070,10 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                     isPageMode,
                     targetScrollTop,
                     actualScrollTop,
-                    targetTranslateY,
-                    matchedY,
-                    detectedRowHeight: ROW_HEIGHT,
-                    optionText: firstOption.textContent?.trim() || ''
+                    matchedTop: Math.round(matchedTop),
+                    matchMethod: 'visual-position',
+                    optionText: firstOption.textContent?.trim() || '',
+                    ...debugInfo
                 };
             }
             """
@@ -1244,24 +1083,31 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
             if result.get("success"):
                 if target == "checkbox":
                     logger.success(
-                        f"✓ JS 勾选成功,索引={index}, 容器={result.get('scrollerInfo')}, "
-                        f"匹配Y={result.get('matchedY')}, 方法={result.get('matchMethod')}, "
-                        f"偏移={result.get('yOffset')}, 首可见索引={result.get('firstVisibleIndex')}"
+                        f"✓ [视觉位置定位] 勾选成功, index={index}, "
+                        f"topOffset={result.get('topOffsetRows')}行, "
+                        f"viewportStartIndex={result.get('viewportStartIndex')}, "
+                        f"bufferRows={result.get('firstFullyVisibleArrayIndex')}, "
+                        f"targetArrayIndex={result.get('targetArrayIndex')}, "
+                        f"可见行数={result.get('visibleRowCount')}, "
+                        f"matchedTop={result.get('matchedTop')}px"
                     )
-                    # 调试: 输出可见行信息
-                    debug_rows = result.get("debugRows", [])
-                    if debug_rows:
-                        logger.debug(f"  可见行(前5): {debug_rows}")
                 else:
                     logger.success(
-                        f"✓ JS 点击认领按钮成功,索引={index}, 容器={result.get('scrollerInfo')}, "
-                        f"page-mode={result.get('isPageMode')}, 匹配Y={result.get('matchedY')}px, "
+                        f"✓ [视觉位置定位] 认领按钮成功, index={index}, "
+                        f"topOffset={result.get('topOffsetRows')}行, "
+                        f"viewportStartIndex={result.get('viewportStartIndex')}, "
+                        f"matchedTop={result.get('matchedTop')}px, "
                         f"选项={result.get('optionText')}"
                     )
             else:
                 logger.warning(
-                    f"JS 行内操作失败: {result.get('error')}, 容器={result.get('scrollerInfo')}, "
-                    f"可见Y值={result.get('visibleYs')}, 检测行高={result.get('detectedRowHeight')}"
+                    f"[视觉位置定位] 操作失败: {result.get('error')}, "
+                    f"index={index}, topOffset={result.get('topOffsetRows')}行, "
+                    f"viewportStartIndex={result.get('viewportStartIndex')}, "
+                    f"bufferRows={result.get('firstFullyVisibleArrayIndex')}, "
+                    f"targetArrayIndex={result.get('targetArrayIndex')}, "
+                    f"可见行数={result.get('visibleRowCount')}, "
+                    f"tops={result.get('allTops')}"
                 )
 
             return result
@@ -1409,6 +1255,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
         for idx in indexes:
             logger.info(f"勾选索引 {idx} 的商品复选框...")
             selected = False
+            index_not_found = False  # 标记索引是否不存在于页面中
 
             for attempt in range(2):
                 if attempt > 0:
@@ -1421,11 +1268,21 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                 if result.get("success"):
                     selected = True
                     break
-                logger.warning(f"索引 {idx} 第 {attempt + 1} 次勾选失败: {result.get('error')}")
+                # 检查是否因为索引不存在而失败
+                error_msg = result.get("error", "")
+                if "not found in visible rows" in error_msg:
+                    index_not_found = True
+                    logger.info(f"索引 {idx} 不存在于页面中，已到达列表末尾")
+                    break
+                logger.warning(f"索引 {idx} 第 {attempt + 1} 次勾选失败: {error_msg}")
                 await waiter.wait_for_dom_stable(timeout_ms=300)
 
             if selected:
                 success_count += 1
+            elif index_not_found:
+                # 索引不存在，提前终止勾选循环
+                logger.info(f"检测到列表末尾，提前终止勾选。已成功勾选 {success_count} 个")
+                break
             else:
                 fail_count += 1
 
@@ -2811,3 +2668,360 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
             logger.debug(f"通过 label 定位 Temu 选项失败: {exc}")
 
         return None
+
+    # ==================== API-based Claim Methods ====================
+
+    async def claim_products_via_api(
+        self,
+        page: Page,
+        *,
+        count: int = 10,
+        platform: str = "pddkj",
+        owner_account: str | None = None,
+    ) -> dict[str, Any]:
+        """使用 API 直接认领产品（绕过浏览器虚拟列表定位）.
+
+        这是浏览器自动化认领的替代方案，直接调用后端 API：
+        - 更快速：无需操作 DOM
+        - 更稳定：避免虚拟列表定位问题
+        - 支持批量：一次请求认领多个产品
+
+        Args:
+            page: Playwright 页面对象（用于获取 Cookie）
+            count: 要认领的产品数量
+            platform: 平台代码 ("pddkj" = Temu全托管)
+            owner_account: 创建人员筛选
+
+        Returns:
+            包含认领结果的字典:
+            - success: 是否成功
+            - claimed_count: 认领数量
+            - message: 结果消息
+            - detail_ids: 认领的产品 ID 列表
+
+        Examples:
+            >>> result = await controller.claim_products_via_api(page, count=5)
+            >>> print(f"成功认领 {result['claimed_count']} 个产品")
+        """
+        from .api_client import MiaoshouApiClient
+
+        try:
+            # 从页面上下文获取 cookies
+            context = page.context
+            client = await MiaoshouApiClient.from_playwright_context(context)
+
+            async with client:
+                result = await client.claim_unclaimed_products(
+                    count=count,
+                    platform=platform,
+                    owner_account=owner_account,
+                )
+
+            if result.get("success"):
+                logger.success(f"API 认领完成: {result.get('claimed_count', 0)} 个产品")
+            else:
+                logger.warning(f"API 认领失败: {result.get('message', '未知错误')}")
+
+            return result
+
+        except Exception as exc:
+            logger.error(f"API 认领异常: {exc}")
+            return {
+                "success": False,
+                "message": str(exc),
+                "claimed_count": 0,
+            }
+
+    async def claim_specific_products_via_api(
+        self,
+        page: Page,
+        *,
+        detail_ids: list[str],
+        platform: str = "pddkj",
+    ) -> dict[str, Any]:
+        """使用 API 认领指定的产品列表.
+
+        Args:
+            page: Playwright 页面对象（用于获取 Cookie）
+            detail_ids: 采集箱产品 ID 列表
+            platform: 平台代码
+
+        Returns:
+            API 响应结果
+
+        Examples:
+            >>> result = await controller.claim_specific_products_via_api(
+            ...     page,
+            ...     detail_ids=["3049643700", "3049643667"]
+            ... )
+        """
+        from .api_client import MiaoshouApiClient
+
+        try:
+            context = page.context
+            client = await MiaoshouApiClient.from_playwright_context(context)
+
+            async with client:
+                api_result = await client.claim_products(
+                    detail_ids=detail_ids,
+                    platform=platform,
+                )
+
+            # 兼容两种响应格式
+            success = api_result.get("result") == "success" or api_result.get("code") == 0
+            if success:
+                logger.success(f"API 认领成功: {len(detail_ids)} 个产品")
+            else:
+                logger.warning(f"API 认领失败: {api_result.get('message')}")
+
+            return {
+                "success": success,
+                "message": api_result.get("message", ""),
+                "claimed_count": len(detail_ids) if success else 0,
+                "detail_ids": detail_ids,
+                "api_response": api_result,
+            }
+
+        except Exception as exc:
+            logger.error(f"API 认领异常: {exc}")
+            return {
+                "success": False,
+                "message": str(exc),
+                "claimed_count": 0,
+            }
+
+    async def extract_product_ids_from_dom(
+        self,
+        page: Page,
+        *,
+        count: int = 10,
+    ) -> list[str]:
+        """从页面 DOM 中提取产品 ID 列表.
+
+        在 DOM 筛选人员后调用此方法，从当前页面提取产品 ID。
+        支持虚拟列表滚动加载，确保能提取足够数量的产品ID。
+
+        Args:
+            page: Playwright 页面对象
+            count: 需要提取的产品数量
+
+        Returns:
+            产品 ID 列表
+        """
+        row_height = 128  # 虚拟列表每行高度
+        max_scroll_attempts = 20  # 最大滚动次数，防止无限循环
+        scroll_step = row_height * 5  # 每次滚动5行的高度
+
+        try:
+            # 收集所有产品ID（通过滚动虚拟列表）
+            all_ids: list[str] = []
+            seen_ids: set[str] = set()
+
+            logger.info(f"开始滚动虚拟列表提取产品 ID，目标数量: {count}")
+
+            # 首先检测滚动容器
+            scroller_info = await page.evaluate(
+                """() => {
+                    // 查找 vue-recycle-scroller 及其可滚动的父元素
+                    const scroller = document.querySelector('.vue-recycle-scroller');
+                    if (!scroller) return { found: false };
+
+                    // 检查 scroller 本身
+                    const scrollerInfo = {
+                        scrollHeight: scroller.scrollHeight,
+                        clientHeight: scroller.clientHeight,
+                        canScroll: scroller.scrollHeight > scroller.clientHeight + 10
+                    };
+
+                    // 向上查找可滚动的父元素
+                    let parent = scroller.parentElement;
+                    let scrollableParent = null;
+                    let depth = 0;
+                    while (parent && depth < 10) {
+                        if (parent.scrollHeight > parent.clientHeight + 10) {
+                            const style = window.getComputedStyle(parent);
+                            const overflow = style.overflowY;
+                            if (overflow === 'auto' || overflow === 'scroll') {
+                                scrollableParent = {
+                                    tagName: parent.tagName,
+                                    className: parent.className.slice(0, 50),
+                                    scrollHeight: parent.scrollHeight,
+                                    clientHeight: parent.clientHeight,
+                                    depth: depth
+                                };
+                                break;
+                            }
+                        }
+                        parent = parent.parentElement;
+                        depth++;
+                    }
+
+                    return {
+                        found: true,
+                        scroller: scrollerInfo,
+                        scrollableParent
+                    };
+                }"""
+            )
+
+            logger.debug(f"滚动容器检测: {scroller_info}")
+
+            for scroll_attempt in range(max_scroll_attempts):
+                # 从当前可见行提取产品ID
+                result = await page.evaluate(
+                    """() => {
+                        const ids = [];
+                        const debug = { rowCount: 0, scrollTop: 0 };
+
+                        const scroller = document.querySelector('.vue-recycle-scroller');
+                        if (scroller) {
+                            debug.scrollTop = scroller.scrollTop;
+                        }
+
+                        const rows = document.querySelectorAll('.vue-recycle-scroller__item-view');
+                        debug.rowCount = rows.length;
+
+                        for (const row of rows) {
+                            const text = row.textContent || '';
+                            const match = text.match(/采集箱产品ID[：:]\\s*(\\d+)/);
+                            if (match && match[1]) {
+                                ids.push(match[1]);
+                            }
+                        }
+
+                        return { ids, debug };
+                    }"""
+                )
+
+                new_ids = result.get("ids", [])
+                debug_info = result.get("debug", {})
+
+                # 添加新发现的ID
+                added_count = 0
+                for pid in new_ids:
+                    if pid not in seen_ids:
+                        seen_ids.add(pid)
+                        all_ids.append(pid)
+                        added_count += 1
+
+                logger.debug(
+                    f"滚动 {scroll_attempt + 1}: "
+                    f"行数={debug_info.get('rowCount')}, "
+                    f"scrollTop={debug_info.get('scrollTop')}, "
+                    f"新增={added_count}, "
+                    f"累计={len(all_ids)}"
+                )
+
+                # 检查是否已收集足够数量
+                if len(all_ids) >= count:
+                    logger.info(f"已收集到足够的产品 ID: {len(all_ids)} >= {count}")
+                    break
+
+                # 滚动虚拟列表加载更多 - 尝试多种滚动方式
+                scroll_result = await page.evaluate(
+                    """(scrollStep) => {
+                        // 查找可滚动的容器
+                        const scroller = document.querySelector('.vue-recycle-scroller');
+                        if (!scroller) return { scrolled: false, reason: 'no_scroller' };
+
+                        // 方法1: 尝试滚动 scroller 本身
+                        let targetElement = scroller;
+                        let maxScroll = scroller.scrollHeight - scroller.clientHeight;
+
+                        // 如果 scroller 不可滚动，查找可滚动的父元素
+                        if (maxScroll <= 10) {
+                            let parent = scroller.parentElement;
+                            let depth = 0;
+                            while (parent && depth < 10) {
+                                const parentMax = parent.scrollHeight - parent.clientHeight;
+                                if (parentMax > 10) {
+                                    const style = window.getComputedStyle(parent);
+                                    if (style.overflowY === 'auto' || style.overflowY === 'scroll') {
+                                        targetElement = parent;
+                                        maxScroll = parentMax;
+                                        break;
+                                    }
+                                }
+                                parent = parent.parentElement;
+                                depth++;
+                            }
+                        }
+
+                        const oldScrollTop = targetElement.scrollTop;
+
+                        // 检查是否已到底部
+                        if (oldScrollTop >= maxScroll - 10) {
+                            return {
+                                scrolled: false,
+                                reason: 'at_bottom',
+                                maxScroll,
+                                oldScrollTop,
+                                element: targetElement.className.slice(0, 30)
+                            };
+                        }
+
+                        // 执行滚动
+                        targetElement.scrollTop = Math.min(oldScrollTop + scrollStep, maxScroll);
+
+                        return {
+                            scrolled: true,
+                            oldScrollTop,
+                            newScrollTop: targetElement.scrollTop,
+                            maxScroll,
+                            element: targetElement.className.slice(0, 30)
+                        };
+                    }""",
+                    scroll_step,
+                )
+
+                if not scroll_result.get("scrolled"):
+                    reason = scroll_result.get("reason", "unknown")
+                    logger.debug(
+                        f"停止滚动: {reason}, "
+                        f"maxScroll={scroll_result.get('maxScroll')}, "
+                        f"scrollTop={scroll_result.get('oldScrollTop')}, "
+                        f"element={scroll_result.get('element')}"
+                    )
+                    break
+                else:
+                    logger.debug(
+                        f"滚动成功: {scroll_result.get('oldScrollTop')} -> "
+                        f"{scroll_result.get('newScrollTop')} / {scroll_result.get('maxScroll')}, "
+                        f"element={scroll_result.get('element')}"
+                    )
+
+                # 等待虚拟列表更新DOM
+                await page.wait_for_timeout(300)
+
+            logger.info(f"从 DOM 提取到 {len(all_ids)} 个产品 ID")
+            if all_ids:
+                logger.debug(f"产品 ID 列表: {all_ids[:10]}...")
+
+            # 滚动回顶部，恢复初始状态
+            await page.evaluate(
+                """() => {
+                    const scroller = document.querySelector('.vue-recycle-scroller');
+                    if (!scroller) return;
+
+                    // 重置 scroller
+                    scroller.scrollTop = 0;
+
+                    // 也重置可能的父滚动容器
+                    let parent = scroller.parentElement;
+                    let depth = 0;
+                    while (parent && depth < 10) {
+                        if (parent.scrollTop > 0) {
+                            parent.scrollTop = 0;
+                        }
+                        parent = parent.parentElement;
+                        depth++;
+                    }
+                }"""
+            )
+            await page.wait_for_timeout(200)
+
+            return all_ids[:count] if len(all_ids) > count else all_ids
+
+        except Exception as exc:
+            logger.error(f"从 DOM 提取产品 ID 失败: {exc}")
+            return []

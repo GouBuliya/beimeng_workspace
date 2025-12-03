@@ -52,6 +52,8 @@ from ..browser.first_edit_controller import FirstEditController
 from ..browser.first_edit_dialog_codegen import fill_first_edit_dialog_codegen
 from ..browser.image_manager import ImageManager
 from ..browser.login_controller import LoginController
+from ..browser.miaoshou.batch_edit_api import run_batch_edit_via_api
+from ..browser.miaoshou.publish_api import run_publish_via_api
 from ..browser.miaoshou_controller import MiaoshouController
 from ..browser.publish_controller import PublishController
 
@@ -183,6 +185,7 @@ class CompletePublishWorkflow:
         selection_rows_override: Sequence[ProductSelectionRow] | None = None,
         use_ai_titles: bool = False,
         use_codegen_batch_edit: bool = False,
+        use_api_batch_edit: bool = True,
         skip_first_edit: bool = False,
         only_claim: bool = False,
         only_stage4_publish: bool = False,
@@ -205,7 +208,8 @@ class CompletePublishWorkflow:
             headless: 浏览器是否使用无头模式; None 时读取配置文件.
             selection_table: 选品表路径,必须由外部提供(Web 上传或 CLI 参数).
             use_ai_titles: 是否启用 AI 生成标题 (失败时自动回退).
-            use_codegen_batch_edit: 是否使用 codegen 录制的批量编辑模块 (默认 False, 推荐使用优化后的 BatchEditController).
+            use_codegen_batch_edit: 是否使用 codegen 录制的批量编辑模块 (默认 False).
+            use_api_batch_edit: 是否使用 API 方式执行批量编辑 (默认 True, 最快速, 支持文件上传).
             skip_first_edit: 是否直接跳过首次编辑阶段.
             resume_from_checkpoint: 是否从检查点恢复.
             checkpoint_id: 指定要恢复的检查点ID,为空则使用最新检查点.
@@ -219,6 +223,7 @@ class CompletePublishWorkflow:
         self.settings = settings
         self.use_ai_titles = use_ai_titles
         self.use_codegen_batch_edit = use_codegen_batch_edit
+        self.use_api_batch_edit = use_api_batch_edit
         self.skip_first_edit = skip_first_edit
         self.only_claim = only_claim
         self.only_stage4_publish = only_stage4_publish
@@ -1239,6 +1244,8 @@ class CompletePublishWorkflow:
                 logger.info(f"起始偏移 {start_offset} 超过单页容量,跳转到第 {initial_page} 页")
                 await _jump_to_page(initial_page)
 
+            # 注：虚拟列表滚动已在 _click_edit_button_by_js 内部处理（基于 DOM 顺序定位算法）
+
             for index, selection in enumerate(working_selections):
                 absolute_index = start_offset + index
                 # 计算目标页码和页内相对索引
@@ -1256,6 +1263,14 @@ class CompletePublishWorkflow:
                 # 为每个商品的编辑添加 Operation 级别追踪
                 op_name = f"edit_product_{absolute_index + 1}"
                 async with self._perf_tracker.operation(op_name, product_index=absolute_index + 1):
+                    # [首次编辑诊断] 记录准备编辑的商品信息
+                    logger.info(
+                        "[首次编辑诊断] 准备编辑商品: 绝对索引={}, 页内索引={}, 产品名={}, 型号={}",
+                        absolute_index,
+                        page_relative_index,
+                        selection.product_name[:20] if selection.product_name else "?",
+                        selection.model_number,
+                    )
                     logger.info(
                         f"编辑商品 {absolute_index + 1} "
                         f"(批次内第 {index + 1}/{len(working_selections)} 个,"
@@ -1275,6 +1290,13 @@ class CompletePublishWorkflow:
 
                             original_title = await first_edit_ctrl.get_original_title(page)
                             base_title = original_title or selection.product_name
+
+                            # [诊断日志] 记录对话框标题（仅用于调试，不做验证）
+                            logger.debug(
+                                "[首次编辑诊断] 对话框已打开, 实际标题='{}'",
+                                original_title[:50] if original_title else "(空)",
+                            )
+
                             payload_dict = self._build_first_edit_payload(selection, base_title)
                             sku_image_urls = list(payload_dict.get("sku_image_urls", []) or [])
                             size_chart_url = (
@@ -1283,6 +1305,38 @@ class CompletePublishWorkflow:
                             product_video_url = (
                                 payload_dict.get("product_video_url") or ""
                             ).strip()
+
+                            # [诊断日志] 记录 SKU 图片数据状态
+                            if sku_image_urls:
+                                logger.info(
+                                    "[SKU诊断] 产品 {} 有 {} 张 SKU 图片待上传",
+                                    selection.model_number,
+                                    len(sku_image_urls),
+                                )
+                            else:
+                                logger.warning(
+                                    "[SKU诊断] 产品 {} 无 SKU 图片数据 "
+                                    "(image_files={}, sku_image_urls={})",
+                                    selection.model_number,
+                                    getattr(selection, "image_files", None),
+                                    getattr(selection, "sku_image_urls", None),
+                                )
+
+                            # [诊断日志] 记录尺寸图数据状态
+                            if size_chart_url:
+                                logger.info(
+                                    "[尺寸图诊断] 产品 {} 有尺寸图待上传: {}",
+                                    selection.model_number,
+                                    size_chart_url[:80] + "..."
+                                    if len(size_chart_url) > 80
+                                    else size_chart_url,
+                                )
+                            else:
+                                logger.warning(
+                                    "[尺寸图诊断] 产品 {} 无尺寸图数据 (原始值='{}')",
+                                    selection.model_number,
+                                    getattr(selection, "size_chart_image_url", None),
+                                )
 
                             hook_fn = self._build_first_edit_hook(
                                 first_edit_ctrl=first_edit_ctrl,
@@ -1564,10 +1618,9 @@ class CompletePublishWorkflow:
         miaoshou_ctrl: MiaoshouController,
         edited_products: Sequence[EditedProduct],
     ) -> StageOutcome:
-        """阶段 2: 逐行点击认领按钮,每个商品点击 5 次.
+        """阶段 2: 认领产品到 Temu 全托管.
 
-        使用 JS 定位逻辑(复用首次编辑的动态行高检测),直接点击每行内的
-        "认领到"下拉按钮并选择第一个选项,无需先勾选复选框.
+        默认使用 API 直接认领（更快速、更稳定），如果 API 失败则回退到 DOM 操作。
         """
 
         if self.skip_first_edit:
@@ -1590,178 +1643,274 @@ class CompletePublishWorkflow:
                 details={"skipped": True, "expected_total": 0},
             )
 
+        # edited_products 是当前批次要处理的商品数据
+        working_products = list(edited_products)
+        selection_count = len(working_products)  # 认领所有产品，分批在后面处理
+
+        # 如果当前批次没有可用商品，直接跳过认领阶段
+        if len(working_products) == 0:
+            logger.info(f"执行轮次 {self.execution_round} 无可用商品，跳过认领阶段")
+            return StageOutcome(
+                name="stage2_claim",
+                success=True,
+                message="NO_PRODUCTS_FOR_ROUND",
+                details={
+                    "execution_round": self.execution_round,
+                    "skipped": True,
+                },
+            )
+
+        # 优先使用 web 前端提供的 collection_owner，否则从 edited_products 获取
         filter_owner: str | None = None
-        if edited_products:
-            owner_candidate = getattr(edited_products[0].selection, "owner", "") or ""
+        owner_candidate = self.collection_owner_override or (
+            getattr(edited_products[0].selection, "owner", "") if edited_products else ""
+        )
+        if owner_candidate:
             try:
                 filter_owner = self._resolve_collection_owner(owner_candidate)
+                logger.info(f"认领阶段使用创建人员筛选: '{filter_owner}'")
             except RuntimeError as exc:
                 logger.warning("Unable to resolve collection owner for claim stage: {}", exc)
                 filter_owner = None
 
-        await miaoshou_ctrl.refresh_collection_box(page, filter_owner=filter_owner)
-
-        # 按 execution_round 计算偏移,若不足则强制使用顺序索引占位
-        start_offset = max(0, (self.execution_round - 1) * self.collect_count)
-        end_offset = start_offset + self.collect_count
-        working_products = edited_products[start_offset:end_offset]
-
-        selection_count = min(max(len(working_products), self.collect_count), 5)
-        # 使用列表位置计算采集箱中的绝对索引，而不是 product.index
-        # 因为 product.index 可能是占位符流程中的局部索引，不是采集箱位置
-        target_indexes = list(range(start_offset, start_offset + selection_count))
-
+        # ==================== 使用 API 认领 ====================
         logger.info(
-            "认领阶段: 目标索引 %s (筛选后的商品列表,共 %s 条), 每商品点击 %s 次",
-            target_indexes,
+            "认领阶段 (API 模式): 目标 %s 个商品, 每商品认领 %s 次",
             selection_count,
             self.claim_times,
         )
 
-        # 分批按索引认领(仿首次编辑的批次逻辑,每批最多5个)
-        batch_size = min(5, max(1, self.collect_count))
-        total_expected = 0
-        batch_failures: list[str] = []
-        batch_success = 0
+        total_claimed = 0
+        api_success = True
+        api_failures: list[str] = []
 
-        abs_indexes = target_indexes + list(
-            range(
-                target_indexes[-1] + 1 if target_indexes else start_offset,
-                start_offset + selection_count,
-            )
-        )
-        for batch_start in range(0, len(abs_indexes), batch_size):
-            batch_indexes = abs_indexes[batch_start : batch_start + batch_size]
-            if not batch_indexes:
-                batch_failures.append(f"批次 {batch_start // batch_size + 1} 无有效索引")
-                break
+        # 计算当前轮次需要的产品偏移量
+        start_offset = (self.execution_round - 1) * self.collect_count
+        detail_ids: list[str] = []
 
-            logger.info(
-                "批次 %s (执行轮次 %s): 勾选索引 %s",
-                batch_start // batch_size + 1,
-                self.execution_round,
-                batch_indexes,
-            )
-            selected_ok, selected_fail = await miaoshou_ctrl.select_products_by_row_js(
-                page,
-                indexes=batch_indexes,
-            )
-            if selected_ok < len(batch_indexes):
-                msg = (
-                    f"批次 {batch_start // batch_size + 1} 勾选部分失败: "
-                    f"成功 {selected_ok}/{len(batch_indexes)}, 失败 {selected_fail}"
-                )
-                batch_failures.append(msg)
-                logger.warning(msg)
-                # 即使部分失败也继续认领已勾选的商品
+        # 使用 API 获取产品列表（通过 page.evaluate + fetch）
+        # API: POST /api/move/common_collect_box/searchDetailList
+        logger.info("使用 API 获取产品 ID 列表")
 
-            # 如果有成功勾选的商品，继续认领流程
-            if selected_ok > 0:
-                if not await miaoshou_ctrl.claim_selected_products_to_temu(
-                    page, repeat=self.claim_times
-                ):
-                    msg = f"批次 {batch_start // batch_size + 1} 批量认领失败"
-                    batch_failures.append(msg)
-                    logger.error(msg)
-                    # 认领失败也继续下一批次
-                else:
-                    batch_success += 1
-                    total_expected += selected_ok * self.claim_times
-            else:
-                # 全部勾选失败，记录但继续下一批次
-                msg = f"批次 {batch_start // batch_size + 1} 全部勾选失败，跳过认领"
-                batch_failures.append(msg)
-                logger.error(msg)
-            await page.wait_for_timeout(500)
+        # 获取 owner_account_id（如果有筛选）
+        owner_account_id = ""
+        if filter_owner:
+            logger.info(f"需要筛选创建人员: {filter_owner}")
+            # 从产品列表中查找匹配创建人员的 subAppAccountId
+            # 需要多页搜索因为目标创建人员的产品可能不在前面
+            # 匹配策略：模糊匹配用户名部分（括号前的名字或括号内的账号名）
+            sample_result = await page.evaluate(
+                r"""
+                async (filterName) => {
+                    try {
+                        // 搜索多页以找到目标创建人员
+                        const allOwners = new Map();  // ownerName -> accountId
+                        const filterLower = filterName.toLowerCase();
 
-        # 只要有批次成功就继续流程（部分成功也算成功）
-        claim_success = batch_success > 0
-        has_failures = len(batch_failures) > 0
+                        for (let pageNo = 1; pageNo <= 10; pageNo++) {
+                            const formData = new URLSearchParams();
+                            formData.append('pageNo', String(pageNo));
+                            formData.append('pageSize', '100');
+                            formData.append('filter[tabPaneName]', 'all');
 
-        # 去重后的阈值:批次总期望 = 实际成功勾选数 x claim_times
-        expected_total = total_expected or (selection_count * self.claim_times)
-        unique_threshold = expected_total
-        verify_success = await miaoshou_ctrl.verify_claim_success(
-            page,
-            expected_count=unique_threshold,
-        )
-        if not verify_success and claim_success:
-            verify_success = await self._retry_claim_verification(
-                page,
-                miaoshou_ctrl,
+                            const resp = await fetch(
+                                '/api/move/common_collect_box/searchDetailList',
+                                {
+                                    method: 'POST',
+                                    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                                    body: formData.toString()
+                                }
+                            );
+                            const data = await resp.json();
+                            if (data.result !== 'success' || !data.detailList) break;
+
+                            for (const item of data.detailList) {
+                                const ownerName = item.ownerSubAccountAliasName || '';
+                                const accountId = item.subAppAccountId;
+                                if (ownerName && accountId && !allOwners.has(ownerName)) {
+                                    allOwners.set(ownerName, accountId);
+                                }
+                                // 多种匹配方式
+                                if (ownerName) {
+                                    const ownerLower = ownerName.toLowerCase();
+                                    // 1. 完全包含
+                                    // 2. 用户名部分匹配（括号前的名字）
+                                    // 3. 账号部分匹配（括号内）
+                                    const nameMatch = ownerLower.includes(filterLower);
+                                    const bracketMatch = ownerName.match(/\(([^)]+)\)/);
+                                    const accountMatch = bracketMatch &&
+                                        bracketMatch[1].toLowerCase().includes(filterLower);
+                                    const prefixMatch = ownerName.split('(')[0]
+                                        .toLowerCase().includes(filterLower);
+
+                                    if (nameMatch || accountMatch || prefixMatch) {
+                                        return {
+                                            success: true,
+                                            accountId: accountId,
+                                            ownerName: ownerName
+                                        };
+                                    }
+                                }
+                            }
+                            // 如果没有更多数据，停止
+                            if (data.detailList.length < 100) break;
+                        }
+                        // 返回所有可用的创建人员名称和 ID
+                        const ownerList = [];
+                        for (const [name, id] of allOwners.entries()) {
+                            ownerList.push({name, id});
+                        }
+                        return {
+                            success: false,
+                            availableOwners: ownerList.slice(0, 30)
+                        };
+                    } catch (e) {
+                        return {error: e.message};
+                    }
+                }
+                """,
                 filter_owner,
-                unique_threshold,
             )
+            if sample_result and sample_result.get("success"):
+                owner_account_id = str(sample_result.get("accountId", ""))
+                owner_name = sample_result.get("ownerName", "")
+                logger.info(f"找到创建人员: {owner_name} -> accountId={owner_account_id}")
+            elif sample_result and "availableOwners" in sample_result:
+                owners = sample_result.get("availableOwners", [])
+                names_with_ids = [f"{o['name']}({o['id']})" for o in owners[:15]]
+                logger.warning(f"未找到匹配 '{filter_owner}' 的账号，可用: {names_with_ids}")
+            elif sample_result and sample_result.get("error"):
+                logger.error(f"查找创建人员失败: {sample_result.get('error')}")
 
-        overall_success = claim_success and verify_success
-        if overall_success and has_failures:
-            message = (
-                f"认领部分成功: 期望 {selection_count} 个商品, "
-                f"实际成功 {batch_success} 批次 (共 {expected_total} 次), "
-                f"存在 {len(batch_failures)} 个失败"
-            )
-        elif overall_success:
-            message = f"认领成功 {selection_count} 个商品,每商品 {self.claim_times} 次 (共 {expected_total} 次)"
+        # 调用 searchDetailList API 获取产品列表
+        api_result = await page.evaluate(
+            """
+            async (params) => {
+                try {
+                    const formData = new URLSearchParams();
+                    formData.append('pageNo', params.pageNo);
+                    formData.append('pageSize', params.pageSize);
+                    formData.append('filter[tabPaneName]', params.tabPaneName);
+                    if (params.ownerAccountId) {
+                        formData.append('filter[ownerAccountIds][0]', params.ownerAccountId);
+                    }
+
+                    const resp = await fetch(
+                        '/api/move/common_collect_box/searchDetailList',
+                        {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                            body: formData.toString()
+                        }
+                    );
+                    return await resp.json();
+                } catch (e) {
+                    return {error: e.message};
+                }
+            }
+            """,
+            {
+                "pageNo": "1",
+                "pageSize": str(selection_count + start_offset + 10),  # 多获取一些
+                "tabPaneName": "all",
+                "ownerAccountId": owner_account_id,
+            },
+        )
+
+        if api_result and api_result.get("result") == "success":
+            detail_list = api_result.get("detailList", [])
+            total_available = api_result.get("total", 0)
+            logger.info(f"API 获取产品列表成功: {len(detail_list)} 条 / 共 {total_available} 条")
+
+            # 提取产品 ID - 使用 commonCollectBoxDetailId 字段
+            all_ids = []
+            for item in detail_list:
+                product_id = item.get("commonCollectBoxDetailId")
+                if product_id:
+                    all_ids.append(str(product_id))
+            logger.info(f"提取到 {len(all_ids)} 个产品 ID: {all_ids[:5]}...")
+
+            if len(all_ids) > start_offset:
+                detail_ids = all_ids[start_offset : start_offset + selection_count]
+            else:
+                logger.warning(f"API 返回 ID 不足 ({len(all_ids)}个)，需要 {start_offset} 起始偏移")
         else:
-            message = "认领结果存在异常, 详见 details"
+            error_msg = api_result.get("error") or api_result.get("message", "未知错误")
+            logger.warning(f"API 获取产品列表失败: {error_msg}")
 
-        details = {
-            "selected_count": selection_count,
-            "batches_success": batch_success,
-            "batch_failures": batch_failures,
-            "has_failures": has_failures,
-            "claim_success": claim_success,
-            "expected_total": expected_total,
-            "unique_threshold": unique_threshold,
-            "verify_success": verify_success,
-        }
+        if not detail_ids:
+            logger.warning("无法获取产品 ID，认领阶段失败")
+            api_success = False
+        else:
+            logger.info(f"提取到 {len(detail_ids)} 个产品 ID: {detail_ids[:5]}...")
 
-        return StageOutcome("stage2_claim", overall_success, message, details)
+            # Step 3: 分批次使用 API 认领（每批 5 个产品，每批认领 claim_times 次）
+            batch_size = 5
+            total_batches = (len(detail_ids) + batch_size - 1) // batch_size
 
-    async def _retry_claim_verification(
-        self,
-        page,
-        miaoshou_ctrl: MiaoshouController,
-        filter_owner: str | None,
-        expected_count: int,
-    ) -> bool:
-        """Retry claim verification by re-navigating to the claimed tab.
+            for batch_idx in range(total_batches):
+                batch_start = batch_idx * batch_size
+                batch_end = min(batch_start + batch_size, len(detail_ids))
+                batch_ids = detail_ids[batch_start:batch_end]
 
-        Args:
-            page: Active Playwright page instance.
-            miaoshou_ctrl: Active Miaoshou controller.
-            filter_owner: Owner filter applied during the initial navigation.
-            expected_count: Expected claimed item count.
-
-        Returns:
-            True when the claimed count meets the expected threshold after re-navigation.
-        """
-        logger.info("Fallback: re-open claimed tab to verify claim results")
-
-        try:
-            await miaoshou_ctrl.navigate_and_filter_collection_box(
-                page,
-                filter_by_user=filter_owner,
-                switch_to_tab="claimed",
-            )
-            counts = await miaoshou_ctrl.get_product_count(page)
-            claimed_count = counts.get("claimed", 0)
-            if claimed_count >= expected_count:
-                logger.success(
-                    "Fallback verification succeeded via re-navigation: claimed=%s expected>=%s",
-                    claimed_count,
-                    expected_count,
+                logger.info(
+                    f"批次 {batch_idx + 1}/{total_batches}: "
+                    f"认领 {len(batch_ids)} 个产品，每个 {self.claim_times} 次"
                 )
-                return True
-            logger.warning(
-                "Fallback verification mismatch after re-navigation: claimed=%s expected>=%s",
-                claimed_count,
-                expected_count,
-            )
-            return False
-        except Exception as exc:
-            logger.warning("Fallback claim verification failed: {}", exc)
-            return False
+
+                # 每批产品认领 claim_times 次
+                for claim_round in range(1, self.claim_times + 1):
+                    try:
+                        result = await miaoshou_ctrl.claim_specific_products_via_api(
+                            page,
+                            detail_ids=batch_ids,
+                            platform="pddkj",
+                        )
+                        if result.get("success"):
+                            claimed_count = result.get("claimed_count", 0)
+                            total_claimed += claimed_count
+                            logger.success(
+                                f"  批次{batch_idx + 1} 第{claim_round}次: "
+                                f"成功认领 {claimed_count} 个"
+                            )
+                        else:
+                            msg = f"批次{batch_idx + 1} 第{claim_round}次失败: {result.get('message')}"
+                            api_failures.append(msg)
+                            logger.warning(f"  {msg}")
+                    except Exception as exc:
+                        msg = f"批次{batch_idx + 1} 第{claim_round}次异常: {exc}"
+                        api_failures.append(msg)
+                        logger.error(f"  {msg}")
+
+        # 判断 API 认领结果
+        expected_total = selection_count * self.claim_times
+        api_success = total_claimed > 0
+
+        if api_success:
+            message = f"API 认领成功: 共认领 {total_claimed} 次 (期望 {expected_total} 次)"
+            if api_failures:
+                message += f", 存在 {len(api_failures)} 个失败"
+            logger.success(message)
+        else:
+            message = f"API 认领失败: 期望 {expected_total} 次, 实际 0 次"
+            if api_failures:
+                message += f", 失败详情: {api_failures}"
+            logger.error(message)
+
+        return StageOutcome(
+            name="stage2_claim",
+            success=api_success,
+            message=message,
+            details={
+                "method": "api",
+                "selected_count": selection_count,
+                "total_claimed": total_claimed,
+                "expected_total": expected_total,
+                "claim_rounds": self.claim_times,
+                "api_failures": api_failures,
+                "detail_ids": detail_ids if detail_ids else [],
+            },
+        )
 
     async def _stage_batch_edit(
         self,
@@ -1769,7 +1918,13 @@ class CompletePublishWorkflow:
         batch_edit_ctrl: BatchEditController,
         edited_products: Sequence[EditedProduct],
     ) -> StageOutcome:
-        """阶段 3: Temu 全托管批量编辑 18 步,增加重试保障."""
+        """阶段 3: Temu 全托管批量编辑 18 步,增加重试保障.
+
+        支持三种模式:
+        1. use_api_batch_edit=True: API 模式，仅编辑纯数据字段（最快速）
+        2. use_codegen_batch_edit=True: Codegen DOM 模式（推荐，完整 18 步）
+        3. 默认: Legacy BatchEditController 模式
+        """
 
         if not edited_products:
             message = "无待批量编辑商品,批量编辑阶段跳过"
@@ -1795,6 +1950,40 @@ class CompletePublishWorkflow:
                 logger.warning("无法解析二次编辑阶段的创建人员: {}", exc)
                 filter_owner = None
 
+        # ===== API 批量编辑模式 =====
+        if self.use_api_batch_edit:
+            logger.info("使用 API 方式执行批量编辑（纯数据字段）")
+            payload = self._build_api_batch_edit_payload()
+
+            api_result = await run_batch_edit_via_api(
+                page,
+                payload,
+                filter_owner=filter_owner,
+            )
+
+            success = api_result.get("success", False)
+            edited_count = api_result.get("edited_count", 0)
+            total_count = api_result.get("total_count", 0)
+
+            message = (
+                f"API 批量编辑完成: {edited_count}/{total_count} 个产品"
+                if success
+                else f"API 批量编辑失败: {api_result.get('error', '未知错误')}"
+            )
+
+            return StageOutcome(
+                name="stage3_batch_edit",
+                success=success,
+                message=message,
+                details={
+                    "mode": "api",
+                    "edited_count": edited_count,
+                    "total_count": total_count,
+                    "error": api_result.get("error"),
+                },
+            )
+
+        # ===== DOM 批量编辑模式 =====
         def _build_codegen_payload() -> dict[str, object]:
             manual_source = self.manual_file_override
             manual_path_str = ""
@@ -1940,29 +2129,37 @@ class CompletePublishWorkflow:
 
         shop_name = self._resolve_shop_name(edited_products)
 
-        # 选择店铺
-        selection_ok = await publish_ctrl.select_shop(page, shop_name)
-        if not selection_ok:
-            return StageOutcome(
-                name="stage4_publish",
-                success=False,
-                message=f"选择店铺 {shop_name} 失败",
-                details={},
-            )
+        # 使用 API 方式发布
+        logger.info("使用 API 方式执行发布...")
 
-        # 供货价逻辑已停用,直接视为成功
-        set_price_ok = True
-        # 批量发布
-        publish_ok = await publish_ctrl.batch_publish(page)
+        # 获取筛选人员
+        owner_candidate = self.collection_owner_override or (
+            edited_products[0].owner if edited_products else ""
+        )
+        filter_owner = self._resolve_collection_owner(owner_candidate) if owner_candidate else None
 
-        success = bool(set_price_ok and publish_ok)
-        message = "批量发布完成" if success else "批量发布存在失败, 请检查执行日志"
+        api_result = await run_publish_via_api(
+            page,
+            filter_owner=filter_owner,
+            shop_id="9134811",  # 默认店铺 ID
+            max_products=20,
+        )
+
+        success = api_result.get("success", False)
+        published_count = api_result.get("published_count", 0)
+        error_msg = api_result.get("error")
+
+        if success:
+            message = f"API 发布完成: 成功发布 {published_count} 个产品"
+        else:
+            message = f"API 发布失败: {error_msg}"
 
         details = {
             "shop_name": shop_name,
-            "set_price_success": set_price_ok,
-            "publish_success": publish_ok,
-            "publish_result": {},
+            "publish_success": success,
+            "published_count": published_count,
+            "detail_ids": api_result.get("detail_ids", []),
+            "error": error_msg,
         }
 
         return StageOutcome("stage4_publish", success, message, details)
@@ -2189,6 +2386,23 @@ class CompletePublishWorkflow:
         if username:
             return f"{owner}({username})"
         return owner
+
+    def _build_api_batch_edit_payload(self) -> dict[str, object]:
+        """构建 API 批量编辑的 payload.
+
+        Returns:
+            包含类目属性等编辑数据的字典
+        """
+        return {
+            "category_path": ["收纳用品", "收纳篮,箱子,盒子", "盖式储物箱"],
+            "category_attrs": {
+                "product_use": "多用途",
+                "shape": "其他形状",
+                "material": "其他材料",
+                "closure_type": "其他闭合类型",
+                "style": "当代",
+            },
+        }
 
     def _resolve_image_base_dir(self) -> Path:
         """解析图片基础目录路径.
