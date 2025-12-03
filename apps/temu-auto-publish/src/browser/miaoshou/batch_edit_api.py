@@ -1,16 +1,20 @@
 """
-@PURPOSE: API 方式执行批量编辑（纯数据部分），与 DOM 文件上传步骤配合使用
+@PURPOSE: API 方式执行批量编辑（完整 18 步），包括文件上传
 @OUTLINE:
-  - async def run_batch_edit_via_api(): 主入口，执行 API 批量编辑
+  - async def run_batch_edit_via_api(): 主入口，执行 API 批量编辑完整流程
+  - async def _upload_files_for_products(): 为产品上传所需文件
   - def _build_edit_payload(): 从业务 payload 构建 API 编辑数据
   - def _map_category_attrs(): 映射类目属性到 API 格式
 @DEPENDENCIES:
   - 内部: .api_client.MiaoshouApiClient
 @RELATED: api_client.py, batch_edit_codegen.py, complete_publish_workflow.py
+@CHANGELOG:
+  - 2025-12-03: 支持完整 18 步，包括文件上传（外包装图、说明书）
 """
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from loguru import logger
@@ -25,14 +29,25 @@ async def run_batch_edit_via_api(
     *,
     filter_owner: str | None = None,
     cookie_file: str | None = None,
+    outer_package_image: str | None = None,
+    product_guide_pdf: str | None = None,
 ) -> dict[str, Any]:
-    """使用 API 执行批量编辑的纯数据部分.
+    """使用 API 执行批量编辑完整 18 步.
 
-    此函数处理批量编辑 18 步中可 API 化的 14 步：
-    - 标题、英语标题、类目属性、主货号、产地
-    - 定制品、敏感属性、SKU 相关
-
-    文件上传步骤（外包装、轮播图、颜色图、说明书）需另行用 DOM 处理。
+    支持的编辑步骤：
+    1. 标题 - 保持原标题
+    2. 英语标题 - 保持原标题
+    3. 类目属性 - 通过 payload["category_attrs"] 设置
+    4. 主货号 - 保持原货号
+    5. 外包装 - 通过 outer_package_image 上传
+    6. 产地 - 默认设置为中国(CN)
+    7. 定制品 - 默认关闭
+    8. 敏感属性 - 默认无
+    9-14. SKU 相关 - 保持原数据
+    15. 包装清单 - 跳过（DOM 处理）
+    16. 轮播图 - 跳过（DOM 处理）
+    17. 颜色图 - 跳过（DOM 处理）
+    18. 产品说明书 - 通过 product_guide_pdf 上传
 
     Args:
         page: Playwright 页面对象（用于获取 Cookie）
@@ -41,6 +56,8 @@ async def run_batch_edit_via_api(
             - category_attrs: dict - 类目属性
         filter_owner: 按创建人员筛选
         cookie_file: Cookie 文件路径（可选，默认从 page 获取）
+        outer_package_image: 外包装图片本地路径
+        product_guide_pdf: 产品说明书 PDF 本地路径
 
     Returns:
         执行结果:
@@ -50,13 +67,16 @@ async def run_batch_edit_via_api(
             "total_count": int,
             "error": str | None,
             "detail_ids": list[str],
+            "uploaded_files": dict,  # 上传的文件 URL
         }
 
     Examples:
         >>> result = await run_batch_edit_via_api(
         ...     page,
-        ...     payload={"category_path": ["收纳用品", "收纳篮"], "category_attrs": {...}},
-        ...     filter_owner="陈昊"
+        ...     payload={"category_attrs": {"材质": "塑料"}},
+        ...     filter_owner="陈昊",
+        ...     outer_package_image="/path/to/package.jpg",
+        ...     product_guide_pdf="/path/to/manual.pdf",
         ... )
         >>> print(f"编辑了 {result['edited_count']} 个产品")
     """
@@ -66,6 +86,7 @@ async def run_batch_edit_via_api(
         "total_count": 0,
         "error": None,
         "detail_ids": [],
+        "uploaded_files": {},
     }
 
     try:
@@ -87,7 +108,7 @@ async def run_batch_edit_via_api(
             logger.info("API 批量编辑: 搜索可编辑产品...")
             search_result = await client.search_temu_collect_box(
                 status="notPublished",
-                page_size=100,  # 获取足够多的产品
+                page_size=100,
             )
 
             if search_result.get("result") != "success":
@@ -101,14 +122,15 @@ async def run_batch_edit_via_api(
                 logger.warning(result["error"])
                 return result
 
-            # Step 3: 按创建人员筛选（如果指定）
+            # Step 3: 按创建人员筛选
             if filter_owner:
                 owner_filter = filter_owner.strip()
                 if "(" in owner_filter:
                     owner_filter = owner_filter.split("(")[0].strip()
 
                 filtered_items = [
-                    item for item in items
+                    item
+                    for item in items
                     if owner_filter in (item.get("ownerSubAccountAliasName") or "")
                 ]
                 if filtered_items:
@@ -135,23 +157,45 @@ async def run_batch_edit_via_api(
 
             logger.info(f"API 批量编辑: 准备编辑 {len(detail_ids)} 个产品")
 
-            # Step 4: 获取产品当前编辑信息
-            logger.info("API 批量编辑: 获取产品当前信息...")
-            info_result = await client.get_collect_item_info(
-                detail_ids=detail_ids,
-                fields=["title", "cid", "attributes", "productOriginCountry"],
+            # Step 4: 上传文件（如果提供）
+            uploaded_files = await _upload_files_for_products(
+                client,
+                outer_package_image=outer_package_image,
+                product_guide_pdf=product_guide_pdf,
+            )
+            result["uploaded_files"] = uploaded_files
+
+            # Step 5: 获取外包装选项
+            outer_package_shape = None
+            outer_package_type = None
+            if outer_package_image:
+                options_result = await client.get_item_options()
+                if options_result.get("result") == "success":
+                    # 默认使用"长方体"和第一个类型
+                    shape_options = options_result.get("outerPackageShapeOptions", [])
+                    type_options = options_result.get("outerPackageTypeOptions", [])
+                    if shape_options:
+                        # 找"长方体"或使用第一个
+                        for opt in shape_options:
+                            if opt.get("value") == "长方体":
+                                outer_package_shape = opt.get("key")
+                                break
+                        if outer_package_shape is None:
+                            outer_package_shape = shape_options[0].get("key")
+                    if type_options:
+                        outer_package_type = type_options[0].get("key")
+
+            # Step 6: 构建编辑数据
+            logger.info("API 批量编辑: 构建编辑数据...")
+            edit_data = _build_edit_payload(
+                payload,
+                uploaded_files=uploaded_files,
+                outer_package_shape=outer_package_shape,
+                outer_package_type=outer_package_type,
             )
 
-            if info_result.get("result") != "success":
-                result["error"] = f"获取产品信息失败: {info_result.get('message')}"
-                logger.error(result["error"])
-                return result
-
-            # Step 5: 构建编辑数据并保存
-            logger.info("API 批量编辑: 构建并保存编辑数据...")
-            edit_data = _build_edit_payload(payload)
-
-            # 使用批量编辑方法
+            # Step 7: 批量保存编辑
+            logger.info("API 批量编辑: 保存编辑数据...")
             edit_result = await client.batch_edit_products(
                 detail_ids=detail_ids,
                 edits=edit_data,
@@ -175,22 +219,84 @@ async def run_batch_edit_via_api(
     return result
 
 
-def _build_edit_payload(payload: dict[str, Any]) -> dict[str, Any]:
+async def _upload_files_for_products(
+    client: MiaoshouApiClient,
+    *,
+    outer_package_image: str | None = None,
+    product_guide_pdf: str | None = None,
+) -> dict[str, Any]:
+    """为产品上传所需文件.
+
+    Args:
+        client: API 客户端
+        outer_package_image: 外包装图片路径
+        product_guide_pdf: 产品说明书 PDF 路径
+
+    Returns:
+        上传结果字典:
+        {
+            "outer_package_url": str | None,
+            "product_guide_url": str | None,
+        }
+    """
+    uploaded: dict[str, Any] = {
+        "outer_package_url": None,
+        "product_guide_url": None,
+    }
+
+    # 上传外包装图片
+    if outer_package_image and Path(outer_package_image).exists():
+        logger.info(f"API 批量编辑: 上传外包装图片 {outer_package_image}...")
+        try:
+            result = await client.upload_picture_file(file_path=outer_package_image)
+            if result.get("result") == "success":
+                uploaded["outer_package_url"] = result.get("picturePath")
+                logger.info(f"外包装图片上传成功: {uploaded['outer_package_url']}")
+            else:
+                logger.warning(f"外包装图片上传失败: {result.get('message')}")
+        except Exception as e:
+            logger.error(f"外包装图片上传异常: {e}")
+
+    # 上传产品说明书
+    if product_guide_pdf and Path(product_guide_pdf).exists():
+        logger.info(f"API 批量编辑: 上传产品说明书 {product_guide_pdf}...")
+        try:
+            result = await client.upload_attach_file(file_path=product_guide_pdf)
+            if result.get("result") == "success":
+                uploaded["product_guide_url"] = result.get("fileUrl")
+                logger.info(f"产品说明书上传成功: {uploaded['product_guide_url']}")
+            else:
+                logger.warning(f"产品说明书上传失败: {result.get('message')}")
+        except Exception as e:
+            logger.error(f"产品说明书上传异常: {e}")
+
+    return uploaded
+
+
+def _build_edit_payload(
+    payload: dict[str, Any],
+    *,
+    uploaded_files: dict[str, Any] | None = None,
+    outer_package_shape: int | None = None,
+    outer_package_type: int | None = None,
+) -> dict[str, Any]:
     """从业务 payload 构建 API 编辑数据.
 
     Args:
         payload: 业务参数字典
+        uploaded_files: 已上传的文件 URL
+        outer_package_shape: 外包装形状 key
+        outer_package_type: 外包装类型 key
 
     Returns:
         API 可接受的编辑字段字典
     """
     edit_data: dict[str, Any] = {}
+    uploaded_files = uploaded_files or {}
 
     # 类目属性映射
     if "category_attrs" in payload:
         attrs = payload["category_attrs"]
-        # 将类目属性转换为 API 格式
-        # 注意：具体格式需要根据实际 API 要求调整
         if attrs:
             edit_data["attributes"] = _map_category_attrs(attrs)
 
@@ -205,6 +311,21 @@ def _build_edit_payload(payload: dict[str, Any]) -> dict[str, Any]:
     edit_data["firstType"] = ""
     edit_data["twiceType"] = ""
 
+    # 外包装图片
+    outer_package_url = uploaded_files.get("outer_package_url")
+    if outer_package_url:
+        # 需要两张图片（正面和背面）
+        edit_data["outerPackageImgUrls"] = [outer_package_url, outer_package_url]
+        if outer_package_shape is not None:
+            edit_data["outerPackageShape"] = str(outer_package_shape)
+        if outer_package_type is not None:
+            edit_data["outerPackageType"] = str(outer_package_type)
+
+    # 产品说明书
+    product_guide_url = uploaded_files.get("product_guide_url")
+    if product_guide_url:
+        edit_data["productGuideFileUrl"] = product_guide_url
+
     return edit_data
 
 
@@ -217,15 +338,15 @@ def _map_category_attrs(attrs: dict[str, Any]) -> list[dict[str, Any]]:
     Returns:
         API 格式的属性列表
     """
-    # 属性名称到 API 字段的映射
-    # 这个映射可能需要根据实际的 API 响应来调整
     attr_list = []
 
     for key, value in attrs.items():
         if value:
-            attr_list.append({
-                "attrName": key,
-                "attrValue": value,
-            })
+            attr_list.append(
+                {
+                    "attrName": key,
+                    "attrValue": value,
+                }
+            )
 
     return attr_list

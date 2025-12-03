@@ -16,6 +16,10 @@
       - async def save_collect_item_info(): 保存产品编辑信息
       - async def batch_edit_products(): 批量编辑产品（高级方法）
       - async def batch_edit_single_product(): 编辑单个产品
+    - 文件上传 API:
+      - async def upload_picture_file(): 上传图片（外包装图、轮播图等）
+      - async def upload_attach_file(): 上传附件（产品说明书 PDF）
+      - async def get_item_options(): 获取商品选项（外包装形状/类型）
 @DEPENDENCIES:
   - 外部: httpx, json
   - 内部: ..cookie_manager.CookieManager
@@ -91,6 +95,7 @@ class MiaoshouApiClient:
         "collectShowSizeTemplateIds",  # 尺码模板 ID
         "thumbnail",  # 缩略图
         "collectBoxDetailShopList",  # 店铺列表
+        "productGuideFileUrl",  # 产品说明书 PDF URL
     ]
 
     def __init__(self, cookies: list[dict[str, Any]]) -> None:
@@ -416,7 +421,8 @@ class MiaoshouApiClient:
                 owner_filter = owner_filter.split("(")[0].strip()
 
             filtered_items = [
-                item for item in items
+                item
+                for item in items
                 if owner_filter in (item.get("ownerSubAccountAliasName") or "")
             ]
             if filtered_items:
@@ -736,9 +742,172 @@ class MiaoshouApiClient:
             ...     edits={"title": "新标题", "cid": "32233"}
             ... )
         """
-        return await self.batch_edit_products(
-            detail_ids=[detail_id], edits=edits, site=site
-        )
+        return await self.batch_edit_products(detail_ids=[detail_id], edits=edits, site=site)
+
+    # ===== 文件上传 API =====
+
+    async def upload_picture_file(
+        self,
+        *,
+        file_path: str,
+    ) -> dict[str, Any]:
+        """上传图片文件（用于外包装图、轮播图、颜色图等）.
+
+        Args:
+            file_path: 图片文件的本地路径
+
+        Returns:
+            API 响应，包含:
+            - picturePath: 图片 URL
+            - appPictureId: 图片 ID
+            - width/height: 图片尺寸
+            - md5: 文件 MD5
+
+        Examples:
+            >>> client = await MiaoshouApiClient.from_cookie_file()
+            >>> result = await client.upload_picture_file(file_path="/path/to/image.jpg")
+            >>> print(f"图片 URL: {result['picturePath']}")
+        """
+        import mimetypes
+        from pathlib import Path
+
+        file_path_obj = Path(file_path)
+        if not file_path_obj.exists():
+            return {"result": "error", "message": f"文件不存在: {file_path}"}
+
+        # 获取 MIME 类型
+        mime_type, _ = mimetypes.guess_type(file_path)
+        if mime_type is None:
+            mime_type = "image/jpeg"
+
+        client = await self._get_client()
+
+        try:
+            with open(file_path, "rb") as f:
+                files = {"file": (file_path_obj.name, f, mime_type)}
+                # 文件上传需要不同的 Content-Type，移除默认的
+                response = await client.post(
+                    "/api/picture/picture/uploadPictureFile",
+                    files=files,
+                    headers={"Content-Type": None},  # 让 httpx 自动设置 multipart
+                )
+            response.raise_for_status()
+            result = response.json()
+
+            if result.get("result") == "success":
+                logger.debug(f"图片上传成功: {result.get('picturePath')}")
+            else:
+                logger.warning(f"图片上传失败: {result.get('message', '未知错误')}")
+
+            return result
+
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP 错误: {e.response.status_code}")
+            raise
+        except Exception as e:
+            logger.error(f"图片上传失败: {e}")
+            raise
+
+    async def upload_attach_file(
+        self,
+        *,
+        file_path: str,
+        platform: str = "pddkj",
+    ) -> dict[str, Any]:
+        """上传附件文件（用于产品说明书等 PDF 文档）.
+
+        Args:
+            file_path: 文件的本地路径
+            platform: 平台代码
+
+        Returns:
+            API 响应，包含:
+            - fileUrl: 文件 URL
+            - appAttachFileId: 文件 ID
+            - ossPath: OSS 路径
+
+        Examples:
+            >>> client = await MiaoshouApiClient.from_cookie_file()
+            >>> result = await client.upload_attach_file(file_path="/path/to/manual.pdf")
+            >>> print(f"说明书 URL: {result['fileUrl']}")
+        """
+        import mimetypes
+        from pathlib import Path
+
+        file_path_obj = Path(file_path)
+        if not file_path_obj.exists():
+            return {"result": "error", "message": f"文件不存在: {file_path}"}
+
+        # 获取 MIME 类型
+        mime_type, _ = mimetypes.guess_type(file_path)
+        if mime_type is None:
+            mime_type = "application/pdf"
+
+        client = await self._get_client()
+
+        try:
+            with open(file_path, "rb") as f:
+                files = {"file": (file_path_obj.name, f, mime_type)}
+                data = {"platform": platform}
+                response = await client.post(
+                    "/api/appAttachFile/app_attach_file/upload_attach_file",
+                    files=files,
+                    data=data,
+                    headers={"Content-Type": None},
+                )
+            response.raise_for_status()
+            result = response.json()
+
+            if result.get("result") == "success":
+                logger.debug(f"附件上传成功: {result.get('fileUrl')}")
+            else:
+                logger.warning(f"附件上传失败: {result.get('message', '未知错误')}")
+
+            return result
+
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP 错误: {e.response.status_code}")
+            raise
+        except Exception as e:
+            logger.error(f"附件上传失败: {e}")
+            raise
+
+    async def get_item_options(self) -> dict[str, Any]:
+        """获取商品编辑选项（外包装形状、类型等）.
+
+        Returns:
+            API 响应，包含:
+            - outerPackageShapeOptions: 外包装形状选项列表
+            - outerPackageTypeOptions: 外包装类型选项列表
+
+        Examples:
+            >>> client = await MiaoshouApiClient.from_cookie_file()
+            >>> options = await client.get_item_options()
+            >>> for opt in options.get("outerPackageShapeOptions", []):
+            ...     print(f"{opt['key']}: {opt['value']}")
+        """
+        client = await self._get_client()
+
+        try:
+            response = await client.get(
+                f"{self.BATCH_EDIT_API_PREFIX}/getItemOptions",
+            )
+            response.raise_for_status()
+            result = response.json()
+
+            if result.get("result") == "success":
+                logger.debug("获取商品选项成功")
+            else:
+                logger.warning(f"获取商品选项失败: {result.get('message', '未知错误')}")
+
+            return result
+
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP 错误: {e.response.status_code}")
+            raise
+        except Exception as e:
+            logger.error(f"获取商品选项失败: {e}")
+            raise
 
     async def __aenter__(self) -> MiaoshouApiClient:
         """异步上下文管理器入口."""

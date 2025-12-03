@@ -81,22 +81,42 @@ async def test_api_client():
             print(f"   获取编辑信息失败: {info_result.get('message')}")
             return False
 
-        # 3. 显示工作流集成信息
-        print("\n3. 工作流集成:")
+        # 3. 测试获取商品选项（外包装形状/类型）
+        print("\n3. 获取商品选项（外包装形状/类型）...")
+        options_result = await client.get_item_options()
+        if options_result.get("result") == "success":
+            shape_options = options_result.get("outerPackageShapeOptions", [])
+            type_options = options_result.get("outerPackageTypeOptions", [])
+            print(f"   外包装形状选项: {len(shape_options)} 个")
+            for opt in shape_options[:3]:
+                print(f"     - {opt.get('key')}: {opt.get('value')}")
+            print(f"   外包装类型选项: {len(type_options)} 个")
+            for opt in type_options[:3]:
+                print(f"     - {opt.get('key')}: {opt.get('value')}")
+        else:
+            print(f"   获取选项失败: {options_result.get('message')}")
+
+        # 4. 显示工作流集成信息
+        print("\n4. 工作流集成:")
         print("   使用方式:")
         print("   ┌─────────────────────────────────────────────────────┐")
         print("   │ CompletePublishWorkflow(use_api_batch_edit=True)    │")
         print("   │                                                     │")
         print("   │ Stage 3 将使用 API 方式执行批量编辑：              │")
         print("   │ - 自动搜索 Temu 采集箱产品                         │")
+        print("   │ - 上传外包装图片和产品说明书                       │")
         print("   │ - 批量更新产品数据字段                             │")
-        print("   │ - 跳过需要 DOM 的文件上传步骤                      │")
         print("   └─────────────────────────────────────────────────────┘")
 
         print("\n   支持的编辑字段:")
-        for field in MiaoshouApiClient.BATCH_EDIT_FIELDS[:10]:
+        for field in MiaoshouApiClient.BATCH_EDIT_FIELDS[:12]:
             print(f"     - {field}")
         print("     ... 更多字段请参考 BATCH_EDIT_FIELDS")
+
+        print("\n   新增文件上传 API:")
+        print("     - upload_picture_file(): 上传图片（外包装图、轮播图等）")
+        print("     - upload_attach_file(): 上传附件（产品说明书 PDF）")
+        print("     - get_item_options(): 获取外包装形状/类型选项")
 
         print("\n" + "=" * 60)
         print("测试完成！API 客户端功能正常")
