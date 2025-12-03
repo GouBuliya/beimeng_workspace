@@ -826,9 +826,11 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
 
                 // 如果只需要点击复选框,直接处理后返回
                 if (target === 'checkbox') {
-                    // 【第八轮修复】使用 targetRow 的视觉位置来匹配复选框
-                    // 因为固定列和主内容区是两个独立的虚拟滚动容器
-                    // 直接用 matchedTop 找到相同垂直位置的复选框
+                    // 【第九轮修复】使用行中心位置匹配复选框中心位置
+                    // 因为复选框在行内垂直居中，用 top 匹配可能有偏差
+
+                    // 计算目标行的中心位置
+                    const rowCenterY = matchedTop + ROW_HEIGHT / 2;
 
                     // 获取所有复选框元素
                     const allCheckboxes = Array.from(
@@ -841,25 +843,26 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                             error: 'No checkboxes found on page',
                             scrollerInfo,
                             matchedTop: Math.round(matchedTop),
+                            rowCenterY: Math.round(rowCenterY),
                             ...debugInfo
                         };
                     }
 
-                    // 找到与 targetRow 相同垂直位置的复选框
-                    // 允许一定误差（行高内的偏差都可接受）
-                    const POSITION_TOLERANCE = ROW_HEIGHT / 2;  // 64px 误差范围
+                    // 找到中心位置最接近行中心的复选框
+                    const POSITION_TOLERANCE = ROW_HEIGHT;  // 128px 误差范围（一个行高内）
 
                     let bestMatch = null;
                     let minDistance = Infinity;
 
                     for (const cb of allCheckboxes) {
                         const rect = cb.getBoundingClientRect();
-                        const cbTop = rect.top;
-                        const distance = Math.abs(cbTop - matchedTop);
+                        // 计算复选框中心位置
+                        const cbCenterY = rect.top + rect.height / 2;
+                        const distance = Math.abs(cbCenterY - rowCenterY);
 
                         if (distance < minDistance && distance < POSITION_TOLERANCE) {
                             minDistance = distance;
-                            bestMatch = { checkbox: cb, top: cbTop, distance };
+                            bestMatch = { checkbox: cb, centerY: cbCenterY, distance };
                         }
                     }
 
@@ -867,21 +870,22 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         ...debugInfo,
                         totalCheckboxes: allCheckboxes.length,
                         matchedTop: Math.round(matchedTop),
+                        rowCenterY: Math.round(rowCenterY),
                         positionTolerance: POSITION_TOLERANCE
                     };
 
                     if (!bestMatch) {
-                        // 输出所有复选框位置用于调试
-                        const allCbTops = allCheckboxes.map(cb => {
+                        // 输出所有复选框中心位置用于调试
+                        const allCbCenters = allCheckboxes.map(cb => {
                             const rect = cb.getBoundingClientRect();
-                            return Math.round(rect.top);
-                        }).filter(t => t > -ROW_HEIGHT && t < window.innerHeight + ROW_HEIGHT);
+                            return Math.round(rect.top + rect.height / 2);
+                        }).filter(c => c > -ROW_HEIGHT && c < window.innerHeight + ROW_HEIGHT);
 
                         return {
                             success: false,
-                            error: `No checkbox found near targetRow (matchedTop=${Math.round(matchedTop)})`,
+                            error: `No checkbox found near rowCenterY=${Math.round(rowCenterY)}`,
                             scrollerInfo,
-                            visibleCbTops: allCbTops,
+                            visibleCbCenters: allCbCenters,
                             ...cbDebugInfo
                         };
                     }
@@ -892,9 +896,10 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                             success: true,
                             scrollerInfo,
                             matchedTop: Math.round(matchedTop),
-                            cbTop: Math.round(bestMatch.top),
+                            rowCenterY: Math.round(rowCenterY),
+                            cbCenterY: Math.round(bestMatch.centerY),
                             cbDistance: Math.round(bestMatch.distance),
-                            matchMethod: 'checkbox-position-match',
+                            matchMethod: 'checkbox-center-match',
                             ...cbDebugInfo
                         };
                     } catch (e) {
@@ -903,7 +908,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                             error: 'Checkbox click failed: ' + e.message,
                             scrollerInfo,
                             matchedTop: Math.round(matchedTop),
-                            cbTop: Math.round(bestMatch.top),
+                            rowCenterY: Math.round(rowCenterY),
                             ...cbDebugInfo
                         };
                     }
