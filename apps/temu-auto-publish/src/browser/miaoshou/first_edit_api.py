@@ -107,9 +107,10 @@ async def run_first_edit_via_api(
     failed_count = 0
 
     try:
-        # 获取已认领产品列表
-        logger.info("获取已认领产品列表...")
-        list_result = await client.get_product_list(tab="claimed", limit=100)
+        # 获取全部产品列表（使用 "all" tab 而非 "claimed"）
+        # 这样可以获取完整列表，然后根据 start_offset 手动管理轮数
+        logger.info("获取全部产品列表...")
+        list_result = await client.get_product_list(tab="all", limit=100)
 
         if list_result.get("result") != "success":
             logger.error(f"获取产品列表失败: {list_result.get('message')}")
@@ -122,7 +123,7 @@ async def run_first_edit_via_api(
             )
 
         product_list = list_result.get("detailList", [])
-        logger.info(f"找到 {len(product_list)} 个已认领产品")
+        logger.info(f"找到 {len(product_list)} 个产品")
 
         # 调试：打印前几个产品的字段信息
         if product_list:
@@ -148,7 +149,8 @@ async def run_first_edit_via_api(
             product_list = filtered
             logger.info(f"按创建人员 '{filter_owner}' 筛选后: {len(product_list)} 个产品")
 
-        # 分轮截取：根据 start_offset 和 max_count 获取当前轮次要处理的产品
+        # 根据 start_offset 和 max_count 截取当前轮次的产品
+        # 产品列表和选品数据都根据相同的偏移量截取，保持一一对应
         total_available = len(product_list)
         if start_offset >= total_available:
             logger.warning(
@@ -163,26 +165,25 @@ async def run_first_edit_via_api(
             )
 
         end_offset = min(start_offset + max_count, total_available)
-        product_list = product_list[start_offset:end_offset]
+        products_to_process = product_list[start_offset:end_offset]
         logger.info(
             f"本轮处理: 第 {start_offset + 1} 到 {end_offset} 个产品 "
-            f"(共 {len(product_list)} 个，总计 {total_available} 个)"
+            f"(共 {len(products_to_process)} 个，总计 {total_available} 个)"
         )
 
-        # 同步截取选品数据：确保产品和选品一一对应
-        # 如果外部传入的 selections 是完整列表，需要根据 start_offset 截取
+        # 选品数据：根据相同的 start_offset 截取
         selection_end_offset = min(start_offset + max_count, len(selections))
         working_selections = selections[start_offset:selection_end_offset]
         logger.info(
             f"本轮选品: 使用第 {start_offset + 1} 到 {selection_end_offset} 条选品数据 "
-            f"(共 {len(working_selections)} 条)"
+            f"(共 {len(working_selections)} 条，总计 {len(selections)} 条)"
         )
 
         # 按选品表顺序处理产品（不使用型号匹配）
         selection_index = 0
 
         # 处理每个产品
-        for product in product_list:
+        for product in products_to_process:
             detail_id = str(product.get("commonCollectBoxDetailId", ""))
             product_title = product.get("title", "未知产品")
 
@@ -227,12 +228,12 @@ async def run_first_edit_via_api(
 
         logger.info(
             f"首次编辑 API 完成: 成功 {success_count}, 失败 {failed_count}, "
-            f"总计 {len(product_list)}"
+            f"总计 {len(products_to_process)}"
         )
 
         return FirstEditApiResult(
             success=failed_count == 0,
-            processed_count=len(product_list),
+            processed_count=len(products_to_process),
             success_count=success_count,
             failed_count=failed_count,
             error_details=error_details,
