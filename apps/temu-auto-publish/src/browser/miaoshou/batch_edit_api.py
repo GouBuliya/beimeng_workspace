@@ -222,13 +222,18 @@ async def run_batch_edit_via_api(
             logger.info("API 批量编辑: 获取产品 SKU 信息...")
             item_info_result = await client.get_collect_item_info(
                 detail_ids=detail_ids,
-                with_sku_map=True,
+                fields=["skuMap"],
             )
 
             # 构建每个产品的编辑数据（包含价格 ×10 的 skuMap）
             items_to_save = []
             if item_info_result.get("result") == "success":
-                item_info_map = item_info_result.get("collectItemInfoMap", {})
+                # 构建 detailId -> 产品信息 的映射
+                item_info_list = item_info_result.get("collectItemInfoList", [])
+                item_info_map = {
+                    str(item.get("detailId")): item for item in item_info_list
+                }
+
                 for detail_id in detail_ids:
                     item_data = {"site": "PDDKJ", "detailId": str(detail_id)}
                     item_data.update(base_edit_data)
@@ -239,6 +244,7 @@ async def run_batch_edit_via_api(
                     if sku_map:
                         updated_sku_map = _update_sku_prices(sku_map)
                         item_data["skuMap"] = updated_sku_map
+                        logger.debug(f"产品 {detail_id}: 更新 {len(sku_map)} 个 SKU 价格")
 
                     items_to_save.append(item_data)
             else:
