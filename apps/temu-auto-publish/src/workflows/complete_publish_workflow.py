@@ -1712,30 +1712,48 @@ class CompletePublishWorkflow:
         )
 
         if not detail_ids:
-            logger.warning("无法从 DOM 提取产品 ID，回退到 DOM 认领模式")
+            logger.warning("无法从 DOM 提取产品 ID")
             api_success = False
         else:
-            logger.info(f"提取到 {len(detail_ids)} 个产品 ID: {detail_ids[:3]}...")
+            logger.info(f"提取到 {len(detail_ids)} 个产品 ID: {detail_ids[:5]}...")
 
-            # Step 3: 使用 API 认领指定的产品 ID
-            for claim_round in range(1, self.claim_times + 1):
-                logger.info(f"API 认领第 {claim_round}/{self.claim_times} 轮")
-                try:
-                    result = await miaoshou_ctrl.claim_specific_products_via_api(
-                        page,
-                        detail_ids=detail_ids,
-                        platform="pddkj",
-                    )
-                    if result.get("success"):
-                        claimed_count = result.get("claimed_count", 0)
-                        total_claimed += claimed_count
-                        logger.success(f"第 {claim_round} 轮 API 认领成功: {claimed_count} 个产品")
-                    else:
-                        api_failures.append(f"第 {claim_round} 轮失败: {result.get('message')}")
-                        logger.warning(f"第 {claim_round} 轮 API 认领失败: {result.get('message')}")
-                except Exception as exc:
-                    api_failures.append(f"第 {claim_round} 轮异常: {exc}")
-                    logger.error(f"第 {claim_round} 轮 API 认领异常: {exc}")
+            # Step 3: 分批次使用 API 认领（每批 5 个产品，每批认领 claim_times 次）
+            batch_size = 5
+            total_batches = (len(detail_ids) + batch_size - 1) // batch_size
+
+            for batch_idx in range(total_batches):
+                batch_start = batch_idx * batch_size
+                batch_end = min(batch_start + batch_size, len(detail_ids))
+                batch_ids = detail_ids[batch_start:batch_end]
+
+                logger.info(
+                    f"批次 {batch_idx + 1}/{total_batches}: "
+                    f"认领 {len(batch_ids)} 个产品，每个 {self.claim_times} 次"
+                )
+
+                # 每批产品认领 claim_times 次
+                for claim_round in range(1, self.claim_times + 1):
+                    try:
+                        result = await miaoshou_ctrl.claim_specific_products_via_api(
+                            page,
+                            detail_ids=batch_ids,
+                            platform="pddkj",
+                        )
+                        if result.get("success"):
+                            claimed_count = result.get("claimed_count", 0)
+                            total_claimed += claimed_count
+                            logger.success(
+                                f"  批次{batch_idx + 1} 第{claim_round}次: "
+                                f"成功认领 {claimed_count} 个"
+                            )
+                        else:
+                            msg = f"批次{batch_idx + 1} 第{claim_round}次失败: {result.get('message')}"
+                            api_failures.append(msg)
+                            logger.warning(f"  {msg}")
+                    except Exception as exc:
+                        msg = f"批次{batch_idx + 1} 第{claim_round}次异常: {exc}"
+                        api_failures.append(msg)
+                        logger.error(f"  {msg}")
 
         # 判断 API 认领结果
         expected_total = selection_count * self.claim_times
