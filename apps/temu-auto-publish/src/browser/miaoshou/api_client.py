@@ -201,7 +201,7 @@ class MiaoshouApiClient:
         tab: str = "all",
         page: int = 1,
         limit: int = 20,
-        owner_account: str | None = None,
+        owner_account_id: str | None = None,
     ) -> dict[str, Any]:
         """获取采集箱产品列表.
 
@@ -209,7 +209,7 @@ class MiaoshouApiClient:
             tab: 标签页 ("all", "unclaimed", "claimed", "failed")
             page: 页码，从 1 开始
             limit: 每页数量
-            owner_account: 创建人员筛选
+            owner_account_id: 创建人员账号 ID (如 "151538")
 
         Returns:
             API 响应，包含产品列表和总数
@@ -221,22 +221,22 @@ class MiaoshouApiClient:
         """
         client = await self._get_client()
 
-        # 构建请求参数
+        # 构建请求参数 - 使用实际抓取的 API 格式
         tab_mapping = {
-            "all": "",
-            "unclaimed": "0",
-            "claimed": "1",
-            "failed": "2",
+            "all": "all",
+            "unclaimed": "noClaimed",
+            "claimed": "claimed",
+            "failed": "failed",
         }
 
-        params = {
-            "page": page,
+        params: dict[str, Any] = {
+            "pageNo": page,
             "pageSize": limit,
-            "tab": tab_mapping.get(tab, ""),
+            "filter[tabPaneName]": tab_mapping.get(tab, "all"),
         }
 
-        if owner_account:
-            params["ownerAccount"] = owner_account
+        if owner_account_id:
+            params["filter[ownerAccountIds][0]"] = owner_account_id
 
         try:
             response = await client.post(
@@ -271,6 +271,69 @@ class MiaoshouApiClient:
         except Exception as e:
             logger.error(f"获取产品列表失败: {e}")
             raise
+
+    async def get_sub_accounts(self) -> dict[str, Any]:
+        """获取子账号列表（用于映射名字到账号 ID）.
+
+        Returns:
+            API 响应，包含子账号列表
+
+        Examples:
+            >>> client = await MiaoshouApiClient.from_cookie_file()
+            >>> result = await client.get_sub_accounts()
+            >>> for acc in result.get("list", []):
+            ...     print(f"{acc['aliasName']}: {acc['subAppAccountId']}")
+        """
+        client = await self._get_client()
+
+        try:
+            response = await client.post(
+                "/api/move/common_collect_box/getSubAccountList",
+            )
+            response.raise_for_status()
+            result = response.json()
+
+            if result.get("result") == "success":
+                accounts = result.get("list", [])
+                logger.info(f"获取子账号列表成功: {len(accounts)} 个账号")
+            else:
+                logger.warning(f"获取子账号失败: {result.get('message')}")
+
+            return result
+
+        except Exception as e:
+            logger.error(f"获取子账号列表失败: {e}")
+            raise
+
+    async def find_owner_account_id(self, owner_name: str) -> str | None:
+        """根据创建人员名字查找账号 ID.
+
+        Args:
+            owner_name: 创建人员名字 (如 "李英亮" 或 "李英亮(lyl123456789)")
+
+        Returns:
+            账号 ID 或 None
+        """
+        # 提取名字部分
+        name_part = owner_name.strip()
+        if "(" in name_part:
+            name_part = name_part.split("(")[0].strip()
+
+        try:
+            result = await self.get_sub_accounts()
+            if result.get("result") == "success":
+                for acc in result.get("list", []):
+                    alias_name = acc.get("aliasName", "")
+                    # 尝试匹配 aliasName 或 name
+                    if name_part in alias_name or name_part == acc.get("name", ""):
+                        account_id = str(acc.get("subAppAccountId", ""))
+                        logger.info(f"找到账号: {alias_name} -> ID {account_id}")
+                        return account_id
+            logger.warning(f"未找到创建人员 '{name_part}' 的账号 ID")
+            return None
+        except Exception as e:
+            logger.error(f"查找账号 ID 失败: {e}")
+            return None
 
     async def claim_products(
         self,
@@ -908,6 +971,61 @@ class MiaoshouApiClient:
         except Exception as e:
             logger.error(f"获取商品选项失败: {e}")
             raise
+
+    async def publish_to_shop(
+        self,
+        *,
+        detail_ids: list[str],
+        shop_id: str = "9134811",
+    ) -> dict[str, Any]:
+        """发布产品到店铺.
+
+        Args:
+            detail_ids: 产品 collectBoxDetailId 列表
+            shop_id: 店铺 ID（默认 9134811）
+
+        Returns:
+            API 响应，包含:
+            - result: "success" 或 "error"
+            - message: 错误信息（如果有）
+
+        Examples:
+            >>> client = await MiaoshouApiClient.from_cookie_file()
+            >>> result = await client.publish_to_shop(
+            ...     detail_ids=["123", "456"],
+            ...     shop_id="9134811"
+            ... )
+        """
+        client = await self._get_client()
+
+        # 构建表单数据
+        form_data: dict[str, Any] = {}
+        for i, detail_id in enumerate(detail_ids):
+            form_data[f"detailIds[{i}]"] = detail_id
+        form_data["shopIds[0]"] = shop_id
+
+        try:
+            # 调用发布 API
+            response = await client.post(
+                "/api/platform/pddkj/move/move_collect/saveMoveCollectTask",
+                data=form_data,
+            )
+            response.raise_for_status()
+            result = response.json()
+
+            if result.get("result") == "success":
+                logger.info(f"发布任务创建成功: {len(detail_ids)} 个产品")
+            else:
+                logger.warning(f"发布失败: {result.get('message', '未知错误')}")
+
+            return result
+
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP 错误: {e.response.status_code}")
+            return {"result": "error", "message": f"HTTP {e.response.status_code}"}
+        except Exception as e:
+            logger.error(f"发布失败: {e}")
+            return {"result": "error", "message": str(e)}
 
     async def __aenter__(self) -> MiaoshouApiClient:
         """异步上下文管理器入口."""

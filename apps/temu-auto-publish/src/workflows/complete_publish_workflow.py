@@ -53,6 +53,7 @@ from ..browser.first_edit_dialog_codegen import fill_first_edit_dialog_codegen
 from ..browser.image_manager import ImageManager
 from ..browser.login_controller import LoginController
 from ..browser.miaoshou.batch_edit_api import run_batch_edit_via_api
+from ..browser.miaoshou.publish_api import run_publish_via_api
 from ..browser.miaoshou_controller import MiaoshouController
 from ..browser.publish_controller import PublishController
 
@@ -184,7 +185,7 @@ class CompletePublishWorkflow:
         selection_rows_override: Sequence[ProductSelectionRow] | None = None,
         use_ai_titles: bool = False,
         use_codegen_batch_edit: bool = False,
-        use_api_batch_edit: bool = False,
+        use_api_batch_edit: bool = True,
         skip_first_edit: bool = False,
         only_claim: bool = False,
         only_stage4_publish: bool = False,
@@ -207,8 +208,8 @@ class CompletePublishWorkflow:
             headless: 浏览器是否使用无头模式; None 时读取配置文件.
             selection_table: 选品表路径,必须由外部提供(Web 上传或 CLI 参数).
             use_ai_titles: 是否启用 AI 生成标题 (失败时自动回退).
-            use_codegen_batch_edit: 是否使用 codegen 录制的批量编辑模块 (默认 False, 推荐使用优化后的 BatchEditController).
-            use_api_batch_edit: 是否使用 API 方式执行批量编辑 (默认 False, 仅编辑纯数据字段).
+            use_codegen_batch_edit: 是否使用 codegen 录制的批量编辑模块 (默认 False).
+            use_api_batch_edit: 是否使用 API 方式执行批量编辑 (默认 True, 最快速, 支持文件上传).
             skip_first_edit: 是否直接跳过首次编辑阶段.
             resume_from_checkpoint: 是否从检查点恢复.
             checkpoint_id: 指定要恢复的检查点ID,为空则使用最新检查点.
@@ -1659,11 +1660,15 @@ class CompletePublishWorkflow:
                 },
             )
 
+        # 优先使用 web 前端提供的 collection_owner，否则从 edited_products 获取
         filter_owner: str | None = None
-        if edited_products:
-            owner_candidate = getattr(edited_products[0].selection, "owner", "") or ""
+        owner_candidate = self.collection_owner_override or (
+            getattr(edited_products[0].selection, "owner", "") if edited_products else ""
+        )
+        if owner_candidate:
             try:
                 filter_owner = self._resolve_collection_owner(owner_candidate)
+                logger.info(f"认领阶段使用创建人员筛选: '{filter_owner}'")
             except RuntimeError as exc:
                 logger.warning("Unable to resolve collection owner for claim stage: {}", exc)
                 filter_owner = None
@@ -1678,63 +1683,130 @@ class CompletePublishWorkflow:
         total_claimed = 0
         api_success = True
         api_failures: list[str] = []
+        detail_ids: list[str] = []
 
-        # Step 1: 先用 DOM 操作筛选人员，然后切换到"全部"tab
-        logger.info("Step 1: DOM 筛选人员 -> 点击搜索 -> 切换到全部tab")
-        navigation_ok = await miaoshou_ctrl.navigate_and_filter_collection_box(
-            page,
-            filter_by_user=filter_owner,
-            switch_to_tab="all",
-        )
-        if not navigation_ok:
-            logger.warning("DOM 筛选导航失败，尝试备用方式")
-            await miaoshou_ctrl.refresh_collection_box(page, filter_owner=filter_owner)
+        # Step 1-2: 使用 API 获取未认领产品（替代 DOM 操作）
+        logger.info("Step 1-2: API 获取未认领产品并筛选创建人员")
 
-        await page.wait_for_timeout(1500)
+        from src.browser.miaoshou.api_client import MiaoshouApiClient
 
-        # Step 2: 从 DOM 提取筛选后的产品 ID
-        logger.info("Step 2: 从 DOM 提取产品 ID")
+        context = page.context
+        api_client = await MiaoshouApiClient.from_playwright_context(context)
 
-        # 等待虚拟列表行加载
-        try:
-            await page.wait_for_selector(
-                ".vue-recycle-scroller__item-view",
-                state="visible",
-                timeout=5000,
-            )
-            logger.debug("虚拟列表行已加载")
-        except Exception:
-            logger.warning("等待虚拟列表行超时，尝试滚动触发加载")
-            # 尝试滚动触发虚拟列表渲染
-            await page.evaluate("window.scrollBy(0, 100)")
-            await page.wait_for_timeout(500)
-            await page.evaluate("window.scrollBy(0, -100)")
-            await page.wait_for_timeout(500)
-
-        # 根据 execution_round 计算偏移量
-        start_offset = (self.execution_round - 1) * self.collect_count
-        # 提取时多取一些，然后根据偏移量截取
-        total_to_extract = start_offset + selection_count
-
-        logger.info(
-            f"提取产品 ID: 起始偏移={start_offset}, 需要={selection_count}, "
-            f"总提取={total_to_extract}"
-        )
-
-        all_ids = await miaoshou_ctrl.extract_product_ids_from_dom(
-            page, count=total_to_extract
-        )
-
-        # 根据偏移量截取当前轮次的产品 ID
-        if len(all_ids) > start_offset:
-            detail_ids = all_ids[start_offset : start_offset + selection_count]
+        if not api_client:
+            logger.error("无法创建 API 客户端，认领阶段失败")
+            api_success = False
         else:
-            detail_ids = []
+            async with api_client:
+                # 获取未认领产品列表
+                start_offset = (self.execution_round - 1) * self.collect_count
+                total_to_fetch = start_offset + selection_count
+                items: list[dict] = []
+
+                # 准备 owner 筛选 - 将名字转换为账号 ID
+                owner_account_id: str | None = None
+                if filter_owner:
+                    owner_name = filter_owner.strip()
+                    if "(" in owner_name:
+                        owner_name = owner_name.split("(")[0].strip()
+                    logger.info(f"查找创建人员 '{owner_name}' 的账号 ID...")
+                    owner_account_id = await api_client.find_owner_account_id(owner_name)
+                    if owner_account_id:
+                        logger.info(f"找到账号 ID: {owner_account_id}")
+                    else:
+                        logger.warning(f"未找到 '{owner_name}' 的账号 ID，将获取所有产品")
+
+                # 使用 API 服务端筛选，使用 "all" tab
+                if owner_account_id:
+                    logger.info(
+                        f"使用 API 筛选获取创建人员的产品 "
+                        f"(owner_account_id={owner_account_id}, tab=all)..."
+                    )
+                    page_num = 1
+                    max_pages = 10  # 服务端筛选效率高，通常不需要太多页
+                    page_size = 100
+
+                    while len(items) < total_to_fetch and page_num <= max_pages:
+                        list_result = await api_client.get_product_list(
+                            tab="all",
+                            page=page_num,
+                            limit=page_size,
+                            owner_account_id=owner_account_id,
+                        )
+
+                        is_success = (
+                            list_result.get("result") == "success" or list_result.get("code") == 0
+                        )
+                        if not is_success:
+                            logger.error(f"第 {page_num} 页获取失败: {list_result.get('message')}")
+                            break
+
+                        # 兼容两种响应格式
+                        if "detailList" in list_result:
+                            page_items = list_result.get("detailList", [])
+                        else:
+                            page_items = list_result.get("data", {}).get("list", [])
+
+                        if not page_items:
+                            logger.debug(f"第 {page_num} 页无数据，停止搜索")
+                            break
+
+                        items.extend(page_items)
+                        logger.debug(
+                            f"第 {page_num} 页: 获取 {len(page_items)} 个, 累计 {len(items)} 个"
+                        )
+                        page_num += 1
+
+                    logger.info(f"API 筛选完成: 找到 {len(items)} 个产品")
+
+                    if not items:
+                        logger.error(f"未找到创建人员的产品 (account_id={owner_account_id})")
+                        api_success = False
+                else:
+                    # 无 owner 筛选，直接获取
+                    list_result = await api_client.get_product_list(
+                        tab="unclaimed",
+                        page=1,
+                        limit=max(100, total_to_fetch),
+                    )
+
+                    is_success = (
+                        list_result.get("result") == "success" or list_result.get("code") == 0
+                    )
+                    if is_success:
+                        if "detailList" in list_result:
+                            items = list_result.get("detailList", [])
+                        else:
+                            items = list_result.get("data", {}).get("list", [])
+                        logger.info(f"API 返回 {len(items)} 个未认领产品")
+                    else:
+                        logger.error(f"API 获取失败: {list_result.get('message')}")
+                        api_success = False
+
+                # 提取产品 ID (使用 commonCollectBoxDetailId 或 detailId)
+                all_ids = []
+                for item in items:
+                    detail_id = (
+                        item.get("commonCollectBoxDetailId")
+                        or item.get("detailId")
+                        or item.get("id")
+                    )
+                    if detail_id:
+                        all_ids.append(str(detail_id))
+
+                # 根据偏移量截取当前轮次的产品 ID
+                logger.info(
+                    f"提取产品 ID: 起始偏移={start_offset}, 需要={selection_count}, "
+                    f"总可用={len(all_ids)}"
+                )
+
+                if len(all_ids) > start_offset:
+                    detail_ids = all_ids[start_offset : start_offset + selection_count]
+                else:
+                    detail_ids = []
 
         if not detail_ids:
-            logger.warning(
-                f"无法提取产品 ID: 总提取={len(all_ids)}, 偏移={start_offset}"
-            )
+            logger.warning("无法获取产品 ID，认领阶段失败")
             api_success = False
         else:
             logger.info(f"提取到 {len(detail_ids)} 个产品 ID: {detail_ids[:5]}...")
@@ -2069,29 +2141,37 @@ class CompletePublishWorkflow:
 
         shop_name = self._resolve_shop_name(edited_products)
 
-        # 选择店铺
-        selection_ok = await publish_ctrl.select_shop(page, shop_name)
-        if not selection_ok:
-            return StageOutcome(
-                name="stage4_publish",
-                success=False,
-                message=f"选择店铺 {shop_name} 失败",
-                details={},
-            )
+        # 使用 API 方式发布
+        logger.info("使用 API 方式执行发布...")
 
-        # 供货价逻辑已停用,直接视为成功
-        set_price_ok = True
-        # 批量发布
-        publish_ok = await publish_ctrl.batch_publish(page)
+        # 获取筛选人员
+        owner_candidate = self.collection_owner_override or (
+            edited_products[0].owner if edited_products else ""
+        )
+        filter_owner = self._resolve_collection_owner(owner_candidate) if owner_candidate else None
 
-        success = bool(set_price_ok and publish_ok)
-        message = "批量发布完成" if success else "批量发布存在失败, 请检查执行日志"
+        api_result = await run_publish_via_api(
+            page,
+            filter_owner=filter_owner,
+            shop_id="9134811",  # 默认店铺 ID
+            max_products=20,
+        )
+
+        success = api_result.get("success", False)
+        published_count = api_result.get("published_count", 0)
+        error_msg = api_result.get("error")
+
+        if success:
+            message = f"API 发布完成: 成功发布 {published_count} 个产品"
+        else:
+            message = f"API 发布失败: {error_msg}"
 
         details = {
             "shop_name": shop_name,
-            "set_price_success": set_price_ok,
-            "publish_success": publish_ok,
-            "publish_result": {},
+            "publish_success": success,
+            "published_count": published_count,
+            "detail_ids": api_result.get("detail_ids", []),
+            "error": error_msg,
         }
 
         return StageOutcome("stage4_publish", success, message, details)
