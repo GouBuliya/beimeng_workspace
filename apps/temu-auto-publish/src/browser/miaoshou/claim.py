@@ -773,12 +773,10 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
 
                 let scrollerInfo = '';
                 let actualScrollTop = 0;
-                let foundScrollContainer = null;  // 保存滚动容器供方法3复用
 
+                // 【第五轮修复】完全复制 navigation.py 的滚动逻辑
                 if (isPageMode) {
-                    // page-mode:滚动整个页面或找到真正的滚动父容器
                     scrollerInfo = 'page-mode';
-
                     let scrollParent = recycleScroller.parentElement;
                     let foundScrollable = false;
 
@@ -787,19 +785,11 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         const overflowY = style.overflowY;
                         if ((overflowY === 'auto' || overflowY === 'scroll') &&
                             scrollParent.scrollHeight > scrollParent.clientHeight) {
-                            // 计算最大可滚动位置
-                            const maxScrollTop = scrollParent.scrollHeight - scrollParent.clientHeight;
-                            // 如果目标位置接近或超过最大位置，直接滚动到最大位置
-                            // 这样可以确保最后几行能被渲染出来
-                            const effectiveScrollTop = targetScrollTop > maxScrollTop - ROW_HEIGHT
-                                ? maxScrollTop
-                                : targetScrollTop;
-                            scrollParent.scrollTop = effectiveScrollTop;
+                            scrollParent.scrollTop = targetScrollTop;
                             await new Promise(r => setTimeout(r, 800));
                             actualScrollTop = scrollParent.scrollTop;
                             scrollerInfo = `parent: ${scrollParent.className.split(' ')[0] || scrollParent.tagName}`;
                             foundScrollable = true;
-                            foundScrollContainer = scrollParent;  // 保存找到的容器
                             break;
                         }
                         scrollParent = scrollParent.parentElement;
@@ -810,7 +800,6 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         await new Promise(r => setTimeout(r, 800));
                         actualScrollTop = window.scrollY || document.documentElement.scrollTop;
                         scrollerInfo = 'window';
-                        foundScrollContainer = document.documentElement;  // 使用 documentElement
                     }
                 } else {
                     if (recycleScroller) {
@@ -818,7 +807,6 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         await new Promise(r => setTimeout(r, 800));
                         actualScrollTop = recycleScroller.scrollTop;
                         scrollerInfo = 'vue-recycle-scroller';
-                        foundScrollContainer = recycleScroller;
                     }
                 }
 
