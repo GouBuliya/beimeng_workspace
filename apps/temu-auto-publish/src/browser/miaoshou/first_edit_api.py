@@ -107,10 +107,23 @@ async def run_first_edit_via_api(
     failed_count = 0
 
     try:
-        # 获取全部产品列表（使用 "all" tab 而非 "claimed"）
-        # 这样可以获取完整列表，然后根据 start_offset 手动管理轮数
-        logger.info("获取全部产品列表...")
-        list_result = await client.get_product_list(tab="all", limit=100)
+        # 先查找创建人员的账号 ID（用于 API 筛选）
+        owner_account_id: str | None = None
+        if filter_owner:
+            owner_account_id = await client.find_owner_account_id(filter_owner)
+            if owner_account_id:
+                logger.info(f"找到创建人员 '{filter_owner}' 的账号 ID: {owner_account_id}")
+            else:
+                logger.warning(f"未找到创建人员 '{filter_owner}' 的账号 ID，将在结果中筛选")
+
+        # 获取全部产品列表（使用 "all" tab）
+        # 如果有 owner_account_id，则在 API 层面筛选
+        logger.info("获取产品列表...")
+        list_result = await client.get_product_list(
+            tab="all",
+            limit=100,
+            owner_account_id=owner_account_id,
+        )
 
         if list_result.get("result") != "success":
             logger.error(f"获取产品列表失败: {list_result.get('message')}")
@@ -134,8 +147,8 @@ async def run_first_edit_via_api(
             sample_ids = [str(p.get("commonCollectBoxDetailId", "N/A")) for p in product_list[:3]]
             logger.debug(f"产品 ID 样例: {sample_ids}")
 
-        # 按创建人员筛选（如果指定）
-        if filter_owner:
+        # 如果 API 层面未筛选（找不到账号 ID），则在结果中筛选
+        if filter_owner and not owner_account_id:
             filtered = []
             for p in product_list:
                 owner_name = p.get("ownerSubAccountAliasName") or p.get("ownerName", "")
