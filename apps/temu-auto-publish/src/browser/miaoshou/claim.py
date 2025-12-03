@@ -795,7 +795,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                                 ? maxScrollTop
                                 : targetScrollTop;
                             scrollParent.scrollTop = effectiveScrollTop;
-                            await new Promise(r => setTimeout(r, 500));
+                            await new Promise(r => setTimeout(r, 800));
                             actualScrollTop = scrollParent.scrollTop;
                             scrollerInfo = `parent: ${scrollParent.className.split(' ')[0] || scrollParent.tagName}`;
                             foundScrollable = true;
@@ -807,7 +807,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
 
                     if (!foundScrollable) {
                         window.scrollTo({ top: targetScrollTop, behavior: 'instant' });
-                        await new Promise(r => setTimeout(r, 500));
+                        await new Promise(r => setTimeout(r, 800));
                         actualScrollTop = window.scrollY || document.documentElement.scrollTop;
                         scrollerInfo = 'window';
                         foundScrollContainer = document.documentElement;  // 使用 documentElement
@@ -815,7 +815,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                 } else {
                     if (recycleScroller) {
                         recycleScroller.scrollTop = targetScrollTop;
-                        await new Promise(r => setTimeout(r, 500));
+                        await new Promise(r => setTimeout(r, 800));
                         actualScrollTop = recycleScroller.scrollTop;
                         scrollerInfo = 'vue-recycle-scroller';
                         foundScrollContainer = recycleScroller;
@@ -824,20 +824,12 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
 
                 // ========== 【第四轮重构】使用视觉位置定位（与首次编辑完全一致）==========
 
-                // 获取所有行（当 target='checkbox' 时，需要过滤只包含复选框的行）
-                const allRows = Array.from(
+                // 【第五轮修复】直接使用所有行，不进行过滤（与 navigation.py 一致）
+                const rows = Array.from(
                     document.querySelectorAll('.vue-recycle-scroller__item-view')
                 );
 
-                // 过滤：如果是 checkbox 模式，只保留包含复选框的行
-                const filteredRows = target === 'checkbox'
-                    ? allRows.filter(row =>
-                        row.querySelector('.is-selection-column') !== null ||
-                        row.querySelector('.jx-checkbox') !== null
-                    )
-                    : allRows;
-
-                if (filteredRows.length === 0) {
+                if (rows.length === 0) {
                     return {
                         success: false,
                         error: '没有找到商品行元素',
@@ -849,7 +841,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                 }
 
                 // 【关键】使用视觉位置排序（getBoundingClientRect），而非 translateY
-                const visibleRows = filteredRows.map(row => {
+                const visibleRows = rows.map(row => {
                     const rect = row.getBoundingClientRect();
                     return {
                         row,
@@ -869,7 +861,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         isPageMode,
                         targetScrollTop,
                         actualScrollTop,
-                        totalRows: filteredRows.length
+                        totalRows: rows.length
                     };
                 }
 
@@ -894,7 +886,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                 // 目标行在可见行数组中的索引 = (目标索引 - 视口起始索引) + 缓冲行数量
                 const targetArrayIndex = (index - viewportStartIndex) + firstFullyVisibleArrayIndex;
 
-                // 调试信息
+                // 调试信息（与 navigation.py 一致）
                 const debugInfo = {
                     topOffsetRows: TOP_OFFSET_ROWS,
                     viewportStartIndex,
@@ -903,6 +895,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                     visibleRowCount: visibleRows.length,
                     actualScrollTop,
                     firstRowTop: Math.round(visibleRows[0].top),
+                    firstFullyVisibleTop: Math.round(visibleRows[firstFullyVisibleArrayIndex].top),
                     allTops: visibleRows.map(r => Math.round(r.top))
                 };
 
