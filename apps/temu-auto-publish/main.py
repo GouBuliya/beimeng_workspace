@@ -60,6 +60,12 @@ ONLY_CLAIM_OPTION = typer.Option(
     help="仅测试认领阶段, 自动跳过首次编辑/批量编辑/发布",
 )
 
+USE_API_BATCH_EDIT_OPTION = typer.Option(
+    False,
+    "--use-api-batch-edit/--no-use-api-batch-edit",
+    help="是否使用 API 方式执行批量编辑 (更快速, 支持文件上传)",
+)
+
 
 @app.command()
 def run(
@@ -69,6 +75,7 @@ def run(
     use_codegen_batch_edit: bool = USE_CODEGEN_BATCH_EDIT_OPTION,
     skip_first_edit: bool = SKIP_FIRST_EDIT_OPTION,
     only_claim: bool = ONLY_CLAIM_OPTION,
+    use_api_batch_edit: bool = USE_API_BATCH_EDIT_OPTION,
 ) -> None:
     """执行 Temu 完整发布工作流."""
     try:
@@ -79,6 +86,7 @@ def run(
             use_codegen_batch_edit=use_codegen_batch_edit,
             skip_first_edit=skip_first_edit,
             only_claim=only_claim,
+            use_api_batch_edit=use_api_batch_edit,
         )
         workflow.execute()
     finally:
