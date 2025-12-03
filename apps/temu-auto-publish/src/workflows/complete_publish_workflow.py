@@ -1716,14 +1716,27 @@ class CompletePublishWorkflow:
                     try:
                         sub_accounts_result = await page.evaluate("""
                         async () => {
-                            const response = await fetch('/api/move/common_collect_box/getSubAccountList', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                                body: ''
-                            });
-                            return await response.json();
+                            try {
+                                const response = await fetch('/api/move/common_collect_box/getSubAccountList', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                                    body: ''
+                                });
+                                const text = await response.text();
+                                if (!text) {
+                                    return { result: 'error', message: '空响应', list: [] };
+                                }
+                                try {
+                                    return JSON.parse(text);
+                                } catch (e) {
+                                    return { result: 'error', message: 'JSON解析失败', raw: text.substring(0, 200), list: [] };
+                                }
+                            } catch (e) {
+                                return { result: 'error', message: e.message, list: [] };
+                            }
                         }
                         """)
+                        logger.debug(f"子账号 API 响应: {sub_accounts_result}")
                         if sub_accounts_result.get("result") == "success":
                             for acc in sub_accounts_result.get("list", []):
                                 alias_name = acc.get("aliasName", "")
@@ -1731,6 +1744,8 @@ class CompletePublishWorkflow:
                                     owner_account_id = str(acc.get("subAppAccountId", ""))
                                     logger.info(f"找到账号: {alias_name} -> ID {owner_account_id}")
                                     break
+                        else:
+                            logger.warning(f"子账号 API 失败: {sub_accounts_result.get('message')}")
                         if not owner_account_id:
                             logger.warning(f"子账号列表中未找到 '{owner_name}'")
                     except Exception as e:
@@ -1752,12 +1767,24 @@ class CompletePublishWorkflow:
                     result = await page.evaluate(
                         f"""
                         async () => {{
-                            const response = await fetch('/api/move/common_collect_box/searchDetailList', {{
-                                method: 'POST',
-                                headers: {{ 'Content-Type': 'application/x-www-form-urlencoded' }},
-                                body: '{params}'
-                            }});
-                            return await response.json();
+                            try {{
+                                const response = await fetch('/api/move/common_collect_box/searchDetailList', {{
+                                    method: 'POST',
+                                    headers: {{ 'Content-Type': 'application/x-www-form-urlencoded' }},
+                                    body: '{params}'
+                                }});
+                                const text = await response.text();
+                                if (!text) {{
+                                    return {{ result: 'error', message: '空响应', detailList: [] }};
+                                }}
+                                try {{
+                                    return JSON.parse(text);
+                                }} catch (e) {{
+                                    return {{ result: 'error', message: 'JSON解析失败', raw: text.substring(0, 200), detailList: [] }};
+                                }}
+                            }} catch (e) {{
+                                return {{ result: 'error', message: e.message, detailList: [] }};
+                            }}
                         }}
                         """
                     )
