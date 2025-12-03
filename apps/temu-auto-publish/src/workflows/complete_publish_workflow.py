@@ -1723,35 +1723,21 @@ class CompletePublishWorkflow:
                         owner_name = owner_name.split("(")[0].strip()
                     logger.info(f"查找创建人员 '{owner_name}' 的账号 ID...")
 
-                    # 通过 page.evaluate 调用 API 获取子账号列表
+                    # 通过 Playwright request API 调用（自动带 cookies）
                     try:
-                        sub_accounts_result = await page.evaluate("""
-                        async () => {
-                            try {
-                                const response = await fetch('/api/move/common_collect_box/getSubAccountList', {
-                                    method: 'POST',
-                                    headers: {
-                                        'Content-Type': 'application/x-www-form-urlencoded',
-                                        'Accept': 'application/json, text/plain, */*',
-                                        'X-Requested-With': 'XMLHttpRequest'
-                                    },
-                                    credentials: 'include',
-                                    body: ''
-                                });
-                                const text = await response.text();
-                                if (!text) {
-                                    return { result: 'error', message: '空响应', status: response.status, list: [] };
-                                }
-                                try {
-                                    return JSON.parse(text);
-                                } catch (e) {
-                                    return { result: 'error', message: 'JSON解析失败', raw: text.substring(0, 200), list: [] };
-                                }
-                            } catch (e) {
-                                return { result: 'error', message: e.message, list: [] };
+                        api_response = await page.request.post(
+                            "https://erp.91miaoshou.com/api/move/common_collect_box/getSubAccountList",
+                            form={},
+                        )
+                        if api_response.ok:
+                            sub_accounts_result = await api_response.json()
+                        else:
+                            body = await api_response.text()
+                            sub_accounts_result = {
+                                "result": "error",
+                                "message": f"HTTP {api_response.status}: {body[:200]}",
+                                "list": [],
                             }
-                        }
-                        """)
                         logger.debug(f"子账号 API 响应: {sub_accounts_result}")
                         if sub_accounts_result.get("result") == "success":
                             for acc in sub_accounts_result.get("list", []):
@@ -1765,51 +1751,42 @@ class CompletePublishWorkflow:
                         if not owner_account_id:
                             logger.warning(f"子账号列表中未找到 '{owner_name}'")
                     except Exception as e:
-                        logger.error(f"page.evaluate 获取子账号失败: {e}")
+                        logger.error(f"Playwright request 获取子账号失败: {e}")
 
                     if owner_account_id:
                         logger.info(f"找到账号 ID: {owner_account_id}")
                     else:
                         logger.warning(f"未找到 '{owner_name}' 的账号 ID，将获取所有产品")
 
-                # 使用 page.evaluate 调用 API，确保使用相同的浏览器会话
+                # 使用 Playwright request API 调用（自动带 cookies）
                 async def fetch_product_list(
                     tab_name: str, page_no: int, page_size: int, account_id: str | None = None
                 ) -> dict:
-                    """通过 page.evaluate 获取产品列表."""
-                    params = f"pageNo={page_no}&pageSize={page_size}&filter[tabPaneName]={tab_name}"
+                    """通过 Playwright request API 获取产品列表."""
+                    form_data: dict = {
+                        "pageNo": str(page_no),
+                        "pageSize": str(page_size),
+                        "filter[tabPaneName]": tab_name,
+                    }
                     if account_id:
-                        params += f"&filter[ownerAccountIds][0]={account_id}"
-                    result = await page.evaluate(
-                        f"""
-                        async () => {{
-                            try {{
-                                const response = await fetch('/api/move/common_collect_box/searchDetailList', {{
-                                    method: 'POST',
-                                    headers: {{
-                                        'Content-Type': 'application/x-www-form-urlencoded',
-                                        'Accept': 'application/json, text/plain, */*',
-                                        'X-Requested-With': 'XMLHttpRequest'
-                                    }},
-                                    credentials: 'include',
-                                    body: '{params}'
-                                }});
-                                const text = await response.text();
-                                if (!text) {{
-                                    return {{ result: 'error', message: '空响应', status: response.status, detailList: [] }};
-                                }}
-                                try {{
-                                    return JSON.parse(text);
-                                }} catch (e) {{
-                                    return {{ result: 'error', message: 'JSON解析失败', raw: text.substring(0, 200), detailList: [] }};
-                                }}
-                            }} catch (e) {{
-                                return {{ result: 'error', message: e.message, detailList: [] }};
-                            }}
-                        }}
-                        """
-                    )
-                    return result
+                        form_data["filter[ownerAccountIds][0]"] = account_id
+
+                    try:
+                        api_response = await page.request.post(
+                            "https://erp.91miaoshou.com/api/move/common_collect_box/searchDetailList",
+                            form=form_data,
+                        )
+                        if api_response.ok:
+                            return await api_response.json()
+                        else:
+                            body = await api_response.text()
+                            return {
+                                "result": "error",
+                                "message": f"HTTP {api_response.status}: {body[:200]}",
+                                "detailList": [],
+                            }
+                    except Exception as e:
+                        return {"result": "error", "message": str(e), "detailList": []}
 
                 if owner_account_id:
                     logger.info(
