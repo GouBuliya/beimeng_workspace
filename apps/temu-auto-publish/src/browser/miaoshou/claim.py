@@ -11,6 +11,10 @@
     - async def _find_clickable_in_scopes(): 在 Page/Frame 中定位可交互按钮
     - async def _click_claim_confirmation_button(): 在认领弹窗中定位并点击确认按钮
     - async def claim_selected_products_to_temu(): 使用 DOM 操作执行认领
+    - async def claim_products_via_api(): 使用 API 直接认领产品（绕过浏览器）
+    - async def claim_specific_products_via_api(): 使用 API 认领指定产品列表
+@DEPENDENCIES:
+  - 内部: .api_client.MiaoshouApiClient (API 认领)
 """
 
 import re
@@ -2664,3 +2668,123 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
             logger.debug(f"通过 label 定位 Temu 选项失败: {exc}")
 
         return None
+
+    # ==================== API-based Claim Methods ====================
+
+    async def claim_products_via_api(
+        self,
+        page: Page,
+        *,
+        count: int = 10,
+        platform: str = "pddkj",
+        owner_account: str | None = None,
+    ) -> dict[str, Any]:
+        """使用 API 直接认领产品（绕过浏览器虚拟列表定位）.
+
+        这是浏览器自动化认领的替代方案，直接调用后端 API：
+        - 更快速：无需操作 DOM
+        - 更稳定：避免虚拟列表定位问题
+        - 支持批量：一次请求认领多个产品
+
+        Args:
+            page: Playwright 页面对象（用于获取 Cookie）
+            count: 要认领的产品数量
+            platform: 平台代码 ("pddkj" = Temu全托管)
+            owner_account: 创建人员筛选
+
+        Returns:
+            包含认领结果的字典:
+            - success: 是否成功
+            - claimed_count: 认领数量
+            - message: 结果消息
+            - detail_ids: 认领的产品 ID 列表
+
+        Examples:
+            >>> result = await controller.claim_products_via_api(page, count=5)
+            >>> print(f"成功认领 {result['claimed_count']} 个产品")
+        """
+        from .api_client import MiaoshouApiClient
+
+        try:
+            # 从页面上下文获取 cookies
+            context = page.context
+            client = await MiaoshouApiClient.from_playwright_context(context)
+
+            async with client:
+                result = await client.claim_unclaimed_products(
+                    count=count,
+                    platform=platform,
+                    owner_account=owner_account,
+                )
+
+            if result.get("success"):
+                logger.success(f"API 认领完成: {result.get('claimed_count', 0)} 个产品")
+            else:
+                logger.warning(f"API 认领失败: {result.get('message', '未知错误')}")
+
+            return result
+
+        except Exception as exc:
+            logger.error(f"API 认领异常: {exc}")
+            return {
+                "success": False,
+                "message": str(exc),
+                "claimed_count": 0,
+            }
+
+    async def claim_specific_products_via_api(
+        self,
+        page: Page,
+        *,
+        detail_ids: list[str],
+        platform: str = "pddkj",
+    ) -> dict[str, Any]:
+        """使用 API 认领指定的产品列表.
+
+        Args:
+            page: Playwright 页面对象（用于获取 Cookie）
+            detail_ids: 采集箱产品 ID 列表
+            platform: 平台代码
+
+        Returns:
+            API 响应结果
+
+        Examples:
+            >>> result = await controller.claim_specific_products_via_api(
+            ...     page,
+            ...     detail_ids=["3049643700", "3049643667"]
+            ... )
+        """
+        from .api_client import MiaoshouApiClient
+
+        try:
+            context = page.context
+            client = await MiaoshouApiClient.from_playwright_context(context)
+
+            async with client:
+                api_result = await client.claim_products(
+                    detail_ids=detail_ids,
+                    platform=platform,
+                )
+
+            success = api_result.get("code") == 0
+            if success:
+                logger.success(f"API 认领成功: {len(detail_ids)} 个产品")
+            else:
+                logger.warning(f"API 认领失败: {api_result.get('message')}")
+
+            return {
+                "success": success,
+                "message": api_result.get("message", ""),
+                "claimed_count": len(detail_ids) if success else 0,
+                "detail_ids": detail_ids,
+                "api_response": api_result,
+            }
+
+        except Exception as exc:
+            logger.error(f"API 认领异常: {exc}")
+            return {
+                "success": False,
+                "message": str(exc),
+                "claimed_count": 0,
+            }
