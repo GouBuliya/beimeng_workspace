@@ -336,13 +336,14 @@ class MiaoshouApiClient:
             name_part = name_part.split("(")[0].strip()
 
         try:
-            result = await self.get_sub_accounts()
+            # 使用通用采集箱的创建人员列表 API
+            result = await self.get_common_collect_box_owner_list()
             if result.get("result") == "success":
-                for acc in result.get("list", []):
-                    alias_name = acc.get("aliasName", "")
-                    # 尝试匹配 aliasName 或 name
-                    if name_part in alias_name or name_part == acc.get("name", ""):
-                        account_id = str(acc.get("subAppAccountId", ""))
+                for owner in result.get("ownerAccountList", []):
+                    alias_name = owner.get("subAccountAliasName", "")
+                    # 尝试匹配名字部分
+                    if name_part in alias_name:
+                        account_id = str(owner.get("ownerAccountId", ""))
                         logger.info(f"找到账号: {alias_name} -> ID {account_id}")
                         return account_id
             logger.warning(f"未找到创建人员 '{name_part}' 的账号 ID")
