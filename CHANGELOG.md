@@ -1,3 +1,10 @@
+# [1.3.0](https://github.com/GouBuliya/beimeng_workspace/compare/v1.2.1...v1.3.0) (2025-12-03)
+
+
+### Features
+
+* 认领/发布次数默认值改为 5 次 ([2474f57](https://github.com/GouBuliya/beimeng_workspace/commit/2474f574ceded788c1ebdc327cefa04b26f59cd7))
+
 ## [1.2.1](https://github.com/GouBuliya/beimeng_workspace/compare/v1.2.0...v1.2.1) (2025-12-03)
 
 
