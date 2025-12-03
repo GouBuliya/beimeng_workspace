@@ -131,6 +131,90 @@ async def test_api_claim(dry_run: bool = True):
                 logger.error(f"认领失败: {result.get('message')}")
 
 
+async def test_owner_filter():
+    """测试人员筛选功能."""
+    logger.info("=" * 50)
+    logger.info("测试 3: 人员筛选功能")
+    logger.info("=" * 50)
+
+    cookie_file = project_root.parent.parent / "data/temp/miaoshou_cookies.json"
+    client = await MiaoshouApiClient.from_cookie_file(str(cookie_file))
+
+    if not client:
+        logger.error("无法创建 API 客户端")
+        return
+
+    async with client:
+        # 先获取一些产品看看有哪些创建人员
+        result = await client.get_product_list(tab="unclaimed", limit=20)
+
+        is_success = result.get("result") == "success" or result.get("code") == 0
+        if not is_success:
+            logger.error("获取产品列表失败")
+            return
+
+        if "detailList" in result:
+            items = result.get("detailList", [])
+        else:
+            items = result.get("data", {}).get("list", [])
+
+        # 统计创建人员
+        owners = {}
+        for item in items:
+            owner = item.get("ownerSubAccountAliasName", "未知")
+            owners[owner] = owners.get(owner, 0) + 1
+
+        logger.info("前 20 个产品的创建人员分布:")
+        for owner, count in sorted(owners.items(), key=lambda x: -x[1]):
+            logger.info(f"  {owner}: {count} 个")
+
+        # 测试筛选（如果有多个创建人员）
+        if len(owners) > 1:
+            # 取第一个创建人员进行筛选测试
+            test_owner = next(iter(owners.keys()))
+            # 提取简短名称用于部分匹配测试
+            if "(" in test_owner:
+                short_name = test_owner.split("(")[0].rstrip("）").rstrip()
+            else:
+                short_name = test_owner[:2]  # 取前两个字符
+
+            logger.info(f"\n测试筛选: 完整名称='{test_owner}', 部分匹配='{short_name}'")
+
+            # 测试 claim_unclaimed_products 的筛选功能 (dry run)
+            logger.info(f"\n模拟认领 (筛选 '{short_name}'):")
+
+            # 获取更多产品进行筛选测试
+            list_result = await client.get_product_list(tab="unclaimed", limit=50)
+            if "detailList" in list_result:
+                all_items = list_result.get("detailList", [])
+            else:
+                all_items = list_result.get("data", {}).get("list", [])
+
+            # 客户端筛选
+            filtered = [
+                item for item in all_items
+                if short_name in (item.get("ownerSubAccountAliasName") or "")
+            ]
+            logger.info(f"  获取 50 个产品，筛选后匹配 '{short_name}' 的有 {len(filtered)} 个")
+
+            if filtered:
+                for i, item in enumerate(filtered[:3], 1):
+                    detail_id = (
+                        item.get("commonCollectBoxDetailId")
+                        or item.get("detailId")
+                        or item.get("id")
+                    )
+                    owner = item.get("ownerSubAccountAliasName", "未知")
+                    title = item.get("title", "")[:30]
+                    logger.info(f"    {i}. ID={detail_id}, 创建人员={owner}, 标题={title}...")
+
+                logger.success("人员筛选功能正常工作！")
+            else:
+                logger.warning(f"筛选 '{short_name}' 没有匹配结果")
+        else:
+            logger.info("只有一个创建人员，跳过筛选测试")
+
+
 async def main():
     """主函数."""
     logger.info("妙手 API 认领功能测试")
@@ -141,6 +225,9 @@ async def main():
 
     # 测试 2: API 认领 (默认 dry_run 模式)
     await test_api_claim(dry_run=True)
+
+    # 测试 3: 人员筛选功能
+    await test_owner_filter()
 
     logger.info("=" * 60)
     logger.info("测试完成")

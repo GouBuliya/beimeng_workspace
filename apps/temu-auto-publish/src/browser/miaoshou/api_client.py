@@ -326,7 +326,7 @@ class MiaoshouApiClient:
         Args:
             count: 要认领的产品数量
             platform: 平台代码
-            owner_account: 创建人员筛选
+            owner_account: 创建人员筛选（支持部分匹配，如 "陈昊" 将匹配 "陈昊（新）(CHENHAO123)"）
 
         Returns:
             包含认领结果的字典
@@ -336,11 +336,14 @@ class MiaoshouApiClient:
             >>> result = await client.claim_unclaimed_products(count=5)
             >>> print(f"成功认领 {result['claimed_count']} 个产品")
         """
+        # 如果需要按人员筛选，获取更多产品然后客户端过滤
+        # API 不支持 owner 筛选参数，需要在客户端过滤
+        fetch_limit = count * 5 if owner_account else count  # 多获取一些以便筛选
+
         # 获取未认领产品列表
         list_result = await self.get_product_list(
             tab="unclaimed",
-            limit=count,
-            owner_account=owner_account,
+            limit=fetch_limit,
         )
 
         # 兼容两种响应格式
@@ -364,6 +367,28 @@ class MiaoshouApiClient:
                 "message": "没有未认领的产品",
                 "claimed_count": 0,
             }
+
+        # 客户端筛选：如果指定了 owner_account，按 ownerSubAccountAliasName 过滤
+        if owner_account:
+            owner_filter = owner_account.strip()
+            filtered_items = [
+                item for item in items
+                if owner_filter in (item.get("ownerSubAccountAliasName") or "")
+            ]
+            if filtered_items:
+                logger.info(
+                    f"按创建人员筛选: '{owner_filter}' 匹配到 {len(filtered_items)}/{len(items)} 个产品"
+                )
+                items = filtered_items[:count]  # 只取需要的数量
+            else:
+                logger.warning(f"未找到匹配 '{owner_filter}' 的产品")
+                return {
+                    "success": False,
+                    "message": f"未找到创建人员 '{owner_filter}' 的产品",
+                    "claimed_count": 0,
+                }
+        else:
+            items = items[:count]
 
         # 提取产品 ID (使用 commonCollectBoxDetailId 或 detailId)
         detail_ids = [
