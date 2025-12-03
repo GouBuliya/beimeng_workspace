@@ -956,8 +956,11 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
                     };
                 }
 
-                // 【关键改进】使用 actualScrollTop 计算视口起始索引
-                const viewportStartIndex = Math.floor(actualScrollTop / ROW_HEIGHT);
+                // 【第四轮修复】修正虚拟列表顶部偏移
+                // 虚拟列表上方有固定元素（表头等），导致 scrollTop 与实际行索引有偏移
+                // 经验值：2 行偏移（256px）
+                const TOP_OFFSET_ROWS = 2;
+                const viewportStartIndex = Math.floor(actualScrollTop / ROW_HEIGHT) - TOP_OFFSET_ROWS;
 
                 // 【第三轮修复】找到第一个完全可见的行（top >= 0）
                 // 虚拟列表可能有缓冲区，会预渲染视口外的行（top < 0）
@@ -980,6 +983,7 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
 
                 // 调试信息
                 const debugInfo = {
+                    topOffsetRows: TOP_OFFSET_ROWS,
                     viewportStartIndex,
                     firstFullyVisibleArrayIndex,
                     targetArrayIndex,
@@ -1051,6 +1055,7 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
             if result.get("success"):
                 logger.success(
                     f"✓ [视觉位置定位] 点击成功, index={index}, "
+                    f"topOffset={result.get('topOffsetRows')}行, "
                     f"viewportStartIndex={result.get('viewportStartIndex')}, "
                     f"bufferRows={result.get('firstFullyVisibleArrayIndex')}, "
                     f"targetArrayIndex={result.get('targetArrayIndex')}, "
@@ -1062,7 +1067,8 @@ class MiaoshouNavigationMixin(MiaoshouControllerBase):
             else:
                 logger.warning(
                     f"[视觉位置定位] 点击失败: {result.get('error')}, "
-                    f"index={index}, viewportStartIndex={result.get('viewportStartIndex')}, "
+                    f"index={index}, topOffset={result.get('topOffsetRows')}行, "
+                    f"viewportStartIndex={result.get('viewportStartIndex')}, "
                     f"bufferRows={result.get('firstFullyVisibleArrayIndex')}, "
                     f"targetArrayIndex={result.get('targetArrayIndex')}, "
                     f"可见行数={result.get('visibleRowCount')}, "
