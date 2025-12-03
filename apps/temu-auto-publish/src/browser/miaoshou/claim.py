@@ -2799,7 +2799,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
         """从页面 DOM 中提取产品 ID 列表.
 
         在 DOM 筛选人员后调用此方法，从当前页面提取产品 ID。
-        通过 Vue 组件数据或 DOM 属性获取。
+        支持多种提取方式：Vue 组件数据、页面文本匹配等。
 
         Args:
             page: Playwright 页面对象
@@ -2809,41 +2809,65 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
             产品 ID 列表
         """
         try:
-            # 从 Vue 虚拟列表组件数据中提取
+            # 从页面中提取产品 ID
             detail_ids = await page.evaluate(
                 """(count) => {
                     const ids = [];
+                    const seen = new Set();
 
-                    // 尝试从 Vue 组件获取数据
-                    const scroller = document.querySelector('.vue-recycle-scroller');
-                    if (scroller && scroller.__vue__) {
-                        const items = scroller.__vue__.items || scroller.__vue__.$data?.items || [];
-                        for (const item of items.slice(0, count)) {
-                            const id = item.commonCollectBoxDetailId || item.detailId || item.id;
-                            if (id) ids.push(String(id));
+                    // 方法 1: 从页面文本中提取 "采集箱产品ID: xxx"
+                    const rows = document.querySelectorAll('.vue-recycle-scroller__item-view');
+                    for (const row of Array.from(rows).slice(0, count * 2)) {
+                        const text = row.textContent || '';
+                        const match = text.match(/采集箱产品ID[:：]\\s*(\\d+)/);
+                        if (match && match[1] && !seen.has(match[1])) {
+                            seen.add(match[1]);
+                            ids.push(match[1]);
                         }
+                        if (ids.length >= count) break;
                     }
 
-                    // 如果 Vue 数据获取失败，尝试从表格行的 data 属性获取
+                    // 方法 2: 如果方法1失败，尝试从 Vue 组件获取数据
                     if (ids.length === 0) {
-                        const rows = document.querySelectorAll(
-                            '.vue-recycle-scroller__item-view, .el-table__row, tr[data-row-key]'
-                        );
-                        for (const row of Array.from(rows).slice(0, count)) {
-                            const id = row.dataset?.rowKey || row.dataset?.id ||
-                                       row.getAttribute('data-row-key') ||
-                                       row.getAttribute('data-id');
-                            if (id) ids.push(String(id));
+                        const scroller = document.querySelector('.vue-recycle-scroller');
+                        if (scroller) {
+                            // 尝试 Vue 2 方式
+                            const vue = scroller.__vue__;
+                            if (vue) {
+                                const items = vue.items || vue.$data?.items ||
+                                              vue._data?.items || vue.pool?.map(p => p.item) || [];
+                                for (const item of items.slice(0, count)) {
+                                    const id = item?.commonCollectBoxDetailId ||
+                                               item?.detailId || item?.id;
+                                    if (id && !seen.has(String(id))) {
+                                        seen.add(String(id));
+                                        ids.push(String(id));
+                                    }
+                                }
+                            }
                         }
                     }
 
-                    return ids;
+                    // 方法 3: 尝试从所有包含数字ID的元素中提取
+                    if (ids.length === 0) {
+                        const allText = document.body.innerText;
+                        const matches = allText.matchAll(/采集箱产品ID[:：]\\s*(\\d+)/g);
+                        for (const m of matches) {
+                            if (m[1] && !seen.has(m[1])) {
+                                seen.add(m[1]);
+                                ids.push(m[1]);
+                            }
+                            if (ids.length >= count) break;
+                        }
+                    }
+
+                    return ids.slice(0, count);
                 }""",
                 count,
             )
 
             if detail_ids:
-                logger.info(f"从 DOM 提取到 {len(detail_ids)} 个产品 ID")
+                logger.info(f"从 DOM 提取到 {len(detail_ids)} 个产品 ID: {detail_ids[:3]}...")
                 return detail_ids
 
             logger.warning("无法从 DOM 提取产品 ID")
