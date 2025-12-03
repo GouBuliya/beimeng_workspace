@@ -826,29 +826,90 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
 
                 // 如果只需要点击复选框,直接处理后返回
                 if (target === 'checkbox') {
-                    const checkboxSelectors = [
-                        '.is-fixed-left.is-selection-column .jx-checkbox__inner',
-                        '.is-fixed-left.is-selection-column .jx-checkbox',
+                    // 【第五轮修复】虚拟表格有两个独立容器：
+                    // 1. 固定左侧列（包含复选框）
+                    // 2. 主内容区（包含商品信息）
+                    // targetRow 是主内容区的行，不包含复选框！
+                    // 需要在固定列容器中找到对应位置的复选框
+
+                    let checkbox = null;
+
+                    // 方法1: 先尝试在 targetRow 内查找（兼容单容器结构）
+                    const rowCheckboxSelectors = [
+                        '.is-selection-column .jx-checkbox__inner',
                         '.jx-checkbox__inner',
                         'input[type="checkbox"]',
                     ];
-                    let checkbox = null;
-                    for (const selector of checkboxSelectors) {
+                    for (const selector of rowCheckboxSelectors) {
                         const found = targetRow.querySelector(selector);
                         if (found) {
                             checkbox = found;
                             break;
                         }
                     }
+
+                    // 方法2: 在固定列容器中按视觉位置查找
+                    if (!checkbox) {
+                        // 获取固定列容器中的所有复选框行
+                        const fixedLeftRows = Array.from(
+                            document.querySelectorAll('.is-fixed-left .vue-recycle-scroller__item-view')
+                        );
+
+                        if (fixedLeftRows.length > 0) {
+                            // 按视觉位置排序
+                            const sortedFixedRows = fixedLeftRows.map(row => ({
+                                row,
+                                top: row.getBoundingClientRect().top
+                            })).filter(r => r.top > -ROW_HEIGHT && r.top < window.innerHeight + ROW_HEIGHT)
+                              .sort((a, b) => a.top - b.top);
+
+                            // 找到与 targetRow 视觉位置最接近的固定列行
+                            const targetTop = matchedTop;
+                            let closestRow = null;
+                            let minDiff = Infinity;
+
+                            for (const item of sortedFixedRows) {
+                                const diff = Math.abs(item.top - targetTop);
+                                if (diff < minDiff) {
+                                    minDiff = diff;
+                                    closestRow = item.row;
+                                }
+                            }
+
+                            if (closestRow && minDiff < ROW_HEIGHT * 0.5) {
+                                checkbox = closestRow.querySelector('.jx-checkbox__inner') ||
+                                          closestRow.querySelector('.jx-checkbox') ||
+                                          closestRow.querySelector('input[type="checkbox"]');
+                            }
+                        }
+                    }
+
+                    // 方法3: 全局按视觉位置查找（最后的回退）
+                    if (!checkbox) {
+                        const allCheckboxes = Array.from(
+                            document.querySelectorAll('.is-selection-column .jx-checkbox__inner')
+                        );
+                        const targetTop = matchedTop;
+
+                        for (const cb of allCheckboxes) {
+                            const cbTop = cb.getBoundingClientRect().top;
+                            if (Math.abs(cbTop - targetTop) < ROW_HEIGHT * 0.5) {
+                                checkbox = cb;
+                                break;
+                            }
+                        }
+                    }
+
                     if (!checkbox) {
                         return {
                             success: false,
-                            error: 'Checkbox not found in target row',
+                            error: 'Checkbox not found (tried row, fixed-left, global)',
                             scrollerInfo,
                             matchedTop: Math.round(matchedTop),
                             ...debugInfo
                         };
                     }
+
                     try {
                         checkbox.click();
                         return {
