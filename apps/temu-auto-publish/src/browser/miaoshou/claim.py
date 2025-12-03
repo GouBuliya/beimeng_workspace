@@ -2767,7 +2767,8 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                     platform=platform,
                 )
 
-            success = api_result.get("code") == 0
+            # 兼容两种响应格式
+            success = api_result.get("result") == "success" or api_result.get("code") == 0
             if success:
                 logger.success(f"API 认领成功: {len(detail_ids)} 个产品")
             else:
