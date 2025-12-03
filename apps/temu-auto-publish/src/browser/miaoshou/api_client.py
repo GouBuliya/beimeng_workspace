@@ -1289,6 +1289,50 @@ class MiaoshouApiClient:
             logger.error(f"保存产品编辑失败: {e}")
             return {"result": "error", "message": str(e)}
 
+    async def verify_login_status(self) -> bool:
+        """通过 API 验证登录状态.
+
+        调用 getAccountInfo API 检测 Cookie 是否有效，
+        比 DOM 检测更可靠快速。
+
+        Returns:
+            True 如果已登录（Cookie 有效）
+
+        Examples:
+            >>> client = await MiaoshouApiClient.from_cookie_file()
+            >>> if await client.verify_login_status():
+            ...     print("登录有效")
+        """
+        client = await self._get_client()
+
+        try:
+            response = await client.get(
+                "/api/auth/account/getAccountInfo",
+                timeout=10.0,
+            )
+            response.raise_for_status()
+            result = response.json()
+
+            if result.get("result") == "success":
+                account_id = result.get("accountId")
+                sub_account_name = result.get("subAccountName", "")
+                logger.debug(f"API 登录验证成功: accountId={account_id}, subAccount={sub_account_name}")
+                return True
+            else:
+                logger.debug(f"API 登录验证失败: {result.get('message', '未知错误')}")
+                return False
+
+        except httpx.HTTPStatusError as e:
+            # 401/403 表示未登录
+            if e.response.status_code in (401, 403):
+                logger.debug("API 登录验证: 未授权 (401/403)")
+            else:
+                logger.debug(f"API 登录验证 HTTP 错误: {e.response.status_code}")
+            return False
+        except Exception as e:
+            logger.debug(f"API 登录验证异常: {e}")
+            return False
+
     async def get_shop_list(
         self,
         platform: str = "pddkj",
