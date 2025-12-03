@@ -2,19 +2,31 @@
 @PURPOSE: 妙手 ERP API 客户端，提供直接 HTTP 调用能力，绕过浏览器自动化
 @OUTLINE:
   - class MiaoshouApiClient: API 客户端主类
-    - async def from_playwright_context(): 从 Playwright 上下文创建客户端
-    - async def from_cookie_file(): 从 Cookie 文件创建客户端
-    - async def get_product_list(): 获取采集箱产品列表
-    - async def claim_products(): 批量认领产品
-    - async def claim_single_product(): 认领单个产品
+    - 工厂方法:
+      - async def from_playwright_context(): 从 Playwright 上下文创建客户端
+      - async def from_cookie_file(): 从 Cookie 文件创建客户端
+    - 认领 API:
+      - async def get_product_list(): 获取通用采集箱产品列表
+      - async def claim_products(): 批量认领产品
+      - async def claim_single_product(): 认领单个产品
+      - async def claim_unclaimed_products(): 获取并认领未认领产品
+    - 批量编辑 API:
+      - async def search_temu_collect_box(): 搜索 Temu 平台采集箱
+      - async def get_collect_item_info(): 获取产品编辑信息
+      - async def save_collect_item_info(): 保存产品编辑信息
+      - async def batch_edit_products(): 批量编辑产品（高级方法）
+      - async def batch_edit_single_product(): 编辑单个产品
 @DEPENDENCIES:
-  - 外部: httpx
+  - 外部: httpx, json
   - 内部: ..cookie_manager.CookieManager
-@RELATED: claim.py, cookie_manager.py
+@RELATED: claim.py, cookie_manager.py, batch_edit_codegen.py
+@CHANGELOG:
+  - 2025-12-03: 新增批量编辑 API (search_temu_collect_box, get/save_collect_item_info)
 """
 
 from __future__ import annotations
 
+import json
 from typing import Any, ClassVar
 
 import httpx
@@ -45,6 +57,8 @@ class MiaoshouApiClient:
 
     BASE_URL: ClassVar[str] = "https://erp.91miaoshou.com"
     API_PREFIX: ClassVar[str] = "/api/move/common_collect_box"
+    # 批量编辑 API 前缀（平台特定）
+    BATCH_EDIT_API_PREFIX: ClassVar[str] = "/api/platform/pddkj/move/collect_box"
 
     # 平台代码映射
     PLATFORM_CODES: ClassVar[dict[str, str]] = {
@@ -52,6 +66,32 @@ class MiaoshouApiClient:
         "temu全托管": "pddkj",
         "pddkj": "pddkj",
     }
+
+    # 批量编辑可用字段
+    BATCH_EDIT_FIELDS: ClassVar[list[str]] = [
+        "title",  # 标题
+        "cid",  # 类目 ID
+        "breadcrumb",  # 类目面包屑
+        "multiLanguageTitleMap",  # 多语言标题（英语标题等）
+        "attributes",  # 类目属性
+        "itemNum",  # 主货号
+        "productOriginCountry",  # 产地国家
+        "productOriginProvince",  # 产地省份
+        "productOriginCertFiles",  # 产地证明文件
+        "outerPackageImgUrls",  # 外包装图片
+        "outerPackageShape",  # 外包装形状
+        "outerPackageType",  # 外包装类型
+        "personalizationSwitch",  # 定制品开关
+        "technologyType",  # 工艺类型（敏感属性）
+        "firstType",  # 一级类型（敏感属性）
+        "twiceType",  # 二级类型（敏感属性）
+        "skuMap",  # SKU 数据（含重量/尺寸/价格）
+        "saleAttributes",  # 销售属性
+        "sizeCharts",  # 尺码表
+        "collectShowSizeTemplateIds",  # 尺码模板 ID
+        "thumbnail",  # 缩略图
+        "collectBoxDetailShopList",  # 店铺列表
+    ]
 
     def __init__(self, cookies: list[dict[str, Any]]) -> None:
         """初始化 API 客户端.
@@ -420,6 +460,285 @@ class MiaoshouApiClient:
             "detail_ids": detail_ids,
             "api_response": claim_result,
         }
+
+    # ===== 批量编辑 API =====
+
+    async def search_temu_collect_box(
+        self,
+        *,
+        status: str = "notPublished",
+        claim_status: str = "published",
+        page: int = 1,
+        page_size: int = 20,
+    ) -> dict[str, Any]:
+        """搜索 Temu 平台采集箱产品列表.
+
+        注意：此 API 返回的是已认领到 Temu 平台的产品，
+        其 collectBoxDetailId 可用于 get_collect_item_info 和 save_collect_item_info。
+
+        Args:
+            status: 发布状态 ("notPublished", "published", "fail")
+            claim_status: 认领状态 ("published" = 已认领)
+            page: 页码
+            page_size: 每页数量
+
+        Returns:
+            包含产品列表的响应，每个产品有 collectBoxDetailId 字段
+
+        Examples:
+            >>> client = await MiaoshouApiClient.from_cookie_file()
+            >>> result = await client.search_temu_collect_box(page_size=50)
+            >>> for item in result.get("detailList", []):
+            ...     print(f"{item['collectBoxDetailId']}: {item.get('cid')}")
+        """
+        client = await self._get_client()
+
+        form_data = {
+            "claimPublishShopStatus": claim_status,
+            "status": status,
+            "pageNo": str(page),
+            "pageSize": str(page_size),
+        }
+
+        try:
+            response = await client.post(
+                f"{self.BATCH_EDIT_API_PREFIX}/searchCollectBoxDetail",
+                data=form_data,
+            )
+            response.raise_for_status()
+            result = response.json()
+
+            if result.get("result") == "success":
+                items = result.get("detailList", [])
+                logger.debug(f"搜索 Temu 采集箱成功: {len(items)} 个产品")
+            else:
+                logger.warning(f"搜索失败: {result.get('message', '未知错误')}")
+
+            return result
+
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP 错误: {e.response.status_code}")
+            raise
+        except Exception as e:
+            logger.error(f"搜索 Temu 采集箱失败: {e}")
+            raise
+
+    async def get_collect_item_info(
+        self,
+        *,
+        detail_ids: list[str],
+        fields: list[str] | None = None,
+        site: str = "PDDKJ",
+    ) -> dict[str, Any]:
+        """获取产品编辑信息（用于批量编辑）.
+
+        Args:
+            detail_ids: 产品 ID 列表
+            fields: 要获取的字段列表，默认获取 title 和 cid
+            site: 平台站点代码
+
+        Returns:
+            包含产品编辑信息的响应
+
+        Examples:
+            >>> client = await MiaoshouApiClient.from_cookie_file()
+            >>> result = await client.get_collect_item_info(
+            ...     detail_ids=["2478360327", "2478360326"],
+            ...     fields=["title", "cid", "attributes"]
+            ... )
+            >>> for item in result.get("collectItemInfoList", []):
+            ...     print(f"{item['detailId']}: {item['title']}")
+        """
+        if fields is None:
+            fields = ["title", "cid"]
+
+        client = await self._get_client()
+
+        # 构建表单数据
+        # 格式: sites[0]=PDDKJ&detailIds[0]=xxx&detailIds[1]=xxx&fields[0]=title
+        form_data: dict[str, str] = {"sites[0]": site}
+        for idx, detail_id in enumerate(detail_ids):
+            form_data[f"detailIds[{idx}]"] = str(detail_id)
+        for idx, field in enumerate(fields):
+            form_data[f"fields[{idx}]"] = field
+
+        try:
+            response = await client.post(
+                f"{self.BATCH_EDIT_API_PREFIX}/getCollectItemInfoList",
+                data=form_data,
+            )
+            response.raise_for_status()
+            result = response.json()
+
+            if result.get("result") == "success":
+                items = result.get("collectItemInfoList", [])
+                logger.debug(f"获取产品编辑信息成功: {len(items)} 个产品")
+            else:
+                logger.warning(f"获取产品编辑信息失败: {result.get('message', '未知错误')}")
+
+            return result
+
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP 错误: {e.response.status_code}")
+            raise
+        except Exception as e:
+            logger.error(f"获取产品编辑信息失败: {e}")
+            raise
+
+    async def save_collect_item_info(
+        self,
+        *,
+        items: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """保存产品编辑信息（批量编辑核心 API）.
+
+        Args:
+            items: 产品信息列表，每个项目至少包含 site 和 detailId，
+                   可包含其他要更新的字段（如 title, cid, attributes 等）
+
+        Returns:
+            API 响应，包含 successNum 和 failNum
+
+        Examples:
+            >>> client = await MiaoshouApiClient.from_cookie_file()
+            >>> result = await client.save_collect_item_info(items=[
+            ...     {
+            ...         "site": "PDDKJ",
+            ...         "detailId": "2478360327",
+            ...         "title": "新标题",
+            ...         "cid": "32233"
+            ...     }
+            ... ])
+            >>> print(f"成功: {result['successNum']}, 失败: {result['failNum']}")
+        """
+        client = await self._get_client()
+
+        # 构建表单数据
+        # 格式: collectItemInfoList=[{...JSON...}]
+        form_data = {"collectItemInfoList": json.dumps(items, ensure_ascii=False)}
+
+        try:
+            response = await client.post(
+                f"{self.BATCH_EDIT_API_PREFIX}/saveCollectItemInfoList",
+                data=form_data,
+            )
+            response.raise_for_status()
+            result = response.json()
+
+            if result.get("result") == "success":
+                success_num = result.get("successNum", 0)
+                fail_num = result.get("failNum", 0)
+                logger.info(f"保存产品编辑信息: 成功 {success_num}, 失败 {fail_num}")
+                if result.get("errorMap"):
+                    logger.warning(f"错误详情: {result['errorMap']}")
+            else:
+                logger.warning(f"保存失败: {result.get('message', '未知错误')}")
+
+            return result
+
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP 错误: {e.response.status_code}")
+            raise
+        except Exception as e:
+            logger.error(f"保存产品编辑信息失败: {e}")
+            raise
+
+    async def batch_edit_products(
+        self,
+        *,
+        detail_ids: list[str],
+        edits: dict[str, Any],
+        site: str = "PDDKJ",
+    ) -> dict[str, Any]:
+        """批量编辑产品（高级方法，对所有产品应用相同的编辑）.
+
+        这是一个便捷方法，对指定的所有产品应用相同的编辑内容。
+
+        Args:
+            detail_ids: 产品 ID 列表
+            edits: 要应用的编辑内容，可包含以下字段：
+                - title: 标题
+                - cid: 类目 ID
+                - breadcrumb: 类目面包屑
+                - multiLanguageTitleMap: 多语言标题 {"en": "English title"}
+                - attributes: 类目属性列表
+                - itemNum: 主货号
+                - productOriginCountry/Province: 产地
+                - outerPackageImgUrls/Shape/Type: 外包装
+                - personalizationSwitch: 定制品开关 (0/1)
+                - technologyType/firstType/twiceType: 敏感属性
+                - skuMap: SKU 数据
+                - saleAttributes: 销售属性
+                - sizeCharts: 尺码表
+            site: 平台站点代码
+
+        Returns:
+            包含成功/失败统计的结果
+
+        Examples:
+            >>> client = await MiaoshouApiClient.from_cookie_file()
+            >>> # 批量更新标题
+            >>> result = await client.batch_edit_products(
+            ...     detail_ids=["123", "456", "789"],
+            ...     edits={"title": "统一的新标题"}
+            ... )
+            >>> # 批量更新产地
+            >>> result = await client.batch_edit_products(
+            ...     detail_ids=["123", "456"],
+            ...     edits={
+            ...         "productOriginCountry": "CN",
+            ...         "productOriginProvince": "广东省"
+            ...     }
+            ... )
+        """
+        # 构建每个产品的编辑数据
+        items = []
+        for detail_id in detail_ids:
+            item = {"site": site, "detailId": str(detail_id)}
+            item.update(edits)
+            items.append(item)
+
+        # 调用保存 API
+        result = await self.save_collect_item_info(items=items)
+
+        # 构建统一的返回格式
+        is_success = result.get("result") == "success"
+        return {
+            "success": is_success,
+            "total": len(detail_ids),
+            "success_count": result.get("successNum", 0) if is_success else 0,
+            "fail_count": result.get("failNum", 0) if is_success else len(detail_ids),
+            "error_map": result.get("errorMap", {}),
+            "api_response": result,
+        }
+
+    async def batch_edit_single_product(
+        self,
+        *,
+        detail_id: str,
+        edits: dict[str, Any],
+        site: str = "PDDKJ",
+    ) -> dict[str, Any]:
+        """编辑单个产品.
+
+        Args:
+            detail_id: 产品 ID
+            edits: 要应用的编辑内容
+            site: 平台站点代码
+
+        Returns:
+            API 响应
+
+        Examples:
+            >>> client = await MiaoshouApiClient.from_cookie_file()
+            >>> result = await client.batch_edit_single_product(
+            ...     detail_id="2478360327",
+            ...     edits={"title": "新标题", "cid": "32233"}
+            ... )
+        """
+        return await self.batch_edit_products(
+            detail_ids=[detail_id], edits=edits, site=site
+        )
 
     async def __aenter__(self) -> MiaoshouApiClient:
         """异步上下文管理器入口."""
