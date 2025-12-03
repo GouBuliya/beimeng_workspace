@@ -66,6 +66,12 @@ USE_API_BATCH_EDIT_OPTION = typer.Option(
     help="是否使用 API 方式执行批量编辑 (更快速, 支持文件上传, 默认开启)",
 )
 
+USE_API_FIRST_EDIT_OPTION = typer.Option(
+    False,
+    "--use-api-first-edit/--no-use-api-first-edit",
+    help="是否使用 API 方式执行首次编辑 (实验性功能, 默认关闭)",
+)
+
 
 @app.command()
 def run(
@@ -76,6 +82,7 @@ def run(
     skip_first_edit: bool = SKIP_FIRST_EDIT_OPTION,
     only_claim: bool = ONLY_CLAIM_OPTION,
     use_api_batch_edit: bool = USE_API_BATCH_EDIT_OPTION,
+    use_api_first_edit: bool = USE_API_FIRST_EDIT_OPTION,
 ) -> None:
     """执行 Temu 完整发布工作流."""
     try:
@@ -87,6 +94,7 @@ def run(
             skip_first_edit=skip_first_edit,
             only_claim=only_claim,
             use_api_batch_edit=use_api_batch_edit,
+            use_api_first_edit=use_api_first_edit,
         )
         workflow.execute()
     finally:

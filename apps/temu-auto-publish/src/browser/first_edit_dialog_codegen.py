@@ -7,7 +7,8 @@
   - async def _fill_title(): 填写产品标题
   - async def _fill_basic_specs(): 填写价格/库存/重量/尺寸等基础字段
   - async def _upload_size_chart_via_url(): 使用网络图片URL上传尺寸图
-  - async def _upload_product_video_via_url(): 使用网络视频URL上传产品视频
+  - async def _upload_product_video_via_url(): 使用网络视频URL上传产品视频(支持API记录)
+  - def _save_captured_api(): 保存捕获的 API 请求到文件
   - async def _handle_existing_video_prompt(): 处理已有视频的删除确认提示
   - async def _click_save(): 点击保存修改按钮
 @GOTCHAS:
@@ -15,6 +16,7 @@
   - 优先使用 get_by_label,get_by_role,get_by_placeholder 等稳定定位器
   - 跳过图片/视频上传部分,由 FirstEditController 的 upload_* 方法处理
   - 尺寸图上传仅支持网络图片URL,需确保外链可直接访问
+  - 设置 CAPTURE_VIDEO_API=1 环境变量启用视频 API 请求记录功能
 @DEPENDENCIES:
   - 外部: playwright, loguru
 @RELATED: first_edit_controller.py, first_edit_codegen.py, batch_edit_codegen.py
@@ -24,9 +26,11 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import os
 import re
 from collections.abc import Callable, Sequence
+from datetime import datetime
 from functools import wraps
 from pathlib import Path
 from typing import Any, TypeVar
@@ -51,6 +55,10 @@ DEFAULT_VIDEO_BASE_URL = os.getenv(
 ).strip()
 VIDEO_UPLOAD_TIMEOUT_MS = 200  # 激进: 300 -> 200
 
+# API 记录功能开关 (用于调试和逆向工程)
+CAPTURE_VIDEO_API = os.getenv("CAPTURE_VIDEO_API", "0").lower() in ("1", "true", "yes")
+CAPTURED_API_LOG_PATH = Path("data/debug/captured_video_api.json")
+
 FIELD_KEYWORDS: dict[str, list[str]] = {
     "price": ["建议售价", "售价", "price"],
     "supply_price": ["供货价", "供货价格", "supply price"],
@@ -60,6 +68,31 @@ FIELD_KEYWORDS: dict[str, list[str]] = {
 
 # 定义泛型类型
 T = TypeVar("T")
+
+
+def _save_captured_api(request_data: dict[str, Any]) -> None:
+    """保存捕获的 API 请求数据到文件.
+
+    Args:
+        request_data: 包含 url, method, headers, post_data 的字典
+    """
+    CAPTURED_API_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+    existing_data: list[dict[str, Any]] = []
+    if CAPTURED_API_LOG_PATH.exists():
+        try:
+            with open(CAPTURED_API_LOG_PATH, encoding="utf-8") as f:
+                existing_data = json.load(f)
+        except (json.JSONDecodeError, OSError):
+            existing_data = []
+
+    request_data["captured_at"] = datetime.now().isoformat()
+    existing_data.append(request_data)
+
+    with open(CAPTURED_API_LOG_PATH, "w", encoding="utf-8") as f:
+        json.dump(existing_data, f, ensure_ascii=False, indent=2)
+
+    logger.info("✓ API 请求已记录到: {}", CAPTURED_API_LOG_PATH)
 
 
 def _resolve_page(args: tuple[Any, ...], kwargs: dict[str, Any]) -> Page | None:
@@ -964,7 +997,52 @@ async def _upload_product_video_via_url(page: Page, video_url: str) -> bool | No
             await _capture_html(page, "data/debug/html/video_missing_confirm.html")
             return False
 
+        # API 请求捕获逻辑 (通过 CAPTURE_VIDEO_API 环境变量启用)
+        captured_requests: list[dict[str, Any]] = []
+
+        async def _capture_request(request) -> None:
+            """捕获视频相关 API 请求."""
+            url = request.url
+            # 筛选视频上传相关的 API 请求
+            if any(
+                keyword in url
+                for keyword in ["video", "upload", "media", "file", "oss", "alicdn"]
+            ):
+                request_data = {
+                    "url": url,
+                    "method": request.method,
+                    "headers": dict(request.headers),
+                    "post_data": None,
+                    "resource_type": request.resource_type,
+                }
+                try:
+                    post_data = request.post_data
+                    if post_data:
+                        request_data["post_data"] = post_data
+                except Exception:
+                    pass
+                captured_requests.append(request_data)
+                logger.debug("捕获到视频相关请求: {} {}", request.method, url[:100])
+
+        if CAPTURE_VIDEO_API:
+            logger.info("🎬 API 记录模式已启用，开始捕获视频上传请求...")
+            page.on("request", _capture_request)
+
         await confirm_btn.click()
+
+        # 等待一小段时间让请求发出
+        if CAPTURE_VIDEO_API:
+            await asyncio.sleep(1.0)
+            page.remove_listener("request", _capture_request)
+
+            # 保存捕获的请求
+            if captured_requests:
+                for req in captured_requests:
+                    req["video_url_input"] = normalized_url
+                    _save_captured_api(req)
+                logger.success("✓ 捕获到 {} 个视频相关 API 请求", len(captured_requests))
+            else:
+                logger.warning("未捕获到任何视频相关 API 请求")
 
         await _ensure_dialog_closed(
             page,

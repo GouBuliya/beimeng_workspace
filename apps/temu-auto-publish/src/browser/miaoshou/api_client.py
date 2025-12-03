@@ -20,6 +20,8 @@
       - async def upload_picture_file(): 上传图片（外包装图、轮播图等）
       - async def upload_attach_file(): 上传附件（产品说明书 PDF）
       - async def get_item_options(): 获取商品选项（外包装形状/类型）
+    - 视频 API:
+      - async def register_video_urls(): 注册视频 URL 并获取视频状态
 @DEPENDENCIES:
   - 外部: httpx, json
   - 内部: ..cookie_manager.CookieManager
@@ -1039,6 +1041,250 @@ class MiaoshouApiClient:
             return {"result": "error", "message": f"HTTP {e.response.status_code}"}
         except Exception as e:
             logger.error(f"发布失败: {e}")
+            return {"result": "error", "message": str(e)}
+
+    # ========== 视频 API ==========
+
+    async def register_video_urls(
+        self,
+        video_urls: list[str],
+    ) -> dict[str, Any]:
+        """注册视频 URL 并获取视频状态.
+
+        妙手在使用网络视频时，会先调用此 API 验证/注册视频 URL，
+        后端会返回视频的处理状态。此方法可用于 API 化首次编辑时
+        注册产品视频。
+
+        Args:
+            video_urls: 视频 URL 列表（支持批量）
+
+        Returns:
+            API 响应，格式为:
+            {
+                "result": "success",
+                "data": {
+                    "<video_url>": {
+                        "status": "ready" | "processing" | "error",
+                        "url": "<processed_video_url>",
+                        ...
+                    }
+                }
+            }
+
+        Examples:
+            >>> client = await MiaoshouApiClient.from_cookie_file()
+            >>> result = await client.register_video_urls([
+            ...     "https://example.com/video1.mp4",
+            ...     "https://example.com/video2.mp4"
+            ... ])
+            >>> if result.get("result") == "success":
+            ...     print("视频注册成功")
+        """
+        if not video_urls:
+            logger.warning("register_video_urls: 没有提供视频 URL")
+            return {"result": "error", "message": "没有提供视频 URL"}
+
+        client = await self._get_client()
+
+        # 构建表单数据 - 使用 videoUrlList[N]=<url> 格式
+        form_data: dict[str, str] = {}
+        for i, url in enumerate(video_urls):
+            form_data[f"videoUrlList[{i}]"] = url
+
+        try:
+            response = await client.post(
+                "/api/common/video/getVideoUrlAndStatusMap",
+                data=form_data,
+                headers={
+                    "x-breadcrumb": "item-common-commonCollectBox",
+                },
+            )
+            response.raise_for_status()
+            result = response.json()
+
+            if result.get("result") == "success":
+                logger.info(f"视频 URL 注册成功: {len(video_urls)} 个")
+            else:
+                logger.warning(f"视频注册失败: {result.get('message', '未知错误')}")
+
+            return result
+
+        except httpx.HTTPStatusError as e:
+            logger.error(f"视频注册 HTTP 错误: {e.response.status_code}")
+            return {"result": "error", "message": f"HTTP {e.response.status_code}"}
+        except Exception as e:
+            logger.error(f"视频注册失败: {e}")
+            return {"result": "error", "message": str(e)}
+
+    # ========== 通用采集箱首次编辑 API ==========
+
+    async def get_common_collect_box_owner_list(self) -> dict[str, Any]:
+        """获取通用采集箱创建人员列表.
+
+        Returns:
+            API 响应，格式为:
+            {
+                "result": "success",
+                "ownerAccountList": [
+                    {"ownerAccountId": 151538, "subAccountAliasName": "李英亮(lyl123456789)"},
+                    ...
+                ]
+            }
+
+        Examples:
+            >>> client = await MiaoshouApiClient.from_cookie_file()
+            >>> result = await client.get_common_collect_box_owner_list()
+            >>> for owner in result.get("ownerAccountList", []):
+            ...     print(f"{owner['ownerAccountId']}: {owner['subAccountAliasName']}")
+        """
+        client = await self._get_client()
+
+        try:
+            response = await client.post(
+                f"{self.API_PREFIX}/getCommonCollectBoxOwnerAccountList",
+            )
+            response.raise_for_status()
+            result = response.json()
+
+            if result.get("result") == "success":
+                owners = result.get("ownerAccountList", [])
+                logger.debug(f"获取创建人员列表成功: {len(owners)} 个")
+            else:
+                logger.warning(f"获取创建人员列表失败: {result.get('message', '未知错误')}")
+
+            return result
+
+        except httpx.HTTPStatusError as e:
+            logger.error(f"获取创建人员列表 HTTP 错误: {e.response.status_code}")
+            return {"result": "error", "message": f"HTTP {e.response.status_code}"}
+        except Exception as e:
+            logger.error(f"获取创建人员列表失败: {e}")
+            return {"result": "error", "message": str(e)}
+
+    async def get_edit_common_box_detail(self, detail_id: str) -> dict[str, Any]:
+        """获取通用采集箱产品编辑信息.
+
+        此方法用于首次编辑，获取产品的完整编辑数据，包括:
+        - title: 标题
+        - price/stock: 价格和库存
+        - colorMap: 颜色规格（包含 SKU 图片）
+        - sizeMap: 尺寸规格
+        - skuMap: SKU 数据（价格、库存、重量、尺寸）
+        - sizeChart: 尺寸图 URL
+        - mainImgVideoUrl: 主图视频 URL
+
+        Args:
+            detail_id: 产品 ID (commonCollectBoxDetailId)
+
+        Returns:
+            API 响应，格式为:
+            {
+                "result": "success",
+                "editCommonBoxDetail": {
+                    "commonCollectBoxDetailId": "3037726721",
+                    "title": "...",
+                    "colorMap": {...},
+                    "skuMap": {...},
+                    ...
+                },
+                "ossMd5": "xxx"
+            }
+
+        Examples:
+            >>> client = await MiaoshouApiClient.from_cookie_file()
+            >>> result = await client.get_edit_common_box_detail("3037726721")
+            >>> detail = result.get("editCommonBoxDetail", {})
+            >>> print(f"标题: {detail.get('title')}")
+        """
+        client = await self._get_client()
+
+        try:
+            response = await client.get(
+                f"{self.API_PREFIX}/getEditCommonBoxDetail",
+                params={"detailId": detail_id},
+            )
+            response.raise_for_status()
+            result = response.json()
+
+            if result.get("result") == "success":
+                detail = result.get("editCommonBoxDetail", {})
+                logger.debug(f"获取产品编辑信息成功: {detail.get('commonCollectBoxDetailId')}")
+            else:
+                logger.warning(f"获取产品编辑信息失败: {result.get('message', '未知错误')}")
+
+            return result
+
+        except httpx.HTTPStatusError as e:
+            logger.error(f"获取产品编辑信息 HTTP 错误: {e.response.status_code}")
+            return {"result": "error", "message": f"HTTP {e.response.status_code}"}
+        except Exception as e:
+            logger.error(f"获取产品编辑信息失败: {e}")
+            return {"result": "error", "message": str(e)}
+
+    async def save_edit_common_box_detail(
+        self,
+        detail: dict[str, Any],
+        oss_md5: str,
+    ) -> dict[str, Any]:
+        """保存通用采集箱产品编辑.
+
+        此方法用于首次编辑保存，需要传入完整的 editCommonBoxDetail 对象。
+        修改后的字段会被保存，未修改的字段保持原值。
+
+        Args:
+            detail: 完整的 editCommonBoxDetail 对象（从 get_edit_common_box_detail 获取并修改）
+            oss_md5: 从 get_edit_common_box_detail 获取的 ossMd5（用于并发控制）
+
+        Returns:
+            API 响应，格式为:
+            {
+                "result": "success",
+                "ossMd5": "new_md5"
+            }
+
+        Examples:
+            >>> client = await MiaoshouApiClient.from_cookie_file()
+            >>> # 先获取编辑信息
+            >>> info = await client.get_edit_common_box_detail("3037726721")
+            >>> detail = info["editCommonBoxDetail"]
+            >>> oss_md5 = info["ossMd5"]
+            >>> # 修改标题
+            >>> detail["title"] = "新标题"
+            >>> # 保存
+            >>> result = await client.save_edit_common_box_detail(detail, oss_md5)
+        """
+        from urllib.parse import quote
+
+        client = await self._get_client()
+
+        # 构建表单数据 - editCommonBoxDetail 需要 URL 编码的 JSON
+        detail_json = json.dumps(detail, ensure_ascii=False)
+        form_data = f"editCommonBoxDetail={quote(detail_json)}&ossMd5={quote(oss_md5)}"
+
+        try:
+            response = await client.post(
+                f"{self.API_PREFIX}/saveEditCommonBoxDetail",
+                content=form_data,
+                headers={
+                    "Content-Type": "application/x-www-form-urlencoded",
+                },
+            )
+            response.raise_for_status()
+            result = response.json()
+
+            if result.get("result") == "success":
+                detail_id = detail.get("commonCollectBoxDetailId", "unknown")
+                logger.info(f"保存产品编辑成功: {detail_id}")
+            else:
+                logger.warning(f"保存产品编辑失败: {result.get('message', '未知错误')}")
+
+            return result
+
+        except httpx.HTTPStatusError as e:
+            logger.error(f"保存产品编辑 HTTP 错误: {e.response.status_code}")
+            return {"result": "error", "message": f"HTTP {e.response.status_code}"}
+        except Exception as e:
+            logger.error(f"保存产品编辑失败: {e}")
             return {"result": "error", "message": str(e)}
 
     async def __aenter__(self) -> MiaoshouApiClient:

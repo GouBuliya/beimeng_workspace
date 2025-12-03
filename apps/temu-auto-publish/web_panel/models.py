@@ -37,6 +37,7 @@ class WorkflowOptions(BaseModel):
     only_claim: bool = Field(default=False)
     only_stage4_publish: bool = Field(default=False, description="仅运行阶段4发布")
     use_api_batch_edit: bool = Field(default=True, description="使用API方式执行批量编辑(默认开启)")
+    use_api_first_edit: bool = Field(default=True, description="使用API方式执行首次编辑(默认开启)")
     outer_package_image: Path | None = Field(default=None, description="外包装图片文件路径")
     manual_file: Path | None = Field(default=None, description="产品说明书PDF路径")
     single_run: bool = Field(default=True, description="是否仅运行一次流程")
@@ -62,6 +63,7 @@ class WorkflowOptions(BaseModel):
             "only_claim": self.only_claim,
             "only_stage4_publish": self.only_stage4_publish,
             "use_api_batch_edit": self.use_api_batch_edit,
+            "use_api_first_edit": self.use_api_first_edit,
             "outer_package_image": str(self.outer_package_image)
             if self.outer_package_image
             else None,

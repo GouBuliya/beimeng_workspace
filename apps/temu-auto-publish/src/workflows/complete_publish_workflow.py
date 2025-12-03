@@ -53,6 +53,7 @@ from ..browser.first_edit_dialog_codegen import fill_first_edit_dialog_codegen
 from ..browser.image_manager import ImageManager
 from ..browser.login_controller import LoginController
 from ..browser.miaoshou.batch_edit_api import run_batch_edit_via_api
+from ..browser.miaoshou.first_edit_api import run_first_edit_via_api
 from ..browser.miaoshou.publish_api import run_publish_via_api
 from ..browser.miaoshou_controller import MiaoshouController
 from ..browser.publish_controller import PublishController
@@ -186,6 +187,7 @@ class CompletePublishWorkflow:
         use_ai_titles: bool = False,
         use_codegen_batch_edit: bool = False,
         use_api_batch_edit: bool = True,
+        use_api_first_edit: bool = False,
         skip_first_edit: bool = False,
         only_claim: bool = False,
         only_stage4_publish: bool = False,
@@ -210,6 +212,7 @@ class CompletePublishWorkflow:
             use_ai_titles: 是否启用 AI 生成标题 (失败时自动回退).
             use_codegen_batch_edit: 是否使用 codegen 录制的批量编辑模块 (默认 False).
             use_api_batch_edit: 是否使用 API 方式执行批量编辑 (默认 True, 最快速, 支持文件上传).
+            use_api_first_edit: 是否使用 API 方式执行首次编辑 (默认 False, 实验性功能).
             skip_first_edit: 是否直接跳过首次编辑阶段.
             resume_from_checkpoint: 是否从检查点恢复.
             checkpoint_id: 指定要恢复的检查点ID,为空则使用最新检查点.
@@ -224,6 +227,7 @@ class CompletePublishWorkflow:
         self.use_ai_titles = use_ai_titles
         self.use_codegen_batch_edit = use_codegen_batch_edit
         self.use_api_batch_edit = use_api_batch_edit
+        self.use_api_first_edit = use_api_first_edit
         self.skip_first_edit = skip_first_edit
         self.only_claim = only_claim
         self.only_stage4_publish = only_stage4_publish
@@ -1129,6 +1133,41 @@ class CompletePublishWorkflow:
                 "skipped": True,
             }
             return StageOutcome("stage1_first_edit", True, "首次编辑已跳过", details), placeholders
+
+        # API 模式首次编辑
+        if self.use_api_first_edit:
+            logger.info("使用 API 模式执行首次编辑...")
+            api_result = await run_first_edit_via_api(
+                page,
+                list(working_selections),
+                filter_owner=staff_name,
+                max_count=self.collect_count,  # 每轮处理数量（默认 5）
+                start_offset=start_offset,  # 当前轮次的起始偏移
+            )
+
+            if api_result.success:
+                # 构建占位符编辑结果
+                placeholders = self._build_placeholder_edits(selections)
+                details = {
+                    "owner": staff_name,
+                    "edited_products": [prod.to_payload() for prod in placeholders],
+                    "errors": api_result.error_details,
+                    "api_mode": True,
+                    "api_success_count": api_result.success_count,
+                    "api_failed_count": api_result.failed_count,
+                }
+                return (
+                    StageOutcome(
+                        "stage1_first_edit",
+                        True,
+                        f"API 模式首次编辑完成: 成功 {api_result.success_count}",
+                        details,
+                    ),
+                    placeholders,
+                )
+            else:
+                logger.warning("API 模式首次编辑失败，回退到 DOM 模式")
+                # 继续执行原有的 DOM 模式
 
         # 导航到采集箱并筛选（带登录兜底机制）
         navigation_success = await miaoshou_ctrl.navigate_and_filter_collection_box(
