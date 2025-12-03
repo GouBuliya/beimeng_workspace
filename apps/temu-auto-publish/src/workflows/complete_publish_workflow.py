@@ -1084,22 +1084,9 @@ class CompletePublishWorkflow:
                 [],
             )
 
-        page_size = 20
-        use_override_rows = self._selection_rows_override is not None
-        # 数据已在 _finalize_selection_rows 中根据 execution_round 截取,这里直接使用
+        # 一次性处理所有选品，不分轮次
         working_selections = list(selections)
-        # start_offset 用于计算采集箱中的商品位置(基于原始数据的绝对索引)
-        # 修复:不管是否有 override,都应该根据 execution_round 计算偏移
-        # 因为页面上的商品列表是完整的,需要根据轮次定位到正确的商品
-        start_offset = max(0, (self.execution_round - 1) * self.collect_count)
-
-        logger.info(
-            "首次编辑起始偏移: start_offset=%s (execution_round=%s, collect_count=%s, use_override=%s)",
-            start_offset,
-            self.execution_round,
-            self.collect_count,
-            use_override_rows,
-        )
+        logger.info(f"首次编辑: 准备一次性处理 {len(working_selections)} 个产品")
 
         if not working_selections:
             message = f"执行轮位 {self.execution_round} 超出可编辑范围,跳过首次编辑"
@@ -1145,8 +1132,7 @@ class CompletePublishWorkflow:
                     page,
                     list(working_selections),
                     filter_owner=staff_name,
-                    max_count=self.collect_count,  # 每轮处理数量（默认 5）
-                    start_offset=start_offset,  # 当前轮次的起始偏移
+                    # 一次性处理所有选品，不传 max_count 则使用选品数量
                 )
 
                 # 判断是否有成功的产品（部分成功也算成功，不回退 DOM）
@@ -1193,6 +1179,11 @@ class CompletePublishWorkflow:
                             f"API 模式首次编辑在 {max_api_retries} 次尝试后仍然全部失败，回退到 DOM 模式"
                         )
                         # 继续执行原有的 DOM 模式
+
+        # DOM 模式回退所需的变量
+        page_size = 20
+        use_override_rows = self._selection_rows_override is not None
+        start_offset = 0  # 一次性处理，从头开始
 
         # 导航到采集箱并筛选（带登录兜底机制）
         navigation_success = await miaoshou_ctrl.navigate_and_filter_collection_box(
@@ -1769,8 +1760,7 @@ class CompletePublishWorkflow:
         api_success = True
         api_failures: list[str] = []
 
-        # 计算当前轮次需要的产品偏移量
-        start_offset = (self.execution_round - 1) * self.collect_count
+        # 一次性认领所有产品（不分轮次）
         detail_ids: list[str] = []
 
         # 使用 API 获取产品列表（通过 page.evaluate + fetch）
@@ -1896,7 +1886,7 @@ class CompletePublishWorkflow:
             """,
             {
                 "pageNo": "1",
-                "pageSize": str(selection_count + start_offset + 10),  # 多获取一些
+                "pageSize": str(selection_count + 10),  # 多获取一些
                 "tabPaneName": "all",
                 "ownerAccountId": owner_account_id,
             },
@@ -1915,10 +1905,8 @@ class CompletePublishWorkflow:
                     all_ids.append(str(product_id))
             logger.info(f"提取到 {len(all_ids)} 个产品 ID: {all_ids[:5]}...")
 
-            if len(all_ids) > start_offset:
-                detail_ids = all_ids[start_offset : start_offset + selection_count]
-            else:
-                logger.warning(f"API 返回 ID 不足 ({len(all_ids)}个)，需要 {start_offset} 起始偏移")
+            # 取前 selection_count 个产品
+            detail_ids = all_ids[:selection_count]
         else:
             error_msg = api_result.get("error") or api_result.get("message", "未知错误")
             logger.warning(f"API 获取产品列表失败: {error_msg}")
@@ -2037,13 +2025,20 @@ class CompletePublishWorkflow:
 
         # ===== API 批量编辑模式 =====
         if self.use_api_batch_edit:
-            logger.info("使用 API 方式执行批量编辑（纯数据字段）")
+            # 二次编辑处理数量 = 选品数量 * claim_times（认领次数）
+            selection_count = len(edited_products)
+            batch_edit_count = selection_count * self.claim_times
+            logger.info(
+                f"使用 API 方式执行批量编辑: {batch_edit_count} 个产品 "
+                f"(选品 {selection_count} * 认领 {self.claim_times} 次)"
+            )
             payload = self._build_api_batch_edit_payload()
 
             api_result = await run_batch_edit_via_api(
                 page,
                 payload,
                 filter_owner=filter_owner,
+                max_products=batch_edit_count,
             )
 
             success = api_result.get("success", False)
@@ -2215,7 +2210,13 @@ class CompletePublishWorkflow:
         shop_name = self._resolve_shop_name(edited_products)
 
         # 使用 API 方式发布
-        logger.info("使用 API 方式执行发布...")
+        # 发布数量 = 选品数量 * claim_times（认领次数）
+        selection_count = len(edited_products)
+        publish_count = selection_count * self.claim_times
+        logger.info(
+            f"使用 API 方式执行发布: {publish_count} 个产品 "
+            f"(选品 {selection_count} * 认领 {self.claim_times} 次)"
+        )
 
         # 获取筛选人员
         owner_candidate = self.collection_owner_override or (
@@ -2227,7 +2228,7 @@ class CompletePublishWorkflow:
             page,
             filter_owner=filter_owner,
             shop_id="9134811",  # 默认店铺 ID
-            max_products=20,
+            max_products=publish_count,
         )
 
         success = api_result.get("success", False)
