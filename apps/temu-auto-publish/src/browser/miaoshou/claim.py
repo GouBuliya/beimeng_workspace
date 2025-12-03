@@ -2810,64 +2810,65 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
         """
         try:
             # 从页面中提取产品 ID
-            detail_ids = await page.evaluate(
+            result = await page.evaluate(
                 """(count) => {
                     const ids = [];
                     const seen = new Set();
+                    const debug = { rowCount: 0, method: 'none', samples: [] };
 
-                    // 方法 1: 从页面文本中提取 "采集箱产品ID: xxx"
+                    // 方法 1: 从虚拟列表行文本中提取
                     const rows = document.querySelectorAll('.vue-recycle-scroller__item-view');
+                    debug.rowCount = rows.length;
+
                     for (const row of Array.from(rows).slice(0, count * 2)) {
                         const text = row.textContent || '';
-                        const match = text.match(/采集箱产品ID[:：]\\s*(\\d+)/);
+                        // 支持中英文冒号
+                        const match = text.match(/采集箱产品ID[：:]\\s*(\\d+)/);
                         if (match && match[1] && !seen.has(match[1])) {
                             seen.add(match[1]);
                             ids.push(match[1]);
+                            if (debug.method === 'none') debug.method = 'row';
+                        }
+                        if (debug.samples.length < 2) {
+                            debug.samples.push(text.substring(0, 80));
                         }
                         if (ids.length >= count) break;
                     }
 
-                    // 方法 2: 如果方法1失败，尝试从 Vue 组件获取数据
-                    if (ids.length === 0) {
-                        const scroller = document.querySelector('.vue-recycle-scroller');
-                        if (scroller) {
-                            // 尝试 Vue 2 方式
-                            const vue = scroller.__vue__;
-                            if (vue) {
-                                const items = vue.items || vue.$data?.items ||
-                                              vue._data?.items || vue.pool?.map(p => p.item) || [];
-                                for (const item of items.slice(0, count)) {
-                                    const id = item?.commonCollectBoxDetailId ||
-                                               item?.detailId || item?.id;
-                                    if (id && !seen.has(String(id))) {
-                                        seen.add(String(id));
-                                        ids.push(String(id));
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // 方法 3: 尝试从所有包含数字ID的元素中提取
+                    // 方法 2: 从整个页面文本匹配
                     if (ids.length === 0) {
                         const allText = document.body.innerText;
-                        const matches = allText.matchAll(/采集箱产品ID[:：]\\s*(\\d+)/g);
-                        for (const m of matches) {
+                        const regex = /采集箱产品ID[：:]\\s*(\\d+)/g;
+                        let m;
+                        while ((m = regex.exec(allText)) !== null) {
                             if (m[1] && !seen.has(m[1])) {
                                 seen.add(m[1]);
                                 ids.push(m[1]);
+                                if (debug.method === 'none') debug.method = 'page';
                             }
                             if (ids.length >= count) break;
                         }
                     }
 
-                    return ids.slice(0, count);
+                    return { ids: ids.slice(0, count), debug };
                 }""",
                 count,
             )
 
+            detail_ids = result.get("ids", [])
+            debug_info = result.get("debug", {})
+
+            logger.debug(
+                f"DOM 提取调试: 行数={debug_info.get('rowCount')}, "
+                f"方法={debug_info.get('method')}, "
+                f"找到={len(detail_ids)}"
+            )
+            if debug_info.get("samples"):
+                for i, sample in enumerate(debug_info["samples"][:2]):
+                    logger.debug(f"  样本{i+1}: {sample}...")
+
             if detail_ids:
-                logger.info(f"从 DOM 提取到 {len(detail_ids)} 个产品 ID: {detail_ids[:3]}...")
+                logger.info(f"从 DOM 提取到 {len(detail_ids)} 个产品 ID: {detail_ids[:5]}")
                 return detail_ids
 
             logger.warning("无法从 DOM 提取产品 ID")
