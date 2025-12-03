@@ -169,6 +169,15 @@ async def run_first_edit_via_api(
             f"(共 {len(product_list)} 个，总计 {total_available} 个)"
         )
 
+        # 同步截取选品数据：确保产品和选品一一对应
+        # 如果外部传入的 selections 是完整列表，需要根据 start_offset 截取
+        selection_end_offset = min(start_offset + max_count, len(selections))
+        working_selections = selections[start_offset:selection_end_offset]
+        logger.info(
+            f"本轮选品: 使用第 {start_offset + 1} 到 {selection_end_offset} 条选品数据 "
+            f"(共 {len(working_selections)} 条)"
+        )
+
         # 按选品表顺序处理产品（不使用型号匹配）
         selection_index = 0
 
@@ -185,8 +194,12 @@ async def run_first_edit_via_api(
                 )
                 continue
 
-            # 按顺序获取选品数据
-            selection = selections[selection_index] if selection_index < len(selections) else None
+            # 按顺序获取选品数据（从截取后的 working_selections 中获取）
+            selection = (
+                working_selections[selection_index]
+                if selection_index < len(working_selections)
+                else None
+            )
 
             try:
                 result = await _process_single_product(
