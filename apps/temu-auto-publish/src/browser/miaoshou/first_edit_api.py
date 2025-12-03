@@ -31,6 +31,43 @@ if TYPE_CHECKING:
     from playwright.async_api import BrowserContext
 
 
+def _has_model_suffix(title: str, model_number: str) -> bool:
+    """检查标题是否已包含型号后缀.
+
+    支持的后缀格式:
+    - 完整型号匹配: "A026"
+    - 复合型号匹配: "A045/A046" 中的任一部分
+    - 末尾匹配: 标题以型号结尾
+
+    Args:
+        title: 原标题
+        model_number: 型号编号（可能包含 "/" 分隔的多个型号）
+
+    Returns:
+        True 如果标题已包含型号后缀
+
+    Examples:
+        >>> _has_model_suffix("收纳柜 A026", "A026")
+        True
+        >>> _has_model_suffix("洗衣篮 A045", "A045/A046")
+        True
+        >>> _has_model_suffix("收纳柜", "A026")
+        False
+    """
+    if not title or not model_number:
+        return False
+
+    # 处理复合型号（如 "A045/A046"）
+    model_parts = [m.strip() for m in model_number.split("/") if m.strip()]
+
+    for model_part in model_parts:
+        # 检查型号是否在标题中（精确匹配或作为单词边界）
+        if model_part in title:
+            return True
+
+    return False
+
+
 @dataclass
 class FirstEditApiResult:
     """首次编辑 API 结果."""
@@ -339,7 +376,7 @@ def _update_product_detail(
     """
     # 生成随机数据（与 DOM 模式保持一致）
     random_gen = RandomDataGenerator()
-    weight_g = random_gen.generate_weight()  # 5000-9999G
+    weight_g = 1000  # 固定 1kg
     length_cm, width_cm, height_cm = random_gen.generate_dimensions()  # 50-99cm, 长>宽>高
 
     # 更新标题（始终执行，即使没有选品数据也添加默认型号后缀）
@@ -348,8 +385,11 @@ def _update_product_detail(
     original_title = detail.get("title", "")
     if selection and selection.model_number:
         model_suffix = f" {selection.model_number}"
-        # 检查标题是否已包含型号，避免重复添加
-        if selection.model_number not in original_title:
+        # 检查标题是否已包含型号后缀，避免重复添加
+        # 支持的后缀格式: A026, A045/A046, A057 等
+        if _has_model_suffix(original_title, selection.model_number):
+            logger.debug(f"标题已包含型号后缀，跳过追加: {selection.model_number}")
+        else:
             detail["title"] = original_title + model_suffix
             logger.debug(f"更新标题: 追加型号 {selection.model_number}")
     else:
@@ -534,5 +574,15 @@ def _update_product_detail(
     # 来自 sourceList[].sourceItemUrl，用于记录商品来源
     # DOM 模式的 _fill_supplier_link() 是填写自定义供货商链接
     # 但在 API 中，该字段由系统自动生成，无需手动设置
+
+    # 英语标题设置为空格（必填但无实际内容）
+    detail["multiLanguageTitleMap"] = {"en": " "}
+    logger.debug("设置英语标题为空格")
+
+    # 产地设置为中国浙江省
+    detail["productOriginCountry"] = "CN"
+    detail["productOriginProvince"] = "43000000000031"
+    detail["productOriginCertFiles"] = []
+    logger.debug("设置产地为中国浙江省")
 
     return detail
