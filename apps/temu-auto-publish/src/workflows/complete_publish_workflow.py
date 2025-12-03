@@ -2221,7 +2221,7 @@ class CompletePublishWorkflow:
 
         # 获取筛选人员
         owner_candidate = self.collection_owner_override or (
-            edited_products[0].owner if edited_products else ""
+            edited_products[0].selection.owner if edited_products else ""
         )
         filter_owner = self._resolve_collection_owner(owner_candidate) if owner_candidate else None
 

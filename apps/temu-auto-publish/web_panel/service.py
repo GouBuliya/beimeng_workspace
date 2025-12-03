@@ -47,7 +47,8 @@ def _resolve_upload_dir() -> Path:
 
 
 UPLOAD_DIR = _resolve_upload_dir()
-DEFAULT_BATCH_SIZE = max(1, min(settings.business.collect_count, 5))
+# 移除上限限制，一次性处理所有选品
+DEFAULT_BATCH_SIZE = max(1, settings.business.collect_count)
 
 
 class SelectionFileStore:
