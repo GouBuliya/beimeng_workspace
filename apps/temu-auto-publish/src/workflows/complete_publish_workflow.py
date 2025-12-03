@@ -1690,6 +1690,23 @@ class CompletePublishWorkflow:
 
         # Step 2: 从 DOM 提取筛选后的产品 ID
         logger.info("Step 2: 从 DOM 提取产品 ID")
+
+        # 等待虚拟列表行加载
+        try:
+            await page.wait_for_selector(
+                ".vue-recycle-scroller__item-view",
+                state="visible",
+                timeout=5000,
+            )
+            logger.debug("虚拟列表行已加载")
+        except Exception:
+            logger.warning("等待虚拟列表行超时，尝试滚动触发加载")
+            # 尝试滚动触发虚拟列表渲染
+            await page.evaluate("window.scrollBy(0, 100)")
+            await page.wait_for_timeout(500)
+            await page.evaluate("window.scrollBy(0, -100)")
+            await page.wait_for_timeout(500)
+
         detail_ids = await miaoshou_ctrl.extract_product_ids_from_dom(
             page, count=selection_count
         )
