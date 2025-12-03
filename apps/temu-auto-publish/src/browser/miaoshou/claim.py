@@ -743,10 +743,10 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
     ) -> dict[str, Any]:
         """使用 JavaScript 直接定位并点击行内目标元素(认领按钮或复选框).
 
-        复用首次编辑的定位逻辑(动态行高检测,translateY 定位等),
-        目标可选:
-        - target="claim_button":点击行内"认领到"按钮并选择下拉第一项
-        - target="checkbox":点击行内复选框(用于批量勾选)
+        【第四轮重构】直接复用首次编辑的视觉位置定位逻辑:
+        - 使用 getBoundingClientRect() 获取视觉位置
+        - 使用 TOP_OFFSET_ROWS = 2 补偿顶部偏移
+        - 使用 viewportStartIndex 和 firstFullyVisibleArrayIndex 定位
 
         Args:
             page: Playwright 页面对象
@@ -754,67 +754,21 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
             target: "claim_button" 或 "checkbox"
 
         Returns:
-            包含操作结果的字典: {success, error?, scrollerInfo, matchedY, ...}
+            包含操作结果的字典: {success, error?, scrollerInfo, matchedTop, ...}
         """
         try:
             js_code = """
             async ({ index, target }) => {
-                const DEFAULT_ROW_HEIGHT = 128;
+                const ROW_HEIGHT = 128;
 
-                // 检查是否为 page-mode(页面级滚动)
+                // 【第四轮修复】虚拟列表顶部偏移补偿（与首次编辑保持一致）
+                const TOP_OFFSET_ROWS = 2;
+
+                // 获取滚动容器
                 const recycleScroller = document.querySelector('.vue-recycle-scroller');
                 const isPageMode = recycleScroller && recycleScroller.classList.contains('page-mode');
 
-                // 获取所有可见行的辅助函数
-                // 关键修复: 当 target='checkbox' 时,只选择包含复选框的行
-                // 因为 pro-virtual-table 有两个独立的虚拟滚动容器:
-                // 1. 固定左侧列容器 - 包含复选框
-                // 2. 主内容区容器 - 包含商品信息(无复选框)
-                // 如果不过滤,可能选中主内容区的行而导致点击错误的复选框
-                const getVisibleRows = (requireCheckbox = false) => {
-                    const rows = document.querySelectorAll('.vue-recycle-scroller__item-view');
-                    const visibleRows = [];
-                    rows.forEach(row => {
-                        // 如果需要复选框,只选择包含复选框的行
-                        if (requireCheckbox) {
-                            const hasCheckbox = row.querySelector('.is-selection-column') !== null ||
-                                              row.querySelector('.jx-checkbox') !== null;
-                            if (!hasCheckbox) return;
-                        }
-                        const style = row.getAttribute('style') || '';
-                        const match = style.match(/translateY\\((-?\\d+(?:\\.\\d+)?)\\s*(?:px)?\\s*\\)/);
-                        if (match) {
-                            const y = parseFloat(match[1]);
-                            if (y >= 0) visibleRows.push({ row, y });
-                        }
-                    });
-                    visibleRows.sort((a, b) => a.y - b.y);
-                    return visibleRows;
-                };
-
-                // 动态检测实际行高(通过测量相邻行的Y差值)
-                const detectRowHeight = () => {
-                    const visibleRows = getVisibleRows();
-                    if (visibleRows.length >= 2) {
-                        const diffs = [];
-                        for (let i = 1; i < visibleRows.length; i++) {
-                            const diff = visibleRows[i].y - visibleRows[i-1].y;
-                            if (diff > 50 && diff < 300) diffs.push(diff);
-                        }
-                        if (diffs.length > 0) {
-                            diffs.sort((a, b) => a - b);
-                            return diffs[Math.floor(diffs.length / 2)];
-                        }
-                    }
-                    if (visibleRows.length >= 1) {
-                        const rect = visibleRows[0].row.getBoundingClientRect();
-                        if (rect.height > 50 && rect.height < 300) return rect.height;
-                    }
-                    return DEFAULT_ROW_HEIGHT;
-                };
-
-                const ROW_HEIGHT = detectRowHeight();
-                // 滚动到目标索引的位置
+                // 计算目标滚动位置
                 const targetScrollTop = index * ROW_HEIGHT;
 
                 let scrollerInfo = '';
@@ -868,193 +822,116 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                     }
                 }
 
-                // 重新获取可见行(滚动后)
-                // 当 target='checkbox' 时,只获取包含复选框的行
-                const visibleRows = getVisibleRows(target === 'checkbox');
+                // ========== 【第四轮重构】使用视觉位置定位（与首次编辑完全一致）==========
 
-                // ========== 新方法：从可见行的 translateY 推断索引 ==========
-                // 核心：每行的 translateY 值直接对应其全局索引
-                // 索引 = translateY / ROW_HEIGHT（考虑偏移量）
+                // 获取所有行（当 target='checkbox' 时，需要过滤只包含复选框的行）
+                const allRows = Array.from(
+                    document.querySelectorAll('.vue-recycle-scroller__item-view')
+                );
 
-                // 检测 Y 偏移量（虚拟列表可能有固定偏移）
-                const minVisibleY = visibleRows.length > 0 ? Math.min(...visibleRows.map(r => r.y)) : 0;
-                const yOffset = minVisibleY % ROW_HEIGHT;
+                // 过滤：如果是 checkbox 模式，只保留包含复选框的行
+                const filteredRows = target === 'checkbox'
+                    ? allRows.filter(row =>
+                        row.querySelector('.is-selection-column') !== null ||
+                        row.querySelector('.jx-checkbox') !== null
+                    )
+                    : allRows;
 
-                // 计算每个可见行的全局索引
-                const calcGlobalIndex = (y) => Math.round((y - yOffset) / ROW_HEIGHT);
-
-                // 找到第一个可见行的全局索引
-                const firstVisibleIndex = visibleRows.length > 0 ? calcGlobalIndex(visibleRows[0].y) : 0;
-
-                let targetRow = null;
-                let matchedY = -1;
-                let matchMethod = '';
-
-                // 调试信息
-                const debugInfo = visibleRows.map((r, i) => ({
-                    y: r.y,
-                    visibleIdx: i,
-                    globalIdx: calcGlobalIndex(r.y)
-                }));
-
-                // 方法1（首选）: 直接遍历可见行，找到全局索引匹配的行
-                for (let i = 0; i < visibleRows.length; i++) {
-                    const globalIdx = calcGlobalIndex(visibleRows[i].y);
-                    if (globalIdx === index) {
-                        targetRow = visibleRows[i].row;
-                        matchedY = visibleRows[i].y;
-                        matchMethod = `method1:globalIdx=${globalIdx},visiblePos=${i}`;
-                        break;
-                    }
-                }
-
-                // 方法2（备用）: 基于相对位置（如果方法1失败）
-                if (!targetRow) {
-                    const relativeIndex = index - firstVisibleIndex;
-                    if (relativeIndex >= 0 && relativeIndex < visibleRows.length) {
-                        targetRow = visibleRows[relativeIndex].row;
-                        matchedY = visibleRows[relativeIndex].y;
-                        matchMethod = `method2:relativeIdx=${relativeIndex},firstVisible=${firstVisibleIndex}`;
-                    }
-                }
-
-                // 方法3: 如果目标行不在可见区域,尝试多滚动一点再匹配
-                if (!targetRow && visibleRows.length > 0 && foundScrollContainer) {
-                    // 计算需要额外滚动的距离
-                    const targetScrollPosition = index * ROW_HEIGHT;
-                    const extraScroll = targetScrollPosition - actualScrollTop + ROW_HEIGHT;
-
-                    if (extraScroll > 0) {
-                        const scrollBefore = foundScrollContainer.scrollTop || window.scrollY;
-
-                        // 尝试多种滚动方式确保生效
-                        if (foundScrollContainer === document.documentElement) {
-                            window.scrollBy(0, extraScroll);
-                        } else {
-                            foundScrollContainer.scrollTop += extraScroll;
-                        }
-                        window.scrollBy(0, extraScroll);
-                        await new Promise(r => setTimeout(r, 500));
-
-                        let scrollAfter = foundScrollContainer.scrollTop || window.scrollY;
-
-                        // 如果滚动没有变化，可能到达边界，尝试滚动到最大位置
-                        if (Math.abs(scrollAfter - scrollBefore) < 10) {
-                            const maxScrollTop = foundScrollContainer.scrollHeight - foundScrollContainer.clientHeight;
-                            if (foundScrollContainer === document.documentElement) {
-                                window.scrollTo({ top: maxScrollTop, behavior: 'instant' });
-                            } else {
-                                foundScrollContainer.scrollTop = maxScrollTop;
-                            }
-                            await new Promise(r => setTimeout(r, 300));
-                            scrollAfter = foundScrollContainer.scrollTop || window.scrollY;
-                        }
-
-                        const scrollAfterFinal = scrollAfter;
-
-                        // 重新获取可见行
-                        const newVisibleRows = getVisibleRows(target === 'checkbox');
-                        const newVisibleYs = newVisibleRows.map(r => r.y);
-
-                        // 重新计算偏移量和索引函数
-                        const newMinVisibleY = newVisibleRows.length > 0 ? Math.min(...newVisibleRows.map(r => r.y)) : 0;
-                        const newYOffset = newMinVisibleY % ROW_HEIGHT;
-                        const newCalcGlobalIndex = (y) => Math.round((y - newYOffset) / ROW_HEIGHT);
-
-                        // 方法3a（首选）: 遍历可见行找到匹配的全局索引
-                        for (let i = 0; i < newVisibleRows.length; i++) {
-                            const globalIdx = newCalcGlobalIndex(newVisibleRows[i].y);
-                            if (globalIdx === index) {
-                                targetRow = newVisibleRows[i].row;
-                                matchedY = newVisibleRows[i].y;
-                                matchMethod = `method3a:globalIdx=${globalIdx},visiblePos=${i}`;
-                                scrollerInfo += ` (retry: extra=${extraScroll}, before=${scrollBefore}, after=${scrollAfterFinal})`;
-                                break;
-                            }
-                        }
-
-                        // 方法3b: 如果滚动没有变化（到达底部）且目标索引不在可见范围内
-                        // 检查是否是列表末尾的边界情况
-                        if (!targetRow && Math.abs(scrollAfterFinal - scrollBefore) < 10) {
-                            const globalIdxs = newVisibleRows.map(r => newCalcGlobalIndex(r.y));
-                            const maxGlobalIdx = Math.max(...globalIdxs);
-
-                            // 如果目标索引刚好在最大可见索引之后（差值在合理范围内）
-                            if (index > maxGlobalIdx && index <= maxGlobalIdx + 3) {
-                                // 策略：向上滚动一点，让虚拟列表渲染出更多行
-                                // 然后再滚动回来，此时末尾的行应该已经被渲染
-                                const scrollBackAmount = ROW_HEIGHT * 3;  // 向上滚动3行的距离
-                                const currentScroll = foundScrollContainer.scrollTop || window.scrollY;
-
-                                // 先向上滚动
-                                if (foundScrollContainer === document.documentElement) {
-                                    window.scrollTo({ top: Math.max(0, currentScroll - scrollBackAmount), behavior: 'instant' });
-                                } else {
-                                    foundScrollContainer.scrollTop = Math.max(0, currentScroll - scrollBackAmount);
-                                }
-                                await new Promise(r => setTimeout(r, 200));
-
-                                // 再滚动到最大位置
-                                const maxScrollTop = foundScrollContainer.scrollHeight - foundScrollContainer.clientHeight;
-                                if (foundScrollContainer === document.documentElement) {
-                                    window.scrollTo({ top: maxScrollTop, behavior: 'instant' });
-                                } else {
-                                    foundScrollContainer.scrollTop = maxScrollTop;
-                                }
-                                await new Promise(r => setTimeout(r, 300));
-
-                                // 重新获取可见行
-                                const boundaryRows = getVisibleRows(target === 'checkbox');
-                                const boundaryMinY = boundaryRows.length > 0 ? Math.min(...boundaryRows.map(r => r.y)) : 0;
-                                const boundaryYOffset = boundaryMinY % ROW_HEIGHT;
-                                const calcBoundaryGlobalIndex = (y) => Math.round((y - boundaryYOffset) / ROW_HEIGHT);
-
-                                // 遍历查找目标索引
-                                for (let i = 0; i < boundaryRows.length; i++) {
-                                    const globalIdx = calcBoundaryGlobalIndex(boundaryRows[i].y);
-                                    if (globalIdx === index) {
-                                        targetRow = boundaryRows[i].row;
-                                        matchedY = boundaryRows[i].y;
-                                        matchMethod = `method3b:boundary,globalIdx=${globalIdx}`;
-                                        scrollerInfo += ` (boundary scroll: maxVisible=${maxGlobalIdx}, boundaryRows=${boundaryRows.length})`;
-                                        break;
-                                    }
-                                }
-
-                                // 如果还是找不到，记录详细信息
-                                if (!targetRow) {
-                                    const boundaryGlobalIdxs = boundaryRows.map(r => calcBoundaryGlobalIndex(r.y));
-                                    scrollerInfo += ` (boundary failed: targetIdx=${index}, boundaryIdxs=[${boundaryGlobalIdxs.join(',')}])`;
-                                }
-                            }
-                        }
-
-                        // 如果重试后仍然失败,添加调试信息
-                        if (!targetRow) {
-                            const globalIdxs = newVisibleRows.map(r => newCalcGlobalIndex(r.y));
-                            scrollerInfo += ` (retry failed: extra=${extraScroll}, before=${scrollBefore}, after=${scrollAfterFinal}, targetIdx=${index}, yOffset=${newYOffset}, globalIdxs=[${globalIdxs.join(',')}])`;
-                        }
-                    }
-                }
-
-                if (!targetRow) {
-                    const globalIdxs = visibleRows.map(r => calcGlobalIndex(r.y));
+                if (filteredRows.length === 0) {
                     return {
                         success: false,
-                        error: `Target index=${index} not found in visible rows`,
+                        error: '没有找到商品行元素',
+                        scrollerInfo,
+                        isPageMode,
+                        targetScrollTop,
+                        actualScrollTop
+                    };
+                }
+
+                // 【关键】使用视觉位置排序（getBoundingClientRect），而非 translateY
+                const visibleRows = filteredRows.map(row => {
+                    const rect = row.getBoundingClientRect();
+                    return {
+                        row,
+                        top: rect.top,
+                        bottom: rect.bottom
+                    };
+                }).filter(r => {
+                    // 过滤视口内的行（包括部分可见的）
+                    return r.bottom > 0 && r.top < window.innerHeight + ROW_HEIGHT;
+                }).sort((a, b) => a.top - b.top);  // 按视觉位置排序
+
+                if (visibleRows.length === 0) {
+                    return {
+                        success: false,
+                        error: '视口内没有可见的商品行',
                         scrollerInfo,
                         isPageMode,
                         targetScrollTop,
                         actualScrollTop,
-                        yOffset,
-                        firstVisibleIndex,
-                        visibleCount: visibleRows.length,
-                        visibleYs: visibleRows.map(r => r.y),
-                        globalIdxs,
-                        detectedRowHeight: ROW_HEIGHT,
-                        hasScrollContainer: !!foundScrollContainer
+                        totalRows: filteredRows.length
                     };
                 }
+
+                // 【第四轮修复】修正虚拟列表顶部偏移
+                const viewportStartIndex = Math.floor(actualScrollTop / ROW_HEIGHT) - TOP_OFFSET_ROWS;
+
+                // 找到第一个完全可见的行（top >= 0）
+                const firstFullyVisibleArrayIndex = visibleRows.findIndex(r => r.top >= 0);
+
+                if (firstFullyVisibleArrayIndex === -1) {
+                    return {
+                        success: false,
+                        error: '没有完全可见的行（所有行 top < 0）',
+                        scrollerInfo,
+                        isPageMode,
+                        targetScrollTop,
+                        actualScrollTop,
+                        allTops: visibleRows.map(r => Math.round(r.top))
+                    };
+                }
+
+                // 目标行在可见行数组中的索引 = (目标索引 - 视口起始索引) + 缓冲行数量
+                const targetArrayIndex = (index - viewportStartIndex) + firstFullyVisibleArrayIndex;
+
+                // 调试信息
+                const debugInfo = {
+                    topOffsetRows: TOP_OFFSET_ROWS,
+                    viewportStartIndex,
+                    firstFullyVisibleArrayIndex,
+                    targetArrayIndex,
+                    visibleRowCount: visibleRows.length,
+                    actualScrollTop,
+                    firstRowTop: Math.round(visibleRows[0].top),
+                    allTops: visibleRows.map(r => Math.round(r.top))
+                };
+
+                // 边界检查
+                if (targetArrayIndex < 0) {
+                    return {
+                        success: false,
+                        error: `目标行在视口上方: targetArrayIndex=${targetArrayIndex} < 0`,
+                        scrollerInfo,
+                        isPageMode,
+                        targetScrollTop,
+                        ...debugInfo
+                    };
+                }
+
+                if (targetArrayIndex >= visibleRows.length) {
+                    return {
+                        success: false,
+                        error: `目标行在视口下方: targetArrayIndex=${targetArrayIndex} >= visibleRows=${visibleRows.length}`,
+                        scrollerInfo,
+                        isPageMode,
+                        targetScrollTop,
+                        ...debugInfo
+                    };
+                }
+
+                // 定位目标行
+                const targetRow = visibleRows[targetArrayIndex].row;
+                const matchedTop = visibleRows[targetArrayIndex].top;
 
                 // 如果只需要点击复选框,直接处理后返回
                 if (target === 'checkbox') {
@@ -1062,7 +939,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         '.is-fixed-left.is-selection-column .jx-checkbox__inner',
                         '.is-fixed-left.is-selection-column .jx-checkbox',
                         '.jx-checkbox__inner',
-                        'input[type=\"checkbox\"]',
+                        'input[type="checkbox"]',
                     ];
                     let checkbox = null;
                     for (const selector of checkboxSelectors) {
@@ -1077,7 +954,8 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                             success: false,
                             error: 'Checkbox not found in target row',
                             scrollerInfo,
-                            matchedY,
+                            matchedTop: Math.round(matchedTop),
+                            ...debugInfo
                         };
                     }
                     try {
@@ -1085,20 +963,17 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         return {
                             success: true,
                             scrollerInfo,
-                            matchedY,
-                            matchMethod,
-                            yOffset,
-                            firstVisibleIndex,
-                            rowHeight: ROW_HEIGHT,
-                            debugRows: debugInfo.slice(0, 5),  // 前5行的调试信息
-                            clickedSelector: checkbox.className || 'checkbox',
+                            matchedTop: Math.round(matchedTop),
+                            matchMethod: 'visual-position',
+                            ...debugInfo
                         };
                     } catch (e) {
                         return {
                             success: false,
-                            error: 'Checkbox click failed',
+                            error: 'Checkbox click failed: ' + e.message,
                             scrollerInfo,
-                            matchedY,
+                            matchedTop: Math.round(matchedTop),
+                            ...debugInfo
                         };
                     }
                 }
@@ -1142,8 +1017,9 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         success: false,
                         error: 'Claim button not found in target row',
                         scrollerInfo,
-                        matchedY,
-                        buttonsFound: allButtons.length
+                        matchedTop: Math.round(matchedTop),
+                        buttonsFound: allButtons.length,
+                        ...debugInfo
                     };
                 }
 
@@ -1225,9 +1101,10 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         success: false,
                         error: 'Dropdown menu not found after clicking claim button',
                         scrollerInfo,
-                        matchedY,
+                        matchedTop: Math.round(matchedTop),
                         claimBtnClicked: true,
-                        ariaControls: ariaControls || 'none'
+                        ariaControls: ariaControls || 'none',
+                        ...debugInfo
                     };
                 }
 
@@ -1253,10 +1130,11 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         success: false,
                         error: 'No option found in dropdown menu',
                         scrollerInfo,
-                        matchedY,
+                        matchedTop: Math.round(matchedTop),
                         claimBtnClicked: true,
                         dropdownFound: true,
-                        dropdownId: dropdown.id || 'unknown'
+                        dropdownId: dropdown.id || 'unknown',
+                        ...debugInfo
                     };
                 }
 
@@ -1269,10 +1147,10 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                     isPageMode,
                     targetScrollTop,
                     actualScrollTop,
-                    targetTranslateY,
-                    matchedY,
-                    detectedRowHeight: ROW_HEIGHT,
-                    optionText: firstOption.textContent?.trim() || ''
+                    matchedTop: Math.round(matchedTop),
+                    matchMethod: 'visual-position',
+                    optionText: firstOption.textContent?.trim() || '',
+                    ...debugInfo
                 };
             }
             """
@@ -1282,24 +1160,31 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
             if result.get("success"):
                 if target == "checkbox":
                     logger.success(
-                        f"✓ JS 勾选成功,索引={index}, 容器={result.get('scrollerInfo')}, "
-                        f"匹配Y={result.get('matchedY')}, 方法={result.get('matchMethod')}, "
-                        f"偏移={result.get('yOffset')}, 首可见索引={result.get('firstVisibleIndex')}"
+                        f"✓ [视觉位置定位] 勾选成功, index={index}, "
+                        f"topOffset={result.get('topOffsetRows')}行, "
+                        f"viewportStartIndex={result.get('viewportStartIndex')}, "
+                        f"bufferRows={result.get('firstFullyVisibleArrayIndex')}, "
+                        f"targetArrayIndex={result.get('targetArrayIndex')}, "
+                        f"可见行数={result.get('visibleRowCount')}, "
+                        f"matchedTop={result.get('matchedTop')}px"
                     )
-                    # 调试: 输出可见行信息
-                    debug_rows = result.get("debugRows", [])
-                    if debug_rows:
-                        logger.debug(f"  可见行(前5): {debug_rows}")
                 else:
                     logger.success(
-                        f"✓ JS 点击认领按钮成功,索引={index}, 容器={result.get('scrollerInfo')}, "
-                        f"page-mode={result.get('isPageMode')}, 匹配Y={result.get('matchedY')}px, "
+                        f"✓ [视觉位置定位] 认领按钮成功, index={index}, "
+                        f"topOffset={result.get('topOffsetRows')}行, "
+                        f"viewportStartIndex={result.get('viewportStartIndex')}, "
+                        f"matchedTop={result.get('matchedTop')}px, "
                         f"选项={result.get('optionText')}"
                     )
             else:
                 logger.warning(
-                    f"JS 行内操作失败: {result.get('error')}, 容器={result.get('scrollerInfo')}, "
-                    f"可见Y值={result.get('visibleYs')}, 检测行高={result.get('detectedRowHeight')}"
+                    f"[视觉位置定位] 操作失败: {result.get('error')}, "
+                    f"index={index}, topOffset={result.get('topOffsetRows')}行, "
+                    f"viewportStartIndex={result.get('viewportStartIndex')}, "
+                    f"bufferRows={result.get('firstFullyVisibleArrayIndex')}, "
+                    f"targetArrayIndex={result.get('targetArrayIndex')}, "
+                    f"可见行数={result.get('visibleRowCount')}, "
+                    f"tops={result.get('allTops')}"
                 )
 
             return result
