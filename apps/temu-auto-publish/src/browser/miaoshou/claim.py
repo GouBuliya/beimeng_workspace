@@ -826,13 +826,13 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
 
                 // 如果只需要点击复选框,直接处理后返回
                 if (target === 'checkbox') {
-                    // 【第十轮修复】使用相同的排序索引方式
-                    // 复选框和行都按 top 排序，用 targetArrayIndex 取对应的复选框
-                    // 不再用位置匹配，避免匹配到相邻行
+                    // 【第十一轮修复】只获取行内的复选框，排除表头的全选复选框
+                    // 表头复选框在 .pro-virtual-table__header 中
+                    // 行复选框在 .vue-recycle-scroller__item-view 中
 
-                    // 获取固定列容器中的所有复选框
+                    // 只获取行内的复选框（排除表头）
                     const allCheckboxes = Array.from(
-                        document.querySelectorAll('.jx-checkbox__inner')
+                        document.querySelectorAll('.vue-recycle-scroller__item-view .jx-checkbox__inner')
                     );
 
                     if (allCheckboxes.length === 0) {
