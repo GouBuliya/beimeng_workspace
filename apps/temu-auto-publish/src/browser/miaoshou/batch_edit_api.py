@@ -165,11 +165,13 @@ async def run_batch_edit_via_api(
 
             logger.info(f"API 批量编辑: 准备编辑 {len(detail_ids)} 个产品")
 
-            # Step 4: 上传文件（如果提供）
+            # Step 4: 上传文件（如果提供）- 需要先导航到编辑页面获取上传组件
             uploaded_files = await _upload_files_for_products(
+                page,
                 client,
                 outer_package_image=outer_package_image,
                 product_guide_pdf=product_guide_pdf,
+                detail_ids=detail_ids,
             )
             result["uploaded_files"] = uploaded_files
 
@@ -277,18 +279,338 @@ async def run_batch_edit_via_api(
     return result
 
 
+async def _upload_pdf_via_page(page: Page, pdf_path: str) -> dict[str, Any]:
+    """通过页面的 axios 上传 PDF 文件.
+
+    Args:
+        page: Playwright Page 对象
+        pdf_path: PDF 文件的本地路径
+
+    Returns:
+        上传结果，包含 result, fileUrl 等字段
+    """
+    import asyncio
+    import base64
+
+    result: dict[str, Any] = {"result": "error", "message": "上传未完成"}
+
+    # 设置响应监听器
+    upload_response: dict[str, Any] = {}
+
+    async def handle_response(response):
+        if "upload_attach_file" in response.url:
+            try:
+                body = await response.json()
+                upload_response.update(body)
+            except Exception:
+                pass
+
+    page.on("response", handle_response)
+
+    try:
+        # 读取文件并转为 base64
+        with open(pdf_path, "rb") as f:
+            file_data = base64.b64encode(f.read()).decode("utf-8")
+
+        file_name = Path(pdf_path).name
+
+        # 使用页面的 axios 发送请求
+        await page.evaluate(
+            """
+            async (params) => {
+                try {
+                    // 将 base64 转换为 Blob
+                    const binaryString = atob(params.fileData);
+                    const bytes = new Uint8Array(binaryString.length);
+                    for (let i = 0; i < binaryString.length; i++) {
+                        bytes[i] = binaryString.charCodeAt(i);
+                    }
+                    const file = new File([bytes], params.fileName, { type: 'application/pdf' });
+
+                    // 创建 FormData
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    formData.append('platform', 'pddkj');
+
+                    // 使用页面的 axios 发送请求（会经过拦截器）
+                    if (window.axios) {
+                        await window.axios.post(
+                            '/api/appAttachFile/app_attach_file/upload_attach_file',
+                            formData
+                        );
+                    }
+                } catch (e) {
+                    console.error('PDF上传失败:', e);
+                }
+            }
+            """,
+            {
+                "fileData": file_data,
+                "fileName": file_name,
+            },
+        )
+
+        # 等待上传完成
+        for _ in range(30):  # 最多等待 3 秒
+            await asyncio.sleep(0.1)
+            if upload_response:
+                break
+
+        result = upload_response or {"result": "error", "message": "上传超时"}
+
+    except Exception as e:
+        result = {"result": "error", "message": str(e)}
+    finally:
+        page.remove_listener("response", handle_response)
+
+    return result
+
+
+async def _wait_for_loading_mask(page: Page, timeout: int = 10000) -> None:
+    """等待加载遮罩消失.
+
+    Args:
+        page: Playwright Page 对象
+        timeout: 超时时间（毫秒）
+    """
+    loading_selectors = [
+        ".jx-loading-mask",
+        ".el-loading-mask",
+        ".loading-mask",
+    ]
+
+    for selector in loading_selectors:
+        try:
+            mask = page.locator(selector)
+            if await mask.count() > 0 and await mask.first.is_visible():
+                logger.debug(f"等待加载遮罩消失: {selector}")
+                await mask.first.wait_for(state="hidden", timeout=timeout)
+        except Exception:
+            pass
+
+
+async def _close_popups(page: Page) -> int:
+    """关闭页面上的各种弹窗.
+
+    Returns:
+        关闭的弹窗数量
+    """
+    closed = 0
+
+    # 先等待加载遮罩消失
+    await _wait_for_loading_mask(page)
+
+    # jx-overlay 公告弹窗的关闭按钮
+    overlay_close_selectors = [
+        ".jx-overlay .jx-icon-close",
+        ".jx-overlay [class*='close']",
+        ".jx-overlay button:has-text('关闭')",
+        ".jx-overlay button:has-text('我知道了')",
+    ]
+
+    # 常规弹窗关闭按钮
+    popup_buttons = [
+        "text='我知道了'",
+        "text='知道了'",
+        "text='确定'",
+        "text='关闭'",
+        "text='我已知晓'",
+        "text='跳过'",
+        "text='下次再说'",
+        "button:has-text('我已知晓')",
+        "button:has-text('跳过')",
+        ".el-dialog__headerbtn",
+        ".jx-dialog__headerbtn",
+        "button[aria-label='关闭']",
+        ".el-icon-close",
+        ".jx-icon-close",
+    ]
+
+    # 先尝试关闭 overlay 弹窗
+    for selector in overlay_close_selectors:
+        try:
+            locator = page.locator(selector)
+            count = await locator.count()
+            if count > 0:
+                for i in range(count):
+                    try:
+                        btn = locator.nth(i)
+                        if await btn.is_visible():
+                            await btn.click(timeout=1000)
+                            closed += 1
+                            logger.debug(f"关闭 overlay 弹窗: {selector}")
+                            await page.wait_for_timeout(500)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+    # 再关闭常规弹窗
+    for selector in popup_buttons:
+        try:
+            locator = page.locator(selector)
+            count = await locator.count()
+            if count > 0:
+                for i in range(count):
+                    try:
+                        btn = locator.nth(i)
+                        if await btn.is_visible():
+                            await btn.click(timeout=1000)
+                            closed += 1
+                            logger.debug(f"关闭弹窗: {selector}")
+                            await page.wait_for_timeout(300)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+    return closed
+
+
+async def _upload_image_via_page(
+    page: Page, image_path: str, detail_ids: list[str] | None = None
+) -> dict[str, Any]:
+    """通过打开批量编辑对话框上传图片.
+
+    流程：
+    1. 确保在采集箱列表页面
+    2. 关闭各种弹窗
+    3. 点击"批量编辑"打开对话框
+    4. 在对话框中找到图片上传组件
+    5. 使用 set_input_files 上传图片
+
+    Args:
+        page: Playwright Page 对象
+        image_path: 图片文件的本地路径
+        detail_ids: 产品 ID 列表（未使用，保留兼容性）
+
+    Returns:
+        上传结果，包含 result, picturePath 等字段
+    """
+    import asyncio
+
+    result: dict[str, Any] = {"result": "error", "message": "上传未完成"}
+
+    # 设置响应监听器
+    upload_response: dict[str, Any] = {}
+
+    async def handle_response(response):
+        if "uploadPictureFile" in response.url:
+            try:
+                body = await response.json()
+                upload_response.update(body)
+            except Exception:
+                pass
+
+    page.on("response", handle_response)
+
+    try:
+        # 确保在采集箱列表页
+        current_url = page.url
+        if "collect_box/items" not in current_url:
+            logger.debug("不在采集箱列表页，先导航到列表页")
+            await page.goto("https://erp.91miaoshou.com/pddkj/collect_box/items")
+            await page.wait_for_timeout(2000)
+
+        # 等待加载遮罩消失
+        await _wait_for_loading_mask(page, timeout=15000)
+
+        # 关闭各种弹窗（多次尝试，确保所有弹窗都关闭）
+        for _ in range(10):
+            closed = await _close_popups(page)
+            if closed == 0:
+                # 额外等待一下，看是否有新弹窗出现
+                await page.wait_for_timeout(500)
+                closed = await _close_popups(page)
+                if closed == 0:
+                    break
+            await page.wait_for_timeout(500)
+
+        # 再次等待加载遮罩消失
+        await _wait_for_loading_mask(page, timeout=5000)
+
+        # 点击"批量编辑"按钮（带重试）
+        batch_edit_btn = page.locator("button:has-text('批量编辑')")
+        clicked = False
+        for attempt in range(3):
+            try:
+                if await batch_edit_btn.count() > 0 and await batch_edit_btn.first.is_visible():
+                    # 使用 force=True 绕过可能的遮挡检测
+                    await batch_edit_btn.first.click(timeout=5000)
+                    logger.debug("已点击批量编辑按钮")
+                    clicked = True
+                    break
+            except Exception as e:
+                logger.debug(f"点击批量编辑按钮失败 (尝试 {attempt + 1}/3): {e}")
+                # 再次尝试关闭弹窗
+                await _close_popups(page)
+                await _wait_for_loading_mask(page, timeout=3000)
+                await page.wait_for_timeout(1000)
+
+        if not clicked:
+            result = {"result": "error", "message": "无法点击批量编辑按钮"}
+            return result
+
+        await page.wait_for_timeout(2000)
+
+        # 查找文件上传 input
+        file_inputs = page.locator('input[type="file"]')
+        count = await file_inputs.count()
+        logger.debug(f"找到 {count} 个文件上传 input")
+
+        if count == 0:
+            result = {"result": "error", "message": "页面上没有可用的上传组件"}
+            return result
+
+        # 使用最后一个 file input（通常是外包装图片的）
+        await file_inputs.last.set_input_files(image_path)
+        logger.debug(f"已设置文件: {image_path}")
+
+        # 等待上传完成
+        for _ in range(50):  # 最多等待 5 秒
+            await asyncio.sleep(0.1)
+            if upload_response:
+                break
+
+        if upload_response:
+            result = upload_response
+            logger.info(f"图片上传成功: {result.get('picturePath')}")
+        else:
+            result = {"result": "error", "message": "上传超时"}
+
+    except Exception as e:
+        result = {"result": "error", "message": str(e)}
+        logger.error(f"上传异常: {e}")
+    finally:
+        # 移除监听器
+        page.remove_listener("response", handle_response)
+
+        # 关闭对话框
+        await _close_popups(page)
+
+        # 刷新页面回到干净状态
+        await page.reload()
+        await page.wait_for_timeout(1000)
+
+    return result
+
+
 async def _upload_files_for_products(
+    page: Page,
     client: MiaoshouApiClient,
     *,
     outer_package_image: str | None = None,
     product_guide_pdf: str | None = None,
+    detail_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     """为产品上传所需文件.
 
     Args:
-        client: API 客户端
+        page: Playwright Page 对象，用于浏览器端上传
+        client: API 客户端（备用）
         outer_package_image: 外包装图片路径
         product_guide_pdf: 产品说明书 PDF 路径
+        detail_ids: 产品 ID 列表，用于导航到编辑页面获取上传组件
 
     Returns:
         上传结果字典:
@@ -302,29 +624,30 @@ async def _upload_files_for_products(
         "product_guide_url": None,
     }
 
-    # 上传外包装图片
+    # 上传外包装图片（使用页面 el-upload 组件的 file input）
     if outer_package_image and Path(outer_package_image).exists():
         logger.info(f"API 批量编辑: 上传外包装图片 {outer_package_image}...")
         try:
-            result = await client.upload_picture_file(file_path=outer_package_image)
-            if result.get("result") == "success":
-                uploaded["outer_package_url"] = result.get("picturePath")
+            # 需要导航到编辑页面以获取上传组件
+            upload_result = await _upload_image_via_page(page, outer_package_image, detail_ids)
+            if upload_result and upload_result.get("result") == "success":
+                uploaded["outer_package_url"] = upload_result.get("picturePath")
                 logger.info(f"外包装图片上传成功: {uploaded['outer_package_url']}")
             else:
-                logger.warning(f"外包装图片上传失败: {result.get('message')}")
+                logger.warning(f"外包装图片上传失败: {upload_result}")
         except Exception as e:
             logger.error(f"外包装图片上传异常: {e}")
 
-    # 上传产品说明书
+    # 上传产品说明书（使用页面的 axios）
     if product_guide_pdf and Path(product_guide_pdf).exists():
         logger.info(f"API 批量编辑: 上传产品说明书 {product_guide_pdf}...")
         try:
-            result = await client.upload_attach_file(file_path=product_guide_pdf)
-            if result.get("result") == "success":
-                uploaded["product_guide_url"] = result.get("fileUrl")
+            upload_result = await _upload_pdf_via_page(page, product_guide_pdf)
+            if upload_result and upload_result.get("result") == "success":
+                uploaded["product_guide_url"] = upload_result.get("fileUrl")
                 logger.info(f"产品说明书上传成功: {uploaded['product_guide_url']}")
             else:
-                logger.warning(f"产品说明书上传失败: {result.get('message')}")
+                logger.warning(f"产品说明书上传失败: {upload_result}")
         except Exception as e:
             logger.error(f"产品说明书上传异常: {e}")
 
@@ -420,9 +743,9 @@ def _update_sku_prices(sku_map: dict[str, Any]) -> dict[str, Any]:
         # 复制 SKU 数据
         new_sku = dict(sku_data)
 
-        # 获取供货价（尝试多个字段名）
+        # 获取供货价（尝试多个字段名，优先使用 originPrice）
         current_price = None
-        for field_name in ["supplyPrice", "supplierPrice", "costPrice", "originPrice", "price"]:
+        for field_name in ["originPrice", "supplyPrice", "supplierPrice", "costPrice", "price"]:
             field_value = sku_data.get(field_name)
             if field_value:
                 try:
@@ -434,8 +757,14 @@ def _update_sku_prices(sku_map: dict[str, Any]) -> dict[str, Any]:
         if current_price:
             # 建议售价 = 供货价 × 10
             suggested_price = round(current_price * 10, 2)
-            new_sku["price"] = str(int(suggested_price))
-            logger.debug(f"SKU 价格更新: {current_price} × 10 = {suggested_price}")
+            new_sku["suggestedPrice"] = str(int(suggested_price))
+            new_sku["suggestedPriceCurrencyType"] = "CNY"
+            logger.debug(f"SKU 建议售价更新: {current_price} × 10 = {suggested_price}")
+
+        # SKU 分类设置为"单品 1 件"
+        new_sku["skuClassification"] = 1  # 单品
+        new_sku["numberOfPieces"] = "1"  # 1 件
+        new_sku["pieceUnitCode"] = 1  # 件
 
         updated_map[sku_key] = new_sku
 
