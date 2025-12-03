@@ -826,13 +826,13 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
 
                 // 如果只需要点击复选框,直接处理后返回
                 if (target === 'checkbox') {
-                    // 【第六轮修复】直接获取所有可见复选框，用相同的索引逻辑定位
-                    // 不依赖 targetRow，因为复选框可能在独立的固定列容器中
+                    // 【第八轮修复】使用 targetRow 的视觉位置来匹配复选框
+                    // 因为固定列和主内容区是两个独立的虚拟滚动容器
+                    // 直接用 matchedTop 找到相同垂直位置的复选框
 
-                    // 获取所有复选框元素（排除表头的"全选"复选框）
-                    // 只选择虚拟列表行内的复选框，避免索引偏移
+                    // 获取所有复选框元素
                     const allCheckboxes = Array.from(
-                        document.querySelectorAll('.vue-recycle-scroller__item-view .jx-checkbox__inner')
+                        document.querySelectorAll('.jx-checkbox__inner')
                     );
 
                     if (allCheckboxes.length === 0) {
@@ -845,70 +845,56 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         };
                     }
 
-                    // 按视觉位置排序（与主内容区行相同的逻辑）
-                    const visibleCheckboxes = allCheckboxes.map(cb => {
+                    // 找到与 targetRow 相同垂直位置的复选框
+                    // 允许一定误差（行高内的偏差都可接受）
+                    const POSITION_TOLERANCE = ROW_HEIGHT / 2;  // 64px 误差范围
+
+                    let bestMatch = null;
+                    let minDistance = Infinity;
+
+                    for (const cb of allCheckboxes) {
                         const rect = cb.getBoundingClientRect();
-                        return { checkbox: cb, top: rect.top };
-                    }).filter(c => c.top > -ROW_HEIGHT && c.top < window.innerHeight + ROW_HEIGHT)
-                      .sort((a, b) => a.top - b.top);
+                        const cbTop = rect.top;
+                        const distance = Math.abs(cbTop - matchedTop);
 
-                    if (visibleCheckboxes.length === 0) {
-                        return {
-                            success: false,
-                            error: 'No visible checkboxes in viewport',
-                            scrollerInfo,
-                            matchedTop: Math.round(matchedTop),
-                            totalCheckboxes: allCheckboxes.length,
-                            ...debugInfo
-                        };
+                        if (distance < minDistance && distance < POSITION_TOLERANCE) {
+                            minDistance = distance;
+                            bestMatch = { checkbox: cb, top: cbTop, distance };
+                        }
                     }
-
-                    // 找到第一个完全可见的复选框（top >= 0）
-                    const firstFullyVisibleCbIndex = visibleCheckboxes.findIndex(c => c.top >= 0);
-
-                    if (firstFullyVisibleCbIndex === -1) {
-                        return {
-                            success: false,
-                            error: 'No fully visible checkbox (all top < 0)',
-                            scrollerInfo,
-                            matchedTop: Math.round(matchedTop),
-                            cbTops: visibleCheckboxes.map(c => Math.round(c.top)),
-                            ...debugInfo
-                        };
-                    }
-
-                    // 用相同的公式计算目标复选框索引
-                    const targetCbIndex = (index - viewportStartIndex) + firstFullyVisibleCbIndex;
 
                     const cbDebugInfo = {
                         ...debugInfo,
-                        visibleCbCount: visibleCheckboxes.length,
-                        firstFullyVisibleCbIndex,
-                        targetCbIndex,
-                        cbTops: visibleCheckboxes.slice(0, 10).map(c => Math.round(c.top))
+                        totalCheckboxes: allCheckboxes.length,
+                        matchedTop: Math.round(matchedTop),
+                        positionTolerance: POSITION_TOLERANCE
                     };
 
-                    if (targetCbIndex < 0 || targetCbIndex >= visibleCheckboxes.length) {
+                    if (!bestMatch) {
+                        // 输出所有复选框位置用于调试
+                        const allCbTops = allCheckboxes.map(cb => {
+                            const rect = cb.getBoundingClientRect();
+                            return Math.round(rect.top);
+                        }).filter(t => t > -ROW_HEIGHT && t < window.innerHeight + ROW_HEIGHT);
+
                         return {
                             success: false,
-                            error: `Checkbox index out of range: ${targetCbIndex} (0-${visibleCheckboxes.length-1})`,
+                            error: `No checkbox found near targetRow (matchedTop=${Math.round(matchedTop)})`,
                             scrollerInfo,
-                            matchedTop: Math.round(matchedTop),
+                            visibleCbTops: allCbTops,
                             ...cbDebugInfo
                         };
                     }
 
-                    const checkbox = visibleCheckboxes[targetCbIndex].checkbox;
-                    const cbTop = visibleCheckboxes[targetCbIndex].top;
-
                     try {
-                        checkbox.click();
+                        bestMatch.checkbox.click();
                         return {
                             success: true,
                             scrollerInfo,
                             matchedTop: Math.round(matchedTop),
-                            cbTop: Math.round(cbTop),
-                            matchMethod: 'checkbox-visual-position',
+                            cbTop: Math.round(bestMatch.top),
+                            cbDistance: Math.round(bestMatch.distance),
+                            matchMethod: 'checkbox-position-match',
                             ...cbDebugInfo
                         };
                     } catch (e) {
@@ -917,6 +903,7 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                             error: 'Checkbox click failed: ' + e.message,
                             scrollerInfo,
                             matchedTop: Math.round(matchedTop),
+                            cbTop: Math.round(bestMatch.top),
                             ...cbDebugInfo
                         };
                     }
