@@ -323,6 +323,14 @@ class LoginController:
             password_selector = login_config.get("password_input", "input[type='password']")
             login_btn_selector = login_config.get("login_button", "button:has-text('登录')")
 
+            # 等待登录表单渲染完成
+            logger.debug("等待登录表单加载...")
+            try:
+                await page.locator(username_selector).first.wait_for(state="visible", timeout=10000)
+                logger.debug("登录表单已加载")
+            except Exception as wait_exc:
+                logger.warning(f"等待登录表单超时: {wait_exc}，继续尝试...")
+
             # 等待登录表单并安全填充
             logger.debug("输入用户名...")
             if not await waiter.safe_fill(
