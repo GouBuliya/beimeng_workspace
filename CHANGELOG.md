@@ -1,3 +1,10 @@
+## [1.2.1](https://github.com/GouBuliya/beimeng_workspace/compare/v1.2.0...v1.2.1) (2025-12-03)
+
+
+### Bug Fixes
+
+* Cookie 登录导航超时时自动执行手动登录兜底 ([8ac8353](https://github.com/GouBuliya/beimeng_workspace/commit/8ac83530fb29cf595a353896742b3198a043f993))
+
 ## [0.2.3](https://github.com/GouBuliya/beimeng_workspace/compare/v0.2.2...v0.2.3) (2025-12-02)
 
 
