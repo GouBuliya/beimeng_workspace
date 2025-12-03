@@ -1613,10 +1613,9 @@ class CompletePublishWorkflow:
         miaoshou_ctrl: MiaoshouController,
         edited_products: Sequence[EditedProduct],
     ) -> StageOutcome:
-        """阶段 2: 逐行点击认领按钮,每个商品点击 5 次.
+        """阶段 2: 认领产品到 Temu 全托管.
 
-        使用 JS 定位逻辑(复用首次编辑的动态行高检测),直接点击每行内的
-        "认领到"下拉按钮并选择第一个选项,无需先勾选复选框.
+        默认使用 API 直接认领（更快速、更稳定），如果 API 失败则回退到 DOM 操作。
         """
 
         if self.skip_first_edit:
@@ -1639,28 +1638,6 @@ class CompletePublishWorkflow:
                 details={"skipped": True, "expected_total": 0},
             )
 
-        filter_owner: str | None = None
-        if edited_products:
-            owner_candidate = getattr(edited_products[0].selection, "owner", "") or ""
-            try:
-                filter_owner = self._resolve_collection_owner(owner_candidate)
-            except RuntimeError as exc:
-                logger.warning("Unable to resolve collection owner for claim stage: {}", exc)
-                filter_owner = None
-
-        # 使用和首次编辑相同的导航和筛选方式，确保看到相同的商品列表
-        navigation_success = await miaoshou_ctrl.navigate_and_filter_collection_box(
-            page,
-            filter_by_user=filter_owner,
-            switch_to_tab="all",
-        )
-        if not navigation_success:
-            logger.warning("认领阶段导航/筛选失败，尝试备用方式")
-            await miaoshou_ctrl.refresh_collection_box(page, filter_owner=filter_owner)
-
-        # 筛选后额外等待页面数据加载完成
-        await page.wait_for_timeout(1500)
-
         # edited_products 是当前批次要处理的商品数据
         working_products = list(edited_products)
         selection_count = min(len(working_products), 5)
@@ -1677,6 +1654,87 @@ class CompletePublishWorkflow:
                     "skipped": True,
                 },
             )
+
+        filter_owner: str | None = None
+        if edited_products:
+            owner_candidate = getattr(edited_products[0].selection, "owner", "") or ""
+            try:
+                filter_owner = self._resolve_collection_owner(owner_candidate)
+            except RuntimeError as exc:
+                logger.warning("Unable to resolve collection owner for claim stage: {}", exc)
+                filter_owner = None
+
+        # ==================== 默认使用 API 认领 ====================
+        logger.info(
+            "认领阶段 (API 模式): 目标 %s 个商品, 每商品认领 %s 次",
+            selection_count,
+            self.claim_times,
+        )
+
+        total_claimed = 0
+        api_success = True
+        api_failures: list[str] = []
+
+        # 每个商品需要认领 claim_times 次
+        for claim_round in range(1, self.claim_times + 1):
+            logger.info(f"API 认领第 {claim_round}/{self.claim_times} 轮")
+            try:
+                result = await miaoshou_ctrl.claim_products_via_api(
+                    page,
+                    count=selection_count,
+                    platform="pddkj",
+                    owner_account=filter_owner,
+                )
+                if result.get("success"):
+                    claimed_count = result.get("claimed_count", 0)
+                    total_claimed += claimed_count
+                    logger.success(f"第 {claim_round} 轮 API 认领成功: {claimed_count} 个产品")
+                else:
+                    api_failures.append(f"第 {claim_round} 轮失败: {result.get('message')}")
+                    logger.warning(f"第 {claim_round} 轮 API 认领失败: {result.get('message')}")
+            except Exception as exc:
+                api_failures.append(f"第 {claim_round} 轮异常: {exc}")
+                logger.error(f"第 {claim_round} 轮 API 认领异常: {exc}")
+
+        # 判断 API 认领结果
+        expected_total = selection_count * self.claim_times
+        api_success = total_claimed > 0
+
+        if api_success:
+            message = f"API 认领成功: 共认领 {total_claimed} 次 (期望 {expected_total} 次)"
+            if api_failures:
+                message += f", 存在 {len(api_failures)} 个失败"
+            logger.success(message)
+
+            return StageOutcome(
+                name="stage2_claim",
+                success=True,
+                message=message,
+                details={
+                    "method": "api",
+                    "selected_count": selection_count,
+                    "total_claimed": total_claimed,
+                    "expected_total": expected_total,
+                    "claim_rounds": self.claim_times,
+                    "api_failures": api_failures,
+                },
+            )
+
+        # ==================== API 失败，回退到 DOM 模式 ====================
+        logger.warning("API 认领失败，回退到 DOM 模式")
+
+        # 使用和首次编辑相同的导航和筛选方式，确保看到相同的商品列表
+        navigation_success = await miaoshou_ctrl.navigate_and_filter_collection_box(
+            page,
+            filter_by_user=filter_owner,
+            switch_to_tab="all",
+        )
+        if not navigation_success:
+            logger.warning("认领阶段导航/筛选失败，尝试备用方式")
+            await miaoshou_ctrl.refresh_collection_box(page, filter_owner=filter_owner)
+
+        # 筛选后额外等待页面数据加载完成
+        await page.wait_for_timeout(1500)
 
         # 获取页面上实际的商品数量，用于边界检查
         page_counts = await miaoshou_ctrl.get_product_count(page)
@@ -1713,7 +1771,7 @@ class CompletePublishWorkflow:
         target_indexes = list(range(start_offset, start_offset + selection_count))
 
         logger.info(
-            "认领阶段: 目标索引 %s (筛选后的商品列表,共 %s 条), 每商品点击 %s 次",
+            "认领阶段 (DOM 回退): 目标索引 %s (筛选后的商品列表,共 %s 条), 每商品点击 %s 次",
             target_indexes,
             selection_count,
             self.claim_times,
@@ -1793,16 +1851,17 @@ class CompletePublishWorkflow:
         overall_success = claim_success and verify_success
         if overall_success and has_failures:
             message = (
-                f"认领部分成功: 期望 {selection_count} 个商品, "
+                f"认领部分成功 (DOM 回退): 期望 {selection_count} 个商品, "
                 f"实际成功 {batch_success} 批次 (共 {expected_total} 次), "
                 f"存在 {len(batch_failures)} 个失败"
             )
         elif overall_success:
-            message = f"认领成功 {selection_count} 个商品,每商品 {self.claim_times} 次 (共 {expected_total} 次)"
+            message = f"认领成功 (DOM 回退): {selection_count} 个商品,每商品 {self.claim_times} 次 (共 {expected_total} 次)"
         else:
-            message = "认领结果存在异常, 详见 details"
+            message = "认领结果存在异常 (DOM 回退), 详见 details"
 
         details = {
+            "method": "dom_fallback",
             "selected_count": selection_count,
             "batches_success": batch_success,
             "batch_failures": batch_failures,
@@ -1811,6 +1870,7 @@ class CompletePublishWorkflow:
             "expected_total": expected_total,
             "unique_threshold": unique_threshold,
             "verify_success": verify_success,
+            "api_failures": api_failures,
         }
 
         return StageOutcome("stage2_claim", overall_success, message, details)
