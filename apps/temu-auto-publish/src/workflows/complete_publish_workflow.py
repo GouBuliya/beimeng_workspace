@@ -1713,31 +1713,26 @@ class CompletePublishWorkflow:
         # 从页面表格提取产品 ID
         if total_available > 0:
             # 使用 JS 从表格提取所有产品 ID
-            # 根据页面结构，ID 在文本 "采集箱产品ID: XXXXXXX" 中
+            # 根据页面结构，ID 在文本 "采集箱产品ID: 3037726721" 中（10位数字）
             extracted_ids = await page.evaluate("""
             () => {
                 const ids = [];
-                // 方法1: 从文本 "采集箱产品ID: XXXXXXX" 提取
-                const allText = document.body.innerText;
-                const idMatches = allText.match(/采集箱产品ID[:：]\\s*(\\d+)/g);
-                if (idMatches) {
-                    idMatches.forEach(match => {
-                        const id = match.match(/\\d+/);
-                        if (id) ids.push(id[0]);
-                    });
-                }
-                // 方法2: 如果方法1失败，尝试从 data 属性获取
+                // 方法1: 精确匹配 "采集箱产品ID: XXXXXXXXXX"（至少8位数字）
+                const spans = document.querySelectorAll('span, div, td');
+                spans.forEach(el => {
+                    const text = el.textContent || '';
+                    const match = text.match(/采集箱产品ID[:：]\\s*(\\d{8,})/);
+                    if (match && !ids.includes(match[1])) {
+                        ids.push(match[1]);
+                    }
+                });
+                // 方法2: 从表格行的 data 属性获取
                 if (ids.length === 0) {
-                    document.querySelectorAll('[data-id], [data-detail-id]').forEach(el => {
-                        const id = el.getAttribute('data-id') || el.getAttribute('data-detail-id');
-                        if (id && !ids.includes(id)) ids.push(id);
-                    });
-                }
-                // 方法3: 从 checkbox 获取
-                if (ids.length === 0) {
-                    document.querySelectorAll('.el-checkbox__original').forEach(cb => {
-                        if (cb.value && cb.value !== 'on' && !ids.includes(cb.value)) {
-                            ids.push(cb.value);
+                    document.querySelectorAll('.el-table__row, tr').forEach(row => {
+                        const id = row.getAttribute('data-id')
+                            || row.getAttribute('data-row-key');
+                        if (id && /^\\d{8,}$/.test(id) && !ids.includes(id)) {
+                            ids.push(id);
                         }
                     });
                 }
