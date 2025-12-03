@@ -380,7 +380,9 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         const match = style.match(/translateY\\((-?\\d+(?:\\.\\d+)?)\\s*(?:px)?\\s*\\)/);
                         if (match) {
                             const y = parseFloat(match[1]);
-                            if (y >= 0) visibleRows.push({ row, y });
+                            // 【修复】同时获取视觉位置，用于新定位算法
+                            const rect = row.getBoundingClientRect();
+                            if (y >= 0) visibleRows.push({ row, y, top: rect.top, bottom: rect.bottom });
                         }
                     });
                     visibleRows.sort((a, b) => a.y - b.y);
@@ -488,6 +490,9 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                     return Math.round(y / ROW_HEIGHT);
                 };
 
+                // 【第四轮修复】顶部偏移常量
+                const TOP_OFFSET_ROWS = 2;
+
                 for (const idx of indexes) {
                     const targetTranslateY = idx * ROW_HEIGHT;
                     let targetRow = null;
@@ -506,17 +511,36 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                             continue;
                         }
 
-                        // 方法1: 基于Y坐标精确匹配(容差为行高的70%)
-                        for (const item of visibleRows) {
-                            const diff = Math.abs(item.y - targetTranslateY);
-                            if (diff < ROW_HEIGHT * 0.7) {
-                                targetRow = item.row;
-                                matchedY = item.y;
-                                break;
+                        // 【第四轮修复】方法0: 基于视觉位置的定位算法
+                        // 获取当前滚动位置
+                        const currentScrollTop = window.scrollY || document.documentElement.scrollTop;
+                        const viewportStartIndex = Math.floor(currentScrollTop / ROW_HEIGHT) - TOP_OFFSET_ROWS;
+
+                        // 按视觉位置排序
+                        const sortedByVisual = [...visibleRows].sort((a, b) => a.top - b.top);
+                        const firstFullyVisibleArrayIndex = sortedByVisual.findIndex(r => r.top >= 0);
+
+                        if (firstFullyVisibleArrayIndex !== -1) {
+                            const targetArrayIndex = (idx - viewportStartIndex) + firstFullyVisibleArrayIndex;
+                            if (targetArrayIndex >= 0 && targetArrayIndex < sortedByVisual.length) {
+                                targetRow = sortedByVisual[targetArrayIndex].row;
+                                matchedY = sortedByVisual[targetArrayIndex].y;
                             }
                         }
 
-                        // 方法2: 基于推断索引匹配(更健壮的匹配方式)
+                        // 方法1（备用）: 基于Y坐标精确匹配(容差为行高的70%)
+                        if (!targetRow) {
+                            for (const item of visibleRows) {
+                                const diff = Math.abs(item.y - targetTranslateY);
+                                if (diff < ROW_HEIGHT * 0.7) {
+                                    targetRow = item.row;
+                                    matchedY = item.y;
+                                    break;
+                                }
+                            }
+                        }
+
+                        // 方法2（备用）: 基于推断索引匹配(更健壮的匹配方式)
                         if (!targetRow) {
                             for (const item of visibleRows) {
                                 const inferredIdx = inferRowIndex(item.y);
@@ -644,7 +668,9 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         const match = style.match(/translateY\\((-?\\d+(?:\\.\\d+)?)\\s*(?:px)?\\s*\\)/);
                         if (match) {
                             const y = parseFloat(match[1]);
-                            if (y >= 0) visibleRows.push({ row, y });
+                            // 【修复】同时获取视觉位置，用于新定位算法
+                            const rect = row.getBoundingClientRect();
+                            if (y >= 0) visibleRows.push({ row, y, top: rect.top, bottom: rect.bottom });
                         }
                     });
                     visibleRows.sort((a, b) => a.y - b.y);
@@ -674,9 +700,15 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
 
                 const ROW_HEIGHT = detectRowHeight();
 
+                // 【第四轮修复】顶部偏移常量
+                const TOP_OFFSET_ROWS = 2;
+
                 // 滚动到目标位置
                 scroller.scrollTop = index * ROW_HEIGHT;
                 await new Promise(r => setTimeout(r, 200));
+
+                // 获取实际滚动位置
+                const actualScrollTop = scroller.scrollTop;
 
                 // 重新获取可见行
                 const visibleRows = getVisibleRows();
@@ -686,15 +718,29 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                 const targetY = index * ROW_HEIGHT;
                 let targetRow = null;
 
-                // 方法1: Y坐标匹配
-                for (const item of visibleRows) {
-                    if (Math.abs(item.y - targetY) < ROW_HEIGHT * 0.7) {
-                        targetRow = item.row;
-                        break;
+                // 【第四轮修复】方法0: 基于视觉位置的定位算法
+                const viewportStartIndex = Math.floor(actualScrollTop / ROW_HEIGHT) - TOP_OFFSET_ROWS;
+                const sortedByVisual = [...visibleRows].sort((a, b) => a.top - b.top);
+                const firstFullyVisibleArrayIndex = sortedByVisual.findIndex(r => r.top >= 0);
+
+                if (firstFullyVisibleArrayIndex !== -1) {
+                    const targetArrayIndex = (index - viewportStartIndex) + firstFullyVisibleArrayIndex;
+                    if (targetArrayIndex >= 0 && targetArrayIndex < sortedByVisual.length) {
+                        targetRow = sortedByVisual[targetArrayIndex].row;
                     }
                 }
 
-                // 方法2: 基于推断索引匹配
+                // 方法1（备用）: Y坐标匹配
+                if (!targetRow) {
+                    for (const item of visibleRows) {
+                        if (Math.abs(item.y - targetY) < ROW_HEIGHT * 0.7) {
+                            targetRow = item.row;
+                            break;
+                        }
+                    }
+                }
+
+                // 方法2（备用）: 基于推断索引匹配
                 if (!targetRow) {
                     for (const item of visibleRows) {
                         const inferredIdx = Math.round(item.y / ROW_HEIGHT);
@@ -772,7 +818,9 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                         const match = style.match(/translateY\\((-?\\d+(?:\\.\\d+)?)\\s*(?:px)?\\s*\\)/);
                         if (match) {
                             const y = parseFloat(match[1]);
-                            if (y >= 0) visibleRows.push({ row, y });
+                            // 【修复】同时获取视觉位置，用于新定位算法
+                            const rect = row.getBoundingClientRect();
+                            if (y >= 0) visibleRows.push({ row, y, top: rect.top, bottom: rect.bottom });
                         }
                     });
                     visibleRows.sort((a, b) => a.y - b.y);
@@ -859,39 +907,63 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                 // 当 target='checkbox' 时,只获取包含复选框的行
                 const visibleRows = getVisibleRows(target === 'checkbox');
 
-                // ========== 新方法：从可见行的 translateY 推断索引 ==========
-                // 核心：每行的 translateY 值直接对应其全局索引
-                // 索引 = translateY / ROW_HEIGHT（考虑偏移量）
+                // ========== 【第四轮修复】使用视觉位置定位算法 ==========
+                // 核心改进：使用 getBoundingClientRect 和 TOP_OFFSET_ROWS 偏移
+                // 与 navigation.py 保持一致
 
-                // 检测 Y 偏移量（虚拟列表可能有固定偏移）
-                const minVisibleY = visibleRows.length > 0 ? Math.min(...visibleRows.map(r => r.y)) : 0;
-                const yOffset = minVisibleY % ROW_HEIGHT;
+                // 【关键】修正虚拟列表顶部偏移
+                // 虚拟列表上方有固定元素（表头等），导致 scrollTop 与实际行索引有偏移
+                const TOP_OFFSET_ROWS = 2;
+                const viewportStartIndex = Math.floor(actualScrollTop / ROW_HEIGHT) - TOP_OFFSET_ROWS;
 
-                // 计算每个可见行的全局索引
-                const calcGlobalIndex = (y) => Math.round((y - yOffset) / ROW_HEIGHT);
+                // 按视觉位置排序（使用 getBoundingClientRect().top）
+                const sortedByVisual = [...visibleRows].sort((a, b) => a.top - b.top);
 
-                // 找到第一个可见行的全局索引
-                const firstVisibleIndex = visibleRows.length > 0 ? calcGlobalIndex(visibleRows[0].y) : 0;
+                // 找到第一个完全可见的行（top >= 0）
+                const firstFullyVisibleArrayIndex = sortedByVisual.findIndex(r => r.top >= 0);
 
                 let targetRow = null;
                 let matchedY = -1;
                 let matchMethod = '';
 
                 // 调试信息
-                const debugInfo = visibleRows.map((r, i) => ({
-                    y: r.y,
-                    visibleIdx: i,
-                    globalIdx: calcGlobalIndex(r.y)
-                }));
+                const debugInfo = {
+                    topOffsetRows: TOP_OFFSET_ROWS,
+                    viewportStartIndex,
+                    firstFullyVisibleArrayIndex,
+                    visibleRowCount: visibleRows.length,
+                    actualScrollTop,
+                    allTops: sortedByVisual.map(r => Math.round(r.top))
+                };
 
-                // 方法1（首选）: 直接遍历可见行，找到全局索引匹配的行
-                for (let i = 0; i < visibleRows.length; i++) {
-                    const globalIdx = calcGlobalIndex(visibleRows[i].y);
-                    if (globalIdx === index) {
-                        targetRow = visibleRows[i].row;
-                        matchedY = visibleRows[i].y;
-                        matchMethod = `method1:globalIdx=${globalIdx},visiblePos=${i}`;
-                        break;
+                // 方法0（首选）: 基于视觉位置的定位算法
+                if (firstFullyVisibleArrayIndex !== -1) {
+                    const targetArrayIndex = (index - viewportStartIndex) + firstFullyVisibleArrayIndex;
+                    if (targetArrayIndex >= 0 && targetArrayIndex < sortedByVisual.length) {
+                        targetRow = sortedByVisual[targetArrayIndex].row;
+                        matchedY = sortedByVisual[targetArrayIndex].y;
+                        const matchedTop = sortedByVisual[targetArrayIndex].top;
+                        matchMethod = `method0:visual,targetArrayIdx=${targetArrayIndex},matchedTop=${Math.round(matchedTop)}`;
+                    }
+                }
+
+                // 保留旧方法作为备用
+                // 检测 Y 偏移量（虚拟列表可能有固定偏移）
+                const minVisibleY = visibleRows.length > 0 ? Math.min(...visibleRows.map(r => r.y)) : 0;
+                const yOffset = minVisibleY % ROW_HEIGHT;
+                const calcGlobalIndex = (y) => Math.round((y - yOffset) / ROW_HEIGHT);
+                const firstVisibleIndex = visibleRows.length > 0 ? calcGlobalIndex(visibleRows[0].y) : 0;
+
+                // 方法1（备用）: 直接遍历可见行，找到全局索引匹配的行
+                if (!targetRow) {
+                    for (let i = 0; i < visibleRows.length; i++) {
+                        const globalIdx = calcGlobalIndex(visibleRows[i].y);
+                        if (globalIdx === index) {
+                            targetRow = visibleRows[i].row;
+                            matchedY = visibleRows[i].y;
+                            matchMethod = `method1:globalIdx=${globalIdx},visiblePos=${i}`;
+                            break;
+                        }
                     }
                 }
 
@@ -1270,23 +1342,23 @@ class MiaoshouClaimMixin(MiaoshouNavigationMixin):
                 if target == "checkbox":
                     logger.success(
                         f"✓ JS 勾选成功,索引={index}, 容器={result.get('scrollerInfo')}, "
-                        f"匹配Y={result.get('matchedY')}, 方法={result.get('matchMethod')}, "
-                        f"偏移={result.get('yOffset')}, 首可见索引={result.get('firstVisibleIndex')}"
+                        f"匹配Y={result.get('matchedY')}, 方法={result.get('matchMethod')}"
                     )
-                    # 调试: 输出可见行信息
-                    debug_rows = result.get("debugRows", [])
-                    if debug_rows:
-                        logger.debug(f"  可见行(前5): {debug_rows}")
                 else:
                     logger.success(
                         f"✓ JS 点击认领按钮成功,索引={index}, 容器={result.get('scrollerInfo')}, "
                         f"page-mode={result.get('isPageMode')}, 匹配Y={result.get('matchedY')}px, "
-                        f"选项={result.get('optionText')}"
+                        f"方法={result.get('matchMethod')}, 选项={result.get('optionText')}"
                     )
             else:
+                # 输出详细调试信息
+                debug_info = result.get("debugInfo", {})
                 logger.warning(
                     f"JS 行内操作失败: {result.get('error')}, 容器={result.get('scrollerInfo')}, "
-                    f"可见Y值={result.get('visibleYs')}, 检测行高={result.get('detectedRowHeight')}"
+                    f"topOffset={debug_info.get('topOffsetRows')}行, "
+                    f"viewportStartIndex={debug_info.get('viewportStartIndex')}, "
+                    f"可见行数={debug_info.get('visibleRowCount')}, "
+                    f"检测行高={result.get('detectedRowHeight')}"
                 )
 
             return result
