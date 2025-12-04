@@ -529,23 +529,85 @@ async def _upload_image_via_page(
         # 再次等待加载遮罩消失
         await _wait_for_loading_mask(page, timeout=5000)
 
-        # 点击"批量编辑"按钮（带重试）
-        batch_edit_btn = page.locator("button:has-text('批量编辑')")
-        clicked = False
-        for attempt in range(3):
+        # 等待表格加载完成
+        table_selector = ".el-table, .jx-table, table"
+        try:
+            await page.wait_for_selector(table_selector, timeout=10000)
+            logger.debug("表格已加载")
+        except Exception:
+            logger.warning("等待表格超时，继续尝试")
+
+        # 先勾选第一个产品（批量编辑按钮需要先选中产品）
+        checkbox_selectors = [
+            ".el-table__body .el-checkbox__input:not(.is-checked)",
+            ".jx-table__body .jx-checkbox__input:not(.is-checked)",
+            "table tbody input[type='checkbox']:not(:checked)",
+            ".el-checkbox__inner",
+            ".jx-checkbox__inner",
+        ]
+
+        checkbox_clicked = False
+        for selector in checkbox_selectors:
             try:
-                if await batch_edit_btn.count() > 0 and await batch_edit_btn.first.is_visible():
-                    # 使用 force=True 绕过可能的遮挡检测
-                    await batch_edit_btn.first.click(timeout=5000)
-                    logger.debug("已点击批量编辑按钮")
-                    clicked = True
-                    break
+                checkboxes = page.locator(selector)
+                count = await checkboxes.count()
+                if count > 0:
+                    # 点击第一个未选中的复选框
+                    first_checkbox = checkboxes.first
+                    if await first_checkbox.is_visible():
+                        await first_checkbox.click(timeout=3000)
+                        checkbox_clicked = True
+                        logger.debug(f"已勾选第一个产品: {selector}")
+                        await page.wait_for_timeout(500)
+                        break
             except Exception as e:
-                logger.debug(f"点击批量编辑按钮失败 (尝试 {attempt + 1}/3): {e}")
-                # 再次尝试关闭弹窗
-                await _close_popups(page)
-                await _wait_for_loading_mask(page, timeout=3000)
-                await page.wait_for_timeout(1000)
+                logger.debug(f"勾选产品失败 ({selector}): {e}")
+
+        if not checkbox_clicked:
+            logger.warning("未能勾选产品，尝试直接点击批量编辑按钮")
+
+        # 点击"批量编辑"按钮（带重试）
+        batch_edit_selectors = [
+            "button:has-text('批量编辑')",
+            ".el-button:has-text('批量编辑')",
+            ".jx-button:has-text('批量编辑')",
+            "text='批量编辑'",
+        ]
+
+        clicked = False
+        for _ in range(3):
+            for selector in batch_edit_selectors:
+                try:
+                    btn = page.locator(selector)
+                    if await btn.count() > 0 and await btn.first.is_visible():
+                        await btn.first.click(timeout=5000)
+                        logger.debug(f"已点击批量编辑按钮: {selector}")
+                        clicked = True
+                        break
+                except Exception as e:
+                    logger.debug(f"点击批量编辑按钮失败 ({selector}): {e}")
+
+            if clicked:
+                break
+
+            # 重试前再次尝试关闭弹窗和勾选产品
+            await _close_popups(page)
+            await _wait_for_loading_mask(page, timeout=3000)
+            await page.wait_for_timeout(1000)
+
+            # 如果没勾选成功，再试一次勾选
+            if not checkbox_clicked:
+                for selector in checkbox_selectors:
+                    try:
+                        checkboxes = page.locator(selector)
+                        if await checkboxes.count() > 0:
+                            await checkboxes.first.click(timeout=2000)
+                            checkbox_clicked = True
+                            logger.debug(f"重试勾选产品成功: {selector}")
+                            await page.wait_for_timeout(500)
+                            break
+                    except Exception:
+                        pass
 
         if not clicked:
             result = {"result": "error", "message": "无法点击批量编辑按钮"}
