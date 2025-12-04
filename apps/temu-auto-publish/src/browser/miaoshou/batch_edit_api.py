@@ -246,44 +246,38 @@ async def run_batch_edit_via_api(
                 if attr_info_result.get("result") == "success":
                     attr_filler = AICategoryAttrFiller(client)
 
-                    # 建立 title -> collectBoxDetailId 映射（用于后续转换）
-                    title_to_collect_box_id: dict[str, str] = {}
+                    # 建立 collectBoxDetailId -> breadcrumb 映射（用于 AI 属性补全的上下文）
+                    id_to_breadcrumb: dict[str, str] = {}
                     for search_item in items:
-                        title = search_item.get("title", "")
                         collect_box_id = str(search_item.get("collectBoxDetailId", ""))
-                        if title and collect_box_id:
-                            title_to_collect_box_id[title] = collect_box_id
-                    logger.info(
-                        f"title 映射建立: {len(title_to_collect_box_id)} 个 "
-                        f"(搜索结果 {len(items)} 个)"
-                    )
+                        if collect_box_id:
+                            cat_map = search_item.get("siteAndCatMap", {}).get("PDDKJ", {})
+                            id_to_breadcrumb[collect_box_id] = cat_map.get("breadcrumb", "")
 
-                    # 构建产品上下文列表，同时建立 detailId -> collectBoxDetailId 映射
+                    # 使用索引映射：API 返回数据顺序与请求的 detail_ids 顺序一致
+                    # 这避免了 title 重复导致的映射丢失问题
+                    attr_info_list = attr_info_result.get("collectItemInfoList", [])
                     detail_id_to_collect_box_id: dict[str, str] = {}
                     contexts = []
-                    for item in attr_info_result.get("collectItemInfoList", []):
+
+                    for idx, collect_box_id in enumerate(detail_ids):
+                        if idx >= len(attr_info_list):
+                            logger.warning(
+                                f"API 返回数量不足: 请求 {len(detail_ids)}, "
+                                f"返回 {len(attr_info_list)}"
+                            )
+                            break
+
+                        item = attr_info_list[idx]
                         detail_id = str(item.get("detailId"))
                         item_title = item.get("title", "")
                         cid = item.get("cid", "")
 
-                        # 通过 title 找到对应的 collectBoxDetailId
-                        collect_box_id = title_to_collect_box_id.get(item_title)
-                        if collect_box_id:
-                            detail_id_to_collect_box_id[detail_id] = collect_box_id
-                        else:
-                            # title 匹配失败，打印警告帮助诊断
-                            logger.warning(
-                                f"title 匹配失败: detailId={detail_id}, "
-                                f"title='{item_title[:60]}...'"
-                            )
+                        # 建立 detailId -> collectBoxDetailId 映射
+                        detail_id_to_collect_box_id[detail_id] = collect_box_id
 
-                        # 从搜索结果中查找 breadcrumb
-                        breadcrumb = ""
-                        for search_item in items:
-                            if search_item.get("title") == item_title:
-                                cat_map = search_item.get("siteAndCatMap", {}).get("PDDKJ", {})
-                                breadcrumb = cat_map.get("breadcrumb", "")
-                                break
+                        # 获取 breadcrumb
+                        breadcrumb = id_to_breadcrumb.get(collect_box_id, "")
 
                         contexts.append(
                             ProductAttrContext(
@@ -295,7 +289,10 @@ async def run_batch_edit_via_api(
                             )
                         )
 
-                    logger.debug(f"ID 映射建立完成: {len(detail_id_to_collect_box_id)} 个产品")
+                    logger.info(
+                        f"索引映射建立: {len(detail_id_to_collect_box_id)} 个产品 "
+                        f"(请求 {len(detail_ids)}, 返回 {len(attr_info_list)})"
+                    )
 
                     # 批量补全属性
                     if contexts:
@@ -357,18 +354,12 @@ async def run_batch_edit_via_api(
 
             items_to_save = []
             if item_info_result.get("result") == "success":
-                # 通过 title 建立 collectBoxDetailId -> SKU 信息映射
+                # 使用索引映射：detail_ids[i] 对应 item_info_list[i]
                 item_info_list = item_info_result.get("collectItemInfoList", [])
                 item_info_map: dict[str, dict] = {}
-                for item in item_info_list:
-                    item_title = item.get("title", "")
-                    # 从搜索结果中通过 title 找到 collectBoxDetailId
-                    for search_item in items:
-                        if search_item.get("title") == item_title:
-                            collect_box_id = str(search_item.get("collectBoxDetailId", ""))
-                            if collect_box_id:
-                                item_info_map[collect_box_id] = item
-                            break
+                for idx, collect_box_id in enumerate(detail_ids):
+                    if idx < len(item_info_list):
+                        item_info_map[collect_box_id] = item_info_list[idx]
 
                 for detail_id in detail_ids:
                     item_data = {"site": "PDDKJ", "detailId": str(detail_id)}
