@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from typing import Any
 
@@ -311,7 +312,9 @@ async def run_batch_edit_via_api(
                                 if collect_box_id:
                                     ai_attrs_map[collect_box_id] = api_attrs
                                 else:
-                                    logger.warning(f"无法找到 detailId={str_id} 对应的 collectBoxDetailId")
+                                    logger.warning(
+                                        f"无法找到 detailId={str_id} 对应的 collectBoxDetailId"
+                                    )
                         logger.info(f"属性格式转换完成: {len(ai_attrs_map)} 个产品")
                         # 调试日志：检查 ID 匹配情况
                         if ai_attrs_map and detail_ids:
@@ -347,10 +350,7 @@ async def run_batch_edit_via_api(
                 # 打印前 5 个未匹配的 ID 帮助诊断
                 missing_ids = [str(d) for d in detail_ids if str(d) not in ai_attrs_map][:5]
                 ai_keys = list(ai_attrs_map.keys())[:5]
-                logger.warning(
-                    f"未匹配 ID 样例: {missing_ids}, "
-                    f"ai_attrs_map 键样例: {ai_keys}"
-                )
+                logger.warning(f"未匹配 ID 样例: {missing_ids}, ai_attrs_map 键样例: {ai_keys}")
 
             items_to_save = []
             if item_info_result.get("result") == "success":
@@ -360,6 +360,66 @@ async def run_batch_edit_via_api(
                 for idx, collect_box_id in enumerate(detail_ids):
                     if idx < len(item_info_list):
                         item_info_map[collect_box_id] = item_info_list[idx]
+
+                # 诊断日志：检查 API 返回数据完整性
+                if len(item_info_list) < len(detail_ids):
+                    logger.warning(
+                        f"SKU 信息不完整: 请求 {len(detail_ids)} 个, "
+                        f"返回 {len(item_info_list)} 个, 缺少 {len(detail_ids) - len(item_info_list)} 个"
+                    )
+
+                # 识别缺失 SKU 数据的商品
+                products_without_sku = []
+                for detail_id in detail_ids:
+                    product_info = item_info_map.get(str(detail_id), {})
+                    sku_map = product_info.get("skuMap", {})
+                    if not sku_map:
+                        products_without_sku.append(detail_id)
+
+                if products_without_sku:
+                    logger.warning(
+                        f"以下 {len(products_without_sku)} 个商品无 SKU 数据: "
+                        f"{products_without_sku[:5]}{'...' if len(products_without_sku) > 5 else ''}"
+                    )
+
+                    # 重试机制：对缺失 SKU 数据的商品进行重试获取
+                    max_retries = 2
+                    for attempt in range(1, max_retries + 1):
+                        if not products_without_sku:
+                            break
+
+                        logger.info(
+                            f"重试获取 SKU 信息 (尝试 {attempt}/{max_retries}): "
+                            f"{len(products_without_sku)} 个商品"
+                        )
+                        await asyncio.sleep(1)  # 等待后重试
+
+                        retry_result = await client.get_collect_item_info(
+                            detail_ids=products_without_sku,
+                            fields=["skuMap"],
+                        )
+
+                        if retry_result.get("result") == "success":
+                            retry_list = retry_result.get("collectItemInfoList", [])
+                            # 更新 item_info_map
+                            for idx, retry_id in enumerate(products_without_sku):
+                                if idx < len(retry_list):
+                                    retry_sku = retry_list[idx].get("skuMap", {})
+                                    if retry_sku:
+                                        item_info_map[str(retry_id)] = retry_list[idx]
+
+                            # 重新计算缺失列表
+                            products_without_sku = [
+                                d
+                                for d in products_without_sku
+                                if not item_info_map.get(str(d), {}).get("skuMap")
+                            ]
+
+                    if products_without_sku:
+                        logger.error(
+                            f"SKU 信息获取失败（已重试 {max_retries} 次）: "
+                            f"{len(products_without_sku)} 个商品将使用默认 SKU 配置"
+                        )
 
                 for detail_id in detail_ids:
                     item_data = {"site": "PDDKJ", "detailId": str(detail_id)}
@@ -380,11 +440,16 @@ async def run_batch_edit_via_api(
                         updated_sku_map = _update_sku_prices(sku_map)
                         item_data["skuMap"] = updated_sku_map
                         logger.debug(f"产品 {detail_id}: 更新 {len(sku_map)} 个 SKU 价格")
+                    else:
+                        # 使用默认 SKU 配置，确保重量和分类被设置
+                        logger.warning(f"产品 {detail_id}: 无 SKU 数据，使用默认 SKU 配置")
+                        default_sku = _create_default_sku()
+                        item_data["skuMap"] = {"default": default_sku}
 
                     items_to_save.append(item_data)
             else:
-                # 如果获取 SKU 信息失败，使用基础编辑数据
-                logger.warning("获取 SKU 信息失败，跳过价格计算")
+                # 如果获取 SKU 信息失败，使用基础编辑数据和默认 SKU 配置
+                logger.warning("获取 SKU 信息失败，所有商品使用默认 SKU 配置")
                 for detail_id in detail_ids:
                     item_data = {"site": "PDDKJ", "detailId": str(detail_id)}
                     item_data.update(base_edit_data)
@@ -395,6 +460,9 @@ async def run_batch_edit_via_api(
                         logger.debug(
                             f"产品 {detail_id}: 设置 {len(ai_attrs_map[str_detail_id])} 个 AI 属性"
                         )
+                    # 使用默认 SKU 配置
+                    default_sku = _create_default_sku()
+                    item_data["skuMap"] = {"default": default_sku}
                     items_to_save.append(item_data)
 
             # Step 9: 批量保存编辑
@@ -1037,6 +1105,38 @@ def _update_sku_prices(sku_map: dict[str, Any]) -> dict[str, Any]:
         )
 
     return updated_map
+
+
+def _create_default_sku() -> dict[str, Any]:
+    """创建默认 SKU 配置，确保重量和 SKU 分类被设置.
+
+    当无法获取商品的 SKU 数据时，使用此默认配置作为兜底方案。
+
+    Returns:
+        默认 SKU 配置字典
+    """
+    import random
+
+    # 生成随机尺寸（50-99cm，长>宽>高）
+    dimensions = [random.randint(50, 99) for _ in range(3)]
+    dimensions.sort(reverse=True)
+    length_cm, width_cm, height_cm = dimensions
+
+    return {
+        "skuClassification": 1,  # 单品
+        "numberOfPieces": "1",  # 1 件
+        "pieceUnitCode": 1,  # 件
+        "weight": "9527",  # 重量
+        "stock": "999",  # 库存
+        "oriPrice": "100",
+        "originPrice": "100",
+        "suggestedPrice": "1000",
+        "suggestedPriceCurrencyType": "CNY",
+        "packageLength": str(length_cm),
+        "packageWidth": str(width_cm),
+        "packageHeight": str(height_cm),
+        "itemNum": " ",
+    }
 
 
 def _map_category_attrs(attrs: dict[str, Any]) -> list[dict[str, Any]]:
