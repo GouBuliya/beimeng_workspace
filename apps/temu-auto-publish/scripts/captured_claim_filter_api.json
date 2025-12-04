@@ -1,0 +1,22 @@
+[
+  {
+    "url": "https://erp.91miaoshou.com/api/move/common_collect_box/searchDetailList",
+    "method": "POST",
+    "post_data": "pageNo=1&pageSize=20&filter%5BtabPaneName%5D=noClaimed"
+  },
+  {
+    "url": "https://erp.91miaoshou.com/api/move/common_collect_box/searchDetailList",
+    "method": "POST",
+    "post_data": "pageNo=1&pageSize=20&filter%5BtabPaneName%5D=noClaimed&filter%5BownerAccountIds%5D%5B0%5D=151538"
+  },
+  {
+    "url": "https://erp.91miaoshou.com/api/move/common_collect_box/searchDetailList",
+    "method": "POST",
+    "post_data": "pageNo=1&pageSize=20&filter%5BtabPaneName%5D=all&filter%5BownerAccountIds%5D%5B0%5D=151538"
+  },
+  {
+    "url": "https://erp.91miaoshou.com/api/move/common_collect_box/searchDetailList",
+    "method": "POST",
+    "post_data": "filter%5BtabPaneName%5D=all&filter%5BownerAccountIds%5D%5B0%5D=151538&pageNo=1&pageSize=20"
+  }
+]
