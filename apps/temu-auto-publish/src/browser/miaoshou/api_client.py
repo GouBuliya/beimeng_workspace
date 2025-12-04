@@ -1284,16 +1284,7 @@ class MiaoshouApiClient:
 
             if result.get("result") == "success":
                 detail = result.get("editCommonBoxDetail", {})
-                detail_id = detail.get("commonCollectBoxDetailId")
-                # 只对失败的产品 3037713010 打印详细信息
-                if detail_id == "3037713010":
-                    orig_color_map = detail.get("colorMap", {})
-                    orig_sku_map = detail.get("skuMap", {})
-                    logger.info(f"[{detail_id}] colorMap 完整: {json.dumps(orig_color_map, ensure_ascii=False)}")
-                    logger.info(f"[{detail_id}] skuMap 完整: {json.dumps(orig_sku_map, ensure_ascii=False)}")
-                    # 打印顶层的 oriPrice 和 originPrice
-                    logger.info(f"[{detail_id}] 顶层 oriPrice={detail.get('oriPrice')}, originPrice={detail.get('originPrice')}")
-                logger.info(f"获取产品编辑信息成功: {detail_id}")
+                logger.debug(f"获取产品编辑信息成功: {detail.get('commonCollectBoxDetailId')}")
             else:
                 logger.warning(f"获取产品编辑信息失败: {result.get('message', '未知错误')}")
 
@@ -1341,29 +1332,6 @@ class MiaoshouApiClient:
         from urllib.parse import quote
 
         client = await self._get_client()
-
-        # 调试：打印发送给 API 的完整 skuMap、colorMap、sizeMap 数据
-        sku_map = detail.get("skuMap", {})
-        color_map = detail.get("colorMap", {})
-        size_map = detail.get("sizeMap", {})
-        logger.info(f"API 请求 - skuMap: {len(sku_map)}, colorMap: {len(color_map)}, sizeMap: {len(size_map)}")
-        # 打印完整的 skuMap JSON
-        logger.info(f"API 请求 skuMap: {json.dumps(sku_map, ensure_ascii=False)}")
-        # 打印完整的 colorMap JSON
-        logger.info(f"API 请求 colorMap: {json.dumps(color_map, ensure_ascii=False)}")
-        # 打印完整的 sizeMap JSON（关键！）
-        if size_map:
-            logger.warning(f"API 请求 sizeMap: {json.dumps(size_map, ensure_ascii=False)}")
-        # 检查顶层的 oriPrice 字段
-        top_ori_price = detail.get("oriPrice", "未设置")
-        top_price = detail.get("price", "未设置")
-        logger.warning(f"顶层价格字段: price={top_price}, oriPrice={top_ori_price}")
-        # 检查 colorMap 中是否有 oriPrice 相关字段
-        for color_id, color_data in color_map.items():
-            if isinstance(color_data, dict):
-                color_ori = color_data.get("oriPrice", "无")
-                color_price = color_data.get("price", "无")
-                logger.warning(f"colorMap[{color_id}]: price={color_price}, oriPrice={color_ori}, 所有键={list(color_data.keys())}")
 
         # 构建表单数据 - editCommonBoxDetail 需要 URL 编码的 JSON
         detail_json = json.dumps(detail, ensure_ascii=False)

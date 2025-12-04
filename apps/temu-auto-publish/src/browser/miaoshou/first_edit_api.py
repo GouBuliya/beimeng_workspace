@@ -592,12 +592,6 @@ def _update_product_detail(
                 sku_data["packageWidth"] = str(width_cm)
                 sku_data["packageHeight"] = str(height_cm)
 
-        # 打印最终的 skuMap 数据以便调试
-        for sku_key, sku_data in sku_map.items():
-            ori_price = sku_data.get("oriPrice", "未设置")
-            suggested = sku_data.get("suggestedPrice", "未设置")
-            logger.info(f"SKU 最终数据 [{sku_key}]: oriPrice={ori_price}, suggestedPrice={suggested}")
-
         logger.info(
             f"更新 SKU: 库存=999, 重量={weight_g}g, 尺寸={length_cm}x{width_cm}x{height_cm}cm"
         )
