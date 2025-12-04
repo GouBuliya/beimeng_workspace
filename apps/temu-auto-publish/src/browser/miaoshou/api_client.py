@@ -1352,7 +1352,9 @@ class MiaoshouApiClient:
                 detail_id = detail.get("commonCollectBoxDetailId", "unknown")
                 logger.info(f"保存产品编辑成功: {detail_id}")
             else:
-                logger.warning(f"保存产品编辑失败: {result.get('message', '未知错误')}")
+                # 记录完整的 API 响应以便调试
+                detail_id = detail.get("commonCollectBoxDetailId", "unknown")
+                logger.warning(f"保存产品编辑失败 [{detail_id}]: {result}")
 
             return result
 
