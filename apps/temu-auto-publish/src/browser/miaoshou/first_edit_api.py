@@ -640,4 +640,18 @@ def _update_product_detail(
     detail["productOriginCertFiles"] = []
     logger.debug("设置产地为中国浙江省")
 
+    # 设置顶层的货源价格（oriPrice）- API 必需字段
+    # 优先使用选品表成本价，否则使用顶层 price 的 1/10，再否则使用默认值
+    top_ori_price = None
+    if selection and selection.cost_price:
+        top_ori_price = selection.cost_price
+    elif detail.get("price"):
+        with contextlib.suppress(ValueError, TypeError):
+            top_ori_price = float(detail["price"]) / 10
+    if top_ori_price:
+        detail["oriPrice"] = str(int(top_ori_price)) if top_ori_price == int(top_ori_price) else str(top_ori_price)
+    else:
+        detail["oriPrice"] = "100"  # 默认值
+    logger.info(f"设置顶层货源价格: oriPrice={detail['oriPrice']}")
+
     return detail
