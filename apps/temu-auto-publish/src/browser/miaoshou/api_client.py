@@ -1284,9 +1284,18 @@ class MiaoshouApiClient:
 
             if result.get("result") == "success":
                 detail = result.get("editCommonBoxDetail", {})
-                # 调试：打印所有顶层键名
-                all_keys = list(detail.keys())
-                logger.info(f"获取产品编辑信息成功: {detail.get('commonCollectBoxDetailId')}, 所有字段: {all_keys}")
+                # 调试：打印原始 colorMap 和 skuMap 的完整结构
+                orig_color_map = detail.get("colorMap", {})
+                orig_sku_map = detail.get("skuMap", {})
+                logger.info(f"获取产品编辑信息成功: {detail.get('commonCollectBoxDetailId')}")
+                # 打印第一个 colorMap 条目的完整结构
+                if orig_color_map:
+                    first_color_id = list(orig_color_map.keys())[0]
+                    logger.info(f"原始 colorMap[{first_color_id}] 完整数据: {json.dumps(orig_color_map[first_color_id], ensure_ascii=False)}")
+                # 打印第一个 skuMap 条目的完整结构
+                if orig_sku_map:
+                    first_sku_key = list(orig_sku_map.keys())[0]
+                    logger.info(f"原始 skuMap[{first_sku_key}] 完整数据: {json.dumps(orig_sku_map[first_sku_key], ensure_ascii=False)}")
             else:
                 logger.warning(f"获取产品编辑信息失败: {result.get('message', '未知错误')}")
 
