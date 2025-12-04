@@ -1,3 +1,32 @@
+# [1.4.0](https://github.com/GouBuliya/beimeng_workspace/compare/v1.3.0...v1.4.0) (2025-12-04)
+
+
+### Bug Fixes
+
+* 二次编辑添加英语标题设置为空格 ([fd02793](https://github.com/GouBuliya/beimeng_workspace/commit/fd02793596f79cd8824cd3d01b2d7090f7337e29))
+* 修复二次编辑获取 SKU 信息的参数和返回值解析 ([e313e43](https://github.com/GouBuliya/beimeng_workspace/commit/e313e43f01942c33d8f48a36452077f52f742ae6))
+* 修复标题型号后缀累积问题 ([f40a416](https://github.com/GouBuliya/beimeng_workspace/commit/f40a41610ab611ff0f8c681d291fd8ac5cac5847))
+* 发布阶段支持超过 100 个产品 ([d8934a3](https://github.com/GouBuliya/beimeng_workspace/commit/d8934a39c9b30344dc321552b93244d3467d158d))
+* 增强供货价字段检测，添加调试日志定位价格计算问题 ([daf16a1](https://github.com/GouBuliya/beimeng_workspace/commit/daf16a1af6b40fe407f1489ad1a9b874654fea56))
+* 外包装上传前先勾选产品，增强按钮点击鲁棒性 ([b8b6624](https://github.com/GouBuliya/beimeng_workspace/commit/b8b66244d118b76cc1df9500ada3828f215c249c))
+* 批量编辑分批保存，每批最多 20 个产品 ([65f4f8c](https://github.com/GouBuliya/beimeng_workspace/commit/65f4f8c02f074457db3d0452e0b37e6a8d29f65d))
+* 改进外包装图片上传，增加遮罩等待和弹窗处理 ([4132d6d](https://github.com/GouBuliya/beimeng_workspace/commit/4132d6df13354dcc7e8147c485916a75eaf02dd8))
+* 首次编辑重量改为 9527g ([c1e74a5](https://github.com/GouBuliya/beimeng_workspace/commit/c1e74a5d0cb1f6c763123807ca23232553a04f7b))
+
+
+### Features
+
+* 二次编辑添加价格计算（供货价 × 10） ([8f94c84](https://github.com/GouBuliya/beimeng_workspace/commit/8f94c8490c402af4d757bd4d2a902893f364931b))
+* 批量编辑运行 3 遍以增加成功率 ([2986c55](https://github.com/GouBuliya/beimeng_workspace/commit/2986c55b6b6a312e0816583a301af0c4ec3be077))
+* 首次编辑增加标题后缀检测，避免重复添加 ([c073744](https://github.com/GouBuliya/beimeng_workspace/commit/c073744cda1610188480be548b47b7f60b65e3db))
+* 首次编辑失败的产品不参与后续认领 ([afb29a6](https://github.com/GouBuliya/beimeng_workspace/commit/afb29a6c8dea2dbc4730c8dd6f88a274f31ec1f8))
+
+
+### Performance Improvements
+
+* 取消批量编辑轮次间的 1 秒等待 ([45dc6c9](https://github.com/GouBuliya/beimeng_workspace/commit/45dc6c9391a238f1b6fb22e23c712ac3f526473c))
+* 批量编辑每批次上限从 20 提升到 1000 ([f8ed68b](https://github.com/GouBuliya/beimeng_workspace/commit/f8ed68bbafb47922a129048ad943661e3375471c))
+
 # [1.3.0](https://github.com/GouBuliya/beimeng_workspace/compare/v1.2.1...v1.3.0) (2025-12-03)
 
 
