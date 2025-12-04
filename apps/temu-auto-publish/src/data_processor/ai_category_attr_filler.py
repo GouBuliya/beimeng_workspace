@@ -155,7 +155,7 @@ class AICategoryAttrFiller:
         api_client: MiaoshouApiClient,
         api_key: str | None = None,
         model: str | None = None,
-        max_retries: int = 3,
+        max_retries: int = 1,
         timeout: int = 30,
     ):
         """初始化 AI 属性补全器.
