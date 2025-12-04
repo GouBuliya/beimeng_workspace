@@ -272,8 +272,17 @@ async def run_batch_edit_via_api(
 
                     # 批量补全属性
                     if contexts:
-                        ai_attrs_map = await attr_filler.fill_batch_attrs(contexts)
-                        logger.info(f"AI 属性补全完成: {len(ai_attrs_map)} 个产品")
+                        ai_attrs_raw = await attr_filler.fill_batch_attrs(contexts)
+                        logger.info(f"AI 属性补全完成: {len(ai_attrs_raw)} 个产品")
+
+                        # 转换为 API 格式
+                        cid_map = {ctx.detail_id: ctx.cid for ctx in contexts}
+                        for detail_id, attrs in ai_attrs_raw.items():
+                            cid = cid_map.get(detail_id)
+                            if cid:
+                                api_attrs = attr_filler.convert_to_api_format(cid, attrs)
+                                ai_attrs_map[detail_id] = api_attrs
+                        logger.info(f"属性格式转换完成: {len(ai_attrs_map)} 个产品")
                 else:
                     logger.warning("获取产品属性信息失败，跳过 AI 属性补全")
 

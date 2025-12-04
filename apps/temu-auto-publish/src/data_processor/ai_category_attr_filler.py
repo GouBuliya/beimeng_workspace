@@ -28,7 +28,7 @@ import json
 import os
 import re
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
@@ -559,3 +559,59 @@ class AICategoryAttrFiller:
         # 有可选值选择第一个，否则使用"通用"
         value = rule.attr_values[0].get("valueName", "") if rule.attr_values else "通用"
         return {"attrName": rule.attr_name, "attrValue": value}
+
+    def convert_to_api_format(
+        self,
+        cid: str,
+        attrs: list[dict[str, str]],
+    ) -> list[dict[str, Any]]:
+        """将 AI 输出格式转换为 API 保存格式.
+
+        Args:
+            cid: 类目 ID
+            attrs: AI 输出的属性列表 [{"attrName": "材质", "attrValue": "不锈钢"}]
+
+        Returns:
+            API 格式的属性列表 [{"templatePid": "952645", "vid": "381"}]
+        """
+        rules = self.cache.get(cid)
+        if not rules:
+            logger.warning(f"类目 {cid} 规则未缓存，无法转换属性格式")
+            return []
+
+        # 构建查找映射: attrName -> rule
+        rule_map = {r.attr_name: r for r in rules}
+
+        api_attrs = []
+        for attr in attrs:
+            attr_name = attr.get("attrName", "")
+            attr_value = attr.get("attrValue", "")
+
+            rule = rule_map.get(attr_name)
+            if not rule:
+                logger.debug(f"属性 '{attr_name}' 未在类目规则中找到，跳过")
+                continue
+
+            # 构建 API 格式
+            api_attr: dict[str, Any] = {"templatePid": rule.attr_id}
+
+            # 查找 vid（如果有可选值）
+            if rule.attr_values:
+                vid = None
+                for v in rule.attr_values:
+                    if v.get("valueName") == attr_value:
+                        vid = v.get("valueId")
+                        break
+                if vid:
+                    api_attr["vid"] = vid
+                else:
+                    # 值不在选项中，作为自由输入处理
+                    api_attr["value"] = attr_value
+            else:
+                # 自由输入属性
+                api_attr["value"] = attr_value
+
+            api_attrs.append(api_attr)
+
+        logger.debug(f"类目 {cid} 属性转换: {len(attrs)} -> {len(api_attrs)} 个")
+        return api_attrs
