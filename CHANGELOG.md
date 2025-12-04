@@ -1,3 +1,10 @@
+## [1.6.1](https://github.com/GouBuliya/beimeng_workspace/compare/v1.6.0...v1.6.1) (2025-12-04)
+
+
+### Bug Fixes
+
+* 更新版本号至 1.5.2 ([212b976](https://github.com/GouBuliya/beimeng_workspace/commit/212b976b77b52e01e5a9537a957fc39e12068236))
+
 # [1.6.0](https://github.com/GouBuliya/beimeng_workspace/compare/v1.5.1...v1.6.0) (2025-12-04)
 
 
