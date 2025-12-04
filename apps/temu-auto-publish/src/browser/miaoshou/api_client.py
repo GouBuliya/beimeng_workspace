@@ -1109,6 +1109,9 @@ class MiaoshouApiClient:
             response.raise_for_status()
             result = response.json()
 
+            # DEBUG: 打印原始响应以便调试
+            logger.debug(f"类目 {cid} 属性规则原始响应: {result}")
+
             if result.get("result") == "success":
                 attrs = result.get("attributeRules", [])
                 logger.debug(f"获取类目 {cid} 属性规则成功: {len(attrs)} 个属性")
