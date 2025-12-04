@@ -31,6 +31,15 @@ from pydantic import BaseModel
 from starlette.middleware.sessions import SessionMiddleware
 
 from .auth_client import get_auth_client
+
+# 版本号从顶层包获取
+try:
+    from .. import __version__
+except ImportError:
+    # 如果相对导入失败，直接读取版本文件
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from __init__ import __version__
 from .env_settings import (
     ENV_FIELDS,
     build_env_payload,
@@ -148,8 +157,14 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
                 "fields": FORM_FIELDS,
                 "env_fields": env_metadata,
                 "username": username,
+                "version": __version__,
             },
         )
+
+    @app.get("/api/version")
+    async def get_version() -> dict[str, str]:
+        """获取系统版本号."""
+        return {"version": __version__}
 
     @app.get("/login", response_class=HTMLResponse)
     async def login_page(request: Request) -> HTMLResponse:
