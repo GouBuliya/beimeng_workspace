@@ -126,7 +126,7 @@ async def capture_filter_api():
         print("操作完成后脚本会自动结束并保存结果。", flush=True)
 
         # 等待 60 秒让用户操作
-        await asyncio.sleep(60)
+        await asyncio.sleep(99999999999)
 
         # 保存捕获的请求
         if captured_requests:
