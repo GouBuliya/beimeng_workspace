@@ -478,11 +478,12 @@ def _update_product_detail(
                     sku_price = selection.cost_price if selection and selection.cost_price else 100
                     # 确保 oriPrice 是整数字符串格式（API 要求）
                     ori_price_str = str(int(sku_price)) if sku_price == int(sku_price) else str(sku_price)
+                    suggested_price_str = str(int(sku_price * 10))
                     new_sku_data = {
-                        "price": "",
+                        "price": suggested_price_str,  # 价格（与 suggestedPrice 相同）
                         "oriPrice": ori_price_str,  # 货源价格，API 必需
                         "originPrice": str(sku_price),  # 货源价格（另一种格式）
-                        "suggestedPrice": str(int(sku_price * 10)),  # 建议售价
+                        "suggestedPrice": suggested_price_str,  # 建议售价
                         "suggestedPriceCurrencyType": "CNY",
                         "stock": "999",
                         "weight": str(weight_g),
