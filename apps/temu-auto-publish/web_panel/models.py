@@ -33,7 +33,7 @@ class WorkflowOptions(BaseModel):
     collection_owner: str = Field(min_length=1, description="妙手采集箱创建人员显示名")
     headless_mode: Literal["auto", "on", "off"] = Field(default="auto")
     use_ai_titles: bool = Field(default=False)
-    use_ai_attrs: bool = Field(default=True, description="使用AI智能补全必填类目属性")
+    use_ai_attrs: bool = Field(default=False, description="使用AI智能补全必填类目属性")
     skip_first_edit: bool = Field(default=False)
     only_claim: bool = Field(default=False)
     only_stage4_publish: bool = Field(default=False, description="仅运行阶段4发布")
