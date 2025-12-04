@@ -1347,15 +1347,10 @@ class MiaoshouApiClient:
         # 打印完整的 sizeMap JSON（关键！）
         if size_map:
             logger.warning(f"API 请求 sizeMap: {json.dumps(size_map, ensure_ascii=False)}")
-        # 检查其他可能包含 SKU/价格/规格信息的字段
-        suspicious_keys = ["sku", "price", "size", "spec", "color", "prop"]
-        for key in detail.keys():
-            key_lower = key.lower()
-            if any(s in key_lower for s in suspicious_keys) and key not in ["skuMap", "colorMap"]:
-                val = detail[key]
-                # 只打印非空值
-                if val and val != "" and val != [] and val != {}:
-                    logger.warning(f"发现其他相关字段 [{key}]: {val}")
+        # 检查顶层的 oriPrice 字段
+        top_ori_price = detail.get("oriPrice", "未设置")
+        top_price = detail.get("price", "未设置")
+        logger.warning(f"顶层价格字段: price={top_price}, oriPrice={top_ori_price}")
 
         # 构建表单数据 - editCommonBoxDetail 需要 URL 编码的 JSON
         detail_json = json.dumps(detail, ensure_ascii=False)
