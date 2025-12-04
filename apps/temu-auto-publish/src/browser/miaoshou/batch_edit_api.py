@@ -253,6 +253,10 @@ async def run_batch_edit_via_api(
                         collect_box_id = str(search_item.get("collectBoxDetailId", ""))
                         if title and collect_box_id:
                             title_to_collect_box_id[title] = collect_box_id
+                    logger.info(
+                        f"title 映射建立: {len(title_to_collect_box_id)} 个 "
+                        f"(搜索结果 {len(items)} 个)"
+                    )
 
                     # 构建产品上下文列表，同时建立 detailId -> collectBoxDetailId 映射
                     detail_id_to_collect_box_id: dict[str, str] = {}
@@ -266,6 +270,12 @@ async def run_batch_edit_via_api(
                         collect_box_id = title_to_collect_box_id.get(item_title)
                         if collect_box_id:
                             detail_id_to_collect_box_id[detail_id] = collect_box_id
+                        else:
+                            # title 匹配失败，打印警告帮助诊断
+                            logger.warning(
+                                f"title 匹配失败: detailId={detail_id}, "
+                                f"title='{item_title[:60]}...'"
+                            )
 
                         # 从搜索结果中查找 breadcrumb
                         breadcrumb = ""
@@ -328,6 +338,23 @@ async def run_batch_edit_via_api(
             )
 
             # 构建每个产品的编辑数据（包含价格 ×10 的 skuMap 和 AI 属性）
+            # 统计 AI 属性应用情况
+            ai_matched = sum(1 for d in detail_ids if str(d) in ai_attrs_map)
+            ai_missing = len(detail_ids) - ai_matched
+            logger.info(
+                f"AI 属性匹配统计: ai_attrs_map={len(ai_attrs_map)} 个, "
+                f"detail_ids={len(detail_ids)} 个, "
+                f"匹配成功={ai_matched}, 未匹配={ai_missing}"
+            )
+            if ai_missing > 0:
+                # 打印前 5 个未匹配的 ID 帮助诊断
+                missing_ids = [str(d) for d in detail_ids if str(d) not in ai_attrs_map][:5]
+                ai_keys = list(ai_attrs_map.keys())[:5]
+                logger.warning(
+                    f"未匹配 ID 样例: {missing_ids}, "
+                    f"ai_attrs_map 键样例: {ai_keys}"
+                )
+
             items_to_save = []
             if item_info_result.get("result") == "success":
                 # 通过 title 建立 collectBoxDetailId -> SKU 信息映射
