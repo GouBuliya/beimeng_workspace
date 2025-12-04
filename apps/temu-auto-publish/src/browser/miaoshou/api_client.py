@@ -1335,14 +1335,18 @@ class MiaoshouApiClient:
 
         client = await self._get_client()
 
-        # 调试：打印发送给 API 的完整 skuMap 和 colorMap 数据
+        # 调试：打印发送给 API 的完整 skuMap、colorMap、sizeMap 数据
         sku_map = detail.get("skuMap", {})
         color_map = detail.get("colorMap", {})
-        logger.info(f"API 请求 - skuMap 数量: {len(sku_map)}, colorMap 数量: {len(color_map)}")
+        size_map = detail.get("sizeMap", {})
+        logger.info(f"API 请求 - skuMap: {len(sku_map)}, colorMap: {len(color_map)}, sizeMap: {len(size_map)}")
         # 打印完整的 skuMap JSON
         logger.info(f"API 请求 skuMap: {json.dumps(sku_map, ensure_ascii=False)}")
-        # 打印完整的 colorMap JSON（检查是否有空名称）
+        # 打印完整的 colorMap JSON
         logger.info(f"API 请求 colorMap: {json.dumps(color_map, ensure_ascii=False)}")
+        # 打印完整的 sizeMap JSON（关键！）
+        if size_map:
+            logger.warning(f"API 请求 sizeMap: {json.dumps(size_map, ensure_ascii=False)}")
         # 检查其他可能包含 SKU/价格/规格信息的字段
         suspicious_keys = ["sku", "price", "size", "spec", "color", "prop"]
         for key in detail.keys():
