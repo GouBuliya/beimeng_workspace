@@ -1,3 +1,15 @@
+# [1.5.0](https://github.com/GouBuliya/beimeng_workspace/compare/v1.4.0...v1.5.0) (2025-12-04)
+
+
+### Bug Fixes
+
+* 认领阶段只认领首次编辑成功的产品 ([0ecdc8d](https://github.com/GouBuliya/beimeng_workspace/commit/0ecdc8d842803145797b49c5faff7ba2b94d8aa5))
+
+
+### Features
+
+* 添加版本号显示到 Web 前端 ([e36448b](https://github.com/GouBuliya/beimeng_workspace/commit/e36448b643d2ddd02503649e1b56439644f1414d))
+
 # [1.4.0](https://github.com/GouBuliya/beimeng_workspace/compare/v1.3.0...v1.4.0) (2025-12-04)
 
 
