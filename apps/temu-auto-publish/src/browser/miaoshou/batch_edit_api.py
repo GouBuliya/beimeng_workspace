@@ -233,9 +233,7 @@ async def run_batch_edit_via_api(
             if item_info_result.get("result") == "success":
                 # 构建 detailId -> 产品信息 的映射
                 item_info_list = item_info_result.get("collectItemInfoList", [])
-                item_info_map = {
-                    str(item.get("detailId")): item for item in item_info_list
-                }
+                item_info_map = {str(item.get("detailId")): item for item in item_info_list}
 
                 for detail_id in detail_ids:
                     item_data = {"site": "PDDKJ", "detailId": str(detail_id)}
@@ -278,20 +276,55 @@ async def run_batch_edit_via_api(
                         )
                         break
                     elif edit_result.get("result") == "partial":
-                        # 部分成功，记录但不重试
-                        result["success"] = False
-                        result["edited_count"] = edit_result.get("successNum", 0)
-                        result["error"] = f"部分保存失败: {edit_result.get('errorMap', {})}"
-                        logger.warning(result["error"])
+                        # 部分成功，对失败的产品进行单独重试
+                        error_map = edit_result.get("errorMap", {})
+                        initial_success = edit_result.get("successNum", 0)
+                        initial_fail = edit_result.get("failNum", len(error_map))
+
+                        logger.warning(
+                            f"部分产品保存失败: 成功 {initial_success}, "
+                            f"失败 {initial_fail}, 失败ID: {list(error_map.keys())}"
+                        )
+
+                        # 对失败的产品进行单独重试
+                        if error_map:
+                            retry_result = await _retry_failed_products(
+                                client=client,
+                                items_to_save=items_to_save,
+                                error_map=error_map,
+                                max_retries=3,
+                            )
+
+                            # 计算最终结果
+                            final_success = initial_success + retry_result["retry_success_count"]
+                            final_fail = retry_result["retry_fail_count"]
+                            final_errors = retry_result["final_errors"]
+
+                            result["edited_count"] = final_success
+                            if final_fail == 0:
+                                result["success"] = True
+                                logger.success(
+                                    f"API 批量编辑完成（含重试）: "
+                                    f"成功 {final_success}/{result['total_count']}"
+                                )
+                            else:
+                                result["success"] = False
+                                result["error"] = f"部分产品最终失败: {final_errors}"
+                                logger.warning(
+                                    f"API 批量编辑部分失败: 成功 {final_success}, 失败 {final_fail}"
+                                )
+                        else:
+                            result["success"] = False
+                            result["edited_count"] = initial_success
+                            result["error"] = "部分保存失败但无 errorMap"
                         break
                     else:
                         # 完全失败，可重试
                         error_msg = f"保存编辑失败: {edit_result.get('errorMap', {})}"
                         if save_attempt < max_save_retries:
-                            logger.warning(
-                                f"{error_msg} (尝试 {save_attempt}/{max_save_retries})"
-                            )
+                            logger.warning(f"{error_msg} (尝试 {save_attempt}/{max_save_retries})")
                             import asyncio
+
                             await asyncio.sleep(2)  # 等待 2 秒后重试
                         else:
                             result["error"] = error_msg
@@ -304,6 +337,7 @@ async def run_batch_edit_via_api(
                             f"保存编辑异常 (尝试 {save_attempt}/{max_save_retries}): {save_exc}"
                         )
                         import asyncio
+
                         await asyncio.sleep(2)
                     else:
                         result["error"] = f"保存编辑最终失败: {save_exc}"
@@ -743,11 +777,13 @@ async def _upload_files_for_products(
                     if attempt < max_retries:
                         logger.info("等待 2 秒后重试...")
                         import asyncio
+
                         await asyncio.sleep(2)
             except Exception as e:
                 logger.error(f"外包装图片上传异常 (尝试 {attempt}/{max_retries}): {e}")
                 if attempt < max_retries:
                     import asyncio
+
                     await asyncio.sleep(2)
 
         if not uploaded["outer_package_url"]:
@@ -891,7 +927,11 @@ def _update_sku_prices(sku_map: dict[str, Any]) -> dict[str, Any]:
             new_sku["suggestedPrice"] = str(int(suggested_price))
             new_sku["suggestedPriceCurrencyType"] = "CNY"
             # 确保货源价格被设置，API 需要同时设置 oriPrice 和 originPrice
-            ori_price_str = str(int(current_price)) if current_price == int(current_price) else str(current_price)
+            ori_price_str = (
+                str(int(current_price))
+                if current_price == int(current_price)
+                else str(current_price)
+            )
             new_sku["oriPrice"] = ori_price_str
             new_sku["originPrice"] = str(current_price)
             # 同时设置 price 字段（与建议售价相同）
@@ -969,3 +1009,95 @@ def _map_category_attrs(attrs: dict[str, Any]) -> list[dict[str, Any]]:
             )
 
     return attr_list
+
+
+async def _retry_failed_products(
+    client: MiaoshouApiClient,
+    items_to_save: list[dict[str, Any]],
+    error_map: dict[str, str],
+    max_retries: int = 3,
+) -> dict[str, Any]:
+    """对失败的产品进行单独重试.
+
+    从 items_to_save 中提取 errorMap 中指示的失败产品，逐个重试。
+
+    Args:
+        client: API 客户端
+        items_to_save: 所有待保存的产品数据列表
+        error_map: API 返回的错误映射 {detailId: errorMessage}
+        max_retries: 每个产品的最大重试次数
+
+    Returns:
+        重试结果:
+        {
+            "retry_success_count": int,
+            "retry_fail_count": int,
+            "final_errors": dict,  # 最终仍失败的产品
+        }
+    """
+    import asyncio
+
+    if not error_map:
+        return {"retry_success_count": 0, "retry_fail_count": 0, "final_errors": {}}
+
+    # 构建 detailId -> item_data 的映射
+    item_map = {str(item.get("detailId")): item for item in items_to_save}
+
+    failed_ids = list(error_map.keys())
+    logger.info(f"开始重试 {len(failed_ids)} 个失败的产品...")
+
+    retry_success = 0
+    final_errors: dict[str, str] = {}
+
+    for detail_id in failed_ids:
+        item_data = item_map.get(str(detail_id))
+        if not item_data:
+            logger.warning(f"未找到产品 {detail_id} 的编辑数据，跳过重试")
+            final_errors[detail_id] = "未找到编辑数据"
+            continue
+
+        original_error = error_map.get(detail_id, "未知错误")
+        logger.debug(f"重试产品 {detail_id}，原因: {original_error}")
+
+        # 对单个产品进行最多 max_retries 次重试
+        success = False
+        for attempt in range(1, max_retries + 1):
+            try:
+                retry_result = await client.save_collect_item_info(items=[item_data])
+
+                if retry_result.get("result") == "success":
+                    success = True
+                    retry_success += 1
+                    logger.success(f"产品 {detail_id} 重试成功 (第 {attempt} 次)")
+                    break
+                else:
+                    new_error = retry_result.get("errorMap", {}).get(str(detail_id), "保存失败")
+                    if attempt < max_retries:
+                        logger.debug(
+                            f"产品 {detail_id} 重试失败 ({attempt}/{max_retries}): {new_error}"
+                        )
+                        await asyncio.sleep(1)  # 重试间隔 1 秒
+                    else:
+                        final_errors[detail_id] = new_error
+
+            except Exception as e:
+                if attempt < max_retries:
+                    logger.debug(f"产品 {detail_id} 重试异常 ({attempt}/{max_retries}): {e}")
+                    await asyncio.sleep(1)
+                else:
+                    final_errors[detail_id] = str(e)
+
+        if not success and detail_id not in final_errors:
+            final_errors[detail_id] = original_error
+
+    retry_fail = len(final_errors)
+    logger.info(f"失败产品重试完成: 成功 {retry_success}, 仍失败 {retry_fail}")
+
+    if final_errors:
+        logger.warning(f"最终失败的产品: {list(final_errors.keys())}")
+
+    return {
+        "retry_success_count": retry_success,
+        "retry_fail_count": retry_fail,
+        "final_errors": final_errors,
+    }

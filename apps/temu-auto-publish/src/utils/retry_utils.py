@@ -63,9 +63,7 @@ async def retry_with_backoff[T](
         except Exception as e:
             last_exception = e
             if attempt < max_retries:
-                logger.warning(
-                    f"{operation_name}失败 (尝试 {attempt}/{max_retries}): {e}"
-                )
+                logger.warning(f"{operation_name}失败 (尝试 {attempt}/{max_retries}): {e}")
                 if on_retry:
                     on_retry(attempt, e, str(e))
                 logger.info(f"等待 {delay:.1f} 秒后重试...")
@@ -178,11 +176,13 @@ def ensure_sku_fields(sku_data: dict[str, Any], *, weight_g: int = 9527) -> dict
         logger.debug("设置默认件单位: 件")
 
     # 确保尺寸设置（50-99cm，长>宽>高）
-    if not all([
-        sku_data.get("packageLength"),
-        sku_data.get("packageWidth"),
-        sku_data.get("packageHeight"),
-    ]):
+    if not all(
+        [
+            sku_data.get("packageLength"),
+            sku_data.get("packageWidth"),
+            sku_data.get("packageHeight"),
+        ]
+    ):
         dimensions = [random.randint(50, 99) for _ in range(3)]
         dimensions.sort(reverse=True)
         sku_data["packageLength"] = str(dimensions[0])
@@ -242,11 +242,13 @@ def ensure_product_detail_fields(
         detail["weight"] = str(weight_g)
 
     # 确保顶层尺寸
-    if not all([
-        detail.get("packageLength"),
-        detail.get("packageWidth"),
-        detail.get("packageHeight"),
-    ]):
+    if not all(
+        [
+            detail.get("packageLength"),
+            detail.get("packageWidth"),
+            detail.get("packageHeight"),
+        ]
+    ):
         dimensions = [random.randint(50, 99) for _ in range(3)]
         dimensions.sort(reverse=True)
         detail["packageLength"] = str(dimensions[0])
