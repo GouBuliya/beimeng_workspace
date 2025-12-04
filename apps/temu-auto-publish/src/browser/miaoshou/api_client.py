@@ -675,15 +675,19 @@ class MiaoshouApiClient:
         self,
         *,
         items: list[dict[str, Any]],
+        batch_size: int = 20,
     ) -> dict[str, Any]:
         """保存产品编辑信息（批量编辑核心 API）.
+
+        为了确保所有产品都能成功更新，会自动分批处理。
 
         Args:
             items: 产品信息列表，每个项目至少包含 site 和 detailId，
                    可包含其他要更新的字段（如 title, cid, attributes 等）
+            batch_size: 每批处理的产品数量（默认 20）
 
         Returns:
-            API 响应，包含 successNum 和 failNum
+            API 响应，包含 successNum 和 failNum（汇总所有批次）
 
         Examples:
             >>> client = await MiaoshouApiClient.from_cookie_file()
@@ -697,37 +701,75 @@ class MiaoshouApiClient:
             ... ])
             >>> print(f"成功: {result['successNum']}, 失败: {result['failNum']}")
         """
+        import asyncio
+
         client = await self._get_client()
 
-        # 构建表单数据
-        # 格式: collectItemInfoList=[{...JSON...}]
-        form_data = {"collectItemInfoList": json.dumps(items, ensure_ascii=False)}
+        # 分批处理
+        total_success = 0
+        total_fail = 0
+        all_errors: dict[str, Any] = {}
 
-        try:
-            response = await client.post(
-                f"{self.BATCH_EDIT_API_PREFIX}/saveCollectItemInfoList",
-                data=form_data,
-            )
-            response.raise_for_status()
-            result = response.json()
+        total_items = len(items)
+        total_batches = (total_items + batch_size - 1) // batch_size
 
-            if result.get("result") == "success":
-                success_num = result.get("successNum", 0)
-                fail_num = result.get("failNum", 0)
-                logger.info(f"保存产品编辑信息: 成功 {success_num}, 失败 {fail_num}")
-                if result.get("errorMap"):
-                    logger.warning(f"错误详情: {result['errorMap']}")
-            else:
-                logger.warning(f"保存失败: {result.get('message', '未知错误')}")
+        logger.info(f"分批保存产品编辑: 共 {total_items} 个产品，分 {total_batches} 批处理")
 
-            return result
+        for batch_idx in range(0, total_items, batch_size):
+            batch_items = items[batch_idx : batch_idx + batch_size]
+            batch_num = batch_idx // batch_size + 1
 
-        except httpx.HTTPStatusError as e:
-            logger.error(f"HTTP 错误: {e.response.status_code}")
-            raise
-        except Exception as e:
-            logger.error(f"保存产品编辑信息失败: {e}")
-            raise
+            # 构建表单数据
+            form_data = {"collectItemInfoList": json.dumps(batch_items, ensure_ascii=False)}
+
+            try:
+                response = await client.post(
+                    f"{self.BATCH_EDIT_API_PREFIX}/saveCollectItemInfoList",
+                    data=form_data,
+                )
+                response.raise_for_status()
+                result = response.json()
+
+                if result.get("result") == "success":
+                    success_num = result.get("successNum", 0)
+                    fail_num = result.get("failNum", 0)
+                    total_success += success_num
+                    total_fail += fail_num
+                    logger.debug(
+                        f"批次 {batch_num}/{total_batches}: 成功 {success_num}, 失败 {fail_num}"
+                    )
+                    if result.get("errorMap"):
+                        all_errors.update(result["errorMap"])
+                else:
+                    # 整批失败，记录所有产品为失败
+                    total_fail += len(batch_items)
+                    logger.warning(
+                        f"批次 {batch_num}/{total_batches} 失败: {result.get('message', '未知错误')}"
+                    )
+
+                # 批次间隔，避免请求过快
+                if batch_idx + batch_size < total_items:
+                    await asyncio.sleep(0.5)
+
+            except httpx.HTTPStatusError as e:
+                logger.error(f"批次 {batch_num} HTTP 错误: {e.response.status_code}")
+                total_fail += len(batch_items)
+            except Exception as e:
+                logger.error(f"批次 {batch_num} 保存失败: {e}")
+                total_fail += len(batch_items)
+
+        # 返回汇总结果
+        is_success = total_fail == 0
+        logger.info(f"保存产品编辑信息完成: 成功 {total_success}, 失败 {total_fail}")
+        if all_errors:
+            logger.warning(f"错误详情: {all_errors}")
+
+        return {
+            "result": "success" if is_success else "partial",
+            "successNum": total_success,
+            "failNum": total_fail,
+            "errorMap": all_errors if all_errors else None,
+        }
 
     async def batch_edit_products(
         self,
@@ -860,24 +902,40 @@ class MiaoshouApiClient:
         if mime_type is None:
             mime_type = "image/jpeg"
 
-        client = await self._get_client()
+        # 文件上传需要单独的 client，不能使用默认的 Content-Type header
+        # 否则会覆盖 multipart/form-data
+        upload_headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/120.0.0.0 Safari/537.36"
+            ),
+            "Accept": "application/json, text/plain, */*",
+            "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+            "Origin": self.BASE_URL,
+            "Referer": f"{self.BASE_URL}/common_collect_box/items",
+        }
 
         try:
-            with open(file_path, "rb") as f:
-                files = {"file": (file_path_obj.name, f, mime_type)}
-                # 文件上传需要不同的 Content-Type，移除默认的
-                response = await client.post(
-                    "/api/picture/picture/uploadPictureFile",
-                    files=files,
-                    headers={"Content-Type": None},  # 让 httpx 自动设置 multipart
-                )
-            response.raise_for_status()
-            result = response.json()
+            async with httpx.AsyncClient(
+                base_url=self.BASE_URL,
+                cookies=self._http_cookies,
+                headers=upload_headers,
+                timeout=60.0,
+            ) as upload_client:
+                with open(file_path, "rb") as f:
+                    files = {"file": (file_path_obj.name, f, mime_type)}
+                    response = await upload_client.post(
+                        "/api/picture/picture/uploadPictureFile",
+                        files=files,
+                    )
+                response.raise_for_status()
+                result = response.json()
 
             if result.get("result") == "success":
                 logger.debug(f"图片上传成功: {result.get('picturePath')}")
             else:
-                logger.warning(f"图片上传失败: {result.get('message', '未知错误')}")
+                logger.warning(f"图片上传失败: {result}")
 
             return result
 
@@ -923,25 +981,41 @@ class MiaoshouApiClient:
         if mime_type is None:
             mime_type = "application/pdf"
 
-        client = await self._get_client()
+        # 文件上传需要单独的 client，不能使用默认的 Content-Type header
+        upload_headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/120.0.0.0 Safari/537.36"
+            ),
+            "Accept": "application/json, text/plain, */*",
+            "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+            "Origin": self.BASE_URL,
+            "Referer": f"{self.BASE_URL}/common_collect_box/items",
+        }
 
         try:
-            with open(file_path, "rb") as f:
-                files = {"file": (file_path_obj.name, f, mime_type)}
-                data = {"platform": platform}
-                response = await client.post(
-                    "/api/appAttachFile/app_attach_file/upload_attach_file",
-                    files=files,
-                    data=data,
-                    headers={"Content-Type": None},
-                )
-            response.raise_for_status()
-            result = response.json()
+            async with httpx.AsyncClient(
+                base_url=self.BASE_URL,
+                cookies=self._http_cookies,
+                headers=upload_headers,
+                timeout=60.0,
+            ) as upload_client:
+                with open(file_path, "rb") as f:
+                    files = {"file": (file_path_obj.name, f, mime_type)}
+                    data = {"platform": platform}
+                    response = await upload_client.post(
+                        "/api/appAttachFile/app_attach_file/upload_attach_file",
+                        files=files,
+                        data=data,
+                    )
+                response.raise_for_status()
+                result = response.json()
 
             if result.get("result") == "success":
                 logger.debug(f"附件上传成功: {result.get('fileUrl')}")
             else:
-                logger.warning(f"附件上传失败: {result.get('message', '未知错误')}")
+                logger.warning(f"附件上传失败: {result}")
 
             return result
 
