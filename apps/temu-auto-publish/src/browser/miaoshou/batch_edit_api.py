@@ -246,16 +246,31 @@ async def run_batch_edit_via_api(
                 if attr_info_result.get("result") == "success":
                     attr_filler = AICategoryAttrFiller(client)
 
-                    # 构建产品上下文列表
+                    # 建立 title -> collectBoxDetailId 映射（用于后续转换）
+                    title_to_collect_box_id: dict[str, str] = {}
+                    for search_item in items:
+                        title = search_item.get("title", "")
+                        collect_box_id = str(search_item.get("collectBoxDetailId", ""))
+                        if title and collect_box_id:
+                            title_to_collect_box_id[title] = collect_box_id
+
+                    # 构建产品上下文列表，同时建立 detailId -> collectBoxDetailId 映射
+                    detail_id_to_collect_box_id: dict[str, str] = {}
                     contexts = []
                     for item in attr_info_result.get("collectItemInfoList", []):
                         detail_id = str(item.get("detailId"))
+                        item_title = item.get("title", "")
                         cid = item.get("cid", "")
+
+                        # 通过 title 找到对应的 collectBoxDetailId
+                        collect_box_id = title_to_collect_box_id.get(item_title)
+                        if collect_box_id:
+                            detail_id_to_collect_box_id[detail_id] = collect_box_id
 
                         # 从搜索结果中查找 breadcrumb
                         breadcrumb = ""
                         for search_item in items:
-                            if str(search_item.get("collectBoxDetailId")) == detail_id:
+                            if search_item.get("title") == item_title:
                                 cat_map = search_item.get("siteAndCatMap", {}).get("PDDKJ", {})
                                 breadcrumb = cat_map.get("breadcrumb", "")
                                 break
@@ -263,26 +278,45 @@ async def run_batch_edit_via_api(
                         contexts.append(
                             ProductAttrContext(
                                 detail_id=detail_id,
-                                title=item.get("title", ""),
+                                title=item_title,
                                 cid=cid,
                                 breadcrumb=breadcrumb,
                                 existing_attrs=item.get("attributes", []),
                             )
                         )
 
+                    logger.debug(f"ID 映射建立完成: {len(detail_id_to_collect_box_id)} 个产品")
+
                     # 批量补全属性
                     if contexts:
                         ai_attrs_raw = await attr_filler.fill_batch_attrs(contexts)
                         logger.info(f"AI 属性补全完成: {len(ai_attrs_raw)} 个产品")
 
-                        # 转换为 API 格式
-                        cid_map = {ctx.detail_id: ctx.cid for ctx in contexts}
+                        # 转换为 API 格式，使用 collectBoxDetailId 作为键
+                        cid_map = {str(ctx.detail_id): ctx.cid for ctx in contexts}
                         for detail_id, attrs in ai_attrs_raw.items():
-                            cid = cid_map.get(detail_id)
+                            str_id = str(detail_id)
+                            cid = cid_map.get(str_id)
                             if cid:
                                 api_attrs = attr_filler.convert_to_api_format(cid, attrs)
-                                ai_attrs_map[detail_id] = api_attrs
+                                # 转换为 collectBoxDetailId 作为键
+                                collect_box_id = detail_id_to_collect_box_id.get(str_id)
+                                if collect_box_id:
+                                    ai_attrs_map[collect_box_id] = api_attrs
+                                else:
+                                    logger.warning(f"无法找到 detailId={str_id} 对应的 collectBoxDetailId")
                         logger.info(f"属性格式转换完成: {len(ai_attrs_map)} 个产品")
+                        # 调试日志：检查 ID 匹配情况
+                        if ai_attrs_map and detail_ids:
+                            sample_key = next(iter(ai_attrs_map.keys()))
+                            logger.debug(
+                                f"ID 匹配检查: ai_attrs_map 键={sample_key} "
+                                f"(type={type(sample_key).__name__}), "
+                                f"detail_ids[0]={detail_ids[0]} "
+                                f"(type={type(detail_ids[0]).__name__})"
+                            )
+                            if ai_attrs_map.get(sample_key):
+                                logger.debug(f"属性值样例: {ai_attrs_map[sample_key][:2]}")
                 else:
                     logger.warning("获取产品属性信息失败，跳过 AI 属性补全")
 
@@ -296,17 +330,30 @@ async def run_batch_edit_via_api(
             # 构建每个产品的编辑数据（包含价格 ×10 的 skuMap 和 AI 属性）
             items_to_save = []
             if item_info_result.get("result") == "success":
-                # 构建 detailId -> 产品信息 的映射
+                # 通过 title 建立 collectBoxDetailId -> SKU 信息映射
                 item_info_list = item_info_result.get("collectItemInfoList", [])
-                item_info_map = {str(item.get("detailId")): item for item in item_info_list}
+                item_info_map: dict[str, dict] = {}
+                for item in item_info_list:
+                    item_title = item.get("title", "")
+                    # 从搜索结果中通过 title 找到 collectBoxDetailId
+                    for search_item in items:
+                        if search_item.get("title") == item_title:
+                            collect_box_id = str(search_item.get("collectBoxDetailId", ""))
+                            if collect_box_id:
+                                item_info_map[collect_box_id] = item
+                            break
 
                 for detail_id in detail_ids:
                     item_data = {"site": "PDDKJ", "detailId": str(detail_id)}
                     item_data.update(base_edit_data)
 
                     # 合并 AI 推断的属性（优先于静态配置）
-                    if detail_id in ai_attrs_map:
-                        item_data["attributes"] = ai_attrs_map[detail_id]
+                    str_detail_id = str(detail_id)
+                    if str_detail_id in ai_attrs_map:
+                        item_data["attributes"] = ai_attrs_map[str_detail_id]
+                        logger.debug(
+                            f"产品 {detail_id}: 设置 {len(ai_attrs_map[str_detail_id])} 个 AI 属性"
+                        )
 
                     # 获取该产品的 SKU 信息并计算价格
                     product_info = item_info_map.get(str(detail_id), {})
@@ -324,8 +371,12 @@ async def run_batch_edit_via_api(
                     item_data = {"site": "PDDKJ", "detailId": str(detail_id)}
                     item_data.update(base_edit_data)
                     # 合并 AI 推断的属性
-                    if detail_id in ai_attrs_map:
-                        item_data["attributes"] = ai_attrs_map[detail_id]
+                    str_detail_id = str(detail_id)
+                    if str_detail_id in ai_attrs_map:
+                        item_data["attributes"] = ai_attrs_map[str_detail_id]
+                        logger.debug(
+                            f"产品 {detail_id}: 设置 {len(ai_attrs_map[str_detail_id])} 个 AI 属性"
+                        )
                     items_to_save.append(item_data)
 
             # Step 9: 批量保存编辑
