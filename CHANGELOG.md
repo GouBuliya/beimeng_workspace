@@ -1,3 +1,10 @@
+## [1.5.1](https://github.com/GouBuliya/beimeng_workspace/compare/v1.5.0...v1.5.1) (2025-12-04)
+
+
+### Bug Fixes
+
+* 修复二次编辑阶段遗漏问题 ([7fd6ede](https://github.com/GouBuliya/beimeng_workspace/commit/7fd6ede82dde10eea42b95fa6008bc703e27476b))
+
 # [1.5.0](https://github.com/GouBuliya/beimeng_workspace/compare/v1.4.0...v1.5.0) (2025-12-04)
 
 
