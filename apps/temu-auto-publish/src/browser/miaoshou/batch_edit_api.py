@@ -20,6 +20,7 @@ from typing import Any
 from loguru import logger
 from playwright.async_api import Page
 
+from ...utils.retry_utils import ensure_sku_fields, validate_sku_fields
 from .api_client import MiaoshouApiClient
 
 
@@ -257,20 +258,56 @@ async def run_batch_edit_via_api(
                     item_data.update(base_edit_data)
                     items_to_save.append(item_data)
 
-            # Step 9: 批量保存编辑
+            # Step 9: 批量保存编辑（带重试机制）
             logger.info(f"API 批量编辑: 保存 {len(items_to_save)} 个产品...")
-            edit_result = await client.save_collect_item_info(items=items_to_save)
 
-            if edit_result.get("result") == "success":
-                result["success"] = True
-                result["edited_count"] = edit_result.get("successNum", len(detail_ids))
-                logger.success(
-                    f"API 批量编辑完成: 成功 {result['edited_count']}/{result['total_count']}"
-                )
-            else:
-                result["error"] = f"保存编辑失败: {edit_result.get('errorMap', {})}"
-                result["edited_count"] = edit_result.get("successNum", 0)
-                logger.warning(result["error"])
+            max_save_retries = 3
+            save_attempt = 0
+            edit_result: dict[str, Any] = {}
+
+            while save_attempt < max_save_retries:
+                save_attempt += 1
+                try:
+                    edit_result = await client.save_collect_item_info(items=items_to_save)
+
+                    if edit_result.get("result") == "success":
+                        result["success"] = True
+                        result["edited_count"] = edit_result.get("successNum", len(detail_ids))
+                        logger.success(
+                            f"API 批量编辑完成: 成功 {result['edited_count']}/{result['total_count']}"
+                        )
+                        break
+                    elif edit_result.get("result") == "partial":
+                        # 部分成功，记录但不重试
+                        result["success"] = False
+                        result["edited_count"] = edit_result.get("successNum", 0)
+                        result["error"] = f"部分保存失败: {edit_result.get('errorMap', {})}"
+                        logger.warning(result["error"])
+                        break
+                    else:
+                        # 完全失败，可重试
+                        error_msg = f"保存编辑失败: {edit_result.get('errorMap', {})}"
+                        if save_attempt < max_save_retries:
+                            logger.warning(
+                                f"{error_msg} (尝试 {save_attempt}/{max_save_retries})"
+                            )
+                            import asyncio
+                            await asyncio.sleep(2)  # 等待 2 秒后重试
+                        else:
+                            result["error"] = error_msg
+                            result["edited_count"] = edit_result.get("successNum", 0)
+                            logger.error(f"{error_msg}，已重试 {max_save_retries} 次")
+
+                except Exception as save_exc:
+                    if save_attempt < max_save_retries:
+                        logger.warning(
+                            f"保存编辑异常 (尝试 {save_attempt}/{max_save_retries}): {save_exc}"
+                        )
+                        import asyncio
+                        await asyncio.sleep(2)
+                    else:
+                        result["error"] = f"保存编辑最终失败: {save_exc}"
+                        logger.error(result["error"])
 
     except Exception as e:
         result["error"] = f"API 批量编辑异常: {e}"
@@ -810,6 +847,8 @@ def _build_edit_payload(
 def _update_sku_prices(sku_map: dict[str, Any]) -> dict[str, Any]:
     """更新 SKU 价格、重量、尺寸等信息.
 
+    带有鲁棒性加强：确保重量和 SKU 分类等关键字段正确设置。
+
     Args:
         sku_map: 原始 SKU 映射
 
@@ -818,12 +857,14 @@ def _update_sku_prices(sku_map: dict[str, Any]) -> dict[str, Any]:
     """
     import random
 
-    updated_map = {}
+    updated_map: dict[str, Any] = {}
 
     # 生成随机尺寸（与首次编辑保持一致：50-99cm，长>宽>高）
     dimensions = [random.randint(50, 99) for _ in range(3)]
     dimensions.sort(reverse=True)
     length_cm, width_cm, height_cm = dimensions
+
+    validation_errors: list[str] = []
 
     for sku_key, sku_data in sku_map.items():
         if not isinstance(sku_data, dict):
@@ -831,10 +872,10 @@ def _update_sku_prices(sku_map: dict[str, Any]) -> dict[str, Any]:
             continue
 
         # 复制 SKU 数据
-        new_sku = dict(sku_data)
+        new_sku: dict[str, Any] = dict(sku_data)
 
         # 获取供货价（尝试多个字段名，优先使用 originPrice）
-        current_price = None
+        current_price: float | None = None
         for field_name in ["originPrice", "supplyPrice", "supplierPrice", "costPrice", "price"]:
             field_value = sku_data.get(field_name)
             if field_value:
@@ -853,6 +894,8 @@ def _update_sku_prices(sku_map: dict[str, Any]) -> dict[str, Any]:
             ori_price_str = str(int(current_price)) if current_price == int(current_price) else str(current_price)
             new_sku["oriPrice"] = ori_price_str
             new_sku["originPrice"] = str(current_price)
+            # 同时设置 price 字段（与建议售价相同）
+            new_sku["price"] = new_sku["suggestedPrice"]
             logger.debug(f"SKU 价格更新: oriPrice={ori_price_str}, originPrice={current_price}")
         else:
             # 如果没有找到供货价，设置一个默认值
@@ -861,6 +904,7 @@ def _update_sku_prices(sku_map: dict[str, Any]) -> dict[str, Any]:
             new_sku["originPrice"] = str(default_price)
             new_sku["suggestedPrice"] = str(default_price * 10)
             new_sku["suggestedPriceCurrencyType"] = "CNY"
+            new_sku["price"] = new_sku["suggestedPrice"]
             logger.warning(f"无法获取供货价，使用默认值 {default_price}")
 
         # SKU 分类设置为"单品 1 件"
@@ -882,7 +926,18 @@ def _update_sku_prices(sku_map: dict[str, Any]) -> dict[str, Any]:
         # 平台 SKU（自定义编码）设置为空格
         new_sku["itemNum"] = " "
 
+        # 鲁棒性加强：使用 ensure_sku_fields 确保所有字段都正确设置
+        new_sku = ensure_sku_fields(new_sku, weight_g=9527)
+
+        # 验证字段
+        valid, errors = validate_sku_fields(new_sku)
+        if not valid:
+            validation_errors.extend([f"SKU[{sku_key[:15]}...]: {e}" for e in errors])
+
         updated_map[sku_key] = new_sku
+
+    if validation_errors:
+        logger.warning(f"SKU 字段验证发现问题: {validation_errors[:5]}...")  # 只显示前 5 个
 
     if updated_map:
         logger.info(
