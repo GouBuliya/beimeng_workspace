@@ -147,10 +147,10 @@ FORM_FIELDS: tuple[FormField, ...] = (
     FormField(
         name="publish_repeat_count",
         label="单批次发布重复次数",
-        help_text="每批20条商品重复发布的次数(1-10次,默认5次,即发布 20xN 条商品).",
+        help_text="每批20条商品重复发布的次数(1-10次,默认1次,即发布 20xN 条商品).",
         kind="path",
-        placeholder="默认 5,最大 10",
-        default="5",
+        placeholder="默认 1,最大 10",
+        default="1",
     ),
     FormField(
         name="start_round",
