@@ -1063,6 +1063,67 @@ class MiaoshouApiClient:
             logger.error(f"获取商品选项失败: {e}")
             raise
 
+    async def get_category_attribute_rules(self, cid: str) -> dict[str, Any]:
+        """获取类目属性规则.
+
+        调用 getCategoryAttributeRules API 获取指定类目的所有属性规则，
+        包括必填/可选属性、输入类型、可选值等。
+
+        Args:
+            cid: 类目 ID（如 "6625", "22083"）
+
+        Returns:
+            API 响应，格式为:
+            {
+                "result": "success",
+                "attributeRules": [
+                    {
+                        "attrId": "123",
+                        "attrName": "材质",
+                        "isRequired": 1,  # 1=必填, 0=可选
+                        "attrValues": [
+                            {"valueId": "1", "valueName": "塑料"},
+                            {"valueId": "2", "valueName": "金属"},
+                        ],
+                        "inputType": "select",  # select/input/multi_select
+                        ...
+                    },
+                    ...
+                ]
+            }
+
+        Examples:
+            >>> client = await MiaoshouApiClient.from_cookie_file()
+            >>> rules = await client.get_category_attribute_rules("6625")
+            >>> required = [r for r in rules.get("attributeRules", [])
+            ...             if r.get("isRequired") == 1]
+            >>> print(f"必填属性: {len(required)} 个")
+        """
+        client = await self._get_client()
+
+        try:
+            response = await client.get(
+                f"{self.BATCH_EDIT_API_PREFIX}/getCategoryAttributeRules",
+                params={"cid": cid},
+            )
+            response.raise_for_status()
+            result = response.json()
+
+            if result.get("result") == "success":
+                attrs = result.get("attributeRules", [])
+                logger.debug(f"获取类目 {cid} 属性规则成功: {len(attrs)} 个属性")
+            else:
+                logger.warning(f"获取类目属性规则失败: {result.get('message', '未知错误')}")
+
+            return result
+
+        except httpx.HTTPStatusError as e:
+            logger.error(f"获取类目属性规则 HTTP 错误: {e.response.status_code}")
+            return {"result": "error", "message": f"HTTP {e.response.status_code}"}
+        except Exception as e:
+            logger.error(f"获取类目属性规则失败: {e}")
+            return {"result": "error", "message": str(e)}
+
     async def publish_to_shop(
         self,
         *,
@@ -1392,7 +1453,9 @@ class MiaoshouApiClient:
             if result.get("result") == "success":
                 account_id = result.get("accountId")
                 sub_account_name = result.get("subAccountName", "")
-                logger.debug(f"API 登录验证成功: accountId={account_id}, subAccount={sub_account_name}")
+                logger.debug(
+                    f"API 登录验证成功: accountId={account_id}, subAccount={sub_account_name}"
+                )
                 return True
             else:
                 logger.debug(f"API 登录验证失败: {result.get('message', '未知错误')}")

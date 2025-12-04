@@ -220,6 +220,58 @@ async def run_batch_edit_via_api(
                 shop_ids=shop_ids,
             )
 
+            # Step 7.5: AI 属性补全（如果启用）
+            ai_attrs_map: dict[str, list[dict[str, Any]]] = {}
+            use_ai_attrs = payload.get("use_ai_attrs", True)  # 默认启用
+
+            if use_ai_attrs:
+                from ...data_processor.ai_category_attr_filler import (
+                    AICategoryAttrFiller,
+                    ProductAttrContext,
+                )
+
+                logger.info("API 批量编辑: 开始 AI 属性补全...")
+
+                # 获取产品的类目、标题和现有属性信息
+                attr_info_result = await client.get_collect_item_info(
+                    detail_ids=detail_ids,
+                    fields=["title", "cid", "attributes"],
+                )
+
+                if attr_info_result.get("result") == "success":
+                    attr_filler = AICategoryAttrFiller(client)
+
+                    # 构建产品上下文列表
+                    contexts = []
+                    for item in attr_info_result.get("collectItemInfoList", []):
+                        detail_id = str(item.get("detailId"))
+                        cid = item.get("cid", "")
+
+                        # 从搜索结果中查找 breadcrumb
+                        breadcrumb = ""
+                        for search_item in items:
+                            if str(search_item.get("collectBoxDetailId")) == detail_id:
+                                cat_map = search_item.get("siteAndCatMap", {}).get("PDDKJ", {})
+                                breadcrumb = cat_map.get("breadcrumb", "")
+                                break
+
+                        contexts.append(
+                            ProductAttrContext(
+                                detail_id=detail_id,
+                                title=item.get("title", ""),
+                                cid=cid,
+                                breadcrumb=breadcrumb,
+                                existing_attrs=item.get("attributes", []),
+                            )
+                        )
+
+                    # 批量补全属性
+                    if contexts:
+                        ai_attrs_map = await attr_filler.fill_batch_attrs(contexts)
+                        logger.info(f"AI 属性补全完成: {len(ai_attrs_map)} 个产品")
+                else:
+                    logger.warning("获取产品属性信息失败，跳过 AI 属性补全")
+
             # Step 8: 获取每个产品的 SKU 信息并计算价格
             logger.info("API 批量编辑: 获取产品 SKU 信息...")
             item_info_result = await client.get_collect_item_info(
@@ -227,18 +279,20 @@ async def run_batch_edit_via_api(
                 fields=["skuMap"],
             )
 
-            # 构建每个产品的编辑数据（包含价格 ×10 的 skuMap）
+            # 构建每个产品的编辑数据（包含价格 ×10 的 skuMap 和 AI 属性）
             items_to_save = []
             if item_info_result.get("result") == "success":
                 # 构建 detailId -> 产品信息 的映射
                 item_info_list = item_info_result.get("collectItemInfoList", [])
-                item_info_map = {
-                    str(item.get("detailId")): item for item in item_info_list
-                }
+                item_info_map = {str(item.get("detailId")): item for item in item_info_list}
 
                 for detail_id in detail_ids:
                     item_data = {"site": "PDDKJ", "detailId": str(detail_id)}
                     item_data.update(base_edit_data)
+
+                    # 合并 AI 推断的属性（优先于静态配置）
+                    if detail_id in ai_attrs_map:
+                        item_data["attributes"] = ai_attrs_map[detail_id]
 
                     # 获取该产品的 SKU 信息并计算价格
                     product_info = item_info_map.get(str(detail_id), {})
@@ -255,6 +309,9 @@ async def run_batch_edit_via_api(
                 for detail_id in detail_ids:
                     item_data = {"site": "PDDKJ", "detailId": str(detail_id)}
                     item_data.update(base_edit_data)
+                    # 合并 AI 推断的属性
+                    if detail_id in ai_attrs_map:
+                        item_data["attributes"] = ai_attrs_map[detail_id]
                     items_to_save.append(item_data)
 
             # Step 9: 批量保存编辑
@@ -706,11 +763,13 @@ async def _upload_files_for_products(
                     if attempt < max_retries:
                         logger.info("等待 2 秒后重试...")
                         import asyncio
+
                         await asyncio.sleep(2)
             except Exception as e:
                 logger.error(f"外包装图片上传异常 (尝试 {attempt}/{max_retries}): {e}")
                 if attempt < max_retries:
                     import asyncio
+
                     await asyncio.sleep(2)
 
         if not uploaded["outer_package_url"]:
@@ -850,7 +909,11 @@ def _update_sku_prices(sku_map: dict[str, Any]) -> dict[str, Any]:
             new_sku["suggestedPrice"] = str(int(suggested_price))
             new_sku["suggestedPriceCurrencyType"] = "CNY"
             # 确保货源价格被设置，API 需要同时设置 oriPrice 和 originPrice
-            ori_price_str = str(int(current_price)) if current_price == int(current_price) else str(current_price)
+            ori_price_str = (
+                str(int(current_price))
+                if current_price == int(current_price)
+                else str(current_price)
+            )
             new_sku["oriPrice"] = ori_price_str
             new_sku["originPrice"] = str(current_price)
             logger.debug(f"SKU 价格更新: oriPrice={ori_price_str}, originPrice={current_price}")
