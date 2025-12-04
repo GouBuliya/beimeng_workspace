@@ -2275,7 +2275,7 @@ class CompletePublishWorkflow:
         """阶段 4: 选择店铺,设置供货价,批量发布.
 
         发布会重复执行 publish_repeat_count 次，以生成更多链接。
-        例如: 80 个产品 × 5 次 = 400 个链接
+        例如: 80 个产品 × 1 次 = 80 个链接（默认）
         """
 
         if not edited_products:
