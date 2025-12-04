@@ -675,7 +675,7 @@ class MiaoshouApiClient:
         self,
         *,
         items: list[dict[str, Any]],
-        batch_size: int = 20,
+        batch_size: int = 1000,
     ) -> dict[str, Any]:
         """保存产品编辑信息（批量编辑核心 API）.
 
@@ -684,7 +684,7 @@ class MiaoshouApiClient:
         Args:
             items: 产品信息列表，每个项目至少包含 site 和 detailId，
                    可包含其他要更新的字段（如 title, cid, attributes 等）
-            batch_size: 每批处理的产品数量（默认 20）
+            batch_size: 每批处理的产品数量（默认 1000）
 
         Returns:
             API 响应，包含 successNum 和 failNum（汇总所有批次）
