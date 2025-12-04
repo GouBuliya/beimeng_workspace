@@ -2094,10 +2094,6 @@ class CompletePublishWorkflow:
                     last_error = api_result.get("error", "未知错误")
                     logger.warning(f"第 {round_num} 轮编辑失败: {last_error}")
 
-                # 轮次间等待，让系统稳定
-                if round_num < batch_edit_rounds:
-                    await asyncio.sleep(1)
-
             # 综合判断：只要有一轮成功就算成功
             success = total_edited > 0
             message = (
