@@ -1284,7 +1284,10 @@ class MiaoshouApiClient:
 
             if result.get("result") == "success":
                 detail = result.get("editCommonBoxDetail", {})
-                logger.debug(f"获取产品编辑信息成功: {detail.get('commonCollectBoxDetailId')}")
+                # 调试：打印所有顶层键名和包含 sku/price 的字段
+                all_keys = list(detail.keys())
+                sku_related = [k for k in all_keys if "sku" in k.lower() or "price" in k.lower()]
+                logger.debug(f"获取产品编辑信息成功: {detail.get('commonCollectBoxDetailId')}, SKU相关字段: {sku_related}")
             else:
                 logger.warning(f"获取产品编辑信息失败: {result.get('message', '未知错误')}")
 
@@ -1333,12 +1336,18 @@ class MiaoshouApiClient:
 
         client = await self._get_client()
 
-        # 调试：打印发送给 API 的完整 skuMap 数据（使用 JSON 格式便于分析）
+        # 调试：打印发送给 API 的完整 skuMap 和 colorMap 数据
         sku_map = detail.get("skuMap", {})
         color_map = detail.get("colorMap", {})
         logger.info(f"API 请求 - skuMap 数量: {len(sku_map)}, colorMap 数量: {len(color_map)}")
-        # 打印完整的 skuMap JSON（用于调试价格问题）
-        logger.info(f"API 请求 skuMap 完整数据: {json.dumps(sku_map, ensure_ascii=False)}")
+        # 打印完整的 skuMap JSON
+        logger.info(f"API 请求 skuMap: {json.dumps(sku_map, ensure_ascii=False)}")
+        # 打印完整的 colorMap JSON（检查是否有空名称）
+        logger.info(f"API 请求 colorMap: {json.dumps(color_map, ensure_ascii=False)}")
+        # 检查其他可能包含 SKU/价格信息的字段
+        for key in detail.keys():
+            if "sku" in key.lower() and key != "skuMap":
+                logger.warning(f"发现其他 SKU 字段 [{key}]: {detail[key]}")
 
         # 构建表单数据 - editCommonBoxDetail 需要 URL 编码的 JSON
         detail_json = json.dumps(detail, ensure_ascii=False)
