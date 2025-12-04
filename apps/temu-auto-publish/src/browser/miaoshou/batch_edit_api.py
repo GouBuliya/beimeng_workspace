@@ -879,6 +879,9 @@ def _update_sku_prices(sku_map: dict[str, Any]) -> dict[str, Any]:
         new_sku["packageWidth"] = str(width_cm)
         new_sku["packageHeight"] = str(height_cm)
 
+        # 平台 SKU（自定义编码）设置为空格
+        new_sku["itemNum"] = " "
+
         updated_map[sku_key] = new_sku
 
     if updated_map:
