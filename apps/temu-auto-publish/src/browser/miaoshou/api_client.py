@@ -1351,6 +1351,12 @@ class MiaoshouApiClient:
         top_ori_price = detail.get("oriPrice", "未设置")
         top_price = detail.get("price", "未设置")
         logger.warning(f"顶层价格字段: price={top_price}, oriPrice={top_ori_price}")
+        # 检查 colorMap 中是否有 oriPrice 相关字段
+        for color_id, color_data in color_map.items():
+            if isinstance(color_data, dict):
+                color_ori = color_data.get("oriPrice", "无")
+                color_price = color_data.get("price", "无")
+                logger.warning(f"colorMap[{color_id}]: price={color_price}, oriPrice={color_ori}, 所有键={list(color_data.keys())}")
 
         # 构建表单数据 - editCommonBoxDetail 需要 URL 编码的 JSON
         detail_json = json.dumps(detail, ensure_ascii=False)
