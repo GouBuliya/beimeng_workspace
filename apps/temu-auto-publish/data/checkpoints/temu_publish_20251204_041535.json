@@ -1,0 +1,41 @@
+{
+  "workflow_id": "temu_publish_20251204_041535",
+  "workflow_type": "complete_publish",
+  "current_stage": "stage1_first_edit",
+  "stages": {
+    "stage1_first_edit": {
+      "name": "stage1_first_edit",
+      "status": "completed",
+      "start_time": "2025-12-04T04:16:30.076521",
+      "end_time": "2025-12-04T04:16:30.076526",
+      "data": {
+        "products": [
+          {
+            "index": 0,
+            "product_name": "卫生间收纳柜",
+            "model_number": "A026",
+            "owner": "未指定",
+            "title": "三层晾衣架(单管) 型号 适用于100个国家, 可移动干燥站,紧凑型洗衣管理,伸缩毛巾架,可调节衣物烘干机,分层储物单元,垂直空间整理器 A057型号 A026",
+            "cost_price": 80.0,
+            "suggested_price": 800.0,
+            "supply_price": 600.0,
+            "real_supply_price": 200.0,
+            "weight_g": 7822,
+            "dimensions_cm": {
+              "length": 93,
+              "width": 84,
+              "height": 73
+            }
+          }
+        ]
+      },
+      "error": null,
+      "retry_count": 0
+    }
+  },
+  "global_data": {},
+  "retry_count": 0,
+  "last_error": null,
+  "created_at": "2025-12-04T04:16:30.076513",
+  "updated_at": "2025-12-04T04:16:30.076519"
+}

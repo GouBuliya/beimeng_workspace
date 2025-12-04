@@ -1,0 +1,146 @@
+{
+  "workflow_id": "temu_publish_20251204_040301",
+  "workflow_type": "complete_publish",
+  "current_stage": "stage3_batch_edit",
+  "stages": {
+    "stage1_first_edit": {
+      "name": "stage1_first_edit",
+      "status": "completed",
+      "start_time": "2025-12-04T04:03:13.272738",
+      "end_time": "2025-12-04T04:03:13.272755",
+      "data": {
+        "products": [
+          {
+            "index": 0,
+            "product_name": "卫生间收纳柜",
+            "model_number": "A026",
+            "owner": "未指定",
+            "title": "卫生间收纳柜 A026",
+            "cost_price": 80.0,
+            "suggested_price": 800.0,
+            "supply_price": 600.0,
+            "real_supply_price": 200.0,
+            "weight_g": 6722,
+            "dimensions_cm": {
+              "length": 92,
+              "width": 78,
+              "height": 69
+            }
+          },
+          {
+            "index": 1,
+            "product_name": "带轮子的滚动洗衣篮",
+            "model_number": "A045/A046",
+            "owner": "未指定",
+            "title": "带轮子的滚动洗衣篮 A045/A046",
+            "cost_price": 35.0,
+            "suggested_price": 350.0,
+            "supply_price": 262.5,
+            "real_supply_price": 87.5,
+            "weight_g": 9017,
+            "dimensions_cm": {
+              "length": 97,
+              "width": 91,
+              "height": 83
+            }
+          },
+          {
+            "index": 2,
+            "product_name": "三层晾衣架(单管）",
+            "model_number": "A057型号",
+            "owner": "未指定",
+            "title": "三层晾衣架(单管） A057型号",
+            "cost_price": 39.0,
+            "suggested_price": 390.0,
+            "supply_price": 292.5,
+            "real_supply_price": 97.5,
+            "weight_g": 9148,
+            "dimensions_cm": {
+              "length": 82,
+              "width": 64,
+              "height": 56
+            }
+          },
+          {
+            "index": 3,
+            "product_name": "马桶刷 黑色",
+            "model_number": "A061",
+            "owner": "未指定",
+            "title": "马桶刷 黑色 A061",
+            "cost_price": 50.0,
+            "suggested_price": 500.0,
+            "supply_price": 375.0,
+            "real_supply_price": 125.0,
+            "weight_g": 6558,
+            "dimensions_cm": {
+              "length": 90,
+              "width": 77,
+              "height": 66
+            }
+          },
+          {
+            "index": 4,
+            "product_name": "15cm（大号）方形猫砂盆",
+            "model_number": "A055",
+            "owner": "未指定",
+            "title": "15cm（大号）方形猫砂盆 A055",
+            "cost_price": 20.0,
+            "suggested_price": 200.0,
+            "supply_price": 150.0,
+            "real_supply_price": 50.0,
+            "weight_g": 9085,
+            "dimensions_cm": {
+              "length": 81,
+              "width": 74,
+              "height": 54
+            }
+          }
+        ]
+      },
+      "error": null,
+      "retry_count": 0
+    },
+    "stage2_claim": {
+      "name": "stage2_claim",
+      "status": "completed",
+      "start_time": "2025-12-04T04:03:21.118152",
+      "end_time": "2025-12-04T04:03:21.118160",
+      "data": {
+        "method": "api",
+        "selected_count": 5,
+        "total_claimed": 20,
+        "expected_total": 20,
+        "claim_rounds": 4,
+        "api_failures": [],
+        "detail_ids": [
+          "3037726721",
+          "3037725215",
+          "3037721988",
+          "3037715514",
+          "3037713010"
+        ]
+      },
+      "error": null,
+      "retry_count": 0
+    },
+    "stage3_batch_edit": {
+      "name": "stage3_batch_edit",
+      "status": "completed",
+      "start_time": "2025-12-04T04:03:23.567376",
+      "end_time": "2025-12-04T04:03:23.567385",
+      "data": {
+        "mode": "api",
+        "edited_count": 20,
+        "total_count": 20,
+        "error": null
+      },
+      "error": null,
+      "retry_count": 0
+    }
+  },
+  "global_data": {},
+  "retry_count": 0,
+  "last_error": null,
+  "created_at": "2025-12-04T04:03:13.272717",
+  "updated_at": "2025-12-04T04:03:23.567364"
+}

@@ -1,0 +1,135 @@
+{
+  "workflow_id": "temu_publish_20251204_043508",
+  "workflow_type": "complete_publish",
+  "current_stage": "stage2_claim",
+  "stages": {
+    "stage1_first_edit": {
+      "name": "stage1_first_edit",
+      "status": "completed",
+      "start_time": "2025-12-04T04:35:09.296309",
+      "end_time": "2025-12-04T04:35:09.296311",
+      "data": {
+        "products": [
+          {
+            "index": 0,
+            "product_name": "厨房碗碟架",
+            "model_number": "A084",
+            "owner": "未指定",
+            "title": "厨房碗碟架 A084",
+            "cost_price": 23.0,
+            "suggested_price": 230.0,
+            "supply_price": 172.5,
+            "real_supply_price": 57.5,
+            "weight_g": 8592,
+            "dimensions_cm": {
+              "length": 93,
+              "width": 77,
+              "height": 65
+            }
+          },
+          {
+            "index": 1,
+            "product_name": "厨房碗碟架",
+            "model_number": "A085",
+            "owner": "未指定",
+            "title": "厨房碗碟架 A085",
+            "cost_price": 29.0,
+            "suggested_price": 290.0,
+            "supply_price": 217.5,
+            "real_supply_price": 72.5,
+            "weight_g": 8680,
+            "dimensions_cm": {
+              "length": 94,
+              "width": 85,
+              "height": 65
+            }
+          },
+          {
+            "index": 2,
+            "product_name": "车后备箱收纳盒不带木板",
+            "model_number": "A086",
+            "owner": "未指定",
+            "title": "车后备箱收纳盒不带木板 A086",
+            "cost_price": 35.0,
+            "suggested_price": 350.0,
+            "supply_price": 262.5,
+            "real_supply_price": 87.5,
+            "weight_g": 7063,
+            "dimensions_cm": {
+              "length": 93,
+              "width": 81,
+              "height": 64
+            }
+          },
+          {
+            "index": 3,
+            "product_name": "宠物楼梯",
+            "model_number": "A087",
+            "owner": "未指定",
+            "title": "宠物楼梯 A087",
+            "cost_price": 34.0,
+            "suggested_price": 340.0,
+            "supply_price": 255.0,
+            "real_supply_price": 85.0,
+            "weight_g": 5058,
+            "dimensions_cm": {
+              "length": 96,
+              "width": 77,
+              "height": 65
+            }
+          },
+          {
+            "index": 4,
+            "product_name": "20套塑料花园边栏",
+            "model_number": "A088",
+            "owner": "未指定",
+            "title": "20套塑料花园边栏 A088",
+            "cost_price": 31.0,
+            "suggested_price": 310.0,
+            "supply_price": 232.5,
+            "real_supply_price": 77.5,
+            "weight_g": 6272,
+            "dimensions_cm": {
+              "length": 87,
+              "width": 75,
+              "height": 68
+            }
+          }
+        ]
+      },
+      "error": null,
+      "retry_count": 0
+    },
+    "stage2_claim": {
+      "name": "stage2_claim",
+      "status": "completed",
+      "start_time": "2025-12-04T04:35:15.123127",
+      "end_time": "2025-12-04T04:35:15.123132",
+      "data": {
+        "method": "api",
+        "selected_count": 5,
+        "total_claimed": 10,
+        "expected_total": 20,
+        "claim_rounds": 4,
+        "api_failures": [
+          "批次1 第3次失败: BrowserContext.cookies: Connection closed while reading from the driver",
+          "批次1 第4次失败: BrowserContext.cookies: Connection closed while reading from the driver"
+        ],
+        "detail_ids": [
+          "3034858399",
+          "3034857347",
+          "3034856249",
+          "3034853869",
+          "3034851885"
+        ]
+      },
+      "error": null,
+      "retry_count": 0
+    }
+  },
+  "global_data": {},
+  "retry_count": 0,
+  "last_error": "API 批量编辑失败: API 批量编辑异常: BrowserContext.cookies: Connection closed while reading from the driver",
+  "created_at": "2025-12-04T04:35:09.296305",
+  "updated_at": "2025-12-04T04:35:15.123123"
+}
