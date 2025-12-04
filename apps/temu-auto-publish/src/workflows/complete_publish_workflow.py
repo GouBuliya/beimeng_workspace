@@ -2064,23 +2064,47 @@ class CompletePublishWorkflow:
                 else None
             )
 
-            api_result = await run_batch_edit_via_api(
-                page,
-                payload,
-                filter_owner=filter_owner,
-                max_products=batch_edit_count,
-                outer_package_image=outer_package_path,
-                product_guide_pdf=manual_path,
-            )
+            # 运行批量编辑 3 遍以增加成功率
+            batch_edit_rounds = 3
+            total_edited = 0
+            last_error = None
 
-            success = api_result.get("success", False)
-            edited_count = api_result.get("edited_count", 0)
-            total_count = api_result.get("total_count", 0)
+            for round_num in range(1, batch_edit_rounds + 1):
+                logger.info(f"API 批量编辑: 第 {round_num}/{batch_edit_rounds} 轮...")
 
+                api_result = await run_batch_edit_via_api(
+                    page,
+                    payload,
+                    filter_owner=filter_owner,
+                    max_products=batch_edit_count,
+                    outer_package_image=outer_package_path,
+                    product_guide_pdf=manual_path,
+                )
+
+                round_success = api_result.get("success", False)
+                round_edited = api_result.get("edited_count", 0)
+                round_total = api_result.get("total_count", 0)
+
+                if round_success:
+                    logger.success(
+                        f"第 {round_num} 轮编辑成功: {round_edited}/{round_total} 个产品"
+                    )
+                    total_edited = max(total_edited, round_edited)
+                else:
+                    last_error = api_result.get("error", "未知错误")
+                    logger.warning(f"第 {round_num} 轮编辑失败: {last_error}")
+
+                # 轮次间等待，让系统稳定
+                if round_num < batch_edit_rounds:
+                    await asyncio.sleep(1)
+
+            # 综合判断：只要有一轮成功就算成功
+            success = total_edited > 0
             message = (
-                f"API 批量编辑完成: {edited_count}/{total_count} 个产品"
+                f"API 批量编辑完成: 运行 {batch_edit_rounds} 轮, "
+                f"最终编辑 {total_edited}/{batch_edit_count} 个产品"
                 if success
-                else f"API 批量编辑失败: {api_result.get('error', '未知错误')}"
+                else f"API 批量编辑失败: {last_error or '所有轮次均失败'}"
             )
 
             return StageOutcome(
@@ -2089,9 +2113,10 @@ class CompletePublishWorkflow:
                 message=message,
                 details={
                     "mode": "api",
-                    "edited_count": edited_count,
-                    "total_count": total_count,
-                    "error": api_result.get("error"),
+                    "edited_count": total_edited,
+                    "total_count": batch_edit_count,
+                    "rounds": batch_edit_rounds,
+                    "error": last_error if not success else None,
                 },
             )
 
