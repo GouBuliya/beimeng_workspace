@@ -946,10 +946,16 @@ class CompletePublishWorkflow:
                         )
                         stages.append(stage2)
                     else:
+                        # 获取首次编辑成功的产品 ID 列表（用于精确过滤）
+                        first_edit_success_ids: list[str] = []
+                        if isinstance(stage1.details, dict):
+                            first_edit_success_ids = stage1.details.get("success_detail_ids", [])
+
                         stage2 = await self._stage_claim_products(
                             page,
                             miaoshou_ctrl,
                             edited_products,
+                            first_edit_success_ids=first_edit_success_ids,
                         )
                         stages.append(stage2)
                         if stage2.success:
@@ -1711,10 +1717,18 @@ class CompletePublishWorkflow:
         page,
         miaoshou_ctrl: MiaoshouController,
         edited_products: Sequence[EditedProduct],
+        *,
+        first_edit_success_ids: list[str] | None = None,
     ) -> StageOutcome:
         """阶段 2: 认领产品到 Temu 全托管.
 
         默认使用 API 直接认领（更快速、更稳定），如果 API 失败则回退到 DOM 操作。
+
+        Args:
+            page: Playwright 页面对象
+            miaoshou_ctrl: 妙手控制器
+            edited_products: 首次编辑产出的产品列表
+            first_edit_success_ids: 首次编辑成功的产品 ID 列表（如果提供，只认领这些产品）
         """
 
         if self.skip_first_edit:
@@ -1923,8 +1937,18 @@ class CompletePublishWorkflow:
                     all_ids.append(str(product_id))
             logger.info(f"提取到 {len(all_ids)} 个产品 ID: {all_ids[:5]}...")
 
-            # 取前 selection_count 个产品
-            detail_ids = all_ids[:selection_count]
+            # 如果提供了首次编辑成功的 ID 列表，只认领这些产品
+            if first_edit_success_ids:
+                # 只保留首次编辑成功的产品（保持顺序）
+                success_ids_set = set(first_edit_success_ids)
+                filtered_ids = [pid for pid in all_ids if pid in success_ids_set]
+                logger.info(
+                    f"使用首次编辑成功 ID 过滤: {len(all_ids)} -> {len(filtered_ids)} 个产品"
+                )
+                detail_ids = filtered_ids
+            else:
+                # 没有提供成功 ID 列表，取前 selection_count 个产品
+                detail_ids = all_ids[:selection_count]
         else:
             error_msg = api_result.get("error") or api_result.get("message", "未知错误")
             logger.warning(f"API 获取产品列表失败: {error_msg}")
