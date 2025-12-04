@@ -849,14 +849,16 @@ def _update_sku_prices(sku_map: dict[str, Any]) -> dict[str, Any]:
             suggested_price = round(current_price * 10, 2)
             new_sku["suggestedPrice"] = str(int(suggested_price))
             new_sku["suggestedPriceCurrencyType"] = "CNY"
-            # 确保货源价格（oriPrice）被设置，API 要求该字段大于 0
+            # 确保货源价格被设置，API 需要同时设置 oriPrice 和 originPrice
             ori_price_str = str(int(current_price)) if current_price == int(current_price) else str(current_price)
             new_sku["oriPrice"] = ori_price_str
-            logger.debug(f"SKU 价格更新: oriPrice={ori_price_str}, suggestedPrice={int(suggested_price)}")
+            new_sku["originPrice"] = str(current_price)
+            logger.debug(f"SKU 价格更新: oriPrice={ori_price_str}, originPrice={current_price}")
         else:
             # 如果没有找到供货价，设置一个默认值
             default_price = 100
             new_sku["oriPrice"] = str(default_price)
+            new_sku["originPrice"] = str(default_price)
             new_sku["suggestedPrice"] = str(default_price * 10)
             new_sku["suggestedPriceCurrencyType"] = "CNY"
             logger.warning(f"无法获取供货价，使用默认值 {default_price}")

@@ -481,6 +481,7 @@ def _update_product_detail(
                     new_sku_data = {
                         "price": "",
                         "oriPrice": ori_price_str,  # 货源价格，API 必需
+                        "originPrice": str(sku_price),  # 货源价格（另一种格式）
                         "suggestedPrice": str(int(sku_price * 10)),  # 建议售价
                         "suggestedPriceCurrencyType": "CNY",
                         "stock": "999",
@@ -495,6 +496,7 @@ def _update_product_detail(
                             if key not in [
                                 "price",
                                 "oriPrice",
+                                "originPrice",
                                 "suggestedPrice",
                                 "suggestedPriceCurrencyType",
                                 "stock",
@@ -561,17 +563,19 @@ def _update_product_detail(
                     suggested_price = round(current_price * 10, 2)
                     sku_data["suggestedPrice"] = str(int(suggested_price))
                     sku_data["suggestedPriceCurrencyType"] = "CNY"
-                    # 确保货源价格（oriPrice）被设置，API 要求该字段大于 0
-                    # 使用整数格式，避免浮点数问题
-                    sku_data["oriPrice"] = str(int(current_price)) if current_price == int(current_price) else str(current_price)
-                    logger.info(f"SKU 价格更新: oriPrice={sku_data['oriPrice']}, suggestedPrice={sku_data['suggestedPrice']}")
+                    # 确保货源价格被设置，API 需要同时设置 oriPrice 和 originPrice
+                    ori_price_str = str(int(current_price)) if current_price == int(current_price) else str(current_price)
+                    sku_data["oriPrice"] = ori_price_str
+                    sku_data["originPrice"] = str(current_price)
+                    logger.info(f"SKU 价格更新: oriPrice={ori_price_str}, originPrice={current_price}")
                 else:
                     # 如果没有找到供货价，设置一个默认值（避免 API 报错"货源价格应大于0"）
                     default_price = 100  # 使用整数
                     sku_data["oriPrice"] = str(default_price)
+                    sku_data["originPrice"] = str(default_price)
                     sku_data["suggestedPrice"] = str(default_price * 10)
                     sku_data["suggestedPriceCurrencyType"] = "CNY"
-                    logger.warning(f"无法获取供货价，使用默认值 {default_price}，SKU 字段: {list(sku_data.keys())}")
+                    logger.warning(f"无法获取供货价，使用默认值 {default_price}")
 
                 # SKU 分类设置为"单品 1 件"
                 sku_data["skuClassification"] = 1  # 单品
@@ -640,7 +644,7 @@ def _update_product_detail(
     detail["productOriginCertFiles"] = []
     logger.debug("设置产地为中国浙江省")
 
-    # 设置顶层的货源价格（oriPrice）- API 必需字段
+    # 设置顶层的货源价格 - API 需要同时设置 oriPrice 和 originPrice
     # 优先使用选品表成本价，否则使用顶层 price 的 1/10，再否则使用默认值
     top_ori_price = None
     if selection and selection.cost_price:
@@ -649,9 +653,12 @@ def _update_product_detail(
         with contextlib.suppress(ValueError, TypeError):
             top_ori_price = float(detail["price"]) / 10
     if top_ori_price:
-        detail["oriPrice"] = str(int(top_ori_price)) if top_ori_price == int(top_ori_price) else str(top_ori_price)
+        ori_str = str(int(top_ori_price)) if top_ori_price == int(top_ori_price) else str(top_ori_price)
+        detail["oriPrice"] = ori_str
+        detail["originPrice"] = str(top_ori_price)
     else:
         detail["oriPrice"] = "100"  # 默认值
-    logger.info(f"设置顶层货源价格: oriPrice={detail['oriPrice']}")
+        detail["originPrice"] = "100"
+    logger.info(f"设置顶层货源价格: oriPrice={detail['oriPrice']}, originPrice={detail['originPrice']}")
 
     return detail
