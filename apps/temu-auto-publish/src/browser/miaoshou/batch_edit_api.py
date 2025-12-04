@@ -32,6 +32,7 @@ async def run_batch_edit_via_api(
     outer_package_image: str | None = None,
     product_guide_pdf: str | None = None,
     max_products: int = 20,
+    skip_ai_attrs: bool = False,
 ) -> dict[str, Any]:
     """使用 API 执行批量编辑完整 18 步.
 
@@ -60,6 +61,7 @@ async def run_batch_edit_via_api(
         outer_package_image: 外包装图片本地路径
         product_guide_pdf: 产品说明书 PDF 本地路径
         max_products: 每次最多编辑的产品数量（默认 20）
+        skip_ai_attrs: 是否跳过 AI 属性补全（用于多轮编辑时只在首轮执行）
 
     Returns:
         执行结果:
@@ -220,9 +222,9 @@ async def run_batch_edit_via_api(
                 shop_ids=shop_ids,
             )
 
-            # Step 7.5: AI 属性补全（如果启用）
+            # Step 7.5: AI 属性补全（如果启用且非跳过）
             ai_attrs_map: dict[str, list[dict[str, Any]]] = {}
-            use_ai_attrs = payload.get("use_ai_attrs", True)  # 默认启用
+            use_ai_attrs = payload.get("use_ai_attrs", True) and not skip_ai_attrs
 
             if use_ai_attrs:
                 from ...data_processor.ai_category_attr_filler import (

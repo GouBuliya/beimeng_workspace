@@ -2106,6 +2106,7 @@ class CompletePublishWorkflow:
                     max_products=batch_edit_count,
                     outer_package_image=outer_package_path,
                     product_guide_pdf=manual_path,
+                    skip_ai_attrs=(round_num > 1),  # 只在第一轮执行 AI 属性补全
                 )
 
                 round_success = api_result.get("success", False)
