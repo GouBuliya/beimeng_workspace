@@ -474,19 +474,29 @@ def _update_product_detail(
 
                     # 创建新的 skuMap 条目
                     new_sku_key = f";{new_color_id};;"
+                    # 获取价格：优先使用选品表成本价，否则使用默认值
+                    sku_price = selection.cost_price if selection and selection.cost_price else 100
+                    # 确保 oriPrice 是整数字符串格式（API 要求）
+                    ori_price_str = str(int(sku_price)) if sku_price == int(sku_price) else str(sku_price)
                     new_sku_data = {
                         "price": "",
+                        "oriPrice": ori_price_str,  # 货源价格，API 必需
+                        "suggestedPrice": str(int(sku_price * 10)),  # 建议售价
+                        "suggestedPriceCurrencyType": "CNY",
                         "stock": "999",
                         "weight": str(weight_g),
                         "packageLength": str(length_cm),
                         "packageWidth": str(width_cm),
                         "packageHeight": str(height_cm),
                     }
-                    # 如果有模板，复制其他字段
+                    # 如果有模板，复制其他字段（排除已设置的价格和物流字段）
                     if template_sku_data:
                         for key in template_sku_data:
                             if key not in [
                                 "price",
+                                "oriPrice",
+                                "suggestedPrice",
+                                "suggestedPriceCurrencyType",
                                 "stock",
                                 "weight",
                                 "packageLength",
@@ -551,9 +561,17 @@ def _update_product_detail(
                     suggested_price = round(current_price * 10, 2)
                     sku_data["suggestedPrice"] = str(int(suggested_price))
                     sku_data["suggestedPriceCurrencyType"] = "CNY"
-                    logger.info(f"SKU 建议售价更新: {current_price} × 10 = {suggested_price}")
+                    # 确保货源价格（oriPrice）被设置，API 要求该字段大于 0
+                    # 使用整数格式，避免浮点数问题
+                    sku_data["oriPrice"] = str(int(current_price)) if current_price == int(current_price) else str(current_price)
+                    logger.info(f"SKU 价格更新: oriPrice={sku_data['oriPrice']}, suggestedPrice={sku_data['suggestedPrice']}")
                 else:
-                    logger.warning(f"无法获取供货价，SKU 数据: {list(sku_data.keys())}")
+                    # 如果没有找到供货价，设置一个默认值（避免 API 报错"货源价格应大于0"）
+                    default_price = 100  # 使用整数
+                    sku_data["oriPrice"] = str(default_price)
+                    sku_data["suggestedPrice"] = str(default_price * 10)
+                    sku_data["suggestedPriceCurrencyType"] = "CNY"
+                    logger.warning(f"无法获取供货价，使用默认值 {default_price}，SKU 字段: {list(sku_data.keys())}")
 
                 # SKU 分类设置为"单品 1 件"
                 sku_data["skuClassification"] = 1  # 单品
@@ -568,6 +586,12 @@ def _update_product_detail(
                 sku_data["packageLength"] = str(length_cm)
                 sku_data["packageWidth"] = str(width_cm)
                 sku_data["packageHeight"] = str(height_cm)
+
+        # 打印最终的 skuMap 数据以便调试
+        for sku_key, sku_data in sku_map.items():
+            ori_price = sku_data.get("oriPrice", "未设置")
+            suggested = sku_data.get("suggestedPrice", "未设置")
+            logger.info(f"SKU 最终数据 [{sku_key}]: oriPrice={ori_price}, suggestedPrice={suggested}")
 
         logger.info(
             f"更新 SKU: 库存=999, 重量={weight_g}g, 尺寸={length_cm}x{width_cm}x{height_cm}cm"
