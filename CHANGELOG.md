@@ -1,3 +1,15 @@
+# [1.6.0](https://github.com/GouBuliya/beimeng_workspace/compare/v1.5.1...v1.6.0) (2025-12-04)
+
+
+### Bug Fixes
+
+* 添加 publish_repeat_count 配置字段 ([8b632c5](https://github.com/GouBuliya/beimeng_workspace/commit/8b632c558d4824fafb3750d2c0c42d716c042332))
+
+
+### Features
+
+* Add scripts for testing and debugging API interactions and image uploads ([794ba13](https://github.com/GouBuliya/beimeng_workspace/commit/794ba136ea54de92032bada0a46e2b270a427a34))
+
 ## [1.5.1](https://github.com/GouBuliya/beimeng_workspace/compare/v1.5.0...v1.5.1) (2025-12-04)
 
 
