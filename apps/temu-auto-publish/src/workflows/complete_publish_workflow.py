@@ -2299,7 +2299,7 @@ class CompletePublishWorkflow:
                 page,
                 filter_owner=filter_owner,
                 shop_id="9134811",  # 默认店铺 ID
-                max_products=publish_count_per_round,
+                max_products=0,  # 不限制，发布所有找到的产品
             )
 
             round_success = api_result.get("success", False)

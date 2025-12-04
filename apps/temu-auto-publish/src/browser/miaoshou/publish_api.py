@@ -100,7 +100,7 @@ async def run_publish_via_api(
     *,
     filter_owner: str | None = None,
     shop_id: str = "9134811",
-    max_products: int = 20,
+    max_products: int = 500,
     cookie_file: str | None = None,
 ) -> dict[str, Any]:
     """使用 API 执行发布流程.
@@ -109,7 +109,7 @@ async def run_publish_via_api(
         page: Playwright 页面对象（用于获取 Cookie）
         filter_owner: 按创建人员筛选
         shop_id: 目标店铺 ID（默认 9134811）
-        max_products: 每次最多发布的产品数量（默认 20）
+        max_products: 每次最多发布的产品数量（默认 500，0 表示不限制）
         cookie_file: Cookie 文件路径（可选，默认从 page 获取）
 
     Returns:
@@ -154,10 +154,11 @@ async def run_publish_via_api(
 
         async with client:
             # Step 2: 搜索已编辑但未发布的产品
+            # 使用较大的 page_size 以获取所有待发布产品
             logger.info("API 发布: 搜索可发布产品...")
             search_result = await client.search_temu_collect_box(
                 status="notPublished",
-                page_size=100,
+                page_size=500,
             )
 
             if search_result.get("result") != "success":
