@@ -380,7 +380,7 @@ def _update_product_detail(
     """
     # 生成随机数据（与 DOM 模式保持一致）
     random_gen = RandomDataGenerator()
-    weight_g = 9.527  # 固定重量
+    weight_g = 9527  # 固定重量（单位：克）
     length_cm, width_cm, height_cm = random_gen.generate_dimensions()  # 50-99cm, 长>宽>高
 
     # 更新标题（始终执行，即使没有选品数据也添加默认型号后缀）
@@ -569,7 +569,7 @@ def _update_product_detail(
                 sku_data["packageWidth"] = str(width_cm)
                 sku_data["packageHeight"] = str(height_cm)
 
-        logger.debug(
+        logger.info(
             f"更新 SKU: 库存=999, 重量={weight_g}g, 尺寸={length_cm}x{width_cm}x{height_cm}cm"
         )
 
@@ -608,7 +608,7 @@ def _update_product_detail(
 
     # 英语标题设置为空格（必填但无实际内容）
     detail["multiLanguageTitleMap"] = {"en": " "}
-    logger.debug("设置英语标题为空格")
+    logger.info("设置英语标题为空格")
 
     # 产地设置为中国浙江省
     detail["productOriginCountry"] = "CN"

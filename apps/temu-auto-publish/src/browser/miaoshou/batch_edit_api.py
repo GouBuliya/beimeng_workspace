@@ -628,8 +628,8 @@ async def _upload_image_via_page(
         await file_inputs.last.set_input_files(image_path)
         logger.debug(f"已设置文件: {image_path}")
 
-        # 等待上传完成
-        for _ in range(50):  # 最多等待 5 秒
+        # 等待上传完成（增加超时时间到 15 秒）
+        for _ in range(150):  # 最多等待 15 秒
             await asyncio.sleep(0.1)
             if upload_response:
                 break
@@ -638,7 +638,8 @@ async def _upload_image_via_page(
             result = upload_response
             logger.info(f"图片上传成功: {result.get('picturePath')}")
         else:
-            result = {"result": "error", "message": "上传超时"}
+            result = {"result": "error", "message": "上传超时（15秒）"}
+            logger.error("外包装图片上传超时，请检查网络连接")
 
     except Exception as e:
         result = {"result": "error", "message": str(e)}
@@ -686,19 +687,34 @@ async def _upload_files_for_products(
         "product_guide_url": None,
     }
 
-    # 上传外包装图片（使用页面 el-upload 组件的 file input）
+    # 上传外包装图片（使用页面 el-upload 组件的 file input，带重试机制）
     if outer_package_image and Path(outer_package_image).exists():
         logger.info(f"API 批量编辑: 上传外包装图片 {outer_package_image}...")
-        try:
-            # 需要导航到编辑页面以获取上传组件
-            upload_result = await _upload_image_via_page(page, outer_package_image, detail_ids)
-            if upload_result and upload_result.get("result") == "success":
-                uploaded["outer_package_url"] = upload_result.get("picturePath")
-                logger.info(f"外包装图片上传成功: {uploaded['outer_package_url']}")
-            else:
-                logger.warning(f"外包装图片上传失败: {upload_result}")
-        except Exception as e:
-            logger.error(f"外包装图片上传异常: {e}")
+        max_retries = 3
+        for attempt in range(1, max_retries + 1):
+            try:
+                # 需要导航到编辑页面以获取上传组件
+                upload_result = await _upload_image_via_page(page, outer_package_image, detail_ids)
+                if upload_result and upload_result.get("result") == "success":
+                    uploaded["outer_package_url"] = upload_result.get("picturePath")
+                    logger.info(f"外包装图片上传成功: {uploaded['outer_package_url']}")
+                    break
+                else:
+                    logger.warning(
+                        f"外包装图片上传失败 (尝试 {attempt}/{max_retries}): {upload_result}"
+                    )
+                    if attempt < max_retries:
+                        logger.info("等待 2 秒后重试...")
+                        import asyncio
+                        await asyncio.sleep(2)
+            except Exception as e:
+                logger.error(f"外包装图片上传异常 (尝试 {attempt}/{max_retries}): {e}")
+                if attempt < max_retries:
+                    import asyncio
+                    await asyncio.sleep(2)
+
+        if not uploaded["outer_package_url"]:
+            logger.error(f"外包装图片上传失败，已重试 {max_retries} 次")
 
     # 上传产品说明书（使用页面的 axios）
     if product_guide_pdf and Path(product_guide_pdf).exists():
@@ -752,6 +768,7 @@ def _build_edit_payload(
 
     # 英语标题设置为空格（必填但无实际内容）
     edit_data["multiLanguageTitleMap"] = {"en": " "}
+    logger.info("设置英语标题为空格")
 
     # 定制品开关（默认关闭）
     edit_data["personalizationSwitch"] = "0"
@@ -783,19 +800,30 @@ def _build_edit_payload(
     if product_guide_url:
         edit_data["productGuideFileUrl"] = product_guide_url
 
+    # 重量设置为固定值 9527 克（与首次编辑保持一致）
+    edit_data["weight"] = "9527"
+    logger.info("设置产品重量: 9527g")
+
     return edit_data
 
 
 def _update_sku_prices(sku_map: dict[str, Any]) -> dict[str, Any]:
-    """更新 SKU 价格为供货价 × 10.
+    """更新 SKU 价格、重量、尺寸等信息.
 
     Args:
         sku_map: 原始 SKU 映射
 
     Returns:
-        更新价格后的 SKU 映射
+        更新后的 SKU 映射
     """
+    import random
+
     updated_map = {}
+
+    # 生成随机尺寸（与首次编辑保持一致：50-99cm，长>宽>高）
+    dimensions = [random.randint(50, 99) for _ in range(3)]
+    dimensions.sort(reverse=True)
+    length_cm, width_cm, height_cm = dimensions
 
     for sku_key, sku_data in sku_map.items():
         if not isinstance(sku_data, dict):
@@ -828,7 +856,24 @@ def _update_sku_prices(sku_map: dict[str, Any]) -> dict[str, Any]:
         new_sku["numberOfPieces"] = "1"  # 1 件
         new_sku["pieceUnitCode"] = 1  # 件
 
+        # 重量设置为固定值 9527 克
+        new_sku["weight"] = "9527"
+
+        # 库存设置为 999
+        new_sku["stock"] = "999"
+
+        # 尺寸设置（随机 50-99cm，长>宽>高）
+        new_sku["packageLength"] = str(length_cm)
+        new_sku["packageWidth"] = str(width_cm)
+        new_sku["packageHeight"] = str(height_cm)
+
         updated_map[sku_key] = new_sku
+
+    if updated_map:
+        logger.info(
+            f"更新 {len(updated_map)} 个 SKU: 重量=9527g, 库存=999, "
+            f"尺寸={length_cm}x{width_cm}x{height_cm}cm"
+        )
 
     return updated_map
 
