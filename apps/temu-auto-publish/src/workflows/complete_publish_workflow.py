@@ -185,7 +185,7 @@ class CompletePublishWorkflow:
         selection_table: Path | str | None = None,
         selection_rows_override: Sequence[ProductSelectionRow] | None = None,
         use_ai_titles: bool = False,
-        use_ai_attrs: bool = True,
+        use_ai_attrs: bool = False,
         use_codegen_batch_edit: bool = False,
         use_api_batch_edit: bool = True,
         use_api_first_edit: bool = False,
@@ -211,7 +211,7 @@ class CompletePublishWorkflow:
             headless: 浏览器是否使用无头模式; None 时读取配置文件.
             selection_table: 选品表路径,必须由外部提供(Web 上传或 CLI 参数).
             use_ai_titles: 是否启用 AI 生成标题 (失败时自动回退).
-            use_ai_attrs: 是否启用 AI 智能补全必填类目属性 (默认 True, 使用通义千问 qwen-flash).
+            use_ai_attrs: 是否启用 AI 智能补全必填类目属性 (默认 False, 使用通义千问 qwen-flash).
             use_codegen_batch_edit: 是否使用 codegen 录制的批量编辑模块 (默认 False).
             use_api_batch_edit: 是否使用 API 方式执行批量编辑 (默认 True, 最快速, 支持文件上传).
             use_api_first_edit: 是否使用 API 方式执行首次编辑 (默认 False, 实验性功能).

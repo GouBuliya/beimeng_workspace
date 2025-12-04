@@ -225,7 +225,7 @@ async def run_batch_edit_via_api(
 
             # Step 7.5: AI 属性补全（如果启用且非跳过）
             ai_attrs_map: dict[str, list[dict[str, Any]]] = {}
-            use_ai_attrs = payload.get("use_ai_attrs", True) and not skip_ai_attrs
+            use_ai_attrs = payload.get("use_ai_attrs", False) and not skip_ai_attrs
 
             if skip_ai_attrs:
                 logger.info("API 批量编辑: 跳过 AI 属性补全（非首轮）")
