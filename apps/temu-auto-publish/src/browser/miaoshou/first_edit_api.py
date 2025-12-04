@@ -68,6 +68,8 @@ class FirstEditApiResult:
     success_count: int
     failed_count: int
     error_details: list[dict[str, Any]]
+    success_detail_ids: list[str]  # 成功编辑的产品 ID 列表
+    failed_detail_ids: list[str]  # 失败的产品 ID 列表
 
 
 async def run_first_edit_via_api(
@@ -116,6 +118,8 @@ async def run_first_edit_via_api(
     client = await MiaoshouApiClient.from_playwright_context(context)
 
     error_details: list[dict[str, Any]] = []
+    success_detail_ids: list[str] = []
+    failed_detail_ids: list[str] = []
     success_count = 0
     failed_count = 0
 
@@ -146,6 +150,8 @@ async def run_first_edit_via_api(
                 success_count=0,
                 failed_count=0,
                 error_details=[{"error": "获取产品列表失败"}],
+                success_detail_ids=[],
+                failed_detail_ids=[],
             )
 
         product_list = list_result.get("detailList", [])
@@ -188,6 +194,8 @@ async def run_first_edit_via_api(
                 success_count=0,
                 failed_count=0,
                 error_details=[],
+                success_detail_ids=[],
+                failed_detail_ids=[],
             )
 
         # 取产品和选品的较小值
@@ -234,14 +242,17 @@ async def run_first_edit_via_api(
                 selection_index += 1
                 if result:
                     success_count += 1
+                    success_detail_ids.append(detail_id)
                     logger.success(f"✓ [{detail_id}] {product_title[:30]} 编辑成功")
                 else:
                     failed_count += 1
+                    failed_detail_ids.append(detail_id)
                     error_details.append(
                         {"detail_id": detail_id, "title": product_title, "error": "编辑失败"}
                     )
             except Exception as e:
                 failed_count += 1
+                failed_detail_ids.append(detail_id)
                 error_details.append(
                     {"detail_id": detail_id, "title": product_title, "error": str(e)}
                 )
@@ -258,6 +269,8 @@ async def run_first_edit_via_api(
             success_count=success_count,
             failed_count=failed_count,
             error_details=error_details,
+            success_detail_ids=success_detail_ids,
+            failed_detail_ids=failed_detail_ids,
         )
 
     finally:
@@ -367,7 +380,7 @@ def _update_product_detail(
     """
     # 生成随机数据（与 DOM 模式保持一致）
     random_gen = RandomDataGenerator()
-    weight_g = 9527  # 固定重量
+    weight_g = 9.527  # 固定重量
     length_cm, width_cm, height_cm = random_gen.generate_dimensions()  # 50-99cm, 长>宽>高
 
     # 更新标题（始终执行，即使没有选品数据也添加默认型号后缀）
@@ -524,8 +537,8 @@ def _update_product_detail(
                     current_price = float(selection.cost_price)
                     logger.debug(f"使用选品表成本价: {current_price}")
                 else:
-                    # 尝试多个可能的供货价字段名
-                    for field_name in ["supplyPrice", "supplierPrice", "costPrice", "originPrice", "price"]:
+                    # 尝试多个可能的供货价字段名（优先使用 originPrice）
+                    for field_name in ["originPrice", "supplyPrice", "supplierPrice", "costPrice", "price"]:
                         field_value = sku_data.get(field_name)
                         if field_value:
                             with contextlib.suppress(ValueError, TypeError):
@@ -536,10 +549,16 @@ def _update_product_detail(
                 if current_price:
                     # 建议售价 = 当前供货价 × 10
                     suggested_price = round(current_price * 10, 2)
-                    sku_data["price"] = str(int(suggested_price))
-                    logger.info(f"SKU 价格更新: {current_price} × 10 = {suggested_price}")
+                    sku_data["suggestedPrice"] = str(int(suggested_price))
+                    sku_data["suggestedPriceCurrencyType"] = "CNY"
+                    logger.info(f"SKU 建议售价更新: {current_price} × 10 = {suggested_price}")
                 else:
                     logger.warning(f"无法获取供货价，SKU 数据: {list(sku_data.keys())}")
+
+                # SKU 分类设置为"单品 1 件"
+                sku_data["skuClassification"] = 1  # 单品
+                sku_data["numberOfPieces"] = "1"  # 1 件
+                sku_data["pieceUnitCode"] = 1  # 件
 
                 # 始终更新库存
                 sku_data["stock"] = "999"

@@ -240,6 +240,7 @@ class CompletePublishWorkflow:
         # 移除上限限制，一次性处理所有选品
         self.collect_count = max(1, self.settings.business.collect_count)
         self.claim_times = max(1, self.settings.business.claim_count)
+        self.publish_repeat_count = max(1, self.settings.business.publish_repeat_count)
         self.headless = headless if headless is not None else self.settings.browser.headless
 
         # 断点恢复配置
@@ -1138,8 +1139,21 @@ class CompletePublishWorkflow:
 
                 # 判断是否有成功的产品（部分成功也算成功，不回退 DOM）
                 if api_result.success_count > 0:
-                    # 构建占位符编辑结果
-                    placeholders = self._build_placeholder_edits(selections)
+                    # 构建占位符编辑结果（只包含成功的产品）
+                    all_placeholders = self._build_placeholder_edits(selections)
+
+                    # 如果有失败的产品，只返回成功的
+                    # 按成功数量截取，确保认领阶段只处理首次编辑成功的产品
+                    if api_result.failed_count > 0:
+                        placeholders = all_placeholders[: api_result.success_count]
+                        logger.info(
+                            f"过滤失败产品: 总计 {len(all_placeholders)} 个，"
+                            f"成功 {len(placeholders)} 个，"
+                            f"跳过 {api_result.failed_count} 个失败产品"
+                        )
+                    else:
+                        placeholders = all_placeholders
+
                     details = {
                         "owner": staff_name,
                         "edited_products": [prod.to_payload() for prod in placeholders],
@@ -1148,12 +1162,15 @@ class CompletePublishWorkflow:
                         "api_success_count": api_result.success_count,
                         "api_failed_count": api_result.failed_count,
                         "api_attempts": attempt + 1,
+                        "success_detail_ids": api_result.success_detail_ids,
+                        "failed_detail_ids": api_result.failed_detail_ids,
                     }
                     # 根据是否有失败，生成不同的消息
                     if api_result.failed_count > 0:
                         msg = (
                             f"API 模式首次编辑部分成功: "
-                            f"{api_result.success_count} 成功, {api_result.failed_count} 失败"
+                            f"{api_result.success_count} 成功, {api_result.failed_count} 失败 "
+                            f"(认领将跳过失败的产品)"
                         )
                         logger.warning(msg)
                     else:
@@ -2035,11 +2052,25 @@ class CompletePublishWorkflow:
             )
             payload = self._build_api_batch_edit_payload()
 
+            # 获取外包装图片和说明书路径
+            outer_package_path = (
+                str(self.outer_package_image_override)
+                if self.outer_package_image_override and self.outer_package_image_override.exists()
+                else None
+            )
+            manual_path = (
+                str(self.manual_file_override)
+                if self.manual_file_override and self.manual_file_override.exists()
+                else None
+            )
+
             api_result = await run_batch_edit_via_api(
                 page,
                 payload,
                 filter_owner=filter_owner,
                 max_products=batch_edit_count,
+                outer_package_image=outer_package_path,
+                product_guide_pdf=manual_path,
             )
 
             success = api_result.get("success", False)
@@ -2196,7 +2227,11 @@ class CompletePublishWorkflow:
         publish_ctrl: PublishController,
         edited_products: Sequence[EditedProduct],
     ) -> StageOutcome:
-        """阶段 4: 选择店铺,设置供货价,批量发布."""
+        """阶段 4: 选择店铺,设置供货价,批量发布.
+
+        发布会重复执行 publish_repeat_count 次，以生成更多链接。
+        例如: 80 个产品 × 5 次 = 400 个链接
+        """
 
         if not edited_products:
             message = "无待发布商品,发布阶段跳过"
@@ -2210,13 +2245,14 @@ class CompletePublishWorkflow:
 
         shop_name = self._resolve_shop_name(edited_products)
 
-        # 使用 API 方式发布
-        # 发布数量 = 选品数量 * claim_times（认领次数）
+        # 使用 API 方式发布，重复执行 publish_repeat_count 次
         selection_count = len(edited_products)
-        publish_count = selection_count * self.claim_times
+        publish_count_per_round = selection_count * self.claim_times
+        total_target = publish_count_per_round * self.publish_repeat_count
+
         logger.info(
-            f"使用 API 方式执行发布: {publish_count} 个产品 "
-            f"(选品 {selection_count} * 认领 {self.claim_times} 次)"
+            f"使用 API 方式执行发布: 目标 {total_target} 个链接 "
+            f"({publish_count_per_round} 个产品 × {self.publish_repeat_count} 次)"
         )
 
         # 获取筛选人员
@@ -2225,28 +2261,57 @@ class CompletePublishWorkflow:
         )
         filter_owner = self._resolve_collection_owner(owner_candidate) if owner_candidate else None
 
-        api_result = await run_publish_via_api(
-            page,
-            filter_owner=filter_owner,
-            shop_id="9134811",  # 默认店铺 ID
-            max_products=publish_count,
-        )
+        total_published = 0
+        all_detail_ids: list[str] = []
+        last_error = None
 
-        success = api_result.get("success", False)
-        published_count = api_result.get("published_count", 0)
-        error_msg = api_result.get("error")
+        for round_idx in range(self.publish_repeat_count):
+            logger.info(
+                f"发布第 {round_idx + 1}/{self.publish_repeat_count} 轮..."
+            )
 
+            api_result = await run_publish_via_api(
+                page,
+                filter_owner=filter_owner,
+                shop_id="9134811",  # 默认店铺 ID
+                max_products=publish_count_per_round,
+            )
+
+            round_success = api_result.get("success", False)
+            round_count = api_result.get("published_count", 0)
+            round_error = api_result.get("error")
+
+            if round_success:
+                total_published += round_count
+                all_detail_ids.extend(api_result.get("detail_ids", []))
+                logger.success(
+                    f"第 {round_idx + 1} 轮发布成功: {round_count} 个产品"
+                )
+            else:
+                last_error = round_error
+                logger.warning(
+                    f"第 {round_idx + 1} 轮发布失败: {round_error}"
+                )
+                # 继续尝试下一轮
+
+        # 汇总结果
+        success = total_published > 0
         if success:
-            message = f"API 发布完成: 成功发布 {published_count} 个产品"
+            message = (
+                f"API 发布完成: 成功发布 {total_published}/{total_target} 个链接 "
+                f"({self.publish_repeat_count} 轮)"
+            )
         else:
-            message = f"API 发布失败: {error_msg}"
+            message = f"API 发布失败: {last_error}"
 
         details = {
             "shop_name": shop_name,
             "publish_success": success,
-            "published_count": published_count,
-            "detail_ids": api_result.get("detail_ids", []),
-            "error": error_msg,
+            "published_count": total_published,
+            "target_count": total_target,
+            "repeat_count": self.publish_repeat_count,
+            "detail_ids": all_detail_ids,
+            "error": last_error,
         }
 
         return StageOutcome("stage4_publish", success, message, details)
