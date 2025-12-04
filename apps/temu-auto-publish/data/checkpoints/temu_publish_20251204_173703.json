@@ -1,7 +1,7 @@
 {
   "workflow_id": "temu_publish_20251204_173703",
   "workflow_type": "complete_publish",
-  "current_stage": "stage2_claim",
+  "current_stage": "stage3_batch_edit",
   "stages": {
     "stage1_first_edit": {
       "name": "stage1_first_edit",
@@ -392,11 +392,26 @@
       },
       "error": null,
       "retry_count": 0
+    },
+    "stage3_batch_edit": {
+      "name": "stage3_batch_edit",
+      "status": "completed",
+      "start_time": "2025-12-04T17:42:33.042513",
+      "end_time": "2025-12-04T17:42:33.042564",
+      "data": {
+        "mode": "api",
+        "edited_count": 80,
+        "total_count": 80,
+        "rounds": 3,
+        "error": null
+      },
+      "error": null,
+      "retry_count": 0
     }
   },
   "global_data": {},
   "retry_count": 0,
   "last_error": null,
   "created_at": "2025-12-04T17:38:11.533394",
-  "updated_at": "2025-12-04T17:38:39.020679"
+  "updated_at": "2025-12-04T17:42:33.042489"
 }
