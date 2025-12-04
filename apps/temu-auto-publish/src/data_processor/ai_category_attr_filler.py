@@ -239,33 +239,36 @@ class AICategoryAttrFiller:
     async def fill_batch_attrs(
         self,
         products: list[ProductAttrContext],
+        max_concurrency: int = 5,
     ) -> dict[str, list[dict[str, str]]]:
-        """批量补全多个产品的属性.
+        """批量补全多个产品的属性（并行处理）.
 
         按类目分组处理，相同类目的产品共享属性规则缓存。
+        使用信号量限制并发数量，避免 API 过载。
 
         Args:
             products: 产品上下文列表
+            max_concurrency: 最大并发数（默认 5）
 
         Returns:
             字典，key 为 detail_id，value 为补全后的属性列表
         """
         results: dict[str, list[dict[str, str]]] = {}
+        semaphore = asyncio.Semaphore(max_concurrency)
 
         # 按类目分组
         by_cid: dict[str, list[ProductAttrContext]] = {}
         for p in products:
             by_cid.setdefault(p.cid, []).append(p)
 
-        logger.info(f"批量属性补全: {len(products)} 个产品, {len(by_cid)} 个类目")
+        logger.info(f"批量属性补全: {len(products)} 个产品, {len(by_cid)} 个类目, 并发={max_concurrency}")
 
-        # 按类目处理
-        for cid, group in by_cid.items():
-            # 预加载类目属性规则到缓存
-            await self._get_required_attrs(cid)
+        # 预加载所有类目的属性规则到缓存（并行）
+        await asyncio.gather(*[self._get_required_attrs(cid) for cid in by_cid])
 
-            # 处理该类目下的每个产品
-            for p in group:
+        # 定义带信号量的处理函数
+        async def process_product(p: ProductAttrContext) -> tuple[str, list[dict[str, str]]]:
+            async with semaphore:
                 attrs = await self.fill_required_attrs(
                     detail_id=p.detail_id,
                     title=p.title,
@@ -273,7 +276,19 @@ class AICategoryAttrFiller:
                     breadcrumb=p.breadcrumb,
                     existing_attrs=p.existing_attrs,
                 )
-                results[p.detail_id] = attrs
+                return p.detail_id, attrs
+
+        # 并行处理所有产品
+        tasks = [process_product(p) for p in products]
+        completed = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # 收集结果
+        for item in completed:
+            if isinstance(item, Exception):
+                logger.error(f"属性补全异常: {item}")
+                continue
+            detail_id, attrs = item
+            results[detail_id] = attrs
 
         return results
 
