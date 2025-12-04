@@ -293,15 +293,22 @@ class AICategoryAttrFiller:
             logger.warning(f"获取类目 {cid} 属性规则失败: {result.get('message')}")
             return []
 
-        # 解析属性规则
+        # 解析属性规则 (API 返回 productAttributeRules)
         rules = []
-        for item in result.get("attributeRules", []):
+        for item in result.get("productAttributeRules", []):
+            # 转换 values 格式: [{vid, name}, ...] -> [{valueId, valueName}, ...]
+            raw_values = item.get("values") or []
+            attr_values = [
+                {"valueId": str(v.get("vid", "")), "valueName": v.get("name", "")}
+                for v in raw_values
+                if v.get("name")
+            ]
             rule = CategoryAttrRule(
-                attr_id=str(item.get("attrId", "")),
-                attr_name=item.get("attrName", ""),
-                is_required=item.get("isRequired") == 1,
-                input_type=item.get("inputType", "input"),
-                attr_values=item.get("attrValues", []),
+                attr_id=str(item.get("templatePid", "")),
+                attr_name=item.get("name", ""),
+                is_required=item.get("required", False) is True,
+                input_type="select" if item.get("controlType") == 1 else "input",
+                attr_values=attr_values,
             )
             rules.append(rule)
 

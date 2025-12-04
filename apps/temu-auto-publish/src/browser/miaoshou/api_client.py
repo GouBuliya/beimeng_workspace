@@ -1109,12 +1109,14 @@ class MiaoshouApiClient:
             response.raise_for_status()
             result = response.json()
 
-            # DEBUG: 打印原始响应以便调试
-            logger.debug(f"类目 {cid} 属性规则原始响应: {result}")
-
             if result.get("result") == "success":
-                attrs = result.get("attributeRules", [])
-                logger.debug(f"获取类目 {cid} 属性规则成功: {len(attrs)} 个属性")
+                # API 返回 productAttributeRules 和 saleAttributeRules
+                product_attrs = result.get("productAttributeRules", [])
+                sale_attrs = result.get("saleAttributeRules", [])
+                logger.debug(
+                    f"获取类目 {cid} 属性规则成功: "
+                    f"产品属性 {len(product_attrs)} 个, 销售属性 {len(sale_attrs)} 个"
+                )
             else:
                 logger.warning(f"获取类目属性规则失败: {result.get('message', '未知错误')}")
 
