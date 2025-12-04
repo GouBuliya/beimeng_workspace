@@ -1284,10 +1284,9 @@ class MiaoshouApiClient:
 
             if result.get("result") == "success":
                 detail = result.get("editCommonBoxDetail", {})
-                # 调试：打印所有顶层键名和包含 sku/price 的字段
+                # 调试：打印所有顶层键名
                 all_keys = list(detail.keys())
-                sku_related = [k for k in all_keys if "sku" in k.lower() or "price" in k.lower()]
-                logger.debug(f"获取产品编辑信息成功: {detail.get('commonCollectBoxDetailId')}, SKU相关字段: {sku_related}")
+                logger.info(f"获取产品编辑信息成功: {detail.get('commonCollectBoxDetailId')}, 所有字段: {all_keys}")
             else:
                 logger.warning(f"获取产品编辑信息失败: {result.get('message', '未知错误')}")
 
@@ -1344,10 +1343,15 @@ class MiaoshouApiClient:
         logger.info(f"API 请求 skuMap: {json.dumps(sku_map, ensure_ascii=False)}")
         # 打印完整的 colorMap JSON（检查是否有空名称）
         logger.info(f"API 请求 colorMap: {json.dumps(color_map, ensure_ascii=False)}")
-        # 检查其他可能包含 SKU/价格信息的字段
+        # 检查其他可能包含 SKU/价格/规格信息的字段
+        suspicious_keys = ["sku", "price", "size", "spec", "color", "prop"]
         for key in detail.keys():
-            if "sku" in key.lower() and key != "skuMap":
-                logger.warning(f"发现其他 SKU 字段 [{key}]: {detail[key]}")
+            key_lower = key.lower()
+            if any(s in key_lower for s in suspicious_keys) and key not in ["skuMap", "colorMap"]:
+                val = detail[key]
+                # 只打印非空值
+                if val and val != "" and val != [] and val != {}:
+                    logger.warning(f"发现其他相关字段 [{key}]: {val}")
 
         # 构建表单数据 - editCommonBoxDetail 需要 URL 编码的 JSON
         detail_json = json.dumps(detail, ensure_ascii=False)
