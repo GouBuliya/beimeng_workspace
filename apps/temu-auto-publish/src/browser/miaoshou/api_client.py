@@ -1333,19 +1333,12 @@ class MiaoshouApiClient:
 
         client = await self._get_client()
 
-        # 调试：打印发送给 API 的完整 skuMap 数据
+        # 调试：打印发送给 API 的完整 skuMap 数据（使用 JSON 格式便于分析）
         sku_map = detail.get("skuMap", {})
         color_map = detail.get("colorMap", {})
         logger.info(f"API 请求 - skuMap 数量: {len(sku_map)}, colorMap 数量: {len(color_map)}")
-        for sku_key, sku_data in sku_map.items():
-            if isinstance(sku_data, dict):
-                ori_price = sku_data.get("oriPrice", "未设置")
-                suggested = sku_data.get("suggestedPrice", "未设置")
-                logger.info(f"API 请求 SKU [{sku_key}]: oriPrice={ori_price}, suggestedPrice={suggested}")
-        for color_id, color_data in color_map.items():
-            if isinstance(color_data, dict):
-                name = color_data.get("name", "未设置")
-                logger.info(f"API 请求 Color [{color_id}]: name={name}")
+        # 打印完整的 skuMap JSON（用于调试价格问题）
+        logger.info(f"API 请求 skuMap 完整数据: {json.dumps(sku_map, ensure_ascii=False)}")
 
         # 构建表单数据 - editCommonBoxDetail 需要 URL 编码的 JSON
         detail_json = json.dumps(detail, ensure_ascii=False)
