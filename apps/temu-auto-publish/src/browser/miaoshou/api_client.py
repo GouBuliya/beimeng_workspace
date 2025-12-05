@@ -755,7 +755,10 @@ class MiaoshouApiClient:
                 logger.error(f"批次 {batch_num} HTTP 错误: {e.response.status_code}")
                 total_fail += len(batch_items)
             except Exception as e:
-                logger.error(f"批次 {batch_num} 保存失败: {e}")
+                # 增强错误日志：包含异常类型和详细信息
+                error_type = type(e).__name__
+                error_msg = str(e) or repr(e)
+                logger.error(f"批次 {batch_num} 保存失败 [{error_type}]: {error_msg}")
                 total_fail += len(batch_items)
 
         # 返回汇总结果
@@ -1113,11 +1116,13 @@ class MiaoshouApiClient:
             return result
 
         except httpx.HTTPStatusError as e:
-            logger.error(f"HTTP 错误: {e.response.status_code}")
+            logger.error(f"发布 HTTP 错误: {e.response.status_code}")
             return {"result": "error", "message": f"HTTP {e.response.status_code}"}
         except Exception as e:
-            logger.error(f"发布失败: {e}")
-            return {"result": "error", "message": str(e)}
+            error_type = type(e).__name__
+            error_msg = str(e) or repr(e)
+            logger.error(f"发布失败 [{error_type}]: {error_msg}")
+            return {"result": "error", "message": f"{error_type}: {error_msg}"}
 
     # ========== 视频 API ==========
 
