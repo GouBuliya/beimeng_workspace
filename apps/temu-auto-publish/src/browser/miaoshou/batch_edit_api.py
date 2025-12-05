@@ -21,6 +21,7 @@ from typing import Any
 from loguru import logger
 from playwright.async_api import Page
 
+from ...utils.retry_utils import ensure_sku_fields, validate_sku_fields
 from .api_client import MiaoshouApiClient
 
 
@@ -465,20 +466,92 @@ async def run_batch_edit_via_api(
                     item_data["skuMap"] = {"default": default_sku}
                     items_to_save.append(item_data)
 
-            # Step 9: 批量保存编辑
+            # Step 9: 批量保存编辑（带重试机制）
             logger.info(f"API 批量编辑: 保存 {len(items_to_save)} 个产品...")
-            edit_result = await client.save_collect_item_info(items=items_to_save)
 
-            if edit_result.get("result") == "success":
-                result["success"] = True
-                result["edited_count"] = edit_result.get("successNum", len(detail_ids))
-                logger.success(
-                    f"API 批量编辑完成: 成功 {result['edited_count']}/{result['total_count']}"
-                )
-            else:
-                result["error"] = f"保存编辑失败: {edit_result.get('errorMap', {})}"
-                result["edited_count"] = edit_result.get("successNum", 0)
-                logger.warning(result["error"])
+            max_save_retries = 3
+            save_attempt = 0
+            edit_result: dict[str, Any] = {}
+
+            while save_attempt < max_save_retries:
+                save_attempt += 1
+                try:
+                    edit_result = await client.save_collect_item_info(items=items_to_save)
+
+                    if edit_result.get("result") == "success":
+                        result["success"] = True
+                        result["edited_count"] = edit_result.get("successNum", len(detail_ids))
+                        logger.success(
+                            f"API 批量编辑完成: 成功 {result['edited_count']}/{result['total_count']}"
+                        )
+                        break
+                    elif edit_result.get("result") == "partial":
+                        # 部分成功，对失败的产品进行单独重试
+                        error_map = edit_result.get("errorMap", {})
+                        initial_success = edit_result.get("successNum", 0)
+                        initial_fail = edit_result.get("failNum", len(error_map))
+
+                        logger.warning(
+                            f"部分产品保存失败: 成功 {initial_success}, "
+                            f"失败 {initial_fail}, 失败ID: {list(error_map.keys())}"
+                        )
+
+                        # 对失败的产品进行单独重试
+                        if error_map:
+                            retry_result = await _retry_failed_products(
+                                client=client,
+                                items_to_save=items_to_save,
+                                error_map=error_map,
+                                max_retries=3,
+                            )
+
+                            # 计算最终结果
+                            final_success = initial_success + retry_result["retry_success_count"]
+                            final_fail = retry_result["retry_fail_count"]
+                            final_errors = retry_result["final_errors"]
+
+                            result["edited_count"] = final_success
+                            if final_fail == 0:
+                                result["success"] = True
+                                logger.success(
+                                    f"API 批量编辑完成（含重试）: "
+                                    f"成功 {final_success}/{result['total_count']}"
+                                )
+                            else:
+                                result["success"] = False
+                                result["error"] = f"部分产品最终失败: {final_errors}"
+                                logger.warning(
+                                    f"API 批量编辑部分失败: 成功 {final_success}, 失败 {final_fail}"
+                                )
+                        else:
+                            result["success"] = False
+                            result["edited_count"] = initial_success
+                            result["error"] = "部分保存失败但无 errorMap"
+                        break
+                    else:
+                        # 完全失败，可重试
+                        error_msg = f"保存编辑失败: {edit_result.get('errorMap', {})}"
+                        if save_attempt < max_save_retries:
+                            logger.warning(f"{error_msg} (尝试 {save_attempt}/{max_save_retries})")
+                            import asyncio
+
+                            await asyncio.sleep(2)  # 等待 2 秒后重试
+                        else:
+                            result["error"] = error_msg
+                            result["edited_count"] = edit_result.get("successNum", 0)
+                            logger.error(f"{error_msg}，已重试 {max_save_retries} 次")
+
+                except Exception as save_exc:
+                    if save_attempt < max_save_retries:
+                        logger.warning(
+                            f"保存编辑异常 (尝试 {save_attempt}/{max_save_retries}): {save_exc}"
+                        )
+                        import asyncio
+
+                        await asyncio.sleep(2)
+                    else:
+                        result["error"] = f"保存编辑最终失败: {save_exc}"
+                        logger.error(result["error"])
 
     except Exception as e:
         result["error"] = f"API 批量编辑异常: {e}"
@@ -1020,6 +1093,8 @@ def _build_edit_payload(
 def _update_sku_prices(sku_map: dict[str, Any]) -> dict[str, Any]:
     """更新 SKU 价格、重量、尺寸等信息.
 
+    带有鲁棒性加强：确保重量和 SKU 分类等关键字段正确设置。
+
     Args:
         sku_map: 原始 SKU 映射
 
@@ -1028,12 +1103,14 @@ def _update_sku_prices(sku_map: dict[str, Any]) -> dict[str, Any]:
     """
     import random
 
-    updated_map = {}
+    updated_map: dict[str, Any] = {}
 
     # 生成随机尺寸（与首次编辑保持一致：50-99cm，长>宽>高）
     dimensions = [random.randint(50, 99) for _ in range(3)]
     dimensions.sort(reverse=True)
     length_cm, width_cm, height_cm = dimensions
+
+    validation_errors: list[str] = []
 
     for sku_key, sku_data in sku_map.items():
         if not isinstance(sku_data, dict):
@@ -1041,10 +1118,10 @@ def _update_sku_prices(sku_map: dict[str, Any]) -> dict[str, Any]:
             continue
 
         # 复制 SKU 数据
-        new_sku = dict(sku_data)
+        new_sku: dict[str, Any] = dict(sku_data)
 
         # 获取供货价（尝试多个字段名，优先使用 originPrice）
-        current_price = None
+        current_price: float | None = None
         for field_name in ["originPrice", "supplyPrice", "supplierPrice", "costPrice", "price"]:
             field_value = sku_data.get(field_name)
             if field_value:
@@ -1067,6 +1144,8 @@ def _update_sku_prices(sku_map: dict[str, Any]) -> dict[str, Any]:
             )
             new_sku["oriPrice"] = ori_price_str
             new_sku["originPrice"] = str(current_price)
+            # 同时设置 price 字段（与建议售价相同）
+            new_sku["price"] = new_sku["suggestedPrice"]
             logger.debug(f"SKU 价格更新: oriPrice={ori_price_str}, originPrice={current_price}")
         else:
             # 如果没有找到供货价，设置一个默认值
@@ -1075,6 +1154,7 @@ def _update_sku_prices(sku_map: dict[str, Any]) -> dict[str, Any]:
             new_sku["originPrice"] = str(default_price)
             new_sku["suggestedPrice"] = str(default_price * 10)
             new_sku["suggestedPriceCurrencyType"] = "CNY"
+            new_sku["price"] = new_sku["suggestedPrice"]
             logger.warning(f"无法获取供货价，使用默认值 {default_price}")
 
         # SKU 分类设置为"单品 1 件"
@@ -1096,7 +1176,18 @@ def _update_sku_prices(sku_map: dict[str, Any]) -> dict[str, Any]:
         # 平台 SKU（自定义编码）设置为空格
         new_sku["itemNum"] = " "
 
+        # 鲁棒性加强：使用 ensure_sku_fields 确保所有字段都正确设置
+        new_sku = ensure_sku_fields(new_sku, weight_g=9527)
+
+        # 验证字段
+        valid, errors = validate_sku_fields(new_sku)
+        if not valid:
+            validation_errors.extend([f"SKU[{sku_key[:15]}...]: {e}" for e in errors])
+
         updated_map[sku_key] = new_sku
+
+    if validation_errors:
+        logger.warning(f"SKU 字段验证发现问题: {validation_errors[:5]}...")  # 只显示前 5 个
 
     if updated_map:
         logger.info(
@@ -1160,3 +1251,95 @@ def _map_category_attrs(attrs: dict[str, Any]) -> list[dict[str, Any]]:
             )
 
     return attr_list
+
+
+async def _retry_failed_products(
+    client: MiaoshouApiClient,
+    items_to_save: list[dict[str, Any]],
+    error_map: dict[str, str],
+    max_retries: int = 3,
+) -> dict[str, Any]:
+    """对失败的产品进行单独重试.
+
+    从 items_to_save 中提取 errorMap 中指示的失败产品，逐个重试。
+
+    Args:
+        client: API 客户端
+        items_to_save: 所有待保存的产品数据列表
+        error_map: API 返回的错误映射 {detailId: errorMessage}
+        max_retries: 每个产品的最大重试次数
+
+    Returns:
+        重试结果:
+        {
+            "retry_success_count": int,
+            "retry_fail_count": int,
+            "final_errors": dict,  # 最终仍失败的产品
+        }
+    """
+    import asyncio
+
+    if not error_map:
+        return {"retry_success_count": 0, "retry_fail_count": 0, "final_errors": {}}
+
+    # 构建 detailId -> item_data 的映射
+    item_map = {str(item.get("detailId")): item for item in items_to_save}
+
+    failed_ids = list(error_map.keys())
+    logger.info(f"开始重试 {len(failed_ids)} 个失败的产品...")
+
+    retry_success = 0
+    final_errors: dict[str, str] = {}
+
+    for detail_id in failed_ids:
+        item_data = item_map.get(str(detail_id))
+        if not item_data:
+            logger.warning(f"未找到产品 {detail_id} 的编辑数据，跳过重试")
+            final_errors[detail_id] = "未找到编辑数据"
+            continue
+
+        original_error = error_map.get(detail_id, "未知错误")
+        logger.debug(f"重试产品 {detail_id}，原因: {original_error}")
+
+        # 对单个产品进行最多 max_retries 次重试
+        success = False
+        for attempt in range(1, max_retries + 1):
+            try:
+                retry_result = await client.save_collect_item_info(items=[item_data])
+
+                if retry_result.get("result") == "success":
+                    success = True
+                    retry_success += 1
+                    logger.success(f"产品 {detail_id} 重试成功 (第 {attempt} 次)")
+                    break
+                else:
+                    new_error = retry_result.get("errorMap", {}).get(str(detail_id), "保存失败")
+                    if attempt < max_retries:
+                        logger.debug(
+                            f"产品 {detail_id} 重试失败 ({attempt}/{max_retries}): {new_error}"
+                        )
+                        await asyncio.sleep(1)  # 重试间隔 1 秒
+                    else:
+                        final_errors[detail_id] = new_error
+
+            except Exception as e:
+                if attempt < max_retries:
+                    logger.debug(f"产品 {detail_id} 重试异常 ({attempt}/{max_retries}): {e}")
+                    await asyncio.sleep(1)
+                else:
+                    final_errors[detail_id] = str(e)
+
+        if not success and detail_id not in final_errors:
+            final_errors[detail_id] = original_error
+
+    retry_fail = len(final_errors)
+    logger.info(f"失败产品重试完成: 成功 {retry_success}, 仍失败 {retry_fail}")
+
+    if final_errors:
+        logger.warning(f"最终失败的产品: {list(final_errors.keys())}")
+
+    return {
+        "retry_success_count": retry_success,
+        "retry_fail_count": retry_fail,
+        "final_errors": final_errors,
+    }

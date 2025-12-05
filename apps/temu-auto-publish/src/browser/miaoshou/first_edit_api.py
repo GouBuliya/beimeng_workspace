@@ -26,6 +26,11 @@ from playwright.async_api import Page
 
 from ...data_processor.random_generator import RandomDataGenerator
 from ...data_processor.selection_table_reader import ProductSelectionRow
+from ...utils.retry_utils import (
+    ensure_product_detail_fields,
+    retry_with_backoff,
+    validate_product_detail,
+)
 from .api_client import MiaoshouApiClient
 
 if TYPE_CHECKING:
@@ -283,16 +288,19 @@ async def _process_single_product(
     detail_id: str,
     product_info: dict[str, Any],
     selection: ProductSelectionRow | None = None,
+    max_retries: int = 3,
 ) -> bool:
     """处理单个产品的首次编辑.
 
     按选品表顺序分配选品数据，执行所有编辑操作。
+    带有重试机制，确保重量和 SKU 分类等关键字段正确设置。
 
     Args:
         client: API 客户端
         detail_id: 产品详情 ID (commonCollectBoxDetailId)
         product_info: 产品基本信息（来自列表）
         selection: 按顺序分配的选品数据
+        max_retries: 最大重试次数（默认 3）
 
     Returns:
         是否成功
@@ -333,22 +341,44 @@ async def _process_single_product(
         selection=selection,
     )
 
+    # 鲁棒性加强：确保重量和 SKU 分类字段正确设置
+    updated_detail = ensure_product_detail_fields(updated_detail, weight_g=9527)
+
+    # 验证关键字段
+    valid, errors = validate_product_detail(updated_detail)
+    if not valid:
+        logger.warning(f"[{detail_id}] 产品字段验证失败: {errors}")
+        # 不中断流程，继续尝试保存，让 API 返回更精确的错误
+
     # 调试：打印关键字段的更新后值
     logger.debug(
         f"[{detail_id}] 更新后关键字段: "
         f"colorPropName={updated_detail.get('colorPropName')}, "
+        f"weight={updated_detail.get('weight')}, "
         f"sizeChart={updated_detail.get('sizeChart', '')[:50] if updated_detail.get('sizeChart') else '空'}, "
         f"mainImgVideoUrl={updated_detail.get('mainImgVideoUrl', '')[:50] if updated_detail.get('mainImgVideoUrl') else '空'}"
     )
 
-    # 保存编辑
-    save_result = await client.save_edit_common_box_detail(updated_detail, oss_md5)
+    # 带重试的保存编辑
+    async def save_with_validation() -> bool:
+        """执行保存并检查结果."""
+        save_result = await client.save_edit_common_box_detail(updated_detail, oss_md5)
+        if save_result.get("result") == "success":
+            return True
+        error_msg = save_result.get("message", "未知错误")
+        raise RuntimeError(f"保存失败: {error_msg}")
 
-    if save_result.get("result") == "success":
-        return True
-
-    logger.warning(f"保存失败: {detail_id} - {save_result.get('message')}")
-    return False
+    try:
+        success = await retry_with_backoff(
+            save_with_validation,
+            max_retries=max_retries,
+            initial_delay=2.0,
+            operation_name=f"[{detail_id}] 保存产品编辑",
+        )
+        return success
+    except Exception as e:
+        logger.error(f"[{detail_id}] 保存最终失败: {e}")
+        return False
 
 
 def _update_product_detail(

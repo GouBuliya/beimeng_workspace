@@ -228,7 +228,7 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
         only_stage4_publish: str | None = Form(default="off"),
         single_run: str | None = Form(default="on"),
         publish_close_retry: str | None = Form(default="5"),
-        publish_repeat_count: str | None = Form(default="5"),
+        publish_repeat_count: str | None = Form(default="1"),
         start_round: str | None = Form(default="1"),
     ) -> RunStatus:
         resolved_path = await _resolve_selection_path(store, selection_file, selection_path)
@@ -259,7 +259,7 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
             raise HTTPException(status_code=400, detail="“仅认领”与“仅发布”不可同时启用")
 
         close_retry = _coerce_int(publish_close_retry, default=5, min_value=1, max_value=10)
-        repeat_count = _coerce_int(publish_repeat_count, default=5, min_value=1, max_value=10)
+        repeat_count = _coerce_int(publish_repeat_count, default=1, min_value=1, max_value=10)
         execution_round = _coerce_int(start_round, default=1, min_value=1, max_value=100)
         _persist_publish_preferences(repeat_count, close_retry)
 
