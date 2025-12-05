@@ -116,3 +116,4 @@ apps/temu-auto-publish/data/debug/html/video_upload_exception.html
 apps/temu-auto-publish/data/input/web_panel/packaging/*
 apps/temu-auto-publish/data/debug/html/size_chart_exception.html
 apps/temu-auto-publish/data/debug/html/video_upload_exception.html
+apps/temu-auto-publish/data/checkpoints/*
