@@ -227,7 +227,7 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
         only_stage4_publish: str | None = Form(default="off"),
         single_run: str | None = Form(default="on"),
         publish_close_retry: str | None = Form(default="5"),
-        publish_repeat_count: str | None = Form(default="1"),
+        publish_repeat_count: str | None = Form(default="5"),
         start_round: str | None = Form(default="1"),
     ) -> RunStatus:
         resolved_path = await _resolve_selection_path(store, selection_file, selection_path)

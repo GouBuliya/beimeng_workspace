@@ -332,7 +332,7 @@
     "note": "发布页面的具体选择器需要在实际进入页面后再获取"
   },
   "publish": {
-    "repeat_per_batch": 5
+    "repeat_per_batch": 1
   },
   "publish_confirm": {
     "close_retry": 5
