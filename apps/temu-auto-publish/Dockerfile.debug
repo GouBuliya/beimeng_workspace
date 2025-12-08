@@ -7,7 +7,7 @@
 #   运行: docker-compose --profile debug up -d
 #   VNC访问: vnc://localhost:5900 或 http://localhost:6080
 
-FROM mcr.microsoft.com/playwright/python:v1.49.0-noble
+FROM mcr.microsoft.com/playwright/python:v1.56.0-noble
 
 WORKDIR /app
 
