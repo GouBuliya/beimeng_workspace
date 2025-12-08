@@ -55,7 +55,7 @@ jobs:
         run: Get-ChildItem -Path apps/temu-auto-publish/dist/ -Recurse
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: TemuWebPanel-windows-x64
           path: apps/temu-auto-publish/dist/TemuWebPanel.exe
@@ -110,7 +110,7 @@ jobs:
         run: ls -la apps/temu-auto-publish/dist/
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: ${{ matrix.artifact-name }}
           path: apps/temu-auto-publish/dist/TemuWebPanel-*
