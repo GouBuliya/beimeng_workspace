@@ -14,12 +14,16 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+
+# 设置 DEBUG_MODE 以启用 dev/dev 登录（测试环境）
+os.environ["DEBUG_MODE"] = "true"
 
 APP_ROOT = Path(__file__).resolve().parents[1] / "apps" / "temu-auto-publish"
 if str(APP_ROOT) not in sys.path:

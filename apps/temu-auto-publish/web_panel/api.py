@@ -107,10 +107,10 @@ OSS_BUCKET_NAME = os.getenv("OSS_BUCKET_NAME", "")
 OSS_ENDPOINT = os.getenv("OSS_ENDPOINT", "oss-cn-hangzhou.aliyuncs.com")
 
 # OSS Bucket 实例 (延迟初始化)
-_oss_bucket: "oss2.Bucket | None" = None
+_oss_bucket: oss2.Bucket | None = None
 
 
-def get_oss_bucket() -> "oss2.Bucket | None":
+def get_oss_bucket() -> oss2.Bucket | None:
     """获取 OSS Bucket 实例，如果配置不完整则返回 None."""
     global _oss_bucket
 
@@ -167,6 +167,120 @@ def upload_to_oss(
     except Exception as exc:
         logger.error(f"OSS 上传失败: {exc}")
         return None
+
+
+# ========== 通用文件上传配置 ==========
+
+# 上传文件类型配置
+UPLOAD_CONFIG = {
+    "image": {
+        "allowed_types": {"image/jpeg", "image/png", "image/gif", "image/webp"},
+        "allowed_extensions": {".jpg", ".jpeg", ".png", ".gif", ".webp"},
+        "default_extension": ".jpg",
+        "max_size": 10 * 1024 * 1024,  # 10MB
+        "max_size_display": "10MB",
+        "type_display": "jpg, png, gif, webp",
+        "oss_folder": "images",
+        "local_subdir": "",
+    },
+    "video": {
+        "allowed_types": {"video/mp4", "video/webm", "video/quicktime"},
+        "allowed_extensions": {".mp4", ".webm", ".mov"},
+        "default_extension": ".mp4",
+        "max_size": 100 * 1024 * 1024,  # 100MB
+        "max_size_display": "100MB",
+        "type_display": "mp4, webm, mov",
+        "oss_folder": "videos",
+        "local_subdir": "videos",
+    },
+}
+
+# 流式读取块大小 (1MB)
+STREAM_CHUNK_SIZE = 1024 * 1024
+
+
+async def stream_upload_file(
+    file: UploadFile,
+    file_type: str,
+) -> dict[str, str]:
+    """通用文件上传处理函数（流式读取，避免大文件内存问题）.
+
+    Args:
+        file: FastAPI 上传文件对象
+        file_type: 文件类型 ("image" 或 "video")
+
+    Returns:
+        包含 url, filename, storage 的字典
+
+    Raises:
+        HTTPException: 验证失败时抛出
+    """
+    config = UPLOAD_CONFIG.get(file_type)
+    if not config:
+        raise HTTPException(status_code=400, detail=f"不支持的文件类型: {file_type}")
+
+    # 验证 MIME 类型
+    content_type = file.content_type or ""
+    if content_type not in config["allowed_types"]:
+        raise HTTPException(
+            status_code=400,
+            detail=f"不支持的文件类型: {content_type}，支持: {config['type_display']}",
+        )
+
+    # 生成唯一文件名
+    original_name = file.filename or file_type
+    ext = Path(original_name).suffix.lower()
+    if ext not in config["allowed_extensions"]:
+        ext = config["default_extension"]
+    unique_name = f"{uuid.uuid4().hex}{ext}"
+
+    # 流式读取文件内容（分块读取，避免一次性加载大文件到内存）
+    chunks: list[bytes] = []
+    total_size = 0
+    max_size = config["max_size"]
+
+    while True:
+        chunk = await file.read(STREAM_CHUNK_SIZE)
+        if not chunk:
+            break
+        total_size += len(chunk)
+        if total_size > max_size:
+            raise HTTPException(
+                status_code=400,
+                detail=f"文件大小不能超过 {config['max_size_display']}",
+            )
+        chunks.append(chunk)
+
+    content = b"".join(chunks)
+
+    # 优先上传到 OSS
+    oss_url = upload_to_oss(content, unique_name, content_type, folder=config["oss_folder"])
+    if oss_url:
+        return {
+            "url": oss_url,
+            "filename": unique_name,
+            "storage": "oss",
+        }
+
+    # OSS 不可用时，回退到本地存储
+    local_subdir = config["local_subdir"]
+    if local_subdir:
+        save_dir = UPLOADS_DIR / local_subdir
+        save_dir.mkdir(parents=True, exist_ok=True)
+        local_url = f"/static/uploads/{local_subdir}/{unique_name}"
+    else:
+        save_dir = UPLOADS_DIR
+        local_url = f"/static/uploads/{unique_name}"
+
+    save_path = save_dir / unique_name
+    save_path.write_bytes(content)
+    logger.info(f"{file_type} 已保存到本地: {save_path}")
+
+    return {
+        "url": local_url,
+        "filename": unique_name,
+        "storage": "local",
+    }
 
 
 def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
@@ -277,12 +391,16 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
         username: str = Form(default=""),
         password: str = Form(...),
     ) -> HTMLResponse:
-        # 开发模式：允许 dev/dev 登录（仅用于本地测试）
-        if username.strip() == "dev" and password.strip() == "dev":
+        # 开发模式：允许 dev/dev 登录（仅在 DEBUG_MODE=true 时启用）
+        if (
+            os.getenv("DEBUG_MODE", "").lower() == "true"
+            and username.strip() == "dev"
+            and password.strip() == "dev"
+        ):
             request.session[SESSION_KEY] = True
             request.session[SESSION_TOKEN_KEY] = "dev_token"
             request.session[SESSION_USERNAME_KEY] = "dev"
-            logger.info("开发模式登录: dev")
+            logger.warning("开发模式登录: dev (DEBUG_MODE=true)")
             return RedirectResponse("/", status_code=303)
 
         # 使用远程认证服务器
@@ -678,51 +796,9 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
         """上传图片并返回访问 URL.
 
         支持的图片格式: .jpg, .jpeg, .png, .gif, .webp
+        最大文件大小: 10MB
         """
-        # 验证文件类型
-        allowed_types = {"image/jpeg", "image/png", "image/gif", "image/webp"}
-        content_type = file.content_type or ""
-        if content_type not in allowed_types:
-            raise HTTPException(
-                status_code=400,
-                detail=f"不支持的文件类型: {content_type}，支持: jpg, png, gif, webp",
-            )
-
-        # 验证文件大小 (最大 10MB)
-        max_size = 10 * 1024 * 1024
-        content = await file.read()
-        if len(content) > max_size:
-            raise HTTPException(
-                status_code=400,
-                detail="图片大小不能超过 10MB",
-            )
-
-        # 生成唯一文件名
-        original_name = file.filename or "image"
-        ext = Path(original_name).suffix.lower()
-        if ext not in {".jpg", ".jpeg", ".png", ".gif", ".webp"}:
-            ext = ".jpg"  # 默认后缀
-        unique_name = f"{uuid.uuid4().hex}{ext}"
-
-        # 优先上传到 OSS (永久外网可访问)
-        oss_url = upload_to_oss(content, unique_name, content_type)
-        if oss_url:
-            return {
-                "url": oss_url,
-                "filename": unique_name,
-                "storage": "oss",
-            }
-
-        # OSS 不可用时，回退到本地存储
-        save_path = UPLOADS_DIR / unique_name
-        save_path.write_bytes(content)
-        logger.info(f"图片已保存到本地: {save_path}")
-
-        return {
-            "url": f"/static/uploads/{unique_name}",
-            "filename": unique_name,
-            "storage": "local",
-        }
+        return await stream_upload_file(file, "image")
 
     # ==================== 视频上传 API ====================
 
@@ -734,54 +810,9 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
         """上传视频并返回访问 URL.
 
         支持的视频格式: .mp4, .webm, .mov
-        最大文件大小: 100MB
+        最大文件大小: 100MB（流式处理，避免内存问题）
         """
-        # 验证文件类型
-        allowed_types = {"video/mp4", "video/webm", "video/quicktime"}
-        content_type = file.content_type or ""
-        if content_type not in allowed_types:
-            raise HTTPException(
-                status_code=400,
-                detail=f"不支持的文件类型: {content_type}，支持: mp4, webm, mov",
-            )
-
-        # 验证文件大小 (最大 100MB)
-        max_size = 100 * 1024 * 1024
-        content = await file.read()
-        if len(content) > max_size:
-            raise HTTPException(
-                status_code=400,
-                detail="视频大小不能超过 100MB",
-            )
-
-        # 生成唯一文件名
-        original_name = file.filename or "video"
-        ext = Path(original_name).suffix.lower()
-        if ext not in {".mp4", ".webm", ".mov"}:
-            ext = ".mp4"  # 默认后缀
-        unique_name = f"{uuid.uuid4().hex}{ext}"
-
-        # 优先上传到 OSS (永久外网可访问)
-        oss_url = upload_to_oss(content, unique_name, content_type, folder="videos")
-        if oss_url:
-            return {
-                "url": oss_url,
-                "filename": unique_name,
-                "storage": "oss",
-            }
-
-        # OSS 不可用时，回退到本地存储
-        video_dir = UPLOADS_DIR / "videos"
-        video_dir.mkdir(parents=True, exist_ok=True)
-        save_path = video_dir / unique_name
-        save_path.write_bytes(content)
-        logger.info(f"视频已保存到本地: {save_path}")
-
-        return {
-            "url": f"/static/uploads/videos/{unique_name}",
-            "filename": unique_name,
-            "storage": "local",
-        }
+        return await stream_upload_file(file, "video")
 
     # ==================== JSON 数据提交 API ====================
 
