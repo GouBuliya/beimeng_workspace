@@ -109,6 +109,13 @@ FORM_FIELDS: tuple[FormField, ...] = (
         default=False,
     ),
     FormField(
+        name="use_ai_attrs",
+        label="启用 AI 属性补全",
+        help_text="批量编辑时自动根据商品信息推断并补全必填类目属性(使用通义千问 qwen-flash).",
+        kind="toggle",
+        default=True,
+    ),
+    FormField(
         name="skip_first_edit",
         label="跳过首次编辑",
         help_text="已手动完成首次编辑时可开启, 系统会直接进入认领阶段.",

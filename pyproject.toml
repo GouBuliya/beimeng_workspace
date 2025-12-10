@@ -30,6 +30,7 @@ dependencies = [
     "chardet>=5.2.0",
     "playwright-stealth>=2.0.0",
     "pyinstaller>=6.17.0",
+    "openai>=2.8.1",
 ]
 
 [project.optional-dependencies]
