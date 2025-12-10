@@ -8,6 +8,13 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Inter Font -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <!-- Handsontable -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/handsontable/dist/handsontable.full.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/handsontable/dist/handsontable.full.min.js"></script>
+    <!-- SortableJS -->
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+    <!-- 表格编辑器样式 -->
+    <link rel="stylesheet" href="/static/css/table-editor.css">
     <script>
       tailwind.config = {
         theme: {
@@ -123,13 +130,70 @@
         <!-- Left Column: Configuration -->
         <div class="lg:col-span-7 space-y-6">
           
-          <!-- Quick Actions / File Prep -->
+          <!-- 选品数据输入 -->
           <div class="bg-white overflow-hidden shadow-sm rounded-xl border border-gray-200">
             <div class="px-6 py-5 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
-              <h3 class="text-lg font-medium leading-6 text-gray-900">准备工作</h3>
+              <div class="flex items-center gap-4">
+                <h3 class="text-lg font-medium leading-6 text-gray-900">选品数据</h3>
+                <!-- 输入模式切换 -->
+                <div class="input-mode-switcher">
+                  <button type="button" id="mode-table" class="active">表格输入</button>
+                  <button type="button" id="mode-csv">CSV上传</button>
+                </div>
+              </div>
               <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">Step 1</span>
             </div>
-            <div class="px-6 py-5">
+
+            <!-- 表格输入模式 -->
+            <div id="table-input-mode" class="px-0 py-0">
+              <!-- 表格工具栏 -->
+              <div class="table-toolbar">
+                <div class="toolbar-group">
+                  <button type="button" id="btn-add-row" class="primary">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                    添加行
+                  </button>
+                  <button type="button" id="btn-duplicate-row">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                    复制行
+                  </button>
+                  <button type="button" id="btn-delete-row" class="danger">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                    删除
+                  </button>
+                </div>
+                <div class="toolbar-divider"></div>
+                <div class="toolbar-group">
+                  <button type="button" id="btn-import-csv">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                    导入CSV
+                  </button>
+                  <button type="button" id="btn-export-csv">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                    导出CSV
+                  </button>
+                  <button type="button" id="btn-clear-table" class="danger">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                    清空
+                  </button>
+                </div>
+                <span class="row-count" id="table-row-count">已输入 0 行</span>
+              </div>
+
+              <!-- 表格容器 -->
+              <div class="table-editor-container">
+                <div class="table-editor-wrapper" id="selection-table"></div>
+              </div>
+
+              <!-- 状态栏 -->
+              <div class="px-4 py-2 bg-gray-50 border-t border-gray-200 flex items-center justify-between text-xs text-gray-500">
+                <span id="table-draft-status"></span>
+                <span>提示: 点击图片单元格可编辑图片，支持上传和URL添加</span>
+              </div>
+            </div>
+
+            <!-- CSV上传模式 (隐藏) -->
+            <div id="csv-input-mode" class="px-6 py-5 hidden">
               <div class="rounded-lg bg-blue-50 p-4 mb-4">
                 <div class="flex">
                   <div class="flex-shrink-0">
@@ -138,29 +202,42 @@
                     </svg>
                   </div>
                   <div class="ml-3 flex-1 md:flex md:justify-between">
-                    <p class="text-sm text-blue-700">请确保选品表文件包含完整的商品信息。</p>
+                    <p class="text-sm text-blue-700">CSV/Excel 高级上传模式，适合批量导入大量数据。</p>
                     <p class="mt-3 text-sm md:mt-0 md:ml-6">
                       <a href="/downloads/sample-selection" class="whitespace-nowrap font-medium text-blue-700 hover:text-blue-600">下载示例文件 &rarr;</a>
                     </p>
                   </div>
                 </div>
               </div>
-              <ul class="space-y-3 text-sm text-gray-600">
-                <li class="flex items-start gap-3">
-                  <span class="flex-shrink-0 flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 text-gray-600 font-bold text-xs">1</span>
-                  <span>准备好您的选品表 Excel/CSV 文件。</span>
-                </li>
-                <li class="flex items-start gap-3">
-                  <span class="flex-shrink-0 flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 text-gray-600 font-bold text-xs">2</span>
-                  <span>在下方表单中上传文件或填写路径。</span>
-                </li>
-                <li class="flex items-start gap-3">
-                  <span class="flex-shrink-0 flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 text-gray-600 font-bold text-xs">3</span>
-                  <span>点击“开始执行”并监控右侧日志。</span>
-                </li>
-              </ul>
+
+              <!-- CSV 文件上传区域 -->
+              <div class="file-upload-area mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-lg hover:border-indigo-400 transition-colors cursor-pointer relative bg-gray-50 hover:bg-white" id="csv-upload-area">
+                <div class="upload-placeholder space-y-1 text-center pointer-events-none">
+                  <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48">
+                    <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                  <div class="flex text-sm text-gray-600 justify-center">
+                    <span class="relative cursor-pointer bg-white rounded-md font-medium text-indigo-600 hover:text-indigo-500">
+                      <span>点击上传 CSV/Excel 文件</span>
+                    </span>
+                  </div>
+                  <p class="text-xs text-gray-500">支持 .csv, .xlsx, .xls 格式</p>
+                </div>
+                <div class="file-selected hidden space-y-2 text-center pointer-events-none">
+                  <svg class="mx-auto h-12 w-12 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                  </svg>
+                  <p class="csv-file-name text-sm font-medium text-gray-900 truncate max-w-xs"></p>
+                  <p class="csv-file-size text-xs text-gray-500"></p>
+                  <p class="text-xs text-indigo-600">点击更换文件</p>
+                </div>
+                <input type="file" id="csv-file-input" accept=".csv,.xlsx,.xls" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+              </div>
             </div>
           </div>
+
+          <!-- 隐藏的文件输入用于导入CSV -->
+          <input type="file" id="import-csv-input" accept=".csv" class="hidden" />
 
           <!-- Run Configuration Form -->
           <div class="bg-white overflow-hidden shadow-sm rounded-xl border border-gray-200">
@@ -172,7 +249,8 @@
               <form id="control-form" enctype="multipart/form-data" class="space-y-6">
                 {% for field in fields %}
                   {% if field.kind == "file" %}
-                  <div>
+                  <!-- 选品表文件字段仅在 CSV 模式下显示 -->
+                  <div class="{% if field.name == 'selection_file' %}selection-file-field hidden{% endif %}">
                     <label class="block text-sm font-medium text-gray-700 mb-1">
                       {{ field.label }}
                       {% if field.required %}<span class="text-red-500">*</span>{% endif %}
@@ -199,12 +277,12 @@
                         <p class="file-size text-xs text-gray-500"></p>
                         <p class="text-xs text-indigo-600">点击更换文件</p>
                       </div>
-                      <input 
-                        type="file" 
-                        name="{{ field.name }}" 
+                      <input
+                        type="file"
+                        name="{{ field.name }}"
                         class="file-input absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                         {% if field.accept %}accept="{{ field.accept }}"{% endif %}
-                        {% if field.required %}required{% endif %}
+                        {% if field.required and field.name != 'selection_file' %}required{% endif %}
                       />
                     </div>
                   </div>
@@ -503,7 +581,8 @@
           const selected = area.querySelector('.file-selected');
           const fileName = area.querySelector('.file-name');
           const fileSize = area.querySelector('.file-size');
-          
+
+          if (!input) return; // 跳过没有 .file-input 的区域
           input.addEventListener('change', function() {
             if (this.files && this.files[0]) {
               const file = this.files[0];
@@ -537,50 +616,9 @@
       // 初始化文件上传区域
       initFileUploadAreas();
 
-      form.addEventListener("submit", async (event) => {
-        event.preventDefault();
-        formError.classList.add("hidden");
-        const data = new FormData(form);
-        if (!data.has("single_run")) {
-          data.append("single_run", "off");
-        }
-        
-        runBtn.setAttribute("aria-busy", "true");
-        runBtn.disabled = true;
-        // Update UI for busy state
-        runBtn.classList.add("opacity-75", "cursor-wait");
-        
-        if (usesDefaultMiaoshouAccount()) {
-          alert("检测到妙手账号或密码仍为默认值 tester，请在“系统设置”中修改后再运行。");
-          runBtn.removeAttribute("aria-busy");
-          runBtn.disabled = false;
-          runBtn.classList.remove("opacity-75", "cursor-wait");
-          return;
-        }
-        try {
-          const response = await fetch("/api/run", {
-            method: "POST",
-            body: data,
-          });
-          if (!response.ok) {
-            const payload = await response.json();
-            throw new Error(payload.detail || "提交失败, 请重试");
-          }
-          logCursor = -1;
-          logBox.innerHTML = ""; // Clear logs
-          await refreshStatus();
-          await refreshLogs();
-        } catch (error) {
-          if(formErrorText) formErrorText.textContent = error.message;
-          formError.classList.remove("hidden");
-        } finally {
-          runBtn.removeAttribute("aria-busy");
-          runBtn.disabled = false;
-          runBtn.classList.remove("opacity-75", "cursor-wait");
-        }
-      });
+      // 注意: 表单提交处理已移至表格编辑器脚本块中的 bindFormSubmit() 函数
 
-      healthBtn.addEventListener("click", async () => {
+      if (healthBtn) healthBtn.addEventListener("click", async () => {
         const originalText = healthBtn.textContent;
         healthBtn.textContent = "检查中...";
         healthBtn.disabled = true;
@@ -607,7 +645,7 @@
         }
       });
 
-      clearCookiesBtn.addEventListener("click", async () => {
+      if (clearCookiesBtn) clearCookiesBtn.addEventListener("click", async () => {
         if (!confirm("确定要清除浏览器 Cookie 吗？\n\n清除后首次运行时，脚本将自动使用系统设置中的账号密码重新登录。")) {
           return;
         }
@@ -733,10 +771,85 @@
             updateProgress(payload.state);
             statusMessage.textContent = payload.message;
             workflowId.textContent = payload.workflow_id || "-";
-            statusError.textContent = payload.last_error || "暂无";
+
+            // 处理 CSV 验证错误的详细展示
+            if (payload.csv_validation_errors && payload.csv_validation_errors.length > 0) {
+                displayCSVValidationErrors(payload.csv_validation_errors, payload.last_error);
+            } else {
+                statusError.innerHTML = payload.last_error || "暂无";
+                statusError.classList.remove("cursor-pointer", "hover:text-red-700");
+                statusError.onclick = null;
+            }
         } catch(e) {
             console.error("Status refresh failed", e);
         }
+      }
+
+      function displayCSVValidationErrors(errors, summary) {
+        // 简短显示在状态区域，点击可展开详情
+        const errorCount = errors.length;
+        statusError.innerHTML = `<span class="underline">CSV 格式错误 (${errorCount}处)</span> <span class="text-xs">点击查看详情</span>`;
+        statusError.classList.add("cursor-pointer", "hover:text-red-700");
+        statusError.onclick = () => showCSVErrorModal(errors, summary);
+      }
+
+      function showCSVErrorModal(errors, summary) {
+        // 创建模态框
+        const modal = document.createElement("div");
+        modal.className = "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50";
+        modal.id = "csv-error-modal";
+
+        let errorListHtml = "";
+        errors.forEach((err, idx) => {
+            const colInfo = err.column_name ? ` [${err.column_name}]` : "";
+            const contextHtml = err.context ? `<pre class="text-xs text-gray-500 mt-1 bg-gray-100 p-2 rounded overflow-x-auto">${escapeHtml(err.context)}</pre>` : "";
+            errorListHtml += `
+                <div class="pl-3 border-l-2 border-red-300 py-2">
+                    <div class="flex items-center gap-2">
+                        <span class="bg-red-100 text-red-700 text-xs px-2 py-0.5 rounded">${err.error_type}</span>
+                        <span class="font-medium">第 ${err.row} 行${colInfo}</span>
+                    </div>
+                    <p class="text-sm text-gray-700 mt-1">${escapeHtml(err.message)}</p>
+                    ${contextHtml}
+                </div>
+            `;
+        });
+
+        modal.innerHTML = `
+            <div class="bg-white rounded-xl shadow-2xl max-w-2xl w-full mx-4 max-h-[80vh] flex flex-col">
+                <div class="p-4 border-b border-gray-200 flex justify-between items-center">
+                    <h3 class="text-lg font-bold text-red-600">CSV 格式验证失败</h3>
+                    <button onclick="closeCSVErrorModal()" class="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
+                </div>
+                <div class="p-4 overflow-y-auto flex-grow">
+                    <p class="text-sm text-gray-600 mb-4">请检查以下格式问题并修正后重新上传:</p>
+                    <div class="space-y-3">
+                        ${errorListHtml}
+                    </div>
+                </div>
+                <div class="p-4 border-t border-gray-200 bg-gray-50 rounded-b-xl">
+                    <button onclick="closeCSVErrorModal()" class="w-full bg-indigo-600 text-white py-2 px-4 rounded-lg hover:bg-indigo-700 transition">
+                        我知道了
+                    </button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+        modal.onclick = (e) => {
+            if (e.target === modal) closeCSVErrorModal();
+        };
+      }
+
+      function closeCSVErrorModal() {
+        const modal = document.getElementById("csv-error-modal");
+        if (modal) modal.remove();
+      }
+
+      function escapeHtml(text) {
+        const div = document.createElement("div");
+        div.textContent = text;
+        return div.innerHTML;
       }
 
       async function refreshLogs() {
@@ -840,6 +953,333 @@
           const value = (entry.value || "").trim().toLowerCase();
           return value === "tester";
         });
+      }
+    </script>
+
+    <!-- 表格编辑器脚本 -->
+    <script src="/static/js/table-editor.js"></script>
+    <script src="/static/js/spec-group-editor.js"></script>
+    <script src="/static/js/image-cell-editor.js"></script>
+    <script src="/static/js/csv-utils.js"></script>
+
+    <script>
+      // ========================================
+      // 表格编辑器初始化
+      // ========================================
+      // 暴露到全局以便调试
+      window.tableEditor = null;
+      let currentInputMode = 'table'; // 'table' or 'csv'
+
+      // 初始化表格编辑器
+      function initTableEditor() {
+        if (window.tableEditor) return; // 防止重复初始化
+        const container = document.getElementById('selection-table');
+        if (!container) {
+          console.error('表格容器未找到');
+          return;
+        }
+        window.tableEditor = new TableEditor('selection-table', {
+          onDataChange: () => {
+            // 数据变化时的回调
+          }
+        });
+        window.tableEditor.init();
+      }
+
+      // 输入模式切换
+      function switchInputMode(mode) {
+        currentInputMode = mode;
+        const modeTableBtn = document.getElementById('mode-table');
+        const modeCsvBtn = document.getElementById('mode-csv');
+        const tableInputMode = document.getElementById('table-input-mode');
+        const csvInputMode = document.getElementById('csv-input-mode');
+        const selectionFileField = document.querySelector('.selection-file-field');
+
+        if (mode === 'table') {
+          if (modeTableBtn) modeTableBtn.classList.add('active');
+          if (modeCsvBtn) modeCsvBtn.classList.remove('active');
+          if (tableInputMode) tableInputMode.classList.remove('hidden');
+          if (csvInputMode) csvInputMode.classList.add('hidden');
+          if (selectionFileField) selectionFileField.classList.add('hidden');
+        } else {
+          if (modeTableBtn) modeTableBtn.classList.remove('active');
+          if (modeCsvBtn) modeCsvBtn.classList.add('active');
+          if (tableInputMode) tableInputMode.classList.add('hidden');
+          if (csvInputMode) csvInputMode.classList.remove('hidden');
+          if (selectionFileField) selectionFileField.classList.remove('hidden');
+        }
+      }
+
+      // 初始化表格编辑器和绑定事件
+      function initTableEditorAndBindings() {
+        // 初始化表格
+        initTableEditor();
+
+        // 绑定模式切换按钮
+        const modeTableBtn = document.getElementById('mode-table');
+        const modeCsvBtn = document.getElementById('mode-csv');
+        if (modeTableBtn) modeTableBtn.addEventListener('click', () => switchInputMode('table'));
+        if (modeCsvBtn) modeCsvBtn.addEventListener('click', () => switchInputMode('csv'));
+
+        // 绑定工具栏按钮
+        const btnAddRow = document.getElementById('btn-add-row');
+        const btnDuplicateRow = document.getElementById('btn-duplicate-row');
+        const btnDeleteRow = document.getElementById('btn-delete-row');
+        const btnClearTable = document.getElementById('btn-clear-table');
+        const btnImportCsv = document.getElementById('btn-import-csv');
+        const btnExportCsv = document.getElementById('btn-export-csv');
+        const importCsvInput = document.getElementById('import-csv-input');
+
+        if (btnAddRow) btnAddRow.addEventListener('click', () => {
+          if (window.tableEditor) window.tableEditor.addRow(1);
+        });
+
+        if (btnDuplicateRow) btnDuplicateRow.addEventListener('click', () => {
+          if (window.tableEditor) window.tableEditor.duplicateRows();
+        });
+
+        if (btnDeleteRow) btnDeleteRow.addEventListener('click', () => {
+          if (window.tableEditor) window.tableEditor.deleteRows();
+        });
+
+        if (btnClearTable) btnClearTable.addEventListener('click', () => {
+          if (window.tableEditor) window.tableEditor.clearAll();
+        });
+
+        if (btnImportCsv && importCsvInput) {
+          btnImportCsv.addEventListener('click', () => {
+            importCsvInput.click();
+          });
+
+          importCsvInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            try {
+              const rowCount = await CSVUtils.importCSVToTable(file, tableEditor);
+              alert(`成功导入 ${rowCount} 行数据`);
+            } catch (error) {
+              alert('导入失败: ' + error.message);
+            }
+
+            importCsvInput.value = '';
+          });
+        }
+
+        if (btnExportCsv) btnExportCsv.addEventListener('click', () => {
+          if (tableEditor) {
+            const timestamp = new Date().toISOString().slice(0, 10);
+            CSVUtils.exportTableToCSV(tableEditor, `selection_data_${timestamp}.csv`);
+          }
+        });
+
+        // 绑定 CSV 上传区域
+        const csvUploadArea = document.getElementById('csv-upload-area');
+        const csvFileInput = document.getElementById('csv-file-input');
+
+        if (csvUploadArea && csvFileInput) {
+          csvFileInput.addEventListener('change', function() {
+            const placeholder = csvUploadArea.querySelector('.upload-placeholder');
+            const selected = csvUploadArea.querySelector('.file-selected');
+            const fileName = csvUploadArea.querySelector('.csv-file-name');
+            const fileSize = csvUploadArea.querySelector('.csv-file-size');
+
+            if (this.files && this.files[0]) {
+              const file = this.files[0];
+              if (placeholder) placeholder.classList.add('hidden');
+              if (selected) selected.classList.remove('hidden');
+              if (fileName) fileName.textContent = file.name;
+              if (fileSize) fileSize.textContent = formatFileSize(file.size);
+              csvUploadArea.classList.remove('border-gray-300', 'bg-gray-50');
+              csvUploadArea.classList.add('border-green-400', 'bg-green-50');
+            } else {
+              if (placeholder) placeholder.classList.remove('hidden');
+              if (selected) selected.classList.add('hidden');
+              csvUploadArea.classList.add('border-gray-300', 'bg-gray-50');
+              csvUploadArea.classList.remove('border-green-400', 'bg-green-50');
+            }
+          });
+        }
+
+        // 绑定表单提交
+        bindFormSubmit();
+      }
+
+      // ========================================
+      // 修改表单提交逻辑
+      // ========================================
+      function bindFormSubmit() {
+        const formEl = document.getElementById("control-form");
+        if (!formEl) return;
+
+        formEl.addEventListener("submit", async (event) => {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+
+          const formErrorEl = document.getElementById("form-error");
+          const formErrorTextEl = document.getElementById("form-error-text");
+          const runBtnEl = document.getElementById("run-btn");
+          const logBoxEl = document.getElementById("log-box");
+
+          if (formErrorEl) formErrorEl.classList.add("hidden");
+
+          // 检查输入模式
+          if (currentInputMode === 'table') {
+            // 表格模式：验证并提交 JSON 数据
+            if (!tableEditor) {
+              alert('表格编辑器未初始化');
+              return;
+            }
+
+            const tableData = window.tableEditor.getData();
+            if (tableData.length === 0) {
+              alert('请至少输入一行选品数据');
+              return;
+            }
+
+            const validation = window.tableEditor.validate();
+            if (!validation.valid) {
+              const errorMsg = validation.errors.map(e => `第${e.row}行: ${e.message}`).join('\n');
+              alert('数据验证失败:\n' + errorMsg);
+              return;
+            }
+
+            if (runBtnEl) {
+              runBtnEl.setAttribute("aria-busy", "true");
+              runBtnEl.disabled = true;
+              runBtnEl.classList.add("opacity-75", "cursor-wait");
+            }
+
+            if (typeof usesDefaultMiaoshouAccount === 'function' && usesDefaultMiaoshouAccount()) {
+              alert('检测到妙手账号或密码仍为默认值 tester，请在「系统设置」中修改后再运行。');
+              if (runBtnEl) {
+                runBtnEl.removeAttribute("aria-busy");
+                runBtnEl.disabled = false;
+                runBtnEl.classList.remove("opacity-75", "cursor-wait");
+              }
+              return;
+            }
+
+            try {
+              // 收集其他表单字段
+              const formData = new FormData(formEl);
+              const otherFields = {};
+              formData.forEach((value, key) => {
+                if (key !== 'selection_file') {
+                  otherFields[key] = value;
+                }
+              });
+
+              // 提交 JSON 数据到专用接口
+              const response = await fetch("/api/run-json", {
+                method: "POST",
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  selection_data: tableData,
+                  ...otherFields,
+                }),
+              });
+
+              if (!response.ok) {
+                const payload = await response.json();
+                throw new Error(payload.detail || "提交失败, 请重试");
+              }
+
+              logCursor = -1;
+              if (logBoxEl) logBoxEl.innerHTML = "";
+              if (typeof refreshStatus === 'function') await refreshStatus();
+              if (typeof refreshLogs === 'function') await refreshLogs();
+
+              // 提交成功后清除草稿
+              window.tableEditor.clearDraft();
+
+            } catch (error) {
+              if (formErrorTextEl) formErrorTextEl.textContent = error.message;
+              if (formErrorEl) formErrorEl.classList.remove("hidden");
+            } finally {
+              if (runBtnEl) {
+                runBtnEl.removeAttribute("aria-busy");
+                runBtnEl.disabled = false;
+                runBtnEl.classList.remove("opacity-75", "cursor-wait");
+              }
+            }
+
+          } else {
+            // CSV 模式：使用原有的文件上传逻辑
+            const csvFileInputEl = document.getElementById('csv-file-input');
+            const selectionFileInput = document.querySelector('input[name="selection_file"]');
+
+            // 将 CSV 上传区的文件复制到原有的 selection_file 字段
+            if (csvFileInputEl && csvFileInputEl.files.length > 0 && selectionFileInput) {
+              const dataTransfer = new DataTransfer();
+              dataTransfer.items.add(csvFileInputEl.files[0]);
+              selectionFileInput.files = dataTransfer.files;
+            }
+
+            // 检查是否有文件
+            if (!selectionFileInput || !selectionFileInput.files.length) {
+              alert('请上传选品表文件');
+              return;
+            }
+
+            const data = new FormData(formEl);
+            if (!data.has("single_run")) {
+              data.append("single_run", "off");
+            }
+
+            if (runBtnEl) {
+              runBtnEl.setAttribute("aria-busy", "true");
+              runBtnEl.disabled = true;
+              runBtnEl.classList.add("opacity-75", "cursor-wait");
+            }
+
+            if (typeof usesDefaultMiaoshouAccount === 'function' && usesDefaultMiaoshouAccount()) {
+              alert('检测到妙手账号或密码仍为默认值 tester，请在「系统设置」中修改后再运行。');
+              if (runBtnEl) {
+                runBtnEl.removeAttribute("aria-busy");
+                runBtnEl.disabled = false;
+                runBtnEl.classList.remove("opacity-75", "cursor-wait");
+              }
+              return;
+            }
+
+            try {
+              const response = await fetch("/api/run", {
+                method: "POST",
+                body: data,
+              });
+              if (!response.ok) {
+                const payload = await response.json();
+                throw new Error(payload.detail || "提交失败, 请重试");
+              }
+              logCursor = -1;
+              if (logBoxEl) logBoxEl.innerHTML = "";
+              if (typeof refreshStatus === 'function') await refreshStatus();
+              if (typeof refreshLogs === 'function') await refreshLogs();
+            } catch (error) {
+              if (formErrorTextEl) formErrorTextEl.textContent = error.message;
+              if (formErrorEl) formErrorEl.classList.remove("hidden");
+            } finally {
+              if (runBtnEl) {
+                runBtnEl.removeAttribute("aria-busy");
+                runBtnEl.disabled = false;
+                runBtnEl.classList.remove("opacity-75", "cursor-wait");
+              }
+            }
+          }
+        }, true); // 使用捕获阶段拦截
+      }
+
+      // 页面加载完成后初始化
+      document.addEventListener('DOMContentLoaded', () => {
+        initTableEditorAndBindings();
+      });
+
+      // 如果 DOM 已经加载完成，立即初始化
+      if (document.readyState === 'complete' || document.readyState === 'interactive') {
+        initTableEditorAndBindings();
       }
     </script>
   </body>
