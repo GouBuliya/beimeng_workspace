@@ -1798,163 +1798,166 @@ class CompletePublishWorkflow:
         # 一次性认领所有产品（不分轮次）
         detail_ids: list[str] = []
 
-        # 使用 API 获取产品列表（通过 page.evaluate + fetch）
-        # API: POST /api/move/common_collect_box/searchDetailList
-        logger.info("使用 API 获取产品 ID 列表")
+        # 如果提供了首次编辑成功的 ID 列表，直接使用它（不需要从 API 获取再过滤）
+        if first_edit_success_ids:
+            detail_ids = list(first_edit_success_ids)
+            logger.info(
+                f"直接使用首次编辑成功 ID 列表: {len(detail_ids)} 个产品"
+            )
+        else:
+            # 使用 API 获取产品列表（通过 page.evaluate + fetch）
+            # API: POST /api/move/common_collect_box/searchDetailList
+            logger.info("使用 API 获取产品 ID 列表")
 
-        # 获取 owner_account_id（如果有筛选）
-        owner_account_id = ""
-        if filter_owner:
-            logger.info(f"需要筛选创建人员: {filter_owner}")
-            # 从产品列表中查找匹配创建人员的 subAppAccountId
-            # 需要多页搜索因为目标创建人员的产品可能不在前面
-            # 匹配策略：模糊匹配用户名部分（括号前的名字或括号内的账号名）
-            sample_result = await page.evaluate(
-                r"""
-                async (filterName) => {
-                    try {
-                        // 搜索多页以找到目标创建人员
-                        const allOwners = new Map();  // ownerName -> accountId
-                        const filterLower = filterName.toLowerCase();
+            # 获取 owner_account_id（如果有筛选）
+            owner_account_id = ""
+            if filter_owner:
+                logger.info(f"需要筛选创建人员: {filter_owner}")
+                # 从产品列表中查找匹配创建人员的 subAppAccountId
+                # 需要多页搜索因为目标创建人员的产品可能不在前面
+                # 匹配策略：模糊匹配用户名部分（括号前的名字或括号内的账号名）
+                sample_result = await page.evaluate(
+                    r"""
+                    async (filterName) => {
+                        try {
+                            // 搜索多页以找到目标创建人员
+                            const allOwners = new Map();  // ownerName -> accountId
+                            const filterLower = filterName.toLowerCase();
 
-                        for (let pageNo = 1; pageNo <= 10; pageNo++) {
-                            const formData = new URLSearchParams();
-                            formData.append('pageNo', String(pageNo));
-                            formData.append('pageSize', '100');
-                            formData.append('filter[tabPaneName]', 'all');
+                            for (let pageNo = 1; pageNo <= 10; pageNo++) {
+                                const formData = new URLSearchParams();
+                                formData.append('pageNo', String(pageNo));
+                                formData.append('pageSize', '100');
+                                formData.append('filter[tabPaneName]', 'all');
 
-                            const resp = await fetch(
-                                '/api/move/common_collect_box/searchDetailList',
-                                {
-                                    method: 'POST',
-                                    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-                                    body: formData.toString()
-                                }
-                            );
-                            const data = await resp.json();
-                            if (data.result !== 'success' || !data.detailList) break;
+                                const resp = await fetch(
+                                    '/api/move/common_collect_box/searchDetailList',
+                                    {
+                                        method: 'POST',
+                                        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                                        body: formData.toString()
+                                    }
+                                );
+                                const data = await resp.json();
+                                if (data.result !== 'success' || !data.detailList) break;
 
-                            for (const item of data.detailList) {
-                                const ownerName = item.ownerSubAccountAliasName || '';
-                                const accountId = item.subAppAccountId;
-                                if (ownerName && accountId && !allOwners.has(ownerName)) {
-                                    allOwners.set(ownerName, accountId);
-                                }
-                                // 多种匹配方式
-                                if (ownerName) {
-                                    const ownerLower = ownerName.toLowerCase();
-                                    // 1. 完全包含
-                                    // 2. 用户名部分匹配（括号前的名字）
-                                    // 3. 账号部分匹配（括号内）
-                                    const nameMatch = ownerLower.includes(filterLower);
-                                    const bracketMatch = ownerName.match(/\(([^)]+)\)/);
-                                    const accountMatch = bracketMatch &&
-                                        bracketMatch[1].toLowerCase().includes(filterLower);
-                                    const prefixMatch = ownerName.split('(')[0]
-                                        .toLowerCase().includes(filterLower);
+                                for (const item of data.detailList) {
+                                    const ownerName = item.ownerSubAccountAliasName || '';
+                                    const accountId = item.subAppAccountId;
+                                    if (ownerName && accountId && !allOwners.has(ownerName)) {
+                                        allOwners.set(ownerName, accountId);
+                                    }
+                                    // 多种匹配方式
+                                    if (ownerName) {
+                                        const ownerLower = ownerName.toLowerCase();
+                                        // 1. 完全包含
+                                        // 2. 用户名部分匹配（括号前的名字）
+                                        // 3. 账号部分匹配（括号内）
+                                        const nameMatch = ownerLower.includes(filterLower);
+                                        const bracketMatch = ownerName.match(/\(([^)]+)\)/);
+                                        const accountMatch = bracketMatch &&
+                                            bracketMatch[1].toLowerCase().includes(filterLower);
+                                        const prefixMatch = ownerName.split('(')[0]
+                                            .toLowerCase().includes(filterLower);
 
-                                    if (nameMatch || accountMatch || prefixMatch) {
-                                        return {
-                                            success: true,
-                                            accountId: accountId,
-                                            ownerName: ownerName
-                                        };
+                                        if (nameMatch || accountMatch || prefixMatch) {
+                                            return {
+                                                success: true,
+                                                accountId: accountId,
+                                                ownerName: ownerName
+                                            };
+                                        }
                                     }
                                 }
+                                // 如果没有更多数据，停止
+                                if (data.detailList.length < 100) break;
                             }
-                            // 如果没有更多数据，停止
-                            if (data.detailList.length < 100) break;
+                            // 返回所有可用的创建人员名称和 ID
+                            const ownerList = [];
+                            for (const [name, id] of allOwners.entries()) {
+                                ownerList.push({name, id});
+                            }
+                            return {
+                                success: false,
+                                availableOwners: ownerList.slice(0, 30)
+                            };
+                        } catch (e) {
+                            return {error: e.message};
                         }
-                        // 返回所有可用的创建人员名称和 ID
-                        const ownerList = [];
-                        for (const [name, id] of allOwners.entries()) {
-                            ownerList.push({name, id});
+                    }
+                    """,
+                    filter_owner,
+                )
+                if sample_result and sample_result.get("success"):
+                    owner_account_id = str(sample_result.get("accountId", ""))
+                    owner_name = sample_result.get("ownerName", "")
+                    logger.info(f"找到创建人员: {owner_name} -> accountId={owner_account_id}")
+                elif sample_result and "availableOwners" in sample_result:
+                    owners = sample_result.get("availableOwners", [])
+                    names_with_ids = [f"{o['name']}({o['id']})" for o in owners[:15]]
+                    logger.warning(f"未找到匹配 '{filter_owner}' 的账号，可用: {names_with_ids}")
+                elif sample_result and sample_result.get("error"):
+                    logger.error(f"查找创建人员失败: {sample_result.get('error')}")
+
+            # 调用 searchDetailList API 获取产品列表
+            api_result = await page.evaluate(
+                """
+                async (params) => {
+                    try {
+                        const formData = new URLSearchParams();
+                        formData.append('pageNo', params.pageNo);
+                        formData.append('pageSize', params.pageSize);
+                        formData.append('filter[tabPaneName]', params.tabPaneName);
+                        if (params.ownerAccountId) {
+                            formData.append('filter[ownerAccountIds][0]', params.ownerAccountId);
                         }
-                        return {
-                            success: false,
-                            availableOwners: ownerList.slice(0, 30)
-                        };
+
+                        const resp = await fetch(
+                            '/api/move/common_collect_box/searchDetailList',
+                            {
+                                method: 'POST',
+                                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                                body: formData.toString()
+                            }
+                        );
+                        return await resp.json();
                     } catch (e) {
                         return {error: e.message};
                     }
                 }
                 """,
-                filter_owner,
+                {
+                    "pageNo": "1",
+                    "pageSize": str(selection_count + 10),  # 多获取一些
+                    "tabPaneName": "all",
+                    "ownerAccountId": owner_account_id,
+                },
             )
-            if sample_result and sample_result.get("success"):
-                owner_account_id = str(sample_result.get("accountId", ""))
-                owner_name = sample_result.get("ownerName", "")
-                logger.info(f"找到创建人员: {owner_name} -> accountId={owner_account_id}")
-            elif sample_result and "availableOwners" in sample_result:
-                owners = sample_result.get("availableOwners", [])
-                names_with_ids = [f"{o['name']}({o['id']})" for o in owners[:15]]
-                logger.warning(f"未找到匹配 '{filter_owner}' 的账号，可用: {names_with_ids}")
-            elif sample_result and sample_result.get("error"):
-                logger.error(f"查找创建人员失败: {sample_result.get('error')}")
 
-        # 调用 searchDetailList API 获取产品列表
-        api_result = await page.evaluate(
-            """
-            async (params) => {
-                try {
-                    const formData = new URLSearchParams();
-                    formData.append('pageNo', params.pageNo);
-                    formData.append('pageSize', params.pageSize);
-                    formData.append('filter[tabPaneName]', params.tabPaneName);
-                    if (params.ownerAccountId) {
-                        formData.append('filter[ownerAccountIds][0]', params.ownerAccountId);
-                    }
-
-                    const resp = await fetch(
-                        '/api/move/common_collect_box/searchDetailList',
-                        {
-                            method: 'POST',
-                            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-                            body: formData.toString()
-                        }
-                    );
-                    return await resp.json();
-                } catch (e) {
-                    return {error: e.message};
-                }
-            }
-            """,
-            {
-                "pageNo": "1",
-                "pageSize": str(selection_count + 10),  # 多获取一些
-                "tabPaneName": "all",
-                "ownerAccountId": owner_account_id,
-            },
-        )
-
-        if api_result and api_result.get("result") == "success":
-            detail_list = api_result.get("detailList", [])
-            total_available = api_result.get("total", 0)
-            logger.info(f"API 获取产品列表成功: {len(detail_list)} 条 / 共 {total_available} 条")
-
-            # 提取产品 ID - 使用 commonCollectBoxDetailId 字段
-            all_ids = []
-            for item in detail_list:
-                product_id = item.get("commonCollectBoxDetailId")
-                if product_id:
-                    all_ids.append(str(product_id))
-            logger.info(f"提取到 {len(all_ids)} 个产品 ID: {all_ids[:5]}...")
-
-            # 如果提供了首次编辑成功的 ID 列表，只认领这些产品
-            if first_edit_success_ids:
-                # 只保留首次编辑成功的产品（保持顺序）
-                success_ids_set = set(first_edit_success_ids)
-                filtered_ids = [pid for pid in all_ids if pid in success_ids_set]
+            if api_result and api_result.get("result") == "success":
+                detail_list = api_result.get("detailList", [])
+                total_available = api_result.get("total", 0)
                 logger.info(
-                    f"使用首次编辑成功 ID 过滤: {len(all_ids)} -> {len(filtered_ids)} 个产品"
+                    f"API 获取产品列表成功: {len(detail_list)} 条 / 共 {total_available} 条"
                 )
-                detail_ids = filtered_ids
-            else:
+
+                # 提取产品 ID - 使用 commonCollectBoxDetailId 字段
+                all_ids = []
+                for item in detail_list:
+                    product_id = item.get("commonCollectBoxDetailId")
+                    if product_id:
+                        all_ids.append(str(product_id))
+                logger.info(f"提取到 {len(all_ids)} 个产品 ID: {all_ids[:5]}...")
+
                 # 没有提供成功 ID 列表，取前 selection_count 个产品
                 detail_ids = all_ids[:selection_count]
-        else:
-            error_msg = api_result.get("error") or api_result.get("message", "未知错误")
-            logger.warning(f"API 获取产品列表失败: {error_msg}")
+            else:
+                error_msg = (
+                    api_result.get("error") or api_result.get("message", "未知错误")
+                    if api_result
+                    else "未知错误"
+                )
+                logger.warning(f"API 获取产品列表失败: {error_msg}")
 
         if not detail_ids:
             logger.warning("无法获取产品 ID，认领阶段失败")
@@ -2323,7 +2326,7 @@ class CompletePublishWorkflow:
                 page,
                 filter_owner=filter_owner,
                 shop_id="9134811",  # 默认店铺 ID
-                max_products=0,  # 不限制，发布所有找到的产品
+                max_products=publish_count_per_round,  # 限制为目标数量
             )
 
             round_success = api_result.get("success", False)

@@ -4,9 +4,12 @@
   - create_app(): FastAPI 应用工厂
   - /: 渲染引导式页面
   - /api/run: 接收表单并启动 Temu 工作流
+  - /api/run-json: 接收 JSON 格式选品数据并启动工作流
   - /api/status: 查询运行状态
   - /api/logs: 增量拉取日志
   - /api/fields: 返回表单元数据
+  - /api/upload-image: 图片上传 (支持 OSS)
+  - /api/upload-video: 视频上传 (支持 OSS, 最大100MB)
   - /health: 环境自检
   - /downloads/sample-selection: 示例选品表下载
 @GOTCHAS:
@@ -19,12 +22,24 @@ from __future__ import annotations
 import json
 import os
 import platform
+import uuid
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
+
+# 阿里云 OSS SDK (可选依赖)
+try:
+    import oss2
+
+    OSS_AVAILABLE = True
+except ImportError:
+    OSS_AVAILABLE = False
+    oss2 = None  # type: ignore
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from loguru import logger
 from pydantic import BaseModel
@@ -38,6 +53,7 @@ try:
 except ImportError:
     # 如果相对导入失败，直接读取版本文件
     import sys
+
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     from __init__ import __version__
 from .env_settings import (
@@ -70,17 +86,211 @@ logger.add(
 logger.info(f"日志文件已配置: {_LOG_DIR}")
 
 TEMPLATE_DIR = APP_ROOT / "web_panel" / "templates"
+STATIC_DIR = APP_ROOT / "web_panel" / "static"
+UPLOADS_DIR = STATIC_DIR / "uploads"
 DEFAULT_SELECTION = APP_ROOT / "data" / "input" / "10月新品可上架.csv"
 SELECTOR_FILE = APP_ROOT / "config" / "miaoshou_selectors_v2.json"
 SESSION_KEY = "web_panel_user"
 SESSION_TOKEN_KEY = "web_panel_token"
 SESSION_USERNAME_KEY = "web_panel_username"
 
+# 确保上传目录存在
+UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+
+# ========== 阿里云 OSS 配置 ==========
+# 加载环境变量
+load_dotenv(APP_ROOT / ".env")
+
+OSS_ACCESS_KEY_ID = os.getenv("OSS_ACCESS_KEY_ID", "")
+OSS_ACCESS_KEY_SECRET = os.getenv("OSS_ACCESS_KEY_SECRET", "")
+OSS_BUCKET_NAME = os.getenv("OSS_BUCKET_NAME", "")
+OSS_ENDPOINT = os.getenv("OSS_ENDPOINT", "oss-cn-hangzhou.aliyuncs.com")
+
+# OSS Bucket 实例 (延迟初始化)
+_oss_bucket: oss2.Bucket | None = None
+
+
+def get_oss_bucket() -> oss2.Bucket | None:
+    """获取 OSS Bucket 实例，如果配置不完整则返回 None."""
+    global _oss_bucket
+
+    if _oss_bucket is not None:
+        return _oss_bucket
+
+    if not OSS_AVAILABLE:
+        logger.warning("oss2 库未安装，图片将保存到本地")
+        return None
+
+    if not all([OSS_ACCESS_KEY_ID, OSS_ACCESS_KEY_SECRET, OSS_BUCKET_NAME]):
+        logger.warning("OSS 配置不完整，图片将保存到本地")
+        return None
+
+    try:
+        auth = oss2.Auth(OSS_ACCESS_KEY_ID, OSS_ACCESS_KEY_SECRET)
+        _oss_bucket = oss2.Bucket(auth, OSS_ENDPOINT, OSS_BUCKET_NAME)
+        logger.info(f"OSS 已配置: bucket={OSS_BUCKET_NAME}, endpoint={OSS_ENDPOINT}")
+        return _oss_bucket
+    except Exception as exc:
+        logger.error(f"OSS 初始化失败: {exc}")
+        return None
+
+
+def upload_to_oss(
+    content: bytes, filename: str, content_type: str, folder: str = "images"
+) -> str | None:
+    """上传文件到 OSS，返回公网访问 URL，失败返回 None.
+
+    Args:
+        content: 文件内容
+        filename: 文件名
+        content_type: MIME 类型
+        folder: 存储目录，默认 "images"，视频使用 "videos"
+    """
+    bucket = get_oss_bucket()
+    if bucket is None:
+        return None
+
+    # 按日期组织目录: images/2024/01/15/xxx.jpg 或 videos/2024/01/15/xxx.mp4
+    date_path = datetime.now().strftime("%Y/%m/%d")
+    object_key = f"{folder}/{date_path}/{filename}"
+
+    try:
+        # 设置 Content-Type
+        headers = {"Content-Type": content_type}
+        bucket.put_object(object_key, content, headers=headers)
+
+        # 返回公网访问 URL
+        # 格式: https://{bucket}.{endpoint}/{object_key}
+        url = f"https://{OSS_BUCKET_NAME}.{OSS_ENDPOINT}/{object_key}"
+        logger.info(f"文件已上传到 OSS: {url}")
+        return url
+    except Exception as exc:
+        logger.error(f"OSS 上传失败: {exc}")
+        return None
+
+
+# ========== 通用文件上传配置 ==========
+
+# 上传文件类型配置
+UPLOAD_CONFIG = {
+    "image": {
+        "allowed_types": {"image/jpeg", "image/png", "image/gif", "image/webp"},
+        "allowed_extensions": {".jpg", ".jpeg", ".png", ".gif", ".webp"},
+        "default_extension": ".jpg",
+        "max_size": 10 * 1024 * 1024,  # 10MB
+        "max_size_display": "10MB",
+        "type_display": "jpg, png, gif, webp",
+        "oss_folder": "images",
+        "local_subdir": "",
+    },
+    "video": {
+        "allowed_types": {"video/mp4", "video/webm", "video/quicktime"},
+        "allowed_extensions": {".mp4", ".webm", ".mov"},
+        "default_extension": ".mp4",
+        "max_size": 100 * 1024 * 1024,  # 100MB
+        "max_size_display": "100MB",
+        "type_display": "mp4, webm, mov",
+        "oss_folder": "videos",
+        "local_subdir": "videos",
+    },
+}
+
+# 流式读取块大小 (1MB)
+STREAM_CHUNK_SIZE = 1024 * 1024
+
+
+async def stream_upload_file(
+    file: UploadFile,
+    file_type: str,
+) -> dict[str, str]:
+    """通用文件上传处理函数（流式读取，避免大文件内存问题）.
+
+    Args:
+        file: FastAPI 上传文件对象
+        file_type: 文件类型 ("image" 或 "video")
+
+    Returns:
+        包含 url, filename, storage 的字典
+
+    Raises:
+        HTTPException: 验证失败时抛出
+    """
+    config = UPLOAD_CONFIG.get(file_type)
+    if not config:
+        raise HTTPException(status_code=400, detail=f"不支持的文件类型: {file_type}")
+
+    # 验证 MIME 类型
+    content_type = file.content_type or ""
+    if content_type not in config["allowed_types"]:
+        raise HTTPException(
+            status_code=400,
+            detail=f"不支持的文件类型: {content_type}，支持: {config['type_display']}",
+        )
+
+    # 生成唯一文件名
+    original_name = file.filename or file_type
+    ext = Path(original_name).suffix.lower()
+    if ext not in config["allowed_extensions"]:
+        ext = config["default_extension"]
+    unique_name = f"{uuid.uuid4().hex}{ext}"
+
+    # 流式读取文件内容（分块读取，避免一次性加载大文件到内存）
+    chunks: list[bytes] = []
+    total_size = 0
+    max_size = config["max_size"]
+
+    while True:
+        chunk = await file.read(STREAM_CHUNK_SIZE)
+        if not chunk:
+            break
+        total_size += len(chunk)
+        if total_size > max_size:
+            raise HTTPException(
+                status_code=400,
+                detail=f"文件大小不能超过 {config['max_size_display']}",
+            )
+        chunks.append(chunk)
+
+    content = b"".join(chunks)
+
+    # 优先上传到 OSS
+    oss_url = upload_to_oss(content, unique_name, content_type, folder=config["oss_folder"])
+    if oss_url:
+        return {
+            "url": oss_url,
+            "filename": unique_name,
+            "storage": "oss",
+        }
+
+    # OSS 不可用时，回退到本地存储
+    local_subdir = config["local_subdir"]
+    if local_subdir:
+        save_dir = UPLOADS_DIR / local_subdir
+        save_dir.mkdir(parents=True, exist_ok=True)
+        local_url = f"/static/uploads/{local_subdir}/{unique_name}"
+    else:
+        save_dir = UPLOADS_DIR
+        local_url = f"/static/uploads/{unique_name}"
+
+    save_path = save_dir / unique_name
+    save_path.write_bytes(content)
+    logger.info(f"{file_type} 已保存到本地: {save_path}")
+
+    return {
+        "url": local_url,
+        "filename": unique_name,
+        "storage": "local",
+    }
+
 
 def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
     """FastAPI 应用工厂."""
 
     app = FastAPI(title="Temu Web Panel", default_response_class=JSONResponse)
+
+    # 挂载静态文件目录
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
     templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
     store = SelectionFileStore()
     manager = task_manager or create_task_manager()
@@ -181,6 +391,18 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
         username: str = Form(default=""),
         password: str = Form(...),
     ) -> HTMLResponse:
+        # 开发模式：允许 dev/dev 登录（仅在 DEBUG_MODE=true 时启用）
+        if (
+            os.getenv("DEBUG_MODE", "").lower() == "true"
+            and username.strip() == "dev"
+            and password.strip() == "dev"
+        ):
+            request.session[SESSION_KEY] = True
+            request.session[SESSION_TOKEN_KEY] = "dev_token"
+            request.session[SESSION_USERNAME_KEY] = "dev"
+            logger.warning("开发模式登录: dev (DEBUG_MODE=true)")
+            return RedirectResponse("/", status_code=303)
+
         # 使用远程认证服务器
         auth_client = get_auth_client()
 
@@ -228,7 +450,7 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
         only_stage4_publish: str | None = Form(default="off"),
         single_run: str | None = Form(default="on"),
         publish_close_retry: str | None = Form(default="5"),
-        publish_repeat_count: str | None = Form(default="1"),
+        publish_repeat_count: str | None = Form(default="5"),
         start_round: str | None = Form(default="1"),
     ) -> RunStatus:
         resolved_path = await _resolve_selection_path(store, selection_file, selection_path)
@@ -565,6 +787,160 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
             if cleared_files
             else "无需清除（Cookie 文件不存在）",
         }
+
+    # ==================== 图片上传 API ====================
+
+    @app.post("/api/upload-image")
+    async def upload_image(
+        file: UploadFile = File(...),
+        admin: None = Depends(admin_guard),
+    ) -> dict[str, str]:
+        """上传图片并返回访问 URL.
+
+        支持的图片格式: .jpg, .jpeg, .png, .gif, .webp
+        最大文件大小: 10MB
+        """
+        return await stream_upload_file(file, "image")
+
+    # ==================== 视频上传 API ====================
+
+    @app.post("/api/upload-video")
+    async def upload_video(
+        file: UploadFile = File(...),
+        admin: None = Depends(admin_guard),
+    ) -> dict[str, str]:
+        """上传视频并返回访问 URL.
+
+        支持的视频格式: .mp4, .webm, .mov
+        最大文件大小: 100MB（流式处理，避免内存问题）
+        """
+        return await stream_upload_file(file, "video")
+
+    # ==================== JSON 数据提交 API ====================
+
+    @app.post("/api/run-json", response_model=RunStatus)
+    async def run_workflow_json(
+        request: Request,
+        admin: None = Depends(admin_guard),
+    ) -> RunStatus:
+        """接收 JSON 格式的选品数据并启动工作流.
+
+        支持表格输入模式下的 JSON 数据提交。
+        """
+        try:
+            body = await request.json()
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"JSON 解析错误: {exc}") from exc
+
+        selection_data = body.get("selection_data", [])
+        if not selection_data:
+            raise HTTPException(status_code=400, detail="选品数据不能为空")
+
+        # 验证必填字段
+        for idx, row in enumerate(selection_data):
+            if not row.get("product_name"):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"第 {idx + 1} 行产品名称不能为空",
+                )
+
+        # 将 JSON 数据写入临时 CSV 文件
+        import csv
+
+        csv_fields = [
+            "product_name",
+            "owner",
+            "model_number",
+            "color_spec",
+            "collect_count",
+            "cost_price",
+            "spec_unit",
+            "spec_options",
+            "image_files",
+            "size_chart_image_url",
+            "product_video_url",
+        ]
+
+        # 创建临时文件
+        temp_dir = APP_ROOT / "data" / "temp"
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        temp_file = temp_dir / f"selection_{uuid.uuid4().hex}.csv"
+
+        with open(temp_file, "w", newline="", encoding="utf-8-sig") as f:
+            writer = csv.DictWriter(f, fieldnames=csv_fields)
+            # 写入中文表头
+            header_map = {
+                "product_name": "产品名称",
+                "owner": "主品负责人",
+                "model_number": "型号",
+                "color_spec": "颜色/规格",
+                "collect_count": "采集数量",
+                "cost_price": "进货价",
+                "spec_unit": "规格单位",
+                "spec_options": "规格选项",
+                "image_files": "实拍图",
+                "size_chart_image_url": "尺码图",
+                "product_video_url": "视频链接",
+            }
+            writer.writerow(header_map)
+
+            for row in selection_data:
+                csv_row = {}
+                for field in csv_fields:
+                    value = row.get(field, "")
+                    # 处理 JSON 数组
+                    if isinstance(value, list):
+                        value = json.dumps(value, ensure_ascii=False)
+                    csv_row[field] = value or ""
+                writer.writerow(csv_row)
+
+        logger.info(f"已生成临时 CSV 文件: {temp_file}, 共 {len(selection_data)} 行")
+
+        # 获取其他参数
+        collection_owner = body.get("collection_owner", "").strip()
+        if not collection_owner:
+            raise HTTPException(status_code=400, detail="妙手创建人员不能为空")
+
+        headless_mode = body.get("headless_mode", "auto")
+        use_ai_titles = body.get("use_ai_titles", "off")
+        skip_first_edit = body.get("skip_first_edit", "off")
+        only_claim = body.get("only_claim", "off")
+        only_stage4_publish = body.get("only_stage4_publish", "off")
+        single_run = body.get("single_run", "on")
+        publish_close_retry = body.get("publish_close_retry", "5")
+        publish_repeat_count = body.get("publish_repeat_count", "5")
+        start_round = body.get("start_round", "1")
+
+        only_claim_flag = _to_bool(only_claim)
+        only_stage4_flag = _to_bool(only_stage4_publish)
+        if only_stage4_flag and only_claim_flag:
+            raise HTTPException(status_code=400, detail="「仅认领」与「仅发布」不可同时启用")
+
+        close_retry = _coerce_int(publish_close_retry, default=5, min_value=1, max_value=10)
+        repeat_count = _coerce_int(publish_repeat_count, default=1, min_value=1, max_value=10)
+        execution_round = _coerce_int(start_round, default=1, min_value=1, max_value=100)
+        _persist_publish_preferences(repeat_count, close_retry)
+
+        options = WorkflowOptions(
+            selection_path=temp_file,
+            collection_owner=collection_owner,
+            headless_mode=_normalize_choice(headless_mode),
+            use_ai_titles=_to_bool(use_ai_titles),
+            skip_first_edit=_to_bool(skip_first_edit),
+            only_claim=only_claim_flag,
+            only_stage4_publish=only_stage4_flag,
+            outer_package_image=None,  # JSON 模式暂不支持
+            manual_file=None,  # JSON 模式暂不支持
+            single_run=_to_bool(single_run),
+            start_round=execution_round,
+        )
+
+        try:
+            status = manager.start(options)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+        return status
 
     return app
 
