@@ -1,340 +1,333 @@
 {
-  "comment": "妙手ERP系统选择器配置 - 使用稳定的文本定位器",
-  "version": "2.0.0",
-  "last_updated": "2025-10-30",
-  "strategy": "text_locator",
-  "note": "使用文本定位器替代动态的aria-ref，提高选择器稳定性",
-  "login": {
-    "url": "https://erp.91miaoshou.com/sub_account/users",
-    "username_input": "input[name='mobile'].account-input",
-    "password_input": "input[name='password'].password-input",
-    "login_button": "button.login-button, button:has-text('登录'), button:has-text('立即登录')"
-  },
-  "homepage": {
-    "url": "https://erp.91miaoshou.com/welcome",
-    "product_menu": "text='产品'",
-    "product_collection_link": "text='产品采集'",
-    "pending_publish_count": "text='待发布'"
-  },
-  "product_collection": {
-    "url": "https://erp.91miaoshou.com/common_collect_box/index",
-    "link_input": "textarea[placeholder*='支持输入'], textarea[placeholder*='链接']",
-    "collection_optimize_btn": "button:has-text('采集优化')",
-    "collection_settings_btn": "button:has-text('采集设置')",
-    "auto_claim_checkbox": "text='自动认领'",
-    "platform_selector": "button:has-text('已选'), button:has-text('平台')",
-    "collect_and_claim_btn": "button:has-text('采集并自动认领')",
-    "collect_and_publish_btn": "button:has-text('采集并自动发布')"
-  },
-  "sidebar_menu": {
-    "common_functions": "text='通用功能'",
-    "product_collection_item": "text='产品采集'",
-    "common_collection_box": "text='公用采集箱'"
-  },
-  "temu_collect_box": {
-    "comment": "Temu全托管采集箱 - 批量编辑入口",
-    "url": "https://erp.91miaoshou.com/pddkj/collect_box/items",
-    "tabs": {
-      "all": ".jx-radio-button:has-text('全部')",
-      "unpublished": ".jx-radio-button:has-text('未发布')",
-      "scheduled": ".jx-radio-button:has-text('定时发布')",
-      "published": ".jx-radio-button:has-text('已发布')"
+    "comment": "妙手ERP系统选择器配置 - 使用稳定的文本定位器",
+    "version": "2.0.0",
+    "last_updated": "2025-10-30",
+    "strategy": "text_locator",
+    "note": "使用文本定位器替代动态的aria-ref，提高选择器稳定性",
+    "login": {
+        "url": "https://erp.91miaoshou.com/sub_account/users",
+        "username_input": "input[name='mobile'].account-input",
+        "password_input": "input[name='password'].password-input",
+        "login_button": "button.login-button, button:has-text('登录'), button:has-text('立即登录')",
     },
-    "action_buttons": {
-      "batch_edit": "button:has-text('批量编辑')",
-      "select_all": "text='全选'",
-      "select_shop": "button:has-text('选择店铺')",
-      "set_price": "button:has-text('设置供货价')",
-      "batch_publish": "button:has-text('批量发布')"
-    }
-  },
-  "collection_box": {
-    "url": "https://erp.91miaoshou.com/common_collect_box/items",
-    "search_box": {
-      "product_title": "input[placeholder*='产品标题'], input[placeholder*='标题']",
-      "source_id": "input[placeholder*='货源ID'], input[placeholder*='ID']",
-      "source_price_min": "input[placeholder*='最低'], input[placeholder*='价格']",
-      "source_price_max": "input[placeholder*='最高'], input[placeholder*='价格']",
-      "search_btn": "button:has-text('搜索')",
-      "reset_btn": "button:has-text('重置')"
+    "homepage": {
+        "url": "https://erp.91miaoshou.com/welcome",
+        "product_menu": "text='产品'",
+        "product_collection_link": "text='产品采集'",
+        "pending_publish_count": "text='待发布'",
     },
-    "action_buttons": {
-      "claim_to": "button:has-text('认领到')",
-      "platform_claim_config": "button:has-text('平台认领配置')",
-      "group": "button:has-text('分组')",
-      "delete": "button:has-text('删除')",
-      "more": "button:has-text('更多')",
-      "create_product": "button:has-text('创建产品')",
-      "import_product": "button:has-text('导入产品')"
+    "product_collection": {
+        "url": "https://erp.91miaoshou.com/common_collect_box/index",
+        "link_input": "textarea[placeholder*='支持输入'], textarea[placeholder*='链接']",
+        "collection_optimize_btn": "button:has-text('采集优化')",
+        "collection_settings_btn": "button:has-text('采集设置')",
+        "auto_claim_checkbox": "text='自动认领'",
+        "platform_selector": "button:has-text('已选'), button:has-text('平台')",
+        "collect_and_claim_btn": "button:has-text('采集并自动认领')",
+        "collect_and_publish_btn": "button:has-text('采集并自动发布')",
     },
-    "tabs": {
-      "all": [
-        ".jx-radio-button:has-text('全部')",
-        ".pro-radio-button:has-text('全部')",
-        ".pro-tabs__item:has-text('全部')",
-        "[role='tab']:has-text('全部')",
-        "button:has-text('全部')",
-        "span:has-text('全部')"
-      ],
-      "unclaimed": [
-        ".jx-radio-button:has-text('未认领')",
-        ".pro-radio-button:has-text('未认领')",
-        ".pro-tabs__item:has-text('未认领')",
-        "[role='tab']:has-text('未认领')",
-        "button:has-text('未认领')",
-        "span:has-text('未认领')"
-      ],
-      "claimed": [
-        ".jx-radio-button:has-text('已认领')",
-        ".pro-radio-button:has-text('已认领')",
-        ".pro-tabs__item:has-text('已认领')",
-        "[role='tab']:has-text('已认领')",
-        "button:has-text('已认领')",
-        "span:has-text('已认领')"
-      ],
-      "failed": [
-        ".jx-radio-button:has-text('失败')",
-        ".pro-radio-button:has-text('失败')",
-        ".pro-tabs__item:has-text('失败')",
-        "[role='tab']:has-text('失败')",
-        "button:has-text('失败')",
-        "span:has-text('失败')"
-      ]
+    "sidebar_menu": {
+        "common_functions": "text='通用功能'",
+        "product_collection_item": "text='产品采集'",
+        "common_collection_box": "text='公用采集箱'",
     },
-    "product_list": {
-      "checkbox_template": "input[type='checkbox']",
-      "edit_btn_selectors": [
-        "button:has-text('编辑')",
-        "button:has-text('首次编辑')",
-        "a:has-text('首次编辑')",
-        "a:has-text('编辑')",
-        "text='首次编辑'",
-        "span:has-text('首次编辑')",
-        "text='编辑'"
-      ],
-      "delete_btn_template": "button:has-text('删除')",
-      "claim_to_btn_template": "button:has-text('认领到')",
-      "note_btn_template": "button:has-text('备注')"
+    "temu_collect_box": {
+        "comment": "Temu全托管采集箱 - 批量编辑入口",
+        "url": "https://erp.91miaoshou.com/pddkj/collect_box/items",
+        "tabs": {
+            "all": ".jx-radio-button:has-text('全部')",
+            "unpublished": ".jx-radio-button:has-text('未发布')",
+            "scheduled": ".jx-radio-button:has-text('定时发布')",
+            "published": ".jx-radio-button:has-text('已发布')",
+        },
+        "action_buttons": {
+            "batch_edit": "button:has-text('批量编辑')",
+            "select_all": "text='全选'",
+            "select_shop": "button:has-text('选择店铺')",
+            "set_price": "button:has-text('设置供货价')",
+            "batch_publish": "button:has-text('批量发布')",
+        },
     },
-    "pagination": {
-      "select_all": "text='全选'",
-      "inverse_select": "text='反选'",
-      "prev_page": "button:has-text('上一页'), button[aria-label*='上一页']",
-      "next_page": "button:has-text('下一页'), button[aria-label*='下一页']",
-      "page_input": "input[type='number'], input[placeholder*='页']",
-      "per_page_selector": "text='条/页'"
-    }
-  },
-  "first_edit_dialog": {
-    "comment": "首次编辑弹窗（产品编辑对话框） - 使用文本定位器",
-    "close_btn": "button[aria-label='关闭'], button[aria-label='Close'], button.jx-dialog__headerbtn, .jx-dialog__close, .el-dialog__headerbtn, .el-dialog__close",
-    "navigation": {
-      "basic_info": "text='基本信息'",
-      "product_attrs": "text='产品属性'",
-      "sales_attrs": "text='销售属性'",
-      "product_images": "text='产品图片'",
-      "product_video": "text='产品视频'",
-      "certification": "text='认证'",
-      "logistics_info": "text='物流信息'",
-      "source_info": "text='货源信息'"
+    "collection_box": {
+        "url": "https://erp.91miaoshou.com/common_collect_box/items",
+        "search_box": {
+            "product_title": "input[placeholder*='产品标题'], input[placeholder*='标题']",
+            "source_id": "input[placeholder*='货源ID'], input[placeholder*='ID']",
+            "source_price_min": "input[placeholder*='最低'], input[placeholder*='价格']",
+            "source_price_max": "input[placeholder*='最高'], input[placeholder*='价格']",
+            "search_btn": "button:has-text('搜索')",
+            "reset_btn": "button:has-text('重置')",
+        },
+        "action_buttons": {
+            "claim_to": "button:has-text('认领到')",
+            "platform_claim_config": "button:has-text('平台认领配置')",
+            "group": "button:has-text('分组')",
+            "delete": "button:has-text('删除')",
+            "more": "button:has-text('更多')",
+            "create_product": "button:has-text('创建产品')",
+            "import_product": "button:has-text('导入产品')",
+        },
+        "tabs": {
+            "all": [
+                ".jx-radio-button:has-text('全部')",
+                ".pro-radio-button:has-text('全部')",
+                ".pro-tabs__item:has-text('全部')",
+                "[role='tab']:has-text('全部')",
+                "button:has-text('全部')",
+                "span:has-text('全部')",
+            ],
+            "unclaimed": [
+                ".jx-radio-button:has-text('未认领')",
+                ".pro-radio-button:has-text('未认领')",
+                ".pro-tabs__item:has-text('未认领')",
+                "[role='tab']:has-text('未认领')",
+                "button:has-text('未认领')",
+                "span:has-text('未认领')",
+            ],
+            "claimed": [
+                ".jx-radio-button:has-text('已认领')",
+                ".pro-radio-button:has-text('已认领')",
+                ".pro-tabs__item:has-text('已认领')",
+                "[role='tab']:has-text('已认领')",
+                "button:has-text('已认领')",
+                "span:has-text('已认领')",
+            ],
+            "failed": [
+                ".jx-radio-button:has-text('失败')",
+                ".pro-radio-button:has-text('失败')",
+                ".pro-tabs__item:has-text('失败')",
+                "[role='tab']:has-text('失败')",
+                "button:has-text('失败')",
+                "span:has-text('失败')",
+            ],
+        },
+        "product_list": {
+            "checkbox_template": "input[type='checkbox']",
+            "edit_btn_selectors": [
+                "button:has-text('编辑')",
+                "button:has-text('首次编辑')",
+                "a:has-text('首次编辑')",
+                "a:has-text('编辑')",
+                "text='首次编辑'",
+                "span:has-text('首次编辑')",
+                "text='编辑'",
+            ],
+            "delete_btn_template": "button:has-text('删除')",
+            "claim_to_btn_template": "button:has-text('认领到')",
+            "note_btn_template": "button:has-text('备注')",
+        },
+        "pagination": {
+            "select_all": "text='全选'",
+            "inverse_select": "text='反选'",
+            "prev_page": "button:has-text('上一页'), button[aria-label*='上一页']",
+            "next_page": "button:has-text('下一页'), button[aria-label*='下一页']",
+            "page_input": "input[type='number'], input[placeholder*='页']",
+            "per_page_selector": "text='条/页'",
+        },
     },
-    "basic_info": {
-      "title_input": "input[placeholder*='标题'], textarea[placeholder*='标题']",
-      "product_code": "input[placeholder*='编号'], input[placeholder*='产品编号']",
-      "simple_desc": "textarea[placeholder*='简易'], textarea[placeholder*='简单']",
-      "detailed_desc_iframe": "iframe"
+    "first_edit_dialog": {
+        "comment": "首次编辑弹窗（产品编辑对话框） - 使用文本定位器",
+        "close_btn": "button[aria-label='关闭'], button[aria-label='Close'], button.jx-dialog__headerbtn, .jx-dialog__close, .el-dialog__headerbtn, .el-dialog__close",
+        "navigation": {
+            "basic_info": "text='基本信息'",
+            "product_attrs": "text='产品属性'",
+            "sales_attrs": "text='销售属性'",
+            "product_images": "text='产品图片'",
+            "product_video": "text='产品视频'",
+            "certification": "text='认证'",
+            "logistics_info": "text='物流信息'",
+            "source_info": "text='货源信息'",
+        },
+        "basic_info": {
+            "title_input": "input[placeholder*='标题'], textarea[placeholder*='标题']",
+            "product_code": "input[placeholder*='编号'], input[placeholder*='产品编号']",
+            "simple_desc": "textarea[placeholder*='简易'], textarea[placeholder*='简单']",
+            "detailed_desc_iframe": "iframe",
+        },
+        "product_attrs": {
+            "add_attr_btn": "button:has-text('添加属性')",
+            "attr_name_template": "input[placeholder*='属性名'], input[placeholder*='名称']",
+            "attr_value_template": "input[placeholder*='属性值'], input[placeholder*='值']",
+        },
+        "sales_attrs": {
+            "single_spec_radio": "text='单规格'",
+            "multi_spec_radio": "text='多规格'",
+            "spec_name_input": "input[placeholder*='规格名'], input[placeholder*='名称']",
+            "spec_value_input": "input[placeholder*='规格值'], input[placeholder*='值']",
+            "add_spec_btn": "button:has-text('添加规格')",
+            "sku_price_template": "input[placeholder*='价格'], input[type='number']",
+            "sku_stock_template": "input[placeholder*='库存']",
+            "sku_weight_template": "input[placeholder*='重量']",
+            "sku_length_template": "input[placeholder*='长度'], input[placeholder*='长']",
+            "sku_width_template": "input[placeholder*='宽度'], input[placeholder*='宽']",
+            "sku_height_template": "input[placeholder*='高度'], input[placeholder*='高']",
+        },
+        "product_images": {
+            "ai_process_btn": "button:has-text('AI处理')",
+            "translate_btn": "button:has-text('翻译')",
+            "edit_btn": "button:has-text('编辑')",
+            "upload_btn": "button:has-text('上传')",
+            "batch_delete_btn": "button:has-text('批量删除')",
+            "export_btn": "button:has-text('导出')",
+            "select_all_checkbox": "text='全选'",
+        },
+        "product_video": {
+            "video_translate_btn": "button:has-text('视频翻译')",
+            "ai_generate_btn": "button:has-text('AI生成')",
+            "edit_video_btn": "button:has-text('剪辑视频')",
+            "one_click_generate_btn": "button:has-text('一键生成')",
+            "make_video_btn": "button:has-text('制作视频')",
+        },
+        "logistics_info": {
+            "package_weight": "input[placeholder*='包裹重量'], input[placeholder*='重量']",
+            "package_length": "input[placeholder*='包裹长度'], input[placeholder*='长度'], input[placeholder*='长']",
+            "package_width": "input[placeholder*='包裹宽度'], input[placeholder*='宽度'], input[placeholder*='宽']",
+            "package_height": "input[placeholder*='包裹高度'], input[placeholder*='高度'], input[placeholder*='高']",
+        },
+        "source_info": {
+            "source_link_input": "input[placeholder*='货源链接'], input[placeholder*='链接']",
+            "jump_btn": "button:has-text('跳转')",
+            "copy_btn": "button:has-text('复制')",
+            "add_btn": "button:has-text('添加')",
+        },
+        "actions": {
+            "cancel_btn": "button:has-text('取消')",
+            "one_click_translate_btn": "button:has-text('一键翻译')",
+            "save_btn": "button:has-text('保存'), button:has-text('保存修改')",
+        },
     },
-    "product_attrs": {
-      "add_attr_btn": "button:has-text('添加属性')",
-      "attr_name_template": "input[placeholder*='属性名'], input[placeholder*='名称']",
-      "attr_value_template": "input[placeholder*='属性值'], input[placeholder*='值']"
+    "batch_edit": {
+        "comment": "批量编辑功能 - 18步编辑流程",
+        "entry_point": {
+            "select_products": "使用 temu_collect_box 选择多个产品",
+            "click_batch_edit": "使用 temu_collect_box.action_buttons.batch_edit 进入批量编辑",
+        },
+        "steps": {
+            "step_01_title": {
+                "comment": "7.1 标题 - 不改动",
+                "step_button": "text='标题'",
+                "preview_button": "button:has-text('预览')",
+                "save_button": "button:has-text('保存修改')",
+            },
+            "step_02_english_title": {
+                "comment": "7.2 英语标题 - 按空格",
+                "step_button": "text='英语标题'",
+                "input": "input[placeholder*='英语'], input[placeholder*='英文'], textarea[placeholder*='英语']",
+            },
+            "step_03_category_attrs": {
+                "comment": "7.3 类目属性 - 参考采集链接填写",
+                "step_button": "text='类目属性'",
+            },
+            "step_04_main_sku": {"comment": "7.4 主货号 - 不改动", "step_button": "text='主货号'"},
+            "step_05_packaging": {
+                "comment": "7.5 外包装 - 长方体+硬包装",
+                "step_button": "text='外包装'",
+                "shape_selectors": [
+                    "text='长方体'",
+                    "label:has-text('长方体')",
+                    ".el-radio:has-text('长方体')",
+                    "input[value='长方体']",
+                ],
+                "type_selectors": [
+                    "text='硬包装'",
+                    "label:has-text('硬包装')",
+                    ".el-radio:has-text('硬包装')",
+                    "input[value='硬包装']",
+                ],
+                "image_network_button": "button:has-text('使用网络图片')",
+                "image_url_input": "input[placeholder*='图片'], textarea",
+            },
+            "step_06_origin": {
+                "comment": "7.6 产地 - 浙江",
+                "step_button": "text='产地'",
+                "input": "input[placeholder*='产地'], input[placeholder*='省份']",
+            },
+            "step_07_customization": {
+                "comment": "7.7 定制品 - 不改动",
+                "step_button": "text='定制品'",
+            },
+            "step_08_sensitive_attrs": {
+                "comment": "7.8 敏感属性 - 不改动",
+                "step_button": "text='敏感属性'",
+            },
+            "step_09_weight": {
+                "comment": "7.9 重量 - 5000-9999G",
+                "step_button": "text='重量'",
+                "input": "input[placeholder*='重量'], input[placeholder*='克'], input[placeholder*='weight']",
+            },
+            "step_10_dimensions": {
+                "comment": "7.10 尺寸 - 50-99cm，长>宽>高",
+                "step_button": "text='尺寸'",
+                "length_input": "input[placeholder*='长'], input[name*='length']",
+                "width_input": "input[placeholder*='宽'], input[name*='width']",
+                "height_input": "input[placeholder*='高'], input[name*='height']",
+            },
+            "step_11_platform_sku": {
+                "comment": "7.11 平台SKU - 点击自定义SKU编码",
+                "step_button": "text='平台SKU'",
+                "custom_sku_button": [
+                    "button:has-text('自定义SKU编码')",
+                    "text='自定义SKU编码'",
+                    "label:has-text('自定义SKU编码')",
+                ],
+            },
+            "step_12_sku_category": {
+                "comment": "7.12 SKU分类 - 组合装500件",
+                "step_button": "text='SKU分类'",
+                "combo_500_selectors": [
+                    "text='组合装500件'",
+                    "label:has-text('组合装500件')",
+                    ".el-radio:has-text('组合装500件')",
+                    "input[value*='组合装500']",
+                ],
+            },
+            "step_13_size_chart": {
+                "comment": "7.13 尺码表 - 不改动",
+                "step_button": "text='尺码表'",
+            },
+            "step_14_suggested_price": {
+                "comment": "7.14 建议售价 - 成本价×10",
+                "step_button": "text='建议售价'",
+                "price_input": "input[placeholder*='价格'], input[placeholder*='售价'], input[type='number']",
+            },
+            "step_15_package_list": {
+                "comment": "7.15 包装清单 - 不改动",
+                "step_button": "text='包装清单'",
+            },
+            "step_16_carousel_images": {
+                "comment": "7.16 轮播图 - 暂时不需要",
+                "step_button": "text='轮播图'",
+            },
+            "step_17_color_images": {
+                "comment": "7.17 颜色图 - 不需要",
+                "step_button": "text='颜色图'",
+            },
+            "step_18_manual": {
+                "comment": "7.18 产品说明书 - 上传PDF",
+                "step_button": "text='产品说明书'",
+                "file_input": "input[type='file'], input[accept*='pdf']",
+            },
+        },
+        "common_actions": {
+            "preview_button": "button:has-text('预览')",
+            "save_button": [
+                "button:has-text('保存修改')",
+                "button.el-button:has-text('保存修改')",
+                "button[type='button']:has-text('保存修改')",
+                "button:has-text('保存')",
+            ],
+            "close_button": [
+                "button:has-text('关闭')",
+                "button:has-text('确定')",
+                "button:has-text('完成')",
+            ],
+            "confirm_button": "button:has-text('确定'), button:has-text('确认')",
+        },
     },
-    "sales_attrs": {
-      "single_spec_radio": "text='单规格'",
-      "multi_spec_radio": "text='多规格'",
-      "spec_name_input": "input[placeholder*='规格名'], input[placeholder*='名称']",
-      "spec_value_input": "input[placeholder*='规格值'], input[placeholder*='值']",
-      "add_spec_btn": "button:has-text('添加规格')",
-      "sku_price_template": "input[placeholder*='价格'], input[type='number']",
-      "sku_stock_template": "input[placeholder*='库存']",
-      "sku_weight_template": "input[placeholder*='重量']",
-      "sku_length_template": "input[placeholder*='长度'], input[placeholder*='长']",
-      "sku_width_template": "input[placeholder*='宽度'], input[placeholder*='宽']",
-      "sku_height_template": "input[placeholder*='高度'], input[placeholder*='高']"
+    "publish_flow": {
+        "comment": "发布流程 - SOP步骤10的预览和发布",
+        "note": "发布页面的具体选择器需要在实际进入页面后再获取",
     },
-    "product_images": {
-      "ai_process_btn": "button:has-text('AI处理')",
-      "translate_btn": "button:has-text('翻译')",
-      "edit_btn": "button:has-text('编辑')",
-      "upload_btn": "button:has-text('上传')",
-      "batch_delete_btn": "button:has-text('批量删除')",
-      "export_btn": "button:has-text('导出')",
-      "select_all_checkbox": "text='全选'"
-    },
-    "product_video": {
-      "video_translate_btn": "button:has-text('视频翻译')",
-      "ai_generate_btn": "button:has-text('AI生成')",
-      "edit_video_btn": "button:has-text('剪辑视频')",
-      "one_click_generate_btn": "button:has-text('一键生成')",
-      "make_video_btn": "button:has-text('制作视频')"
-    },
-    "logistics_info": {
-      "package_weight": "input[placeholder*='包裹重量'], input[placeholder*='重量']",
-      "package_length": "input[placeholder*='包裹长度'], input[placeholder*='长度'], input[placeholder*='长']",
-      "package_width": "input[placeholder*='包裹宽度'], input[placeholder*='宽度'], input[placeholder*='宽']",
-      "package_height": "input[placeholder*='包裹高度'], input[placeholder*='高度'], input[placeholder*='高']"
-    },
-    "source_info": {
-      "source_link_input": "input[placeholder*='货源链接'], input[placeholder*='链接']",
-      "jump_btn": "button:has-text('跳转')",
-      "copy_btn": "button:has-text('复制')",
-      "add_btn": "button:has-text('添加')"
-    },
-    "actions": {
-      "cancel_btn": "button:has-text('取消')",
-      "one_click_translate_btn": "button:has-text('一键翻译')",
-      "save_btn": "button:has-text('保存'), button:has-text('保存修改')"
-    }
-  },
-  "batch_edit": {
-    "comment": "批量编辑功能 - 18步编辑流程",
-    "entry_point": {
-      "select_products": "使用 temu_collect_box 选择多个产品",
-      "click_batch_edit": "使用 temu_collect_box.action_buttons.batch_edit 进入批量编辑"
-    },
-    "steps": {
-      "step_01_title": {
-        "comment": "7.1 标题 - 不改动",
-        "step_button": "text='标题'",
-        "preview_button": "button:has-text('预览')",
-        "save_button": "button:has-text('保存修改')"
-      },
-      "step_02_english_title": {
-        "comment": "7.2 英语标题 - 按空格",
-        "step_button": "text='英语标题'",
-        "input": "input[placeholder*='英语'], input[placeholder*='英文'], textarea[placeholder*='英语']"
-      },
-      "step_03_category_attrs": {
-        "comment": "7.3 类目属性 - 参考采集链接填写",
-        "step_button": "text='类目属性'"
-      },
-      "step_04_main_sku": {
-        "comment": "7.4 主货号 - 不改动",
-        "step_button": "text='主货号'"
-      },
-      "step_05_packaging": {
-        "comment": "7.5 外包装 - 长方体+硬包装",
-        "step_button": "text='外包装'",
-        "shape_selectors": [
-          "text='长方体'",
-          "label:has-text('长方体')",
-          ".el-radio:has-text('长方体')",
-          "input[value='长方体']"
-        ],
-        "type_selectors": [
-          "text='硬包装'",
-          "label:has-text('硬包装')",
-          ".el-radio:has-text('硬包装')",
-          "input[value='硬包装']"
-        ],
-        "image_network_button": "button:has-text('使用网络图片')",
-        "image_url_input": "input[placeholder*='图片'], textarea"
-      },
-      "step_06_origin": {
-        "comment": "7.6 产地 - 浙江",
-        "step_button": "text='产地'",
-        "input": "input[placeholder*='产地'], input[placeholder*='省份']"
-      },
-      "step_07_customization": {
-        "comment": "7.7 定制品 - 不改动",
-        "step_button": "text='定制品'"
-      },
-      "step_08_sensitive_attrs": {
-        "comment": "7.8 敏感属性 - 不改动",
-        "step_button": "text='敏感属性'"
-      },
-      "step_09_weight": {
-        "comment": "7.9 重量 - 5000-9999G",
-        "step_button": "text='重量'",
-        "input": "input[placeholder*='重量'], input[placeholder*='克'], input[placeholder*='weight']"
-      },
-      "step_10_dimensions": {
-        "comment": "7.10 尺寸 - 50-99cm，长>宽>高",
-        "step_button": "text='尺寸'",
-        "length_input": "input[placeholder*='长'], input[name*='length']",
-        "width_input": "input[placeholder*='宽'], input[name*='width']",
-        "height_input": "input[placeholder*='高'], input[name*='height']"
-      },
-      "step_11_platform_sku": {
-        "comment": "7.11 平台SKU - 点击自定义SKU编码",
-        "step_button": "text='平台SKU'",
-        "custom_sku_button": [
-          "button:has-text('自定义SKU编码')",
-          "text='自定义SKU编码'",
-          "label:has-text('自定义SKU编码')"
-        ]
-      },
-      "step_12_sku_category": {
-        "comment": "7.12 SKU分类 - 组合装500件",
-        "step_button": "text='SKU分类'",
-        "combo_500_selectors": [
-          "text='组合装500件'",
-          "label:has-text('组合装500件')",
-          ".el-radio:has-text('组合装500件')",
-          "input[value*='组合装500']"
-        ]
-      },
-      "step_13_size_chart": {
-        "comment": "7.13 尺码表 - 不改动",
-        "step_button": "text='尺码表'"
-      },
-      "step_14_suggested_price": {
-        "comment": "7.14 建议售价 - 成本价×10",
-        "step_button": "text='建议售价'",
-        "price_input": "input[placeholder*='价格'], input[placeholder*='售价'], input[type='number']"
-      },
-      "step_15_package_list": {
-        "comment": "7.15 包装清单 - 不改动",
-        "step_button": "text='包装清单'"
-      },
-      "step_16_carousel_images": {
-        "comment": "7.16 轮播图 - 暂时不需要",
-        "step_button": "text='轮播图'"
-      },
-      "step_17_color_images": {
-        "comment": "7.17 颜色图 - 不需要",
-        "step_button": "text='颜色图'"
-      },
-      "step_18_manual": {
-        "comment": "7.18 产品说明书 - 上传PDF",
-        "step_button": "text='产品说明书'",
-        "file_input": "input[type='file'], input[accept*='pdf']"
-      }
-    },
-    "common_actions": {
-      "preview_button": "button:has-text('预览')",
-      "save_button": [
-        "button:has-text('保存修改')",
-        "button.el-button:has-text('保存修改')",
-        "button[type='button']:has-text('保存修改')",
-        "button:has-text('保存')"
-      ],
-      "close_button": [
-        "button:has-text('关闭')",
-        "button:has-text('确定')",
-        "button:has-text('完成')"
-      ],
-      "confirm_button": "button:has-text('确定'), button:has-text('确认')"
-    }
-  },
-  "publish_flow": {
-    "comment": "发布流程 - SOP步骤10的预览和发布",
-    "note": "发布页面的具体选择器需要在实际进入页面后再获取"
-  },
-  "publish": {
-    "repeat_per_batch": 1
-  },
-  "publish_confirm": {
-    "close_retry": 5
-  }
+    "publish": {"repeat_per_batch": 5},
+    "publish_confirm": {"close_retry": 5},
 }

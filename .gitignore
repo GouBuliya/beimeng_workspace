@@ -116,6 +116,7 @@ apps/temu-auto-publish/data/debug/html/video_upload_exception.html
 apps/temu-auto-publish/data/input/web_panel/packaging/*
 apps/temu-auto-publish/data/debug/html/size_chart_exception.html
 apps/temu-auto-publish/data/debug/html/video_upload_exception.html
+apps/temu-auto-publish/data/checkpoints/*
 
 # 根目录临时数据
 data/checkpoints/*
@@ -126,4 +127,3 @@ data/debug/*
 apps/temu-auto-publish/debug/*
 apps/temu-auto-publish/debug_*.html
 temp_pc.txt
-apps/temu-auto-publish/data/checkpoints/temu_publish_*.json

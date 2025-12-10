@@ -1,3 +1,10 @@
+# [1.8.0](https://github.com/GouBuliya/beimeng_workspace/compare/v1.7.1...v1.8.0) (2025-12-10)
+
+
+### Features
+
+* **web-panel:** 添加表格输入系统替代 CSV 上传 ([#15](https://github.com/GouBuliya/beimeng_workspace/issues/15)) ([ca4c1ed](https://github.com/GouBuliya/beimeng_workspace/commit/ca4c1edf4e6ad1c5535e3e797b204e3076ee7ec5))
+
 ## [1.6.1](https://github.com/GouBuliya/beimeng_workspace/compare/v1.6.0...v1.6.1) (2025-12-04)
 
 

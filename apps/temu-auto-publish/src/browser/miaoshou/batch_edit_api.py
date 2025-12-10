@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +34,7 @@ async def run_batch_edit_via_api(
     outer_package_image: str | None = None,
     product_guide_pdf: str | None = None,
     max_products: int = 20,
+    skip_ai_attrs: bool = False,
 ) -> dict[str, Any]:
     """使用 API 执行批量编辑完整 18 步.
 
@@ -61,6 +63,7 @@ async def run_batch_edit_via_api(
         outer_package_image: 外包装图片本地路径
         product_guide_pdf: 产品说明书 PDF 本地路径
         max_products: 每次最多编辑的产品数量（默认 20）
+        skip_ai_attrs: 是否跳过 AI 属性补全（用于多轮编辑时只在首轮执行）
 
     Returns:
         执行结果:
@@ -221,6 +224,113 @@ async def run_batch_edit_via_api(
                 shop_ids=shop_ids,
             )
 
+            # Step 7.5: AI 属性补全（如果启用且非跳过）
+            ai_attrs_map: dict[str, list[dict[str, Any]]] = {}
+            use_ai_attrs = payload.get("use_ai_attrs", False) and not skip_ai_attrs
+
+            if skip_ai_attrs:
+                logger.info("API 批量编辑: 跳过 AI 属性补全（非首轮）")
+
+            if use_ai_attrs:
+                from ...data_processor.ai_category_attr_filler import (
+                    AICategoryAttrFiller,
+                    ProductAttrContext,
+                )
+
+                logger.info("API 批量编辑: 开始 AI 属性补全...")
+
+                # 获取产品的类目、标题和现有属性信息
+                attr_info_result = await client.get_collect_item_info(
+                    detail_ids=detail_ids,
+                    fields=["title", "cid", "attributes"],
+                )
+
+                if attr_info_result.get("result") == "success":
+                    attr_filler = AICategoryAttrFiller(client)
+
+                    # 建立 collectBoxDetailId -> breadcrumb 映射（用于 AI 属性补全的上下文）
+                    id_to_breadcrumb: dict[str, str] = {}
+                    for search_item in items:
+                        collect_box_id = str(search_item.get("collectBoxDetailId", ""))
+                        if collect_box_id:
+                            cat_map = search_item.get("siteAndCatMap", {}).get("PDDKJ", {})
+                            id_to_breadcrumb[collect_box_id] = cat_map.get("breadcrumb", "")
+
+                    # 使用索引映射：API 返回数据顺序与请求的 detail_ids 顺序一致
+                    # 这避免了 title 重复导致的映射丢失问题
+                    attr_info_list = attr_info_result.get("collectItemInfoList", [])
+                    detail_id_to_collect_box_id: dict[str, str] = {}
+                    contexts = []
+
+                    for idx, collect_box_id in enumerate(detail_ids):
+                        if idx >= len(attr_info_list):
+                            logger.warning(
+                                f"API 返回数量不足: 请求 {len(detail_ids)}, "
+                                f"返回 {len(attr_info_list)}"
+                            )
+                            break
+
+                        item = attr_info_list[idx]
+                        detail_id = str(item.get("detailId"))
+                        item_title = item.get("title", "")
+                        cid = item.get("cid", "")
+
+                        # 建立 detailId -> collectBoxDetailId 映射
+                        detail_id_to_collect_box_id[detail_id] = collect_box_id
+
+                        # 获取 breadcrumb
+                        breadcrumb = id_to_breadcrumb.get(collect_box_id, "")
+
+                        contexts.append(
+                            ProductAttrContext(
+                                detail_id=detail_id,
+                                title=item_title,
+                                cid=cid,
+                                breadcrumb=breadcrumb,
+                                existing_attrs=item.get("attributes", []),
+                            )
+                        )
+
+                    logger.info(
+                        f"索引映射建立: {len(detail_id_to_collect_box_id)} 个产品 "
+                        f"(请求 {len(detail_ids)}, 返回 {len(attr_info_list)})"
+                    )
+
+                    # 批量补全属性
+                    if contexts:
+                        ai_attrs_raw = await attr_filler.fill_batch_attrs(contexts)
+                        logger.info(f"AI 属性补全完成: {len(ai_attrs_raw)} 个产品")
+
+                        # 转换为 API 格式，使用 collectBoxDetailId 作为键
+                        cid_map = {str(ctx.detail_id): ctx.cid for ctx in contexts}
+                        for detail_id, attrs in ai_attrs_raw.items():
+                            str_id = str(detail_id)
+                            cid = cid_map.get(str_id)
+                            if cid:
+                                api_attrs = attr_filler.convert_to_api_format(cid, attrs)
+                                # 转换为 collectBoxDetailId 作为键
+                                collect_box_id = detail_id_to_collect_box_id.get(str_id)
+                                if collect_box_id:
+                                    ai_attrs_map[collect_box_id] = api_attrs
+                                else:
+                                    logger.warning(
+                                        f"无法找到 detailId={str_id} 对应的 collectBoxDetailId"
+                                    )
+                        logger.info(f"属性格式转换完成: {len(ai_attrs_map)} 个产品")
+                        # 调试日志：检查 ID 匹配情况
+                        if ai_attrs_map and detail_ids:
+                            sample_key = next(iter(ai_attrs_map.keys()))
+                            logger.debug(
+                                f"ID 匹配检查: ai_attrs_map 键={sample_key} "
+                                f"(type={type(sample_key).__name__}), "
+                                f"detail_ids[0]={detail_ids[0]} "
+                                f"(type={type(detail_ids[0]).__name__})"
+                            )
+                            if ai_attrs_map.get(sample_key):
+                                logger.debug(f"属性值样例: {ai_attrs_map[sample_key][:2]}")
+                else:
+                    logger.warning("获取产品属性信息失败，跳过 AI 属性补全")
+
             # Step 8: 获取每个产品的 SKU 信息并计算价格
             logger.info("API 批量编辑: 获取产品 SKU 信息...")
             item_info_result = await client.get_collect_item_info(
@@ -228,16 +338,101 @@ async def run_batch_edit_via_api(
                 fields=["skuMap"],
             )
 
-            # 构建每个产品的编辑数据（包含价格 ×10 的 skuMap）
+            # 构建每个产品的编辑数据（包含价格 ×10 的 skuMap 和 AI 属性）
+            # 统计 AI 属性应用情况
+            ai_matched = sum(1 for d in detail_ids if str(d) in ai_attrs_map)
+            ai_missing = len(detail_ids) - ai_matched
+            logger.info(
+                f"AI 属性匹配统计: ai_attrs_map={len(ai_attrs_map)} 个, "
+                f"detail_ids={len(detail_ids)} 个, "
+                f"匹配成功={ai_matched}, 未匹配={ai_missing}"
+            )
+            if ai_missing > 0:
+                # 打印前 5 个未匹配的 ID 帮助诊断
+                missing_ids = [str(d) for d in detail_ids if str(d) not in ai_attrs_map][:5]
+                ai_keys = list(ai_attrs_map.keys())[:5]
+                logger.warning(f"未匹配 ID 样例: {missing_ids}, ai_attrs_map 键样例: {ai_keys}")
+
             items_to_save = []
             if item_info_result.get("result") == "success":
-                # 构建 detailId -> 产品信息 的映射
+                # 使用索引映射：detail_ids[i] 对应 item_info_list[i]
                 item_info_list = item_info_result.get("collectItemInfoList", [])
-                item_info_map = {str(item.get("detailId")): item for item in item_info_list}
+                item_info_map: dict[str, dict] = {}
+                for idx, collect_box_id in enumerate(detail_ids):
+                    if idx < len(item_info_list):
+                        item_info_map[collect_box_id] = item_info_list[idx]
+
+                # 诊断日志：检查 API 返回数据完整性
+                if len(item_info_list) < len(detail_ids):
+                    logger.warning(
+                        f"SKU 信息不完整: 请求 {len(detail_ids)} 个, "
+                        f"返回 {len(item_info_list)} 个, 缺少 {len(detail_ids) - len(item_info_list)} 个"
+                    )
+
+                # 识别缺失 SKU 数据的商品
+                products_without_sku = []
+                for detail_id in detail_ids:
+                    product_info = item_info_map.get(str(detail_id), {})
+                    sku_map = product_info.get("skuMap", {})
+                    if not sku_map:
+                        products_without_sku.append(detail_id)
+
+                if products_without_sku:
+                    logger.warning(
+                        f"以下 {len(products_without_sku)} 个商品无 SKU 数据: "
+                        f"{products_without_sku[:5]}{'...' if len(products_without_sku) > 5 else ''}"
+                    )
+
+                    # 重试机制：对缺失 SKU 数据的商品进行重试获取
+                    max_retries = 2
+                    for attempt in range(1, max_retries + 1):
+                        if not products_without_sku:
+                            break
+
+                        logger.info(
+                            f"重试获取 SKU 信息 (尝试 {attempt}/{max_retries}): "
+                            f"{len(products_without_sku)} 个商品"
+                        )
+                        await asyncio.sleep(1)  # 等待后重试
+
+                        retry_result = await client.get_collect_item_info(
+                            detail_ids=products_without_sku,
+                            fields=["skuMap"],
+                        )
+
+                        if retry_result.get("result") == "success":
+                            retry_list = retry_result.get("collectItemInfoList", [])
+                            # 更新 item_info_map
+                            for idx, retry_id in enumerate(products_without_sku):
+                                if idx < len(retry_list):
+                                    retry_sku = retry_list[idx].get("skuMap", {})
+                                    if retry_sku:
+                                        item_info_map[str(retry_id)] = retry_list[idx]
+
+                            # 重新计算缺失列表
+                            products_without_sku = [
+                                d
+                                for d in products_without_sku
+                                if not item_info_map.get(str(d), {}).get("skuMap")
+                            ]
+
+                    if products_without_sku:
+                        logger.error(
+                            f"SKU 信息获取失败（已重试 {max_retries} 次）: "
+                            f"{len(products_without_sku)} 个商品将使用默认 SKU 配置"
+                        )
 
                 for detail_id in detail_ids:
                     item_data = {"site": "PDDKJ", "detailId": str(detail_id)}
                     item_data.update(base_edit_data)
+
+                    # 合并 AI 推断的属性（优先于静态配置）
+                    str_detail_id = str(detail_id)
+                    if str_detail_id in ai_attrs_map:
+                        item_data["attributes"] = ai_attrs_map[str_detail_id]
+                        logger.debug(
+                            f"产品 {detail_id}: 设置 {len(ai_attrs_map[str_detail_id])} 个 AI 属性"
+                        )
 
                     # 获取该产品的 SKU 信息并计算价格
                     product_info = item_info_map.get(str(detail_id), {})
@@ -246,14 +441,29 @@ async def run_batch_edit_via_api(
                         updated_sku_map = _update_sku_prices(sku_map)
                         item_data["skuMap"] = updated_sku_map
                         logger.debug(f"产品 {detail_id}: 更新 {len(sku_map)} 个 SKU 价格")
+                    else:
+                        # 使用默认 SKU 配置，确保重量和分类被设置
+                        logger.warning(f"产品 {detail_id}: 无 SKU 数据，使用默认 SKU 配置")
+                        default_sku = _create_default_sku()
+                        item_data["skuMap"] = {"default": default_sku}
 
                     items_to_save.append(item_data)
             else:
-                # 如果获取 SKU 信息失败，使用基础编辑数据
-                logger.warning("获取 SKU 信息失败，跳过价格计算")
+                # 如果获取 SKU 信息失败，使用基础编辑数据和默认 SKU 配置
+                logger.warning("获取 SKU 信息失败，所有商品使用默认 SKU 配置")
                 for detail_id in detail_ids:
                     item_data = {"site": "PDDKJ", "detailId": str(detail_id)}
                     item_data.update(base_edit_data)
+                    # 合并 AI 推断的属性
+                    str_detail_id = str(detail_id)
+                    if str_detail_id in ai_attrs_map:
+                        item_data["attributes"] = ai_attrs_map[str_detail_id]
+                        logger.debug(
+                            f"产品 {detail_id}: 设置 {len(ai_attrs_map[str_detail_id])} 个 AI 属性"
+                        )
+                    # 使用默认 SKU 配置
+                    default_sku = _create_default_sku()
+                    item_data["skuMap"] = {"default": default_sku}
                     items_to_save.append(item_data)
 
             # Step 9: 批量保存编辑（带重试机制）
@@ -986,6 +1196,38 @@ def _update_sku_prices(sku_map: dict[str, Any]) -> dict[str, Any]:
         )
 
     return updated_map
+
+
+def _create_default_sku() -> dict[str, Any]:
+    """创建默认 SKU 配置，确保重量和 SKU 分类被设置.
+
+    当无法获取商品的 SKU 数据时，使用此默认配置作为兜底方案。
+
+    Returns:
+        默认 SKU 配置字典
+    """
+    import random
+
+    # 生成随机尺寸（50-99cm，长>宽>高）
+    dimensions = [random.randint(50, 99) for _ in range(3)]
+    dimensions.sort(reverse=True)
+    length_cm, width_cm, height_cm = dimensions
+
+    return {
+        "skuClassification": 1,  # 单品
+        "numberOfPieces": "1",  # 1 件
+        "pieceUnitCode": 1,  # 件
+        "weight": "9527",  # 重量
+        "stock": "999",  # 库存
+        "oriPrice": "100",
+        "originPrice": "100",
+        "suggestedPrice": "1000",
+        "suggestedPriceCurrencyType": "CNY",
+        "packageLength": str(length_cm),
+        "packageWidth": str(width_cm),
+        "packageHeight": str(height_cm),
+        "itemNum": " ",
+    }
 
 
 def _map_category_attrs(attrs: dict[str, Any]) -> list[dict[str, Any]]:
