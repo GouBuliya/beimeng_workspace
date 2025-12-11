@@ -62,6 +62,7 @@ class TokenVerifyResponse(BaseModel):
     username: str | None = Field(default=None, description="用户名")
     is_superuser: bool = Field(default=False, description="是否是管理员")
     message: str | None = Field(default=None, description="验证结果消息")
+    bound_miaoshou_username: str | None = Field(default=None, description="绑定的妙手账号")
 
 
 class UserResponse(BaseModel):
@@ -74,6 +75,7 @@ class UserResponse(BaseModel):
     is_superuser: bool = Field(..., description="是否是管理员")
     created_at: datetime = Field(..., description="创建时间")
     updated_at: datetime = Field(..., description="更新时间")
+    bound_miaoshou_username: str | None = Field(default=None, description="绑定的妙手账号")
 
     model_config = {"from_attributes": True}
 

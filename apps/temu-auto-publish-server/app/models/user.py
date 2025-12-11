@@ -67,6 +67,13 @@ class User(Base):
         onupdate=func.now(),
         nullable=False,
     )
+    # 绑定的妙手账号（用于验证用户使用的账号是否与后台绑定一致）
+    bound_miaoshou_username: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+        default=None,
+        comment="绑定的妙手账号",
+    )
 
     def __repr__(self) -> str:
         return f"<User(id={self.id}, username={self.username}, is_superuser={self.is_superuser})>"

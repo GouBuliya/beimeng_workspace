@@ -114,6 +114,7 @@ class UserService:
             hashed_password=hashed_password,
             is_active=user_data.is_active,
             is_superuser=user_data.is_superuser,
+            bound_miaoshou_username=user_data.bound_miaoshou_username,
         )
 
         self.db.add(user)
@@ -161,6 +162,9 @@ class UserService:
             user.hashed_password = get_password_hash(user_data.password)
             # 密码修改后强制下线
             await self.force_logout(user_id)
+
+        if user_data.bound_miaoshou_username is not None:
+            user.bound_miaoshou_username = user_data.bound_miaoshou_username
 
         await self.db.commit()
         await self.db.refresh(user)

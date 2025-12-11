@@ -434,6 +434,7 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
 
     @app.post("/api/run", response_model=RunStatus)
     async def run_workflow(
+        request: Request,
         admin: None = Depends(admin_guard),
         selection_file: UploadFile | None = File(default=None),
         selection_path: str | None = Form(default=None),
@@ -453,6 +454,19 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
         publish_repeat_count: str | None = Form(default="5"),
         start_round: str | None = Form(default="1"),
     ) -> RunStatus:
+        # 获取用户绑定的妙手账号
+        token = request.session.get(SESSION_TOKEN_KEY)
+        bound_miaoshou_username: str | None = None
+        if token:
+            auth_client = get_auth_client()
+            user_info = await auth_client.get_user_info(token)
+            if user_info:
+                bound_miaoshou_username = user_info.bound_miaoshou_username
+
+        # 检查是否绑定妙手账号
+        if not bound_miaoshou_username:
+            raise HTTPException(status_code=403, detail="请先在后台绑定妙手账号后再运行任务")
+
         resolved_path = await _resolve_selection_path(store, selection_file, selection_path)
         owner_value = (collection_owner or "").strip()
         if not owner_value:
@@ -498,6 +512,7 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
             manual_file=manual_file_path,
             single_run=_to_bool(single_run),
             start_round=execution_round,
+            bound_miaoshou_username=bound_miaoshou_username,
         )
         try:
             status = manager.start(options)
@@ -827,6 +842,19 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
 
         支持表格输入模式下的 JSON 数据提交。
         """
+        # 获取用户绑定的妙手账号
+        token = request.session.get(SESSION_TOKEN_KEY)
+        bound_miaoshou_username: str | None = None
+        if token:
+            auth_client = get_auth_client()
+            user_info = await auth_client.get_user_info(token)
+            if user_info:
+                bound_miaoshou_username = user_info.bound_miaoshou_username
+
+        # 检查是否绑定妙手账号
+        if not bound_miaoshou_username:
+            raise HTTPException(status_code=403, detail="请先在后台绑定妙手账号后再运行任务")
+
         try:
             body = await request.json()
         except Exception as exc:
@@ -933,6 +961,7 @@ def create_app(task_manager: WorkflowTaskManager | None = None) -> FastAPI:
             manual_file=None,  # JSON 模式暂不支持
             single_run=_to_bool(single_run),
             start_round=execution_round,
+            bound_miaoshou_username=bound_miaoshou_username,
         )
 
         try:
@@ -1065,3 +1094,7 @@ def _persist_publish_preferences(repeat_per_batch: int, close_retry: int) -> Non
         )
     except Exception as exc:  # pragma: no cover - 运行时保护
         logger.warning("更新发布配置失败: {}", exc)
+
+
+# ========== 模块级别 app 实例（用于 uvicorn） ==========
+app = create_app()

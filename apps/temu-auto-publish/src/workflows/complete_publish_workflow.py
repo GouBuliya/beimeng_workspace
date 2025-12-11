@@ -204,6 +204,8 @@ class CompletePublishWorkflow:
         reuse_existing_login: bool = False,
         # 新增: 超时配置
         timeout_config: dict[str, int] | TimeoutConfig | None = None,
+        # 新增: 绑定的妙手账号（用于验证）
+        bound_miaoshou_username: str | None = None,
     ) -> None:
         """初始化工作流控制器.
 
@@ -295,6 +297,9 @@ class CompletePublishWorkflow:
         self._max_stage_retries = 3
         # 复用登录控制器时不关闭浏览器,以便后续批次继续使用
         self._close_browser_on_complete = not (login_ctrl is not None and reuse_existing_login)
+
+        # 绑定的妙手账号（用于运行前验证）
+        self.bound_miaoshou_username = bound_miaoshou_username
 
     def execute(self) -> WorkflowExecutionResult:
         """????, ?? asyncio ??."""
@@ -732,6 +737,17 @@ class CompletePublishWorkflow:
             username, password = self._resolve_credentials()
             if not username or not password:
                 raise RuntimeError("缺少登录凭证 (MIAOSHOU_USERNAME/MIAOSHOU_PASSWORD)")
+
+            # 验证妙手账号是否与后台绑定一致
+            if self.bound_miaoshou_username:
+                if username != self.bound_miaoshou_username:
+                    from ..errors import AccountMismatchError
+
+                    raise AccountMismatchError(
+                        actual_username=username,
+                        bound_username=self.bound_miaoshou_username,
+                    )
+                logger.info(f"账号验证通过: {username}")
 
             # 登录ERP
             already_logged_in = False

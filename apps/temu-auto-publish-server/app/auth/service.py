@@ -230,6 +230,7 @@ class AuthService:
             username=user.username,
             is_superuser=user.is_superuser,
             message="令牌有效",
+            bound_miaoshou_username=user.bound_miaoshou_username,
         )
 
     async def get_user_by_id(self, user_id: str | uuid.UUID) -> User | None:

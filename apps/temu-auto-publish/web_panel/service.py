@@ -20,15 +20,16 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 from typing import BinaryIO
 
-from config.settings import settings
 from loguru import logger
 from src.browser.login_controller import LoginController
 from src.data_processor.selection_table_queue import (
+    CSVValidationError,
     SelectionTableEmptyError,
     SelectionTableFormatError,
     SelectionTableQueue,
 )
 from src.data_processor.selection_table_reader import ProductSelectionRow
+from src.errors import AccountMismatchError
 from src.utils.selector_hit_recorder import export_selector_report
 from src.workflows.complete_publish_workflow import CompletePublishWorkflow
 
@@ -154,6 +155,14 @@ class WorkflowTaskManager:
                 self._run_single(options)
             else:
                 self._run_continuous(options)
+        except CSVValidationError as exc:
+            # 专门处理 CSV 验证错误，提供详细错误信息
+            logger.error("CSV 格式验证失败: {}", exc)
+            self._mark_csv_validation_failure(exc)
+        except AccountMismatchError as exc:
+            # 专门处理账号不匹配错误，提供明确的用户反馈
+            logger.error("账号验证失败: {}", exc)
+            self._mark_account_mismatch_failure(exc)
         except Exception as exc:  # pragma: no cover - 运行时错误
             logger.exception(f"Temu 工作流运行失败: {exc}")
             self._mark_failure(str(exc))
@@ -328,6 +337,61 @@ class WorkflowTaskManager:
                 started_at=self._status.started_at,
                 finished_at=time.time(),
                 last_error=error,
+            )
+
+    def _mark_csv_validation_failure(self, exc: CSVValidationError) -> None:
+        """标记 CSV 验证失败，包含详细错误信息."""
+        # 构建详细错误信息
+        error_details = []
+        for err in exc.errors[:10]:  # 最多显示 10 个错误
+            col_info = f" [{err.column_name}]" if err.column_name else ""
+            error_details.append(
+                {
+                    "row": err.row,
+                    "column": err.column,
+                    "column_name": err.column_name,
+                    "error_type": err.error_type,
+                    "message": err.message,
+                    "context": err.context,
+                }
+            )
+
+        # 构建用户友好的错误消息
+        error_summary = "CSV 格式验证失败:\n"
+        for err in exc.errors[:5]:
+            col_info = f" [{err.column_name}]" if err.column_name else ""
+            error_summary += f"  - 第{err.row}行{col_info}: {err.message}\n"
+        if len(exc.errors) > 5:
+            error_summary += f"  ... 还有 {len(exc.errors) - 5} 个错误"
+
+        with self._lock:
+            self._status = RunStatus(
+                state=RunState.FAILED,
+                message="CSV 格式验证失败, 请检查选品表格式",
+                workflow_id=self._status.workflow_id,
+                started_at=self._status.started_at,
+                finished_at=time.time(),
+                last_error=error_summary,
+                csv_validation_errors=error_details,
+            )
+
+    def _mark_account_mismatch_failure(self, exc: AccountMismatchError) -> None:
+        """标记账号验证失败，提供明确的错误反馈."""
+        error_message = (
+            f"账号验证失败！\n"
+            f"当前使用的妙手账号: {exc.actual_username}\n"
+            f"后台绑定的妙手账号: {exc.bound_username}\n"
+            f"请确保使用与后台绑定一致的妙手账号登录"
+        )
+
+        with self._lock:
+            self._status = RunStatus(
+                state=RunState.FAILED,
+                message="妙手账号验证失败, 账号不匹配",
+                workflow_id=self._status.workflow_id,
+                started_at=self._status.started_at,
+                finished_at=time.time(),
+                last_error=error_message,
             )
 
     def _attach_log_sink(self) -> None:

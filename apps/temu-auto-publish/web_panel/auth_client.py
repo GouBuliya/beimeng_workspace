@@ -38,6 +38,7 @@ class UserInfo(BaseModel):
     user_id: str
     username: str
     is_superuser: bool
+    bound_miaoshou_username: str | None = None
 
 
 class VerifyResult(BaseModel):
@@ -48,6 +49,7 @@ class VerifyResult(BaseModel):
     username: str | None = None
     is_superuser: bool = False
     message: str | None = None
+    bound_miaoshou_username: str | None = None
 
 
 class AuthClient:
@@ -211,6 +213,7 @@ class AuthClient:
                     user_id=str(data["id"]),
                     username=data["username"],
                     is_superuser=data["is_superuser"],
+                    bound_miaoshou_username=data.get("bound_miaoshou_username"),
                 )
 
             return None

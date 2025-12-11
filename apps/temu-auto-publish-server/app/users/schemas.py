@@ -25,6 +25,9 @@ class UserCreate(BaseModel):
     email: EmailStr | None = Field(default=None, description="邮箱(可选)")
     is_active: bool = Field(default=True, description="是否激活")
     is_superuser: bool = Field(default=False, description="是否是管理员")
+    bound_miaoshou_username: str | None = Field(
+        default=None, max_length=100, description="绑定的妙手账号"
+    )
 
 
 class UserUpdate(BaseModel):
@@ -34,6 +37,9 @@ class UserUpdate(BaseModel):
     is_active: bool | None = Field(default=None, description="是否激活")
     is_superuser: bool | None = Field(default=None, description="是否是管理员")
     password: str | None = Field(default=None, min_length=6, max_length=100, description="新密码")
+    bound_miaoshou_username: str | None = Field(
+        default=None, max_length=100, description="绑定的妙手账号"
+    )
 
 
 class UserDetail(BaseModel):
@@ -47,6 +53,7 @@ class UserDetail(BaseModel):
     created_at: datetime = Field(..., description="创建时间")
     updated_at: datetime = Field(..., description="更新时间")
     is_online: bool = Field(default=False, description="是否在线")
+    bound_miaoshou_username: str | None = Field(default=None, description="绑定的妙手账号")
 
     model_config = {"from_attributes": True}
 

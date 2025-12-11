@@ -43,6 +43,9 @@ class WorkflowOptions(BaseModel):
     manual_file: Path | None = Field(default=None, description="产品说明书PDF路径")
     single_run: bool = Field(default=True, description="是否仅运行一次流程")
     start_round: int = Field(default=1, ge=1, description="起始轮次(模拟已运行次数,默认1)")
+    bound_miaoshou_username: str | None = Field(
+        default=None, description="后台绑定的妙手账号（用于验证）"
+    )
 
     def as_workflow_kwargs(self) -> dict[str, object]:
         """转换为 CompletePublishWorkflow 所需的关键参数."""
@@ -71,7 +74,19 @@ class WorkflowOptions(BaseModel):
             else None,
             "manual_file": str(self.manual_file) if self.manual_file else None,
             "execution_round": self.start_round,
+            "bound_miaoshou_username": self.bound_miaoshou_username,
         }
+
+
+class CSVValidationErrorDetail(BaseModel):
+    """CSV 验证错误详情."""
+
+    row: int = Field(description="错误所在行号（从1开始）")
+    column: int | None = Field(default=None, description="错误所在列号")
+    column_name: str | None = Field(default=None, description="错误所在列名")
+    error_type: str = Field(description="错误类型标识")
+    message: str = Field(description="错误描述")
+    context: str = Field(default="", description="错误上下文")
 
 
 class RunStatus(BaseModel):
@@ -83,6 +98,10 @@ class RunStatus(BaseModel):
     started_at: float | None = None
     finished_at: float | None = None
     last_error: str | None = None
+    csv_validation_errors: list[dict] | None = Field(
+        default=None,
+        description="CSV 验证错误详情列表（仅在 CSV 格式验证失败时有值）",
+    )
 
 
 class LogChunk(BaseModel):
